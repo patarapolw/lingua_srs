@@ -867,8 +867,8 @@ class _StudyViewState extends State<StudyView> {
                                                 ),
                                           ),
                                           const SizedBox(height: 6),
-                                          Text(
-                                            item.sentence!.translationText,
+                                          MarkdownContent(
+                                            content: item.sentence!.translationText,
                                             style: theme.textTheme.bodyMedium
                                                 ?.copyWith(
                                                   color: theme

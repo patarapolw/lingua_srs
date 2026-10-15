@@ -407,8 +407,12 @@ vocabulary:
 vocabulary:
   fruit:
     Local:
-      - ko: 배
-        en: pear
+      Berries:
+        Fresh:
+          - ko: 배
+            en: pear
+          - ko: 딸기
+            en: strawberry
   examples:
     - ko: 배
       en: pear
@@ -417,12 +421,12 @@ vocabulary:
 ''';
         final lesson = await provider.importYaml(frontmatter);
         final sharedVocab = lesson.vocabularies;
-        expect(sharedVocab, hasLength(2));
+        expect(sharedVocab, hasLength(3));
         final sibling = sharedVocab.last;
         sibling.cardTargetToNative.repetitions = 4;
         sibling.cardTargetToNative.status = SrsStatus.review;
 
-        await provider.deleteSection(lesson.id, ['fruit']);
+        await provider.deleteSection(lesson.id, ['FRUIT']);
         expect(lesson.vocabularies, hasLength(1));
         expect(lesson.vocabularies.single, same(sibling));
         expect(sibling.cardTargetToNative.repetitions, 0);
@@ -430,6 +434,38 @@ vocabulary:
         provider.dispose();
       },
     );
+
+    test('Deleting a lesson group removes all lessons in that group', () async {
+      SharedPreferences.setMockInitialValues({
+        'lingua_srs_windows_legacy_migration_complete': true,
+        'lingua_srs_lessons': '[]',
+        'lingua_srs_sentences': '[]',
+      });
+      final provider = AppProvider();
+      while (provider.isLoading) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      final first = await provider.importYaml(
+        'Lesson: Lesson 1\nnouns:\n  - ko: 하나\n    en: one',
+        defaultUnitTitle: 'Unit 1',
+      );
+      await provider.importYaml(
+        'Lesson: Lesson 2\nnouns:\n  - ko: 둘\n    en: two',
+        defaultUnitTitle: 'UNIT 1',
+      );
+      final remaining = await provider.importYaml(
+        'Lesson: Theme 1\nnouns:\n  - ko: 셋\n    en: three',
+        defaultUnitTitle: 'Theme',
+      );
+      expect(provider.lessons, hasLength(3));
+
+      await provider.deleteLessonGroup('unit 1');
+
+      expect(provider.lessons, hasLength(1));
+      expect(provider.lessons.single, same(remaining));
+      expect(provider.lessons.any((lesson) => lesson.id == first.id), isFalse);
+      provider.dispose();
+    });
 
     test('Markdown imports require and read only vocabulary frontmatter', () {
       expect(

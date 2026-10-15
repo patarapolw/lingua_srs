@@ -98,7 +98,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
                 NavigationRailDestination(
                   icon: Icon(Icons.file_upload_outlined),
                   selectedIcon: Icon(Icons.file_upload),
-                  label: Text('Import YAML'),
+                  label: Text('Add Lessons'),
                 ),
               ],
             ),

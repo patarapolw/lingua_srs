@@ -5,7 +5,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/app_provider.dart';
-import '../services/storage_service.dart';
 import '../services/yaml_parser_service.dart';
 
 class YamlImportView extends StatefulWidget {
@@ -16,6 +15,7 @@ class YamlImportView extends StatefulWidget {
 }
 
 class _YamlImportViewState extends State<YamlImportView> {
+  final TextEditingController _lessonNameController = TextEditingController();
   final TextEditingController _yamlController = TextEditingController();
   String? _errorMessage;
   YamlParseResult? _previewResult;
@@ -29,14 +29,8 @@ class _YamlImportViewState extends State<YamlImportView> {
   int _progressTotal = 0;
 
   @override
-  void initState() {
-    super.initState();
-    _yamlController.text = StorageService.defaultSampleYaml.trim();
-    _parseCurrentYaml();
-  }
-
-  @override
   void dispose() {
+    _lessonNameController.dispose();
     _yamlController.dispose();
     super.dispose();
   }
@@ -57,9 +51,11 @@ class _YamlImportViewState extends State<YamlImportView> {
     }
 
     try {
+      final nameParts = _lessonNameParts(_lessonNameController.text);
       final res = YamlParserService.parseLessonYaml(
         text,
-        defaultUnitTitle: _defaultUnitTitle,
+        defaultTitle: nameParts.title,
+        defaultUnitTitle: nameParts.unitTitle ?? _defaultUnitTitle,
       );
       setState(() {
         _errorMessage = null;
@@ -71,6 +67,17 @@ class _YamlImportViewState extends State<YamlImportView> {
         _previewResult = null;
       });
     }
+  }
+
+  static ({String? title, String? unitTitle}) _lessonNameParts(String value) {
+    final parts = value
+        .split('/')
+        .map((part) => part.trim())
+        .where((part) => part.isNotEmpty)
+        .toList();
+    if (parts.isEmpty) return (title: null, unitTitle: null);
+    if (parts.length == 1) return (title: parts.single, unitTitle: null);
+    return (title: parts.skip(1).join(' / '), unitTitle: parts.first);
   }
 
   Future<void> _pickFile() async {
@@ -93,6 +100,7 @@ class _YamlImportViewState extends State<YamlImportView> {
         _directoryFiles = [];
         _directoryErrors = [];
         _directorySkipped = 0;
+        _lessonNameController.clear();
         _yamlController.text = content;
         _parseCurrentYaml();
       }
@@ -122,6 +130,7 @@ class _YamlImportViewState extends State<YamlImportView> {
         _progressCurrent = 0;
         _progressTotal = 0;
       });
+      _lessonNameController.clear();
       _yamlController.clear();
 
       final root = Directory(directoryPath);
@@ -134,9 +143,16 @@ class _YamlImportViewState extends State<YamlImportView> {
           files.add(entity);
         }
       }
-      files.sort(
-        (a, b) => a.path.toLowerCase().compareTo(b.path.toLowerCase()),
-      );
+      String fileName(File file) => file.uri.pathSegments.isEmpty
+          ? file.path
+          : file.uri.pathSegments.last;
+      files.sort((first, second) {
+        final byName = fileName(first)
+            .toLowerCase()
+            .compareTo(fileName(second).toLowerCase());
+        if (byName != 0) return byName;
+        return first.path.toLowerCase().compareTo(second.path.toLowerCase());
+      });
       if (mounted) {
         setState(() {
           _progressTotal = files.length;
@@ -231,9 +247,11 @@ class _YamlImportViewState extends State<YamlImportView> {
     setState(() => _isParsing = true);
     try {
       final provider = context.read<AppProvider>();
+      final nameParts = _lessonNameParts(_lessonNameController.text);
       final importedLesson = await provider.importYaml(
         text,
-        defaultUnitTitle: _defaultUnitTitle,
+        defaultTitle: nameParts.title,
+        defaultUnitTitle: nameParts.unitTitle ?? _defaultUnitTitle,
       );
 
       if (mounted) {
@@ -330,7 +348,7 @@ class _YamlImportViewState extends State<YamlImportView> {
                 : const Icon(Icons.check),
             label: Text(
               _directoryFiles.isEmpty
-                  ? 'Import Now'
+                  ? 'Import YAML'
                   : 'Import ${_directoryFiles.length} Lessons',
             ),
             onPressed:
@@ -363,25 +381,30 @@ class _YamlImportViewState extends State<YamlImportView> {
                     ),
                     const SizedBox(height: 12),
                   ],
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'YAML Input Definition',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          _yamlController.text = StorageService
-                              .defaultSampleYaml
-                              .trim();
-                          _parseCurrentYaml();
-                        },
-                        child: const Text('Reset to Sample'),
-                      ),
-                    ],
+                  Text(
+                    'Lesson name',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _lessonNameController,
+                    enabled: !_isParsing && _directoryFiles.isEmpty,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      hintText: 'e.g. Unit 2 / Lesson 26',
+                      helperText: 'Use / to separate hierarchy levels.',
+                    ),
+                    onChanged: (_) => _parseCurrentYaml(),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'YAML',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Expanded(
@@ -389,17 +412,41 @@ class _YamlImportViewState extends State<YamlImportView> {
                       controller: _yamlController,
                       maxLines: null,
                       expands: true,
+                      enabled: !_isParsing && _directoryFiles.isEmpty,
                       textAlignVertical: TextAlignVertical.top,
+                      keyboardType: TextInputType.multiline,
+                      autocorrect: false,
+                      enableSuggestions: false,
                       style: const TextStyle(
                         fontFamily: 'monospace',
-                        fontSize: 13.5,
+                        fontSize: 14,
+                        height: 1.45,
                       ),
                       decoration: InputDecoration(
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
+                        border: const OutlineInputBorder(),
+                        alignLabelWithHint: true,
+                        hintText:
+                            'vocabulary:\n'
+                            '  nouns:  # Replace with a part of speech or section name\n'
+                            '    - ko: "Korean word"\n'
+                            '      audio: "https://example.com/word-audio.mp3"\n'
+                            '      en: "English meaning"\n'
+                            '      notes: "Optional HTML or Markdown notes"\n'
+                            '      examples:\n'
+                            '        - ko: "Sentence with **word**"\n'
+                            '          en: "Translated sentence with **meaning**"\n'
+                            '        - ko: "Another example sentence"\n'
+                            '          audio: "https://example.com/sentence-audio.mp3"\n'
+                            '          en: "Another translation"',
+                        hintStyle: TextStyle(
+                          color: theme.colorScheme.onSurfaceVariant.withValues(
+                            alpha: 0.65,
+                          ),
+                          fontFamily: 'monospace',
+                          fontSize: 14,
+                          height: 1.45,
                         ),
-                        hintText: 'Paste YAML content here...',
-                        contentPadding: const EdgeInsets.all(14),
+                        contentPadding: const EdgeInsets.all(16),
                       ),
                       onChanged: (_) => _parseCurrentYaml(),
                     ),

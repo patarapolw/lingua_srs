@@ -186,7 +186,9 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                               title: MarkdownContent(
                                 content: sentence.targetText,
                               ),
-                              subtitle: Text(sentence.translationText),
+                              subtitle: MarkdownContent(
+                                content: sentence.translationText,
+                              ),
                               trailing: Checkbox(
                                 value: isAttached,
                                 onChanged: (val) {
@@ -578,7 +580,9 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                               title: MarkdownContent(
                                 content: sentence.targetText,
                               ),
-                              subtitle: Text(sentence.translationText),
+                              subtitle: MarkdownContent(
+                                content: sentence.translationText,
+                              ),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [

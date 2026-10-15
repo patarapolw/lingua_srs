@@ -613,8 +613,8 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                                                 MarkdownContent(
                                                   content: s.targetText,
                                                 ),
-                                                Text(
-                                                  s.translationText,
+                                                MarkdownContent(
+                                                  content: s.translationText,
                                                   style: theme
                                                       .textTheme
                                                       .bodySmall

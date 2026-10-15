@@ -443,7 +443,9 @@ class AppProvider extends ChangeNotifier {
       final path = vocab.effectiveSectionPath;
       if (path.length < sectionPath.length) return false;
       for (var index = 0; index < sectionPath.length; index++) {
-        if (path[index] != sectionPath[index]) return false;
+        if (path[index].toLowerCase() != sectionPath[index].toLowerCase()) {
+          return false;
+        }
       }
       return true;
     }
@@ -467,6 +469,25 @@ class AppProvider extends ChangeNotifier {
   Future<void> deleteLesson(String lessonId) async {
     _lessons.removeWhere((l) => l.id == lessonId);
     if (_selectedLessonId == lessonId) {
+      _selectedLessonId = _lessons.isNotEmpty ? _lessons.first.id : null;
+    }
+    await saveState();
+  }
+
+  Future<void> deleteLessonGroup(String unitTitle) async {
+    final normalizedTitle = _normalizeLessonPart(unitTitle);
+    final deletedIds = _lessons
+        .where(
+          (lesson) =>
+              _normalizeLessonPart(lesson.effectiveUnitTitle) ==
+              normalizedTitle,
+        )
+        .map((lesson) => lesson.id)
+        .toSet();
+    if (deletedIds.isEmpty) return;
+
+    _lessons.removeWhere((lesson) => deletedIds.contains(lesson.id));
+    if (_selectedLessonId != null && deletedIds.contains(_selectedLessonId)) {
       _selectedLessonId = _lessons.isNotEmpty ? _lessons.first.id : null;
     }
     await saveState();

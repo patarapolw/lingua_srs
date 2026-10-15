@@ -126,6 +126,40 @@ class LessonListView extends StatelessWidget {
     );
   }
 
+  Future<void> _confirmDeleteLessonGroup(
+    BuildContext context,
+    AppProvider provider,
+    String unitTitle,
+    int lessonCount,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Delete "$unitTitle" and its lessons?'),
+        content: Text(
+          'This will delete $lessonCount '
+          '${lessonCount == 1 ? 'lesson' : 'lessons'} in this section and all '
+          'vocabulary inside them. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete section'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    await provider.deleteLessonGroup(unitTitle);
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
@@ -200,7 +234,7 @@ class LessonListView extends StatelessWidget {
           const SizedBox(width: 8),
           FilledButton.icon(
             icon: const Icon(Icons.code),
-            label: const Text('Import YAML'),
+            label: const Text('Add Lessons'),
             onPressed: () {
               Navigator.push(
                 context,
@@ -349,14 +383,36 @@ class LessonListView extends StatelessWidget {
                       delegate: SliverChildBuilderDelegate((context, idx) {
                         final row = lessonRows[idx];
                         if (row is String) {
+                          final groupLessonCount =
+                              lessonsByUnit[row]?.length ?? 0;
                           return Padding(
                             padding: const EdgeInsets.fromLTRB(4, 20, 4, 4),
-                            child: Text(
-                              row,
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: theme.colorScheme.primary,
-                              ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    row,
+                                    style: theme.textTheme.titleMedium
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                          color: theme.colorScheme.primary,
+                                        ),
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.delete_outline,
+                                    color: theme.colorScheme.error,
+                                  ),
+                                  tooltip: 'Delete $row and its lessons',
+                                  onPressed: () => _confirmDeleteLessonGroup(
+                                    context,
+                                    provider,
+                                    row,
+                                    groupLessonCount,
+                                  ),
+                                ),
+                              ],
                             ),
                           );
                         }
