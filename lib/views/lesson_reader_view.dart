@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:lingua_srs/widgets/markdown_webview.dart';
 import 'package:provider/provider.dart';
 
 import '../models/lesson.dart';
 import '../providers/app_provider.dart';
-import '../widgets/markdown_content.dart';
 import 'lesson_detail_view.dart';
 
 class LessonReaderView extends StatelessWidget {
@@ -67,16 +67,9 @@ class LessonReaderView extends StatelessWidget {
   }
 
   Widget _markdownBody(String markdown) {
-    final chunks = _splitMarkdownBlocks(_prepareMarkdown(markdown));
-    return ListView.builder(
+    return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-      itemCount: chunks.length,
-      itemBuilder: (context, index) => Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 900),
-          child: MarkdownContent(content: chunks[index], selectable: true),
-        ),
-      ),
+      child: MarkdownWebview(markdownString: markdown),
     );
   }
 
@@ -111,166 +104,6 @@ class LessonReaderView extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  static String _prepareMarkdown(String markdown) {
-    final fencedCodeBlocks = <String>[];
-    final codeBlockPattern = RegExp(
-      r'(^```[\s\S]*?^```[ \t]*$|^~~~[\s\S]*?^~~~[ \t]*$)',
-      multiLine: true,
-    );
-    var prepared = markdown.replaceAllMapped(codeBlockPattern, (match) {
-      final placeholder = 'LINGUA_CODE_BLOCK_${fencedCodeBlocks.length}';
-      fencedCodeBlocks.add(match[0]!);
-      return placeholder;
-    });
-
-    prepared = prepared.replaceAll(
-      RegExp(
-        r'<VocabQuiz\b[^>]*>([\s\S]*?)</VocabQuiz\s*>|<VocabQuiz\b[^>]*/?>',
-        caseSensitive: false,
-      ),
-      '',
-    );
-    prepared = MarkdownContent.prepareSpoilerSpans(prepared);
-    prepared = prepared.replaceAllMapped(
-      RegExp(r'<AudioButton\b([^>]*)/?>', caseSensitive: false),
-      (match) {
-        final source = RegExp(
-          r'''src\s*=\s*["']([^"']+)["']''',
-          caseSensitive: false,
-        ).firstMatch(match[1] ?? '')?.group(1);
-        if (source == null) return '';
-        final audioUri = Uri(
-          scheme: 'lingua-audio',
-          queryParameters: {'src': source},
-        );
-        return '![Audio](<$audioUri>)';
-      },
-    );
-    prepared = prepared.replaceAllMapped(
-      RegExp(r'<TTS\b[^>]*>([\s\S]*?)</TTS\s*>', caseSensitive: false),
-      (match) {
-        final text = (match[1] ?? '').replaceAll(RegExp(r'<[^>]*>'), '').trim();
-        if (text.isEmpty) return '';
-        final audioUri = Uri(
-          scheme: 'lingua-audio',
-          queryParameters: {'text': text},
-        );
-        return '$text ![Speak](<$audioUri>)';
-      },
-    );
-    prepared = prepared.replaceAllMapped(
-      RegExp(r'<Details\b([^>]*)>', caseSensitive: false),
-      (match) {
-        final summary = RegExp(
-          r'''(?:summary|title)\s*=\s*["']([^"']+)["']''',
-          caseSensitive: false,
-        ).firstMatch(match[1] ?? '')?.group(1);
-        return summary == null ? '' : '\n\n**$summary**\n\n';
-      },
-    );
-    prepared = prepared.replaceAllMapped(
-      RegExp(
-        r'<YouTube\b([^>]*)>([\s\S]*?)</YouTube\s*>|<YouTube\b([^>]*)/?>',
-        caseSensitive: false,
-      ),
-      (match) {
-        final attributes = match[1] ?? match[3] ?? '';
-        final videoId = RegExp(
-          r'''(?:id|video[-_]?id|src)\s*=\s*["']([^"']+)["']''',
-          caseSensitive: false,
-        ).firstMatch(attributes)?.group(1);
-        if (videoId == null) return '';
-        final videoUri = videoId.startsWith('http')
-            ? videoId
-            : 'https://www.youtube.com/watch?v=$videoId';
-        return '\n\nYouTube video URL: $videoUri\n\n';
-      },
-    );
-    prepared = prepared.replaceAllMapped(
-      RegExp(r'<img\b([^>]*)/?>', caseSensitive: false),
-      (match) {
-        final attributes = match[1] ?? '';
-        final source = RegExp(
-          r'''src\s*=\s*["']([^"']+)["']''',
-          caseSensitive: false,
-        ).firstMatch(attributes)?.group(1);
-        if (source == null) return '';
-        final alt = RegExp(
-          r'''alt\s*=\s*["']([^"']*)["']''',
-          caseSensitive: false,
-        ).firstMatch(attributes)?.group(1);
-        return '\n\n![${alt ?? ''}]($source)\n\n';
-      },
-    );
-    prepared = prepared.replaceAll(
-      RegExp(r'</?[A-Za-z][A-Za-z0-9:-]*(?:\s+[^<>]*?)?\s*/?>'),
-      '',
-    );
-    for (var index = 0; index < fencedCodeBlocks.length; index++) {
-      prepared = prepared.replaceAll(
-        'LINGUA_CODE_BLOCK_$index',
-        fencedCodeBlocks[index],
-      );
-    }
-    return prepared;
-  }
-
-  static List<String> _splitMarkdownBlocks(String markdown) {
-    final blocks = <String>[];
-    final current = StringBuffer();
-    var inFence = false;
-    String? fenceMarker;
-
-    for (final line in markdown.split('\n')) {
-      final fenceMatch = RegExp(r'^\s*(`{3,}|~{3,})').firstMatch(line);
-      if (fenceMatch != null) {
-        final marker = fenceMatch.group(1)!;
-        if (!inFence) {
-          inFence = true;
-          fenceMarker = marker[0];
-        } else if (marker.startsWith(fenceMarker!)) {
-          inFence = false;
-          fenceMarker = null;
-        }
-      }
-
-      if (line.trim().isEmpty && !inFence && current.isNotEmpty) {
-        blocks.add(current.toString().trim());
-        current.clear();
-      } else {
-        if (current.isNotEmpty) current.write('\n');
-        current.write(line);
-      }
-    }
-    if (current.isNotEmpty) blocks.add(current.toString().trim());
-
-    final safeBlocks = <String>[];
-    final listItem = RegExp(r'^\s*(?:[-*+]|\d+[.)])\s');
-    for (final block in blocks) {
-      if (safeBlocks.isNotEmpty &&
-          listItem.hasMatch(safeBlocks.last) &&
-          (listItem.hasMatch(block) || block.startsWith(RegExp(r'\s')))) {
-        safeBlocks[safeBlocks.length - 1] = '${safeBlocks.last}\n\n$block';
-      } else {
-        safeBlocks.add(block);
-      }
-    }
-
-    final chunks = <String>[];
-    final chunk = StringBuffer();
-    for (final block in safeBlocks) {
-      final nextLength = chunk.length + block.length + (chunk.isEmpty ? 0 : 2);
-      if (chunk.isNotEmpty && nextLength > 1800) {
-        chunks.add(chunk.toString());
-        chunk.clear();
-      }
-      if (chunk.isNotEmpty) chunk.write('\n\n');
-      chunk.write(block);
-    }
-    if (chunk.isNotEmpty) chunks.add(chunk.toString());
-    return chunks;
   }
 }
 
