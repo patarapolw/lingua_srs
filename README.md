@@ -211,7 +211,6 @@ Vocabulary sections can be nested to any depth. Entries with the same explicit v
 ### Features
 
 - Markdown render in `Webview` may be more reliable for lesson explanation details. `<YouTube>` tags and other actual HTML tags could be more reliably rendered there.
-- Lesson folder hierarchy should indent appropriately.
 - Sync between mobile and desktop, and between devices. Quick connect via QR code. I am probably using Cloudflare D1 worker for this.
 
 ### Bugs

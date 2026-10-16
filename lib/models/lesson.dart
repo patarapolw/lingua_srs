@@ -131,7 +131,7 @@ class Lesson {
 
 List<String> _hierarchyParts(String? path) =>
     path
-        ?.split(RegExp(r'[/\\]'))
+        ?.split(' / ')
         .map((part) => part.trim())
         .where((part) => part.isNotEmpty)
         .toList() ??

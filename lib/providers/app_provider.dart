@@ -408,10 +408,10 @@ class AppProvider extends ChangeNotifier {
 
   static String _normalizeHierarchyPath(String? value) =>
       value
-          ?.split(RegExp(r'[/\\]'))
+          ?.split(' / ')
           .map((part) => part.trim().toLowerCase())
           .where((part) => part.isNotEmpty)
-          .join('/') ??
+          .join(' / ') ??
       '';
 
   static String _lessonIdentity(Lesson lesson) {
@@ -857,7 +857,7 @@ class AppProvider extends ChangeNotifier {
       (candidate) => candidate.id == lessonId,
       orElse: () => throw StateError('Cannot move missing lesson $lessonId.'),
     );
-    final destinationPath = _hierarchyPathParts(folderPath).join('/');
+    final destinationPath = _hierarchyPathParts(folderPath).join(' / ');
     final destination = _normalizeHierarchyPath(destinationPath);
     if (_normalizeHierarchyPath(lesson.effectiveUnitTitle) == destination) {
       return;
@@ -940,7 +940,7 @@ class AppProvider extends ChangeNotifier {
 
   static List<String> _hierarchyPathParts(String? path) =>
       path
-          ?.split(RegExp(r'[/\\]'))
+          ?.split(' / ')
           .map((part) => part.trim())
           .where((part) => part.isNotEmpty)
           .toList() ??

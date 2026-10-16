@@ -33,6 +33,8 @@ class LessonHierarchyView extends StatelessWidget {
   final void Function(String folderPath) onMoveFolder;
   final void Function(String folderPath, int lessonCount) onDeleteFolder;
 
+  static const double _indentPerLevel = 24;
+
   const LessonHierarchyView({
     super.key,
     required this.lessons,
@@ -93,7 +95,10 @@ class LessonHierarchyView extends StatelessWidget {
             ? _folderRow(context, row, index)
             : ReorderableDelayedDragStartListener(
                 index: index,
-                child: lessonBuilder(context, row.lesson!),
+                child: Padding(
+                  padding: EdgeInsets.only(left: _indentPerLevel * row.depth, right: 6),
+                  child: lessonBuilder(context, row.lesson!),
+                ),
               );
         return KeyedSubtree(key: ValueKey(row.key), child: child);
       },
@@ -106,7 +111,7 @@ class LessonHierarchyView extends StatelessWidget {
     for (var lessonIndex = 0; lessonIndex < lessons.length; lessonIndex++) {
       final lesson = lessons[lessonIndex];
       final folders = (lesson.effectiveUnitTitle ?? '')
-          .split(RegExp(r'[/\\]'))
+          .split(' / ')
           .map((part) => part.trim())
           .where((part) => part.isNotEmpty)
           .toList();
@@ -201,7 +206,7 @@ class LessonHierarchyView extends StatelessWidget {
     final theme = Theme.of(context);
     final expanded = folderExpansion[row.key] ?? true;
     return Card(
-      margin: EdgeInsets.fromLTRB(4 + 24.0 * row.depth, 12, 4, 2),
+      margin: EdgeInsets.fromLTRB(4 + _indentPerLevel * row.depth, 12, 4, 2),
       child: ReorderableDelayedDragStartListener(
         index: index,
         child: ListTile(

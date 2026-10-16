@@ -272,7 +272,7 @@ class LessonListView extends StatelessWidget {
     final pathsByKey = <String, String>{};
     for (final lesson in provider.lessons) {
       final parts = lesson.effectiveUnitTitle
-          ?.split(RegExp(r'[/\\]'))
+          ?.split(' / ')
           .map((part) => part.trim())
           .where((part) => part.isNotEmpty)
           .toList();
