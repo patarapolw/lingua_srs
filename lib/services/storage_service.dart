@@ -86,6 +86,9 @@ adjectives:
         en: The subway is very crowded during rush hour
 ''';
 
+  static const String _keyMaxReviews24h = 'lingua_srs_max_reviews_24h';
+  static const String _keyReviewTimestamps = 'lingua_srs_review_timestamps_24h';
+
   static Future<bool> loadAutoplay() async {
     final prefs = await SharedPreferences.getInstance();
     await _migrateLegacyWindowsPreferences(prefs);
@@ -95,6 +98,40 @@ adjectives:
   static Future<void> saveAutoplay(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyAutoplay, value);
+  }
+
+  static Future<int> loadMaxReviews24h() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_keyMaxReviews24h) ?? 100;
+  }
+
+  static Future<void> saveMaxReviews24h(int limit) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyMaxReviews24h, limit);
+  }
+
+  static Future<List<DateTime>> loadReviewTimestamps() async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList(_keyReviewTimestamps) ?? [];
+    final now = DateTime.now();
+    final valid = <DateTime>[];
+    for (final s in list) {
+      final dt = DateTime.tryParse(s);
+      if (dt != null && now.difference(dt).inHours < 24) {
+        valid.add(dt);
+      }
+    }
+    return valid;
+  }
+
+  static Future<void> saveReviewTimestamps(List<DateTime> timestamps) async {
+    final prefs = await SharedPreferences.getInstance();
+    final now = DateTime.now();
+    final strings = timestamps
+        .where((t) => now.difference(t).inHours < 24)
+        .map((t) => t.toIso8601String())
+        .toList();
+    await prefs.setStringList(_keyReviewTimestamps, strings);
   }
 
   static Future<List<Sentence>> loadSentences() async {

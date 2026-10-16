@@ -28,6 +28,9 @@ class SrsCard {
   DateTime dueDate;
   DateTime? lastReviewed;
   SrsStatus status;
+  int lapses;
+  DateTime? lastMistakeDate;
+  SrsRating? lastRating;
 
   SrsCard({
     String? id,
@@ -39,10 +42,30 @@ class SrsCard {
     DateTime? dueDate,
     this.lastReviewed,
     this.status = SrsStatus.isNew,
+    this.lapses = 0,
+    this.lastMistakeDate,
+    this.lastRating,
   })  : id = id ?? const Uuid().v4(),
         dueDate = dueDate ?? DateTime.now();
 
-  bool get isDue => isEnabled && (status == SrsStatus.isNew || dueDate.isBefore(DateTime.now()) || dueDate.difference(DateTime.now()).inHours <= 12);
+  bool get isDue =>
+      isEnabled &&
+      (status == SrsStatus.isNew || !dueDate.isAfter(DateTime.now()));
+
+  bool get hasRecentMistake {
+    if (!isEnabled) return false;
+    if (lastMistakeDate != null) {
+      final hours = DateTime.now().difference(lastMistakeDate!).inHours;
+      if (hours <= 48 && (lastRating == SrsRating.again || status == SrsStatus.learning)) {
+        return true;
+      }
+    }
+    if (status == SrsStatus.learning && lastReviewed != null) {
+      final hours = DateTime.now().difference(lastReviewed!).inHours;
+      if (hours <= 48) return true;
+    }
+    return false;
+  }
 
   void resetProgress() {
     interval = 0;
@@ -51,6 +74,9 @@ class SrsCard {
     dueDate = DateTime.now();
     lastReviewed = null;
     status = SrsStatus.isNew;
+    lapses = 0;
+    lastMistakeDate = null;
+    lastRating = null;
   }
 
   Map<String, dynamic> toJson() => {
@@ -63,6 +89,9 @@ class SrsCard {
         'dueDate': dueDate.toIso8601String(),
         'lastReviewed': lastReviewed?.toIso8601String(),
         'status': status.name,
+        'lapses': lapses,
+        'lastMistakeDate': lastMistakeDate?.toIso8601String(),
+        'lastRating': lastRating?.name,
       };
 
   factory SrsCard.fromJson(Map<String, dynamic> json) => SrsCard(
@@ -81,5 +110,15 @@ class SrsCard {
           (e) => e.name == json['status'],
           orElse: () => SrsStatus.isNew,
         ),
+        lapses: json['lapses'] as int? ?? 0,
+        lastMistakeDate: json['lastMistakeDate'] != null
+            ? DateTime.parse(json['lastMistakeDate'] as String)
+            : null,
+        lastRating: json['lastRating'] != null
+            ? SrsRating.values.firstWhere(
+                (e) => e.name == json['lastRating'],
+                orElse: () => SrsRating.again,
+              )
+            : null,
       );
 }

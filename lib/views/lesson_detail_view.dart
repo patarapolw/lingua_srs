@@ -188,7 +188,7 @@ class _LessonDetailViewState extends State<LessonDetailView> {
     final provider = context.watch<AppProvider>();
     final theme = Theme.of(context);
 
-    Lesson? lesson;
+    final Lesson lesson;
     try {
       lesson = provider.lessons.firstWhere((l) => l.id == widget.lessonId);
     } catch (_) {
@@ -299,13 +299,37 @@ class _LessonDetailViewState extends State<LessonDetailView> {
           IconButton(
             icon: const Icon(Icons.restart_alt),
             tooltip: 'Reset all SRS progress in this lesson',
-            onPressed: () => _confirmResetLesson(lesson!),
+            onPressed: () => _confirmResetLesson(lesson),
           ),
           IconButton(
             icon: const Icon(Icons.add_circle_outline),
             tooltip: 'Add Vocabulary',
-            onPressed: () => _showAddVocabDialog(lesson!),
+            onPressed: () => _showAddVocabDialog(lesson),
           ),
+          if (context.watch<AppProvider>().getRecentMistakesCount(lessonId: lesson.id) > 0) ...[
+            FilledButton.tonalIcon(
+              style: FilledButton.styleFrom(
+                backgroundColor: theme.colorScheme.errorContainer,
+                foregroundColor: theme.colorScheme.onErrorContainer,
+              ),
+              icon: const Icon(Icons.history_edu_rounded),
+              label: Text(
+                'Mistakes (${context.watch<AppProvider>().getRecentMistakesCount(lessonId: lesson.id)})',
+              ),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => StudyView(
+                      lessonId: lesson.id,
+                      recentMistakesOnly: true,
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(width: 8),
+          ],
           FilledButton.icon(
             icon: const Icon(Icons.play_arrow_rounded),
             label: Text('Study (${lesson.dueCardsCount} Due)'),
@@ -315,7 +339,7 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => StudyView(lessonId: lesson!.id),
+                        builder: (_) => StudyView(lessonId: lesson.id),
                       ),
                     );
                   },
@@ -397,7 +421,7 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                           FilledButton.tonalIcon(
                             icon: const Icon(Icons.add),
                             label: const Text('Add Word'),
-                            onPressed: () => _showAddVocabDialog(lesson!),
+                            onPressed: () => _showAddVocabDialog(lesson),
                           ),
                       ],
                     ),
@@ -448,7 +472,7 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                                 ),
                                 tooltip: 'Delete section and its vocabulary',
                                 onPressed: () =>
-                                    _confirmDeleteSection(lesson!, row),
+                                    _confirmDeleteSection(lesson, row),
                               ),
                               onTap: () => setState(() {
                                 if (isCollapsed) {
@@ -520,7 +544,7 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                                                 audioUrl: vocab.audioUrl,
                                                 fallbackText: vocab.targetWord,
                                                 language:
-                                                    lesson!.targetLanguage,
+                                                    lesson.targetLanguage,
                                                 compact: true,
                                               ),
                                             ],
@@ -539,7 +563,7 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                                       onPressed: () => VocabEditDialog.show(
                                         context,
                                         vocab,
-                                        lessonId: lesson!.id,
+                                        lessonId: lesson.id,
                                       ),
                                     ),
                                     IconButton(
@@ -556,7 +580,7 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                                       ),
                                       tooltip: 'Delete',
                                       onPressed: () {
-                                        _confirmDeleteVocab(lesson!, vocab);
+                                        _confirmDeleteVocab(lesson, vocab);
                                       },
                                     ),
                                   ],
@@ -630,7 +654,7 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                                           AudioButton(
                                             audioUrl: s.audioUrl,
                                             fallbackText: s.targetText,
-                                            language: lesson!.targetLanguage,
+                                            language: lesson.targetLanguage,
                                             compact: true,
                                           ),
                                         ],

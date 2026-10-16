@@ -638,11 +638,13 @@ vocabulary:
       expect(card.repetitions, 2);
       expect(card.interval, 6);
 
-      // 3. Again (reset)
+      // 3. Again (reset with 1-hour minimum repetition)
       SrsService.processReview(card, SrsRating.again);
       expect(card.repetitions, 0);
-      expect(card.interval, 1);
+      expect(card.interval, 0);
       expect(card.status, SrsStatus.learning);
+      expect(card.dueDate.difference(DateTime.now()).inMinutes >= 55, isTrue);
+      expect(card.dueDate.difference(DateTime.now()).inMinutes <= 65, isTrue);
     });
 
     test('Resetting SRS progress keeps card visibility and identity', () {
@@ -672,6 +674,148 @@ vocabulary:
         card.dueDate.isBefore(DateTime.now().add(const Duration(seconds: 1))),
         isTrue,
       );
+    });
+
+    test('Tracks mistakes, lapses, and recent mistakes queue', () {
+      final card = SrsCard(direction: CardDirection.targetToNative);
+      expect(card.lapses, 0);
+      expect(card.lastMistakeDate, isNull);
+      expect(card.hasRecentMistake, isFalse);
+
+      SrsService.processReview(card, SrsRating.again);
+      expect(card.lapses, 1);
+      expect(card.lastMistakeDate, isNotNull);
+      expect(card.lastRating, SrsRating.again);
+      expect(card.hasRecentMistake, isTrue);
+
+      // Reviewing with Good clears active recent mistake state
+      SrsService.processReview(card, SrsRating.good);
+      expect(card.lastRating, SrsRating.good);
+      expect(card.hasRecentMistake, isFalse);
+      expect(card.lapses, 1); // retains total lapse count
+    });
+
+    test('AppProvider prioritizes oldest inserted lessons while shuffling by POS', () async {
+      SharedPreferences.setMockInitialValues({
+        'lingua_srs_windows_legacy_migration_complete': true,
+        'lingua_srs_lessons': '[]',
+      });
+      final provider = AppProvider();
+      while (provider.isLoading) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      provider.lessons.clear();
+
+      // Create Lesson 1 (older) with nouns and verbs
+      final lesson1 = Lesson(title: 'Lesson 1');
+      lesson1.vocabularies.addAll([
+        VocabItem(targetWord: '사과', translation: 'apple', pos: 'nouns'),
+        VocabItem(targetWord: '바나나', translation: 'banana', pos: 'nouns'),
+        VocabItem(targetWord: '먹다', translation: 'to eat', pos: 'verbs'),
+        VocabItem(targetWord: '마시다', translation: 'to drink', pos: 'verbs'),
+      ]);
+
+      // Create Lesson 2 (newer) with adjectives
+      final lesson2 = Lesson(title: 'Lesson 2');
+      lesson2.vocabularies.addAll([
+        VocabItem(targetWord: '크다', translation: 'big', pos: 'adjectives'),
+        VocabItem(targetWord: '작다', translation: 'small', pos: 'adjectives'),
+      ]);
+
+      provider.lessons.addAll([lesson1, lesson2]);
+
+      final queue = provider.getStudyQueue(dueOnly: false);
+      expect(queue, hasLength(6));
+
+      // All cards from Lesson 1 must come before all cards from Lesson 2
+      final lesson1Indices = <int>[];
+      final lesson2Indices = <int>[];
+      for (var i = 0; i < queue.length; i++) {
+        if (queue[i].lesson.id == lesson1.id) {
+          lesson1Indices.add(i);
+        } else if (queue[i].lesson.id == lesson2.id) {
+          lesson2Indices.add(i);
+        }
+      }
+
+      expect(lesson1Indices.length, 4);
+      expect(lesson2Indices.length, 2);
+      expect(lesson1Indices.last < lesson2Indices.first, isTrue,
+          reason: 'Oldest inserted lessons must be prioritized first');
+
+      // Test Recent Mistakes queue filter
+      expect(provider.totalRecentMistakes, 0);
+      SrsService.processReview(lesson1.vocabularies[0].cardTargetToNative, SrsRating.again);
+      expect(provider.totalRecentMistakes, 1);
+
+      final mistakesQueue = provider.getRecentMistakesQueue();
+      expect(mistakesQueue, hasLength(1));
+      expect(mistakesQueue.first.vocab.targetWord, '사과');
+    });
+
+    test('Again and Hard repeat in less than 24 hours, and 24h review limit is enforced', () async {
+      final now = DateTime.now();
+
+      // 1. Again scheduling
+      final againCard = SrsCard(direction: CardDirection.targetToNative);
+      SrsService.processReview(againCard, SrsRating.again);
+      expect(againCard.interval, 0);
+      expect(againCard.status, SrsStatus.learning);
+      // Repeating in ~1 hour (less than 24 hours)
+      expect(againCard.dueDate.isAfter(now), isTrue);
+      expect(againCard.dueDate.difference(now).inHours, 1); // 1 hour difference
+      expect(againCard.dueDate.difference(now).inMinutes >= 55, isTrue);
+      // Currently scheduled in the future, so not due yet
+      expect(againCard.isDue, isFalse);
+
+      // 2. Hard scheduling for learning card
+      final hardCard = SrsCard(direction: CardDirection.targetToNative);
+      SrsService.processReview(hardCard, SrsRating.hard);
+      expect(hardCard.interval, 0);
+      expect(hardCard.dueDate.difference(now).inHours, 12); // 12 hours (less than 24h)
+      expect(hardCard.isDue, isFalse);
+
+      // 3. 24-hour review limit in AppProvider
+      SharedPreferences.setMockInitialValues({
+        'lingua_srs_windows_legacy_migration_complete': true,
+        'lingua_srs_lessons': '[]',
+        'lingua_srs_max_reviews_24h': 2,
+      });
+
+      final provider = AppProvider();
+      while (provider.isLoading) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      provider.lessons.clear();
+
+      final lesson = Lesson(title: 'Review Limit Lesson');
+      lesson.vocabularies.addAll([
+        VocabItem(targetWord: '단어1', translation: 'word 1', pos: 'nouns'),
+        VocabItem(targetWord: '단어2', translation: 'word 2', pos: 'nouns'),
+        VocabItem(targetWord: '단어3', translation: 'word 3', pos: 'nouns'),
+      ]);
+      provider.lessons.add(lesson);
+
+      expect(provider.maxReviews24h, 2);
+      expect(provider.remainingReviews24h, 2);
+
+      // Only 2 cards should be returned due to the 24h review limit
+      final queue = provider.getStudyQueue(dueOnly: true);
+      expect(queue, hasLength(2));
+
+      // After 2 reviews, remaining reviews is 0
+      await provider.recordCardReview(queue[0].card, SrsRating.good);
+      await provider.recordCardReview(queue[1].card, SrsRating.good);
+      expect(provider.reviewsInLast24Hours, 2);
+      expect(provider.remainingReviews24h, 0);
+
+      // Queue is now empty for due cards
+      final emptyDueQueue = provider.getStudyQueue(dueOnly: true);
+      expect(emptyDueQueue, isEmpty);
+
+      // But cram mode (dueOnly: false) still allows studying all cards
+      final cramQueue = provider.getStudyQueue(dueOnly: false);
+      expect(cramQueue, hasLength(3));
     });
   });
 }

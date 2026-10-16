@@ -64,6 +64,15 @@ A Flutter application targeting **Desktop (Windows, macOS, Linux)** and **Mobile
    - **Desktop**: Navigation Rail sidebar, wide-screen flashcard canvas, complete hotkey bar, undo & navigation controls.
    - **Mobile**: Responsive bottom navigation, touch-friendly card taps, swipeable sheet editors.
 
+10. **Recent Mistakes & Adaptive Queueing**:
+   - **Top-Level "Recent Mistakes" Review**: Directly review active mistakes across all lessons (or per lesson) from the top banner or AppBar with live mistake count badges.
+   - **Interleaved Re-queuing**: Cards rated *Again* are automatically re-inserted a few cards ahead in the active session for delayed retrieval practice.
+   - **Intelligent Session Completion**: Looping continues as long as multiple unmastered cards remain, and concludes when at most 1 *Again*'d card is left to avoid immediate zero-delay 1-card echo loops.
+   - **Color-Coded Review Progress Bar**: Displays live Wrong (Red) and Right (Green) breakdown indicators directly on the top progress bar and AppBar during study sessions.
+   - **24-Hour Review Window Limit**: Caps daily review volume to a rolling 24-hour limit (default: 100 cards), customizable or set to unlimited from the dashboard.
+   - **Sub-24h Repetition for Difficult Cards**: Cards marked *Again* are scheduled to repeat after a sensible 1-hour minimum delay (rather than waiting an entire day), while early *Hard* reviews repeat in 12 hours.
+   - **POS-Category Shuffling**: Cards within each lesson are shuffled and interleaved across parts of speech (nouns, verbs, adjectives, etc.) rather than displaying oldest-inserted cards first, while continuing to prioritize oldest-inserted lessons first.
+
 ---
 
 ## 🚀 Running the App

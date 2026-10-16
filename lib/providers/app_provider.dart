@@ -33,11 +33,32 @@ class AppProvider extends ChangeNotifier {
   bool _isLoading = true;
   String? _selectedLessonId;
 
+  int _maxReviews24h = 100;
+  List<DateTime> _reviewTimestamps24h = [];
+
   List<Lesson> get lessons => _lessons;
   List<Sentence> get sentences => _sentences;
   bool get autoplayAudio => _autoplayAudio;
   bool get isLoading => _isLoading;
   String? get selectedLessonId => _selectedLessonId;
+  int get maxReviews24h => _maxReviews24h;
+
+  int get reviewsInLast24Hours {
+    final now = DateTime.now();
+    _reviewTimestamps24h.removeWhere((t) => now.difference(t).inHours >= 24);
+    return _reviewTimestamps24h.length;
+  }
+
+  int get remainingReviews24h {
+    if (_maxReviews24h <= 0) return 999999;
+    return max(0, _maxReviews24h - reviewsInLast24Hours);
+  }
+
+  Future<void> setMaxReviews24h(int limit) async {
+    _maxReviews24h = limit;
+    await StorageService.saveMaxReviews24h(limit);
+    notifyListeners();
+  }
 
   Lesson? get currentLesson {
     if (_selectedLessonId == null) return null;
@@ -57,6 +78,8 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
 
     _autoplayAudio = await StorageService.loadAutoplay();
+    _maxReviews24h = await StorageService.loadMaxReviews24h();
+    _reviewTimestamps24h = await StorageService.loadReviewTimestamps();
     _sentences = await StorageService.loadSentences();
     _lessons = await StorageService.loadLessons();
     if (_canonicalizeSentencePool()) {
@@ -666,56 +689,115 @@ class AppProvider extends ChangeNotifier {
   }
 
   // Generate study queue for a lesson (or all)
-  List<StudyCardItem> getStudyQueue({String? lessonId, bool dueOnly = true}) {
+  List<StudyCardItem> getStudyQueue({
+    String? lessonId,
+    bool dueOnly = true,
+    bool mistakesOnly = false,
+  }) {
     final List<Lesson> targetLessons = lessonId == null
         ? _lessons
         : _lessons.where((l) => l.id == lessonId).toList();
 
     final List<StudyCardItem> queue = [];
     final seenCardIds = <String>{};
+    final rand = Random();
 
     for (final lesson in targetLessons) {
+      final Map<String, List<StudyCardItem>> posGroups = {};
+
       for (final vocab in lesson.vocabularies) {
+        final posKey = vocab.pos.trim().toLowerCase().isEmpty
+            ? 'general'
+            : vocab.pos.trim().toLowerCase();
+
         // KO -> EN Card
         if (vocab.cardTargetToNative.isEnabled) {
-          if (!dueOnly || vocab.cardTargetToNative.isDue) {
-            if (seenCardIds.add(vocab.cardTargetToNative.id)) {
-              queue.add(
-                StudyCardItem(
-                  vocab: vocab,
-                  card: vocab.cardTargetToNative,
-                  lesson: lesson,
-                  sentence: getRandomSentenceForVocab(vocab),
-                ),
-              );
-            }
+          final card = vocab.cardTargetToNative;
+          final isEligible = mistakesOnly
+              ? card.hasRecentMistake
+              : (!dueOnly || card.isDue);
+          if (isEligible && seenCardIds.add(card.id)) {
+            posGroups.putIfAbsent(posKey, () => []).add(
+              StudyCardItem(
+                vocab: vocab,
+                card: card,
+                lesson: lesson,
+                sentence: getRandomSentenceForVocab(vocab),
+              ),
+            );
           }
         }
 
         // EN -> KO Card
         if (vocab.cardNativeToTarget.isEnabled) {
-          if (!dueOnly || vocab.cardNativeToTarget.isDue) {
-            if (seenCardIds.add(vocab.cardNativeToTarget.id)) {
-              queue.add(
-                StudyCardItem(
-                  vocab: vocab,
-                  card: vocab.cardNativeToTarget,
-                  lesson: lesson,
-                  sentence: getRandomSentenceForVocab(vocab),
-                ),
-              );
-            }
+          final card = vocab.cardNativeToTarget;
+          final isEligible = mistakesOnly
+              ? card.hasRecentMistake
+              : (!dueOnly || card.isDue);
+          if (isEligible && seenCardIds.add(card.id)) {
+            posGroups.putIfAbsent(posKey, () => []).add(
+              StudyCardItem(
+                vocab: vocab,
+                card: card,
+                lesson: lesson,
+                sentence: getRandomSentenceForVocab(vocab),
+              ),
+            );
           }
         }
+      }
+
+      if (posGroups.isEmpty) continue;
+
+      // Shuffle cards within each POS bucket
+      final activeBuckets = <List<StudyCardItem>>[];
+      final sortedPosKeys = posGroups.keys.toList()..shuffle(rand);
+      for (final key in sortedPosKeys) {
+        final items = posGroups[key]!;
+        items.shuffle(rand);
+        activeBuckets.add(items);
+      }
+
+      // Interleave across POS categories
+      while (activeBuckets.isNotEmpty) {
+        activeBuckets.shuffle(rand);
+        for (var i = activeBuckets.length - 1; i >= 0; i--) {
+          final bucket = activeBuckets[i];
+          if (bucket.isNotEmpty) {
+            queue.add(bucket.removeLast());
+          }
+          if (bucket.isEmpty) {
+            activeBuckets.removeAt(i);
+          }
+        }
+      }
+    }
+
+    if (dueOnly && !mistakesOnly && _maxReviews24h > 0) {
+      final limit = remainingReviews24h;
+      if (queue.length > limit) {
+        return queue.sublist(0, limit);
       }
     }
 
     return queue;
   }
 
+  List<StudyCardItem> getRecentMistakesQueue({String? lessonId}) =>
+      getStudyQueue(lessonId: lessonId, mistakesOnly: true);
+
+  int getRecentMistakesCount({String? lessonId}) =>
+      getRecentMistakesQueue(lessonId: lessonId).length;
+
+  int get totalRecentMistakes => getRecentMistakesCount();
+
   // Answer SRS review
   Future<void> recordCardReview(SrsCard card, SrsRating rating) async {
     SrsService.processReview(card, rating);
+    final now = DateTime.now();
+    _reviewTimestamps24h.removeWhere((t) => now.difference(t).inHours >= 24);
+    _reviewTimestamps24h.add(now);
+    await StorageService.saveReviewTimestamps(_reviewTimestamps24h);
     await saveState();
   }
 

@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -19,6 +21,8 @@ class ReviewHistoryRecord {
   final DateTime? oldLastReviewed;
   final SrsStatus oldStatus;
   final SrsRating ratingGiven;
+  final int? requeuedIndex;
+  final bool wasInAgainSet;
 
   ReviewHistoryRecord({
     required this.queueIndex,
@@ -30,14 +34,22 @@ class ReviewHistoryRecord {
     required this.oldLastReviewed,
     required this.oldStatus,
     required this.ratingGiven,
+    this.requeuedIndex,
+    this.wasInAgainSet = false,
   });
 }
 
 class StudyView extends StatefulWidget {
   final String? lessonId;
   final bool dueOnly;
+  final bool recentMistakesOnly;
 
-  const StudyView({super.key, this.lessonId, this.dueOnly = true});
+  const StudyView({
+    super.key,
+    this.lessonId,
+    this.dueOnly = true,
+    this.recentMistakesOnly = false,
+  });
 
   @override
   State<StudyView> createState() => _StudyViewState();
@@ -49,7 +61,14 @@ class _StudyViewState extends State<StudyView> {
   int _answeredCount = 0; // Highest index of card answered so far
   bool _isAnswerRevealed = false;
   final List<ReviewHistoryRecord> _history = [];
+  final Set<String> _againCardIds = {};
+  final Set<String> _sessionRatedCardIds = {};
   final FocusNode _keyboardFocusNode = FocusNode();
+
+  int get rightCount =>
+      _history.where((r) => r.ratingGiven != SrsRating.again).length;
+  int get wrongCount =>
+      _history.where((r) => r.ratingGiven == SrsRating.again).length;
 
   @override
   void initState() {
@@ -69,7 +88,8 @@ class _StudyViewState extends State<StudyView> {
     final provider = context.read<AppProvider>();
     final queue = provider.getStudyQueue(
       lessonId: widget.lessonId,
-      dueOnly: widget.dueOnly,
+      dueOnly: widget.recentMistakesOnly ? false : widget.dueOnly,
+      mistakesOnly: widget.recentMistakesOnly,
     );
     setState(() {
       _queue = queue;
@@ -77,6 +97,8 @@ class _StudyViewState extends State<StudyView> {
       _answeredCount = 0;
       _isAnswerRevealed = false;
       _history.clear();
+      _againCardIds.clear();
+      _sessionRatedCardIds.clear();
     });
 
     _triggerPreload(0);
@@ -148,24 +170,78 @@ class _StudyViewState extends State<StudyView> {
     if (_currentIndex >= _queue.length) return;
     context.read<AudioService>().stop();
     final item = _queue[_currentIndex];
+    final card = item.card;
+    final cardId = card.id;
     final provider = context.read<AppProvider>();
+    final wasInAgainSet = _againCardIds.contains(cardId);
+
+    int? requeuedIndex;
+
+    final isFirstSessionRating = !_sessionRatedCardIds.contains(cardId);
+    _sessionRatedCardIds.add(cardId);
+
+    if (rating == SrsRating.again) {
+      _againCardIds.add(cardId);
+      if (isFirstSessionRating) {
+        provider.recordCardReview(card, SrsRating.again);
+      } else {
+        card.lastMistakeDate = DateTime.now();
+        card.lastRating = SrsRating.again;
+        provider.saveState();
+      }
+
+      // Interleaved re-queuing:
+      // Do not end the session unless there is only 1 Again'd card left.
+      final remainingAhead = _queue.length - (_currentIndex + 1);
+      final newItem = StudyCardItem(
+        vocab: item.vocab,
+        card: item.card,
+        lesson: item.lesson,
+        sentence: provider.getRandomSentenceForVocab(item.vocab),
+      );
+
+      if (remainingAhead >= 3) {
+        final targetIndex = min(_queue.length, _currentIndex + 4);
+        _queue.insert(targetIndex, newItem);
+        requeuedIndex = targetIndex;
+      } else if (remainingAhead > 0) {
+        _queue.add(newItem);
+        requeuedIndex = _queue.length - 1;
+      } else {
+        // At the very end of the queue:
+        // If more than 1 Again'd card remains, keep re-queuing interleaved!
+        // If only 1 Again'd card remains, do not re-queue so the session can conclude.
+        if (_againCardIds.length > 1) {
+          _queue.add(newItem);
+          requeuedIndex = _queue.length - 1;
+        }
+      }
+    } else {
+      _againCardIds.remove(cardId);
+      if (isFirstSessionRating) {
+        provider.recordCardReview(card, rating);
+      } else {
+        card.lastRating = rating;
+        provider.saveState();
+      }
+    }
 
     // Save snapshot in history for Undo
     _history.add(
       ReviewHistoryRecord(
         queueIndex: _currentIndex,
-        card: item.card,
-        oldInterval: item.card.interval,
-        oldRepetitions: item.card.repetitions,
-        oldEaseFactor: item.card.easeFactor,
-        oldDueDate: item.card.dueDate,
-        oldLastReviewed: item.card.lastReviewed,
-        oldStatus: item.card.status,
+        card: card,
+        oldInterval: card.interval,
+        oldRepetitions: card.repetitions,
+        oldEaseFactor: card.easeFactor,
+        oldDueDate: card.dueDate,
+        oldLastReviewed: card.lastReviewed,
+        oldStatus: card.status,
         ratingGiven: rating,
+        requeuedIndex: requeuedIndex,
+        wasInAgainSet: wasInAgainSet,
       ),
     );
-
-    provider.recordCardReview(item.card, rating);
 
     setState(() {
       if (_currentIndex == _answeredCount) {
@@ -183,6 +259,17 @@ class _StudyViewState extends State<StudyView> {
     context.read<AudioService>().stop();
     final provider = context.read<AppProvider>();
     final record = _history.removeLast();
+
+    // Remove the re-queued duplicate if one was inserted
+    if (record.requeuedIndex != null && record.requeuedIndex! < _queue.length) {
+      _queue.removeAt(record.requeuedIndex!);
+    }
+
+    if (record.wasInAgainSet) {
+      _againCardIds.add(record.card.id);
+    } else {
+      _againCardIds.remove(record.card.id);
+    }
 
     // Restore previous SRS state
     record.card.interval = record.oldInterval;
@@ -342,27 +429,44 @@ class _StudyViewState extends State<StudyView> {
     final provider = context.watch<AppProvider>();
 
     if (_queue.isEmpty || _currentIndex >= _queue.length) {
+      final isMistakesMode = widget.recentMistakesOnly;
+      final hasPostponedCard = _againCardIds.length == 1;
+
       return Scaffold(
-        appBar: AppBar(title: const Text('Study Complete')),
+        appBar: AppBar(
+          title: Text(isMistakesMode ? 'Recent Mistakes Complete' : 'Study Complete'),
+        ),
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
-                Icons.check_circle_outline_rounded,
+                hasPostponedCard
+                    ? Icons.pending_actions_rounded
+                    : Icons.check_circle_outline_rounded,
                 size: 72,
-                color: Colors.green.shade600,
+                color: hasPostponedCard
+                    ? Colors.amber.shade700
+                    : Colors.green.shade600,
               ),
               const SizedBox(height: 16),
               Text(
-                'Session Complete!',
+                isMistakesMode
+                    ? (hasPostponedCard
+                        ? 'Mistakes Review Finished'
+                        : 'All Recent Mistakes Cleared!')
+                    : 'Session Complete!',
                 style: theme.textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
               ),
               const SizedBox(height: 8),
               Text(
-                'You have reviewed all available flashcards in this queue.',
+                hasPostponedCard
+                    ? '1 difficult card was postponed for your next review session.'
+                    : (_queue.isEmpty
+                        ? 'No cards found matching this queue.'
+                        : 'You have completed all cards in this review queue.'),
                 style: theme.textTheme.bodyLarge?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -385,23 +489,53 @@ class _StudyViewState extends State<StudyView> {
                     ),
                     const SizedBox(width: 16),
                   ],
-                  FilledButton.icon(
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Review All (Cram Mode)'),
-                    onPressed: () {
-                      final allQueue = provider.getStudyQueue(
-                        lessonId: widget.lessonId,
-                        dueOnly: false,
-                      );
-                      setState(() {
-                        _queue = allQueue;
-                        _currentIndex = 0;
-                        _answeredCount = 0;
-                        _isAnswerRevealed = false;
-                        _history.clear();
-                      });
-                    },
-                  ),
+                  if (hasPostponedCard) ...[
+                    FilledButton.icon(
+                      icon: const Icon(Icons.replay),
+                      label: const Text('Retry Remaining Card'),
+                      onPressed: () {
+                        final remainingCardId = _againCardIds.first;
+                        final retryQueue = provider
+                            .getStudyQueue(dueOnly: false)
+                            .where((item) => item.card.id == remainingCardId)
+                            .toList();
+                        setState(() {
+                          _queue = retryQueue;
+                          _currentIndex = 0;
+                          _answeredCount = 0;
+                          _isAnswerRevealed = false;
+                          _history.clear();
+                          _againCardIds.clear();
+                          _sessionRatedCardIds.clear();
+                        });
+                      },
+                    ),
+                  ] else ...[
+                    FilledButton.icon(
+                      icon: const Icon(Icons.refresh),
+                      label: Text(
+                        isMistakesMode
+                            ? 'Review Mistakes Again'
+                            : 'Review All (Cram Mode)',
+                      ),
+                      onPressed: () {
+                        final reloadQueue = provider.getStudyQueue(
+                          lessonId: widget.lessonId,
+                          dueOnly: false,
+                          mistakesOnly: isMistakesMode,
+                        );
+                        setState(() {
+                          _queue = reloadQueue;
+                          _currentIndex = 0;
+                          _answeredCount = 0;
+                          _isAnswerRevealed = false;
+                          _history.clear();
+                          _againCardIds.clear();
+                          _sessionRatedCardIds.clear();
+                        });
+                      },
+                    ),
+                  ],
                 ],
               ),
             ],
@@ -424,15 +558,57 @@ class _StudyViewState extends State<StudyView> {
       onKeyEvent: _handleKeyEvent,
       child: Scaffold(
         appBar: AppBar(
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          title: Row(
             children: [
-              if (item.lesson.effectiveUnitTitle != null)
-                Text(
-                  item.lesson.effectiveUnitTitle!,
-                  style: Theme.of(context).textTheme.labelSmall,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (widget.recentMistakesOnly) ...[
+                      const Text('Recent Mistakes Review'),
+                      Text('Card $currentNumber of $total', style: Theme.of(context).textTheme.labelSmall),
+                    ] else ...[
+                      if (item.lesson.effectiveUnitTitle != null)
+                        Text(
+                          item.lesson.effectiveUnitTitle!,
+                          style: Theme.of(context).textTheme.labelSmall,
+                        ),
+                      Text('${item.lesson.displayTitle} ($currentNumber/$total)'),
+                    ],
+                  ],
                 ),
-              Text('${item.lesson.displayTitle} ($currentNumber/$total)'),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '✓ $rightCount',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green.shade800,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '✗ $wrongCount',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.red.shade800,
+                  ),
+                ),
+              ),
             ],
           ),
           actions: [
@@ -490,10 +666,44 @@ class _StudyViewState extends State<StudyView> {
             const SizedBox(width: 14),
           ],
           bottom: PreferredSize(
-            preferredSize: const Size.fromHeight(4),
-            child: LinearProgressIndicator(
-              value: (_answeredCount) / total,
-              backgroundColor: theme.colorScheme.surfaceContainerHighest,
+            preferredSize: const Size.fromHeight(6),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final totalWidth = constraints.maxWidth;
+                final totalCards = _queue.isEmpty ? 1 : _queue.length;
+                final rightWidth =
+                    (rightCount / totalCards).clamp(0.0, 1.0) * totalWidth;
+                final wrongWidth =
+                    (wrongCount / totalCards).clamp(0.0, 1.0) * totalWidth;
+                final remainingWidth =
+                    max(0.0, totalWidth - rightWidth - wrongWidth);
+
+                return SizedBox(
+                  height: 6,
+                  child: Row(
+                    children: [
+                      if (rightWidth > 0)
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          width: rightWidth,
+                          color: Colors.green.shade600,
+                        ),
+                      if (wrongWidth > 0)
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          width: wrongWidth,
+                          color: Colors.red.shade600,
+                        ),
+                      if (remainingWidth > 0)
+                        Expanded(
+                          child: Container(
+                            color: theme.colorScheme.surfaceContainerHighest,
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
             ),
           ),
         ),

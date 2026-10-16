@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -126,6 +128,109 @@ class LessonListView extends StatelessWidget {
     );
   }
 
+  void _showEditMaxReviewsDialog(BuildContext context, AppProvider provider) {
+    final controller = TextEditingController(
+      text: provider.maxReviews24h > 0 ? '${provider.maxReviews24h}' : '0',
+    );
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('24-Hour Review Limit'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Set the maximum number of reviews allowed in any rolling 24-hour window. Enter 0 for unlimited.',
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Max reviews per 24 hours',
+                border: OutlineInputBorder(),
+                suffixText: 'cards',
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              children: [50, 100, 200, 0].map((val) {
+                final label = val == 0 ? 'Unlimited' : '$val';
+                return ActionChip(
+                  label: Text(label),
+                  onPressed: () {
+                    controller.text = '$val';
+                  },
+                );
+              }).toList(),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final parsed = int.tryParse(controller.text.trim());
+              if (parsed != null && parsed >= 0) {
+                provider.setMaxReviews24h(parsed);
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      parsed == 0
+                          ? '24-hour review limit set to Unlimited.'
+                          : '24-hour review limit set to $parsed cards.',
+                    ),
+                  ),
+                );
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showLimitReachedDialog(BuildContext context, AppProvider provider) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Daily 24h Review Limit Reached'),
+        content: Text(
+          'You have reviewed ${provider.reviewsInLast24Hours} cards in the last 24 hours (limit is ${provider.maxReviews24h}).\n\n'
+          'You can adjust your limit, or continue practicing in Cram Mode (which ignores the daily limit).',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _showEditMaxReviewsDialog(context, provider);
+            },
+            child: const Text('Adjust Limit'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const StudyView(dueOnly: false),
+                ),
+              );
+            },
+            child: const Text('Practice in Cram Mode'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _confirmDeleteLessonGroup(
     BuildContext context,
     AppProvider provider,
@@ -166,9 +271,9 @@ class LessonListView extends StatelessWidget {
     final theme = Theme.of(context);
 
     int totalDue = 0;
-    int totalCards = 0;
-    final activeCardIds = <String>{};
     final dueCardIds = <String>{};
+    final mistakeCardIds = <String>{};
+    var totalRecentMistakes = 0;
     for (final l in provider.lessons) {
       for (final vocab in l.vocabularies) {
         for (final card in [
@@ -176,8 +281,10 @@ class LessonListView extends StatelessWidget {
           vocab.cardNativeToTarget,
         ]) {
           if (!card.isEnabled) continue;
-          if (activeCardIds.add(card.id)) totalCards++;
           if (card.isDue && dueCardIds.add(card.id)) totalDue++;
+          if (card.hasRecentMistake && mistakeCardIds.add(card.id)) {
+            totalRecentMistakes++;
+          }
         }
       }
     }
@@ -194,6 +301,10 @@ class LessonListView extends StatelessWidget {
       lessonRows.addAll(entry.value);
     }
 
+    final availableDue = min(totalDue, provider.remainingReviews24h);
+    final isDailyLimitReached =
+        totalDue > 0 && provider.remainingReviews24h == 0;
+
     return Scaffold(
       appBar: AppBar(
         title: const Row(
@@ -204,6 +315,35 @@ class LessonListView extends StatelessWidget {
           ],
         ),
         actions: [
+          // Top-level Recent Mistakes action
+          IconButton(
+            icon: Badge(
+              isLabelVisible: totalRecentMistakes > 0,
+              label: Text('$totalRecentMistakes'),
+              backgroundColor: theme.colorScheme.error,
+              child: const Icon(Icons.history_edu_rounded),
+            ),
+            tooltip: totalRecentMistakes > 0
+                ? 'Review Recent Mistakes ($totalRecentMistakes)'
+                : 'Recent Mistakes (None)',
+            onPressed: () {
+              if (totalRecentMistakes == 0) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('No recent mistakes to review! Keep it up!'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              } else {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const StudyView(recentMistakesOnly: true),
+                  ),
+                );
+              }
+            },
+          ),
           // Autoplay toggle
           Tooltip(
             message: 'Audio Autoplay on Answer',
@@ -276,7 +416,8 @@ class LessonListView extends StatelessWidget {
                                   ),
                                   const SizedBox(height: 6),
                                   Text(
-                                    '$totalDue cards due today across ${provider.lessons.length} lessons ($totalCards active cards total)',
+                                    '$totalDue cards due today • ${provider.reviewsInLast24Hours}/${provider.maxReviews24h > 0 ? provider.maxReviews24h : '∞'} in 24h'
+                                    '${totalRecentMistakes > 0 ? ' • $totalRecentMistakes mistakes' : ''}',
                                     style: theme.textTheme.bodyMedium?.copyWith(
                                       color: theme
                                           .colorScheme
@@ -284,30 +425,119 @@ class LessonListView extends StatelessWidget {
                                           .withValues(alpha: 0.8),
                                     ),
                                   ),
+                                  const SizedBox(height: 6),
+                                  InkWell(
+                                    onTap: () => _showEditMaxReviewsDialog(
+                                      context,
+                                      provider,
+                                    ),
+                                    borderRadius: BorderRadius.circular(6),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 2),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.tune,
+                                            size: 14,
+                                            color: theme
+                                                .colorScheme
+                                                .onPrimaryContainer
+                                                .withValues(alpha: 0.7),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            '24h Limit: ${provider.maxReviews24h > 0 ? '${provider.maxReviews24h}' : '∞'} (edit)',
+                                            style: theme.textTheme.labelSmall
+                                                ?.copyWith(
+                                                  color: theme
+                                                      .colorScheme
+                                                      .onPrimaryContainer
+                                                      .withValues(alpha: 0.9),
+                                                  fontWeight: FontWeight.bold,
+                                                  decoration:
+                                                      TextDecoration.underline,
+                                                ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
-                            FilledButton.icon(
-                              style: FilledButton.styleFrom(
-                                backgroundColor: theme.colorScheme.primary,
-                                foregroundColor: theme.colorScheme.onPrimary,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 20,
-                                  vertical: 14,
-                                ),
-                              ),
-                              icon: const Icon(Icons.bolt_rounded),
-                              label: Text('Study All Due ($totalDue)'),
-                              onPressed: totalDue == 0
-                                  ? null
-                                  : () {
+                            Wrap(
+                              spacing: 10,
+                              runSpacing: 8,
+                              alignment: WrapAlignment.end,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                if (totalRecentMistakes > 0)
+                                  FilledButton.tonalIcon(
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor:
+                                          theme.colorScheme.errorContainer,
+                                      foregroundColor:
+                                          theme.colorScheme.onErrorContainer,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                        vertical: 14,
+                                      ),
+                                    ),
+                                    icon: const Icon(Icons.history_edu_rounded),
+                                    label: Text(
+                                      'Recent Mistakes ($totalRecentMistakes)',
+                                    ),
+                                    onPressed: () {
                                       Navigator.push(
                                         context,
                                         MaterialPageRoute(
-                                          builder: (_) => const StudyView(),
+                                          builder: (_) => const StudyView(
+                                            recentMistakesOnly: true,
+                                          ),
                                         ),
                                       );
                                     },
+                                  ),
+                                FilledButton.icon(
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: isDailyLimitReached
+                                        ? Colors.grey.shade700
+                                        : theme.colorScheme.primary,
+                                    foregroundColor:
+                                        theme.colorScheme.onPrimary,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 20,
+                                      vertical: 14,
+                                    ),
+                                  ),
+                                  icon: Icon(
+                                    isDailyLimitReached
+                                        ? Icons.check_circle_outline
+                                        : Icons.bolt_rounded,
+                                  ),
+                                  label: Text(
+                                    isDailyLimitReached
+                                        ? 'Daily Limit Reached (${provider.reviewsInLast24Hours}/${provider.maxReviews24h})'
+                                        : 'Study Due ($availableDue)',
+                                  ),
+                                  onPressed: availableDue == 0
+                                      ? (isDailyLimitReached
+                                          ? () => _showLimitReachedDialog(
+                                              context,
+                                              provider,
+                                            )
+                                          : null)
+                                      : () {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) => const StudyView(),
+                                            ),
+                                          );
+                                        },
+                                ),
+                              ],
                             ),
                           ],
                         ),
