@@ -43,7 +43,7 @@ class Lesson {
       ...explicitParts,
       ...titleParts.take(titleParts.isEmpty ? 0 : titleParts.length - 1),
     ];
-    return folderParts.isEmpty ? null : folderParts.join('/');
+    return folderParts.isEmpty ? null : folderParts.join(' / ');
   }
 
   String get displayTitle {

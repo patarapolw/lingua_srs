@@ -9,7 +9,6 @@ import '../models/ai_discussion_message.dart';
 import '../models/lesson.dart';
 import '../models/sentence.dart';
 import '../models/srs_card.dart';
-import '../models/vocab_item.dart';
 import 'yaml_parser_service.dart';
 
 class StorageService {
@@ -31,7 +30,6 @@ Lesson: Unit 2/Lesson 26
 
 nouns:
   - ko: 아줌마
-    audio: https://example.com/audio/2016/01/Lesson26v2.mp3
     en: middle aged/older woman
     notes: |
       <p>The word "아주머니" is commonly used as well</p>
@@ -42,7 +40,6 @@ nouns:
         en: I opened the door for **an older lady**
 
   - ko: 물건
-    audio: https://example.com/audio/2016/01/Lesson26v3.mp3
     en: thing, item, goods
     examples:
       - ko: "제가 산 **물건**을 언제 받을 수 있어요?"
@@ -51,25 +48,21 @@ nouns:
         en: In Korea, tax is included in the price of **goods**
 
   - ko: 복도
-    audio: https://example.com/audio/2016/01/Lesson26v4.mp3
     en: hall, hallway
     notes: The pronunciation of this word is closer to "복또"
     examples:
       - ko: "**복도**에서 달리는 것은 위험해요"
-        audio: https://example.com/audio/2016/02/Lesson26s14.mp3
         en: It is dangerous to run in the **hallway**
       - ko: 이 **복도**를 걸레로 다 청소하는 데 시간이 많이 필요할 것 같아요
         en: It will probably take a long time to clean this **hallway** with just a rag
 
   - ko: 목적
-    audio: https://example.com/audio/2016/01/Lesson26v5.mp3
     en: purpose, aim, goal
     notes: The pronunciation of this word is closer to "목쩍"
     examples:
       - ko: 저는 **목적**을 이루지 못했어요
         en: I couldn't achieve my **goal**
       - ko: "우리 학교의 **목적**은 국제고등학교가 되는 것이다"
-        audio: https://example.com/audio/2016/02/Lesson26s6.mp3
         en: Our school's **goal** is becoming an international school
       - ko: 친구와 여행의 **목적**을 정하고 여행 일정을 대충 만들었어요
         en: I set the **goals** of the trip with my friend and then made rough travel plans
@@ -132,16 +125,12 @@ adjectives:
           'Invalid AI discussion history for "${entry.key}".',
         );
       }
-      discussions[entry.key.toString()] = (entry.value as List)
-          .map((message) {
-            if (message is! Map) {
-              throw const FormatException('Invalid AI discussion message.');
-            }
-            return AiDiscussionMessage.fromJson(
-              Map<String, dynamic>.from(message),
-            );
-          })
-          .toList();
+      discussions[entry.key.toString()] = (entry.value as List).map((message) {
+        if (message is! Map) {
+          throw const FormatException('Invalid AI discussion message.');
+        }
+        return AiDiscussionMessage.fromJson(Map<String, dynamic>.from(message));
+      }).toList();
     }
     return discussions;
   }
@@ -191,9 +180,7 @@ adjectives:
     });
   }
 
-  static Future<void> saveLessonHierarchyOrder(
-    Map<String, int> order,
-  ) async {
+  static Future<void> saveLessonHierarchyOrder(Map<String, int> order) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyLessonHierarchyOrder, jsonEncode(order));
   }
@@ -517,8 +504,7 @@ adjectives:
         if (currentVocab.targetWord != sampleVocab.targetWord ||
             currentVocab.translation != sampleVocab.translation ||
             currentVocab.pos != sampleVocab.pos ||
-            (currentVocab.audioUrl != sampleVocab.audioUrl &&
-                !_hasLegacySampleAudio(currentVocab)) ||
+            currentVocab.audioUrl != sampleVocab.audioUrl ||
             currentVocab.notes != sampleVocab.notes ||
             !_isNewDefaultCard(
               currentVocab.cardTargetToNative,
@@ -564,15 +550,6 @@ adjectives:
         card.easeFactor == 2.5 &&
         card.lastReviewed == null &&
         card.status == SrsStatus.isNew;
-  }
-
-  static bool _hasLegacySampleAudio(VocabItem vocab) {
-    return (vocab.targetWord == '도착하다' &&
-            vocab.audioUrl ==
-                'https://example.com/audio/2016/01/Lesson26v8.mp3') ||
-        (vocab.targetWord == '복잡하다' &&
-            vocab.audioUrl ==
-                'https://example.com/audio/2016/01/Lesson26v15.mp3');
   }
 
   static bool _haveSameSentenceContent(

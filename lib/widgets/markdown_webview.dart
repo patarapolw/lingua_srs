@@ -47,16 +47,20 @@ String parseMarkdownToHtml(String markdownString) {
       ),
       (match) {
         final attributes = match[1] ?? match[3] ?? '';
-        final videoId = RegExp(
-          r'''id\s*=\s*["']([^"']+)["']''',
-          caseSensitive: false,
-        ).firstMatch(attributes)?.group(1) ?? 'videoseries';
-        var href = 'https://www.youtube.com/embed/$videoId';
+        var href = 'https://www.youtube.com/watch';
+        final params = <String>[];
 
-        final params = <String>["origin=https://example.com"];
+        final videoId = RegExp(
+          r''' id\s*=\s*["']?([^"']+?)["']? ''',
+          caseSensitive: false,
+        ).firstMatch(attributes)?.group(1);
+        if (videoId != null) {
+          params.add('v=$videoId');
+        }
+
 
         final videoPlaylistId = RegExp(
-          r'''list\s*=\s*["']([^"']+)["']''',
+          r''' list\s*=\s*["']?([^"']+?)["']? ''',
           caseSensitive: false,
         ).firstMatch(attributes)?.group(1);
         if (videoPlaylistId != null) {
@@ -64,7 +68,7 @@ String parseMarkdownToHtml(String markdownString) {
         }
 
         var title = RegExp(
-          r'''title\s*=\s*["']([^"']+)["']''',
+          r''' title\s*=\s*["']>([^"']+?)["']? ''',
           caseSensitive: false,
         ).firstMatch(attributes)?.group(1) ?? '';
         if (title.isNotEmpty) {
@@ -75,9 +79,7 @@ String parseMarkdownToHtml(String markdownString) {
           href = '$href?${params.join('&')}';
         }
 
-        return '<div class="yt-container">'
-        '<iframe src="$href" $title frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>'
-        '</div>';
+        return '[${title.isEmpty ? href : title}]($href)';
       },
     );
 

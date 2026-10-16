@@ -34,7 +34,7 @@ void main() {
 
   group('YAML Parser & Vocabulary Models', () {
     const sampleYaml = '''
-Lesson: Unit 2/Lesson 26
+Lesson: Unit 2 / Lesson 26
 
 nouns:
   - ko: 아줌마
@@ -54,7 +54,7 @@ verbs:
 
     test('Parses lesson title, categories and cards', () {
       final res = YamlParserService.parseLessonYaml(sampleYaml);
-      expect(res.lesson.title, 'Unit 2/Lesson 26');
+      expect(res.lesson.title, 'Unit 2 / Lesson 26');
       expect(res.lesson.vocabularies.length, 2);
 
       final noun = res.lesson.vocabularies[0];
@@ -462,7 +462,7 @@ vocabulary:
     test('Splits legacy Unit/Lesson title into hierarchy display fields', () {
       final lesson = YamlParserService.parseLessonYaml(sampleYaml).lesson;
 
-      expect(lesson.title, 'Unit 2/Lesson 26');
+      expect(lesson.title, 'Unit 2 / Lesson 26');
       expect(lesson.effectiveUnitTitle, 'Unit 2');
       expect(lesson.displayTitle, 'Lesson 26');
     });
@@ -470,13 +470,13 @@ vocabulary:
     test('Uses slash-separated lesson paths for nested folders', () {
       final lesson = Lesson(title: 'Topic / Subtopic / Lesson A');
       final lessonWithParent = Lesson(
-        title: 'Subtopic/Lesson B',
+        title: 'Subtopic / Lesson B',
         unitTitle: 'Topic',
       );
 
-      expect(lesson.effectiveUnitTitle, 'Topic/Subtopic');
+      expect(lesson.effectiveUnitTitle, 'Topic / Subtopic');
       expect(lesson.displayTitle, 'Lesson A');
-      expect(lessonWithParent.effectiveUnitTitle, 'Topic/Subtopic');
+      expect(lessonWithParent.effectiveUnitTitle, 'Topic / Subtopic');
       expect(lessonWithParent.displayTitle, 'Lesson B');
     });
 
