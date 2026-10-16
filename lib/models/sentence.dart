@@ -5,6 +5,7 @@ class Sentence {
   String targetText;
   String translationText;
   String? audioUrl;
+  String notes;
   String? lessonId;
 
   Sentence({
@@ -12,6 +13,7 @@ class Sentence {
     required this.targetText,
     required this.translationText,
     this.audioUrl,
+    this.notes = '',
     this.lessonId,
   }) : id = id ?? const Uuid().v4();
 
@@ -71,6 +73,7 @@ class Sentence {
         'targetText': targetText,
         'translationText': translationText,
         'audioUrl': audioUrl,
+        'notes': notes,
         'lessonId': lessonId,
       };
 
@@ -79,6 +82,7 @@ class Sentence {
         targetText: json['targetText'] as String? ?? '',
         translationText: json['translationText'] as String? ?? '',
         audioUrl: json['audioUrl'] as String?,
+        notes: json['notes'] as String? ?? '',
         lessonId: json['lessonId'] as String?,
       );
 }

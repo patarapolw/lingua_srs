@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/lesson.dart';
@@ -12,6 +13,7 @@ import 'yaml_parser_service.dart';
 
 class StorageService {
   static const String _keyLessons = 'lingua_srs_lessons';
+  static const String _keyLessonMarkdownIds = 'lingua_srs_lesson_markdown_ids';
   static const String _keySentences = 'lingua_srs_sentences';
   static const String _keyAutoplay = 'lingua_srs_autoplay';
   static const String _keyWindowsMigration =
@@ -88,6 +90,8 @@ adjectives:
 
   static const String _keyMaxReviews24h = 'lingua_srs_max_reviews_24h';
   static const String _keyReviewTimestamps = 'lingua_srs_review_timestamps_24h';
+  static final Map<String, String> _lessonMarkdownCache = {};
+  static Set<String> _storedLessonMarkdownIds = {};
 
   static Future<bool> loadAutoplay() async {
     final prefs = await SharedPreferences.getInstance();
@@ -160,13 +164,18 @@ adjectives:
     final jsonStr = prefs.getString(_keyLessons);
 
     if (jsonStr != null && jsonStr.isNotEmpty) {
+      List<Lesson>? lessons;
       try {
         final List<dynamic> list = jsonDecode(jsonStr);
-        return list
+        lessons = list
             .map((e) => Lesson.fromJson(Map<String, dynamic>.from(e)))
             .toList();
       } catch (e) {
         // Fallback to sample
+      }
+      if (lessons != null) {
+        await _loadLessonMarkdown(prefs, lessons);
+        return lessons;
       }
     }
 
@@ -174,13 +183,86 @@ adjectives:
     final parsed = YamlParserService.parseLessonYaml(defaultSampleYaml);
     await saveLessons([parsed.lesson]);
     await saveSentences(parsed.sentences);
-    return [parsed.lesson];
+    final lessons = [parsed.lesson];
+    await _loadLessonMarkdown(prefs, lessons);
+    return lessons;
   }
 
   static Future<void> saveLessons(List<Lesson> lessons) async {
     final prefs = await SharedPreferences.getInstance();
+    final markdownIds = <String>[];
+    if (lessons.any((lesson) => lesson.markdownContent.isNotEmpty) ||
+        _storedLessonMarkdownIds.isNotEmpty ||
+        prefs.getStringList(_keyLessonMarkdownIds)?.isNotEmpty == true) {
+      final directory = await getApplicationSupportDirectory();
+      final previousIds = {
+        ..._storedLessonMarkdownIds,
+        ...?prefs.getStringList(_keyLessonMarkdownIds),
+      };
+      final markdownDirectory = Directory(
+        '${directory.path}${Platform.pathSeparator}lesson_markdown',
+      );
+      for (final lesson in lessons) {
+        final markdown = lesson.markdownContent;
+        if (markdown.isEmpty) continue;
+        markdownIds.add(lesson.id);
+        if (_lessonMarkdownCache[lesson.id] == markdown) continue;
+
+        await markdownDirectory.create(recursive: true);
+        await _markdownFile(
+          directory,
+          lesson.id,
+        ).writeAsString(markdown, flush: true);
+        _lessonMarkdownCache[lesson.id] = markdown;
+      }
+      for (final removedId in previousIds.difference(markdownIds.toSet())) {
+        final file = _markdownFile(directory, removedId);
+        if (await file.exists()) await file.delete();
+        _lessonMarkdownCache.remove(removedId);
+      }
+      _storedLessonMarkdownIds = markdownIds.toSet();
+      await prefs.setStringList(_keyLessonMarkdownIds, markdownIds);
+    }
+
     final jsonStr = jsonEncode(lessons.map((l) => l.toJson()).toList());
     await prefs.setString(_keyLessons, jsonStr);
+  }
+
+  static Future<void> _loadLessonMarkdown(
+    SharedPreferences prefs,
+    List<Lesson> lessons,
+  ) async {
+    final ids = prefs.getStringList(_keyLessonMarkdownIds) ?? const [];
+    if (ids.isEmpty) {
+      _storedLessonMarkdownIds = {};
+      return;
+    }
+
+    final directory = await getApplicationSupportDirectory();
+    final lessonsById = {for (final lesson in lessons) lesson.id: lesson};
+    for (final id in ids) {
+      final lesson = lessonsById[id];
+      if (lesson == null) continue;
+      final file = _markdownFile(directory, id);
+      if (!await file.exists()) {
+        debugPrint(
+          'Markdown content for lesson "$id" is missing from storage.',
+        );
+        continue;
+      }
+      final markdown = await file.readAsString();
+      lesson.markdownContent = markdown;
+      _lessonMarkdownCache[id] = markdown;
+    }
+    _storedLessonMarkdownIds = ids.toSet();
+  }
+
+  static File _markdownFile(Directory directory, String lessonId) {
+    final safeId = base64Url.encode(utf8.encode(lessonId)).replaceAll('=', '');
+    return File(
+      '${directory.path}${Platform.pathSeparator}lesson_markdown'
+      '${Platform.pathSeparator}$safeId.md',
+    );
   }
 
   static Future<void> _migrateLegacyWindowsPreferences(

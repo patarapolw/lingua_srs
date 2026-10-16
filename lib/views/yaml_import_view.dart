@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -27,15 +29,21 @@ class _YamlImportViewState extends State<YamlImportView> {
   String? _progressMessage;
   int _progressCurrent = 0;
   int _progressTotal = 0;
+  Timer? _parseTimer;
+  int _parseGeneration = 0;
 
   @override
   void dispose() {
     _lessonNameController.dispose();
     _yamlController.dispose();
+    _parseTimer?.cancel();
+    _parseGeneration++;
     super.dispose();
   }
 
   void _parseCurrentYaml() {
+    _parseTimer?.cancel();
+    final generation = ++_parseGeneration;
     final text = _yamlController.text.trim();
     if (_directoryFiles.isNotEmpty) {
       _directoryFiles = [];
@@ -46,27 +54,40 @@ class _YamlImportViewState extends State<YamlImportView> {
       setState(() {
         _errorMessage = null;
         _previewResult = null;
+        _progressMessage = null;
       });
       return;
     }
 
-    try {
-      final nameParts = _lessonNameParts(_lessonNameController.text);
-      final res = YamlParserService.parseLessonYaml(
-        text,
-        defaultTitle: nameParts.title,
-        defaultUnitTitle: nameParts.unitTitle ?? _defaultUnitTitle,
-      );
-      setState(() {
-        _errorMessage = null;
-        _previewResult = res;
-      });
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'YAML Parse Error: $e';
-        _previewResult = null;
-      });
-    }
+    final nameParts = _lessonNameParts(_lessonNameController.text);
+    final unitTitle = nameParts.unitTitle ?? _defaultUnitTitle;
+    setState(() {
+      _errorMessage = null;
+      _previewResult = null;
+      _progressMessage = 'Parsing lesson in the background...';
+    });
+    _parseTimer = Timer(const Duration(milliseconds: 300), () async {
+      try {
+        final result = await _parseLessonInBackground(
+          text,
+          nameParts.title,
+          unitTitle,
+        );
+        if (!mounted || generation != _parseGeneration) return;
+        setState(() {
+          _errorMessage = null;
+          _previewResult = result;
+          _progressMessage = null;
+        });
+      } catch (error) {
+        if (!mounted || generation != _parseGeneration) return;
+        setState(() {
+          _errorMessage = 'YAML / Markdown Parse Error: $error';
+          _previewResult = null;
+          _progressMessage = null;
+        });
+      }
+    });
   }
 
   static ({String? title, String? unitTitle}) _lessonNameParts(String value) {
@@ -119,6 +140,8 @@ class _YamlImportViewState extends State<YamlImportView> {
       );
       if (directoryPath == null) return;
 
+      _parseTimer?.cancel();
+      _parseGeneration++;
       setState(() {
         _isParsing = true;
         _previewResult = null;
@@ -160,50 +183,31 @@ class _YamlImportViewState extends State<YamlImportView> {
         });
       }
 
-      final imports = <_MarkdownImportFile>[];
-      final errors = <String>[];
-      var skipped = 0;
-      for (var index = 0; index < files.length; index++) {
-        final file = files[index];
-        final relativePath = file.path
-            .substring(directoryPath.length)
-            .replaceAll('\\', '/')
-            .replaceFirst(RegExp(r'^/+'), '');
-        try {
-          final contents = await file.readAsString();
-          if (!YamlParserService.hasVocabularyFrontmatter(contents)) {
-            skipped++;
-          } else {
-            final unitTitle = _unitTitleForPath(relativePath, file.path);
-            final preview = YamlParserService.parseLessonYaml(
-              contents,
-              defaultUnitTitle: unitTitle,
-            );
-            imports.add(
-              _MarkdownImportFile(path: relativePath, preview: preview),
-            );
-          }
-        } catch (error) {
-          errors.add('$relativePath: $error');
-        }
-        if (mounted && (index % 3 == 2 || index == files.length - 1)) {
-          setState(() => _progressCurrent = index + 1);
-          await Future<void>.delayed(Duration.zero);
-        }
+      if (mounted) {
+        setState(() {
+          _progressMessage = 'Parsing Markdown files in the background...';
+          _progressCurrent = 0;
+          _progressTotal = files.length;
+        });
       }
+      final result = await _parseMarkdownDirectoryInBackground(
+        files.map((file) => file.path).toList(),
+        directoryPath,
+      );
 
       if (!mounted) return;
       setState(() {
-        _directoryFiles = imports;
-        _directoryErrors = errors;
-        _directorySkipped = skipped;
+        _directoryFiles = result.imports;
+        _directoryErrors = result.errors;
+        _directorySkipped = result.skipped;
+        _progressCurrent = files.length;
         _isParsing = false;
         _progressMessage = null;
-        if (imports.isEmpty) {
-          _errorMessage = errors.isEmpty
+        if (result.imports.isEmpty) {
+          _errorMessage = result.errors.isEmpty
               ? 'No Markdown files with a vocabulary frontmatter section were found.'
-              : 'No importable Markdown files found. ${errors.length} files '
-                    'could not be parsed:\n${errors.take(5).join('\n')}';
+              : 'No importable Markdown files found. ${result.errors.length} files '
+                    'could not be parsed:\n${result.errors.take(5).join('\n')}';
         }
       });
     } catch (error) {
@@ -216,25 +220,6 @@ class _YamlImportViewState extends State<YamlImportView> {
     }
   }
 
-  static String? _unitTitleForPath(String relativePath, String absolutePath) {
-    final unitMatch = RegExp(
-      r'(?:^|/)(unit[-_ ](\d+))(?:/|$)',
-      caseSensitive: false,
-    ).firstMatch(absolutePath.replaceAll('\\', '/'));
-    if (unitMatch != null) return 'Unit ${unitMatch.group(2)}';
-
-    final firstDirectory = relativePath.split('/').first;
-    if (relativePath.contains('/')) {
-      final words = firstDirectory
-          .replaceAll(RegExp(r'[-_]'), ' ')
-          .split(' ')
-          .where((word) => word.isNotEmpty)
-          .map((word) => '${word[0].toUpperCase()}${word.substring(1)}');
-      return words.join(' ');
-    }
-    return null;
-  }
-
   Future<void> _executeImport() async {
     if (_directoryFiles.isNotEmpty) {
       await _executeDirectoryImport();
@@ -242,17 +227,14 @@ class _YamlImportViewState extends State<YamlImportView> {
     }
 
     final text = _yamlController.text.trim();
-    if (text.isEmpty) return;
+    final preview = _previewResult;
+    if (text.isEmpty || preview == null) return;
 
     setState(() => _isParsing = true);
     try {
       final provider = context.read<AppProvider>();
-      final nameParts = _lessonNameParts(_lessonNameController.text);
-      final importedLesson = await provider.importYaml(
-        text,
-        defaultTitle: nameParts.title,
-        defaultUnitTitle: nameParts.unitTitle ?? _defaultUnitTitle,
-      );
+      final importedLesson = (await provider.importParsedLessons([preview]))
+          .single;
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -287,6 +269,13 @@ class _YamlImportViewState extends State<YamlImportView> {
     try {
       final importedLessons = await provider.importParsedLessons(
         _directoryFiles.map((file) => file.preview).toList(),
+        onProgress: (current, total) {
+          if (!mounted) return;
+          setState(() {
+            _progressCurrent = current;
+            _progressTotal = total;
+          });
+        },
       );
       final importedCount = importedLessons.length;
       if (!mounted) return;
@@ -348,7 +337,7 @@ class _YamlImportViewState extends State<YamlImportView> {
                 : const Icon(Icons.check),
             label: Text(
               _directoryFiles.isEmpty
-                  ? 'Import YAML'
+                  ? 'Import Markdown'
                   : 'Import ${_directoryFiles.length} Lessons',
             ),
             onPressed:
@@ -401,7 +390,7 @@ class _YamlImportViewState extends State<YamlImportView> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'YAML',
+                    'Markdown with YAML frontmatter',
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
@@ -426,6 +415,7 @@ class _YamlImportViewState extends State<YamlImportView> {
                         border: const OutlineInputBorder(),
                         alignLabelWithHint: true,
                         hintText:
+                            '---\n'
                             'vocabulary:\n'
                             '  nouns:  # Replace with a part of speech or section name\n'
                             '    - ko: "Korean word"\n'
@@ -437,7 +427,12 @@ class _YamlImportViewState extends State<YamlImportView> {
                             '          en: "Translated sentence with **meaning**"\n'
                             '        - ko: "Another example sentence"\n'
                             '          audio: "https://example.com/sentence-audio.mp3"\n'
-                            '          en: "Another translation"',
+                            '          en: "Another translation"\n'
+                            '---\n'
+                            '\n'
+                            '# Lesson 1\n'
+                            '\n'
+                            'Lesson contents go **here**.',
                         hintStyle: TextStyle(
                           color: theme.colorScheme.onSurfaceVariant.withValues(
                             alpha: 0.65,
@@ -659,7 +654,9 @@ class _YamlImportViewState extends State<YamlImportView> {
                     ),
                   ] else if (_errorMessage == null)
                     const Expanded(
-                      child: Center(child: Text('Enter YAML to see preview')),
+                      child: Center(
+                        child: Text('Enter Markdown to see preview'),
+                      ),
                     ),
                 ],
               ),
@@ -676,4 +673,88 @@ class _MarkdownImportFile {
   final YamlParseResult preview;
 
   const _MarkdownImportFile({required this.path, required this.preview});
+}
+
+class _MarkdownDirectoryResult {
+  final List<_MarkdownImportFile> imports;
+  final List<String> errors;
+  final int skipped;
+
+  const _MarkdownDirectoryResult({
+    required this.imports,
+    required this.errors,
+    required this.skipped,
+  });
+}
+
+Future<YamlParseResult> _parseLessonInBackground(
+  String text,
+  String? title,
+  String? unitTitle,
+) => Isolate.run(
+  () => YamlParserService.parseLessonYaml(
+    text,
+    defaultTitle: title,
+    defaultUnitTitle: unitTitle,
+  ),
+);
+
+Future<_MarkdownDirectoryResult> _parseMarkdownDirectoryInBackground(
+  List<String> paths,
+  String directoryPath,
+) => Isolate.run(() => _parseMarkdownFiles(paths, directoryPath));
+
+_MarkdownDirectoryResult _parseMarkdownFiles(
+  List<String> paths,
+  String directoryPath,
+) {
+  final imports = <_MarkdownImportFile>[];
+  final errors = <String>[];
+  var skipped = 0;
+  final normalizedDirectory = directoryPath.replaceAll('\\', '/');
+
+  for (final path in paths) {
+    final normalizedPath = path.replaceAll('\\', '/');
+    final relativePath = normalizedPath
+        .substring(normalizedDirectory.length)
+        .replaceFirst(RegExp(r'^/+'), '');
+    try {
+      final contents = File(path).readAsStringSync();
+      if (!YamlParserService.hasVocabularyFrontmatter(contents)) {
+        skipped++;
+        continue;
+      }
+      final preview = YamlParserService.parseLessonYaml(
+        contents,
+        defaultUnitTitle: _unitTitleForPath(relativePath, path),
+      );
+      imports.add(_MarkdownImportFile(path: relativePath, preview: preview));
+    } catch (error) {
+      errors.add('$relativePath: $error');
+    }
+  }
+  return _MarkdownDirectoryResult(
+    imports: imports,
+    errors: errors,
+    skipped: skipped,
+  );
+}
+
+String? _unitTitleForPath(String relativePath, String absolutePath) {
+  final unitMatch = RegExp(
+    r'(?:^|/)(unit[-_ ](\d+))(?:/|$)',
+    caseSensitive: false,
+  ).firstMatch(absolutePath.replaceAll('\\', '/'));
+  if (unitMatch != null) return 'Unit ${unitMatch.group(2)}';
+
+  final firstDirectory = relativePath.split('/').first;
+  if (relativePath.contains('/')) {
+    final words = firstDirectory
+        .replaceAll(RegExp(r'[-_]'), ' ')
+        .split(' ')
+        .where((word) => word.isNotEmpty)
+        .map((word) => '${word[0].toUpperCase()}${word.substring(1)}');
+    return words.join(' ');
+  }
+  return null;
 }

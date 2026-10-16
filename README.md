@@ -7,12 +7,13 @@ A Flutter application targeting **Desktop (Windows, macOS, Linux)** and **Mobile
 ## 🌟 Key Features
 
 1. **YAML/Markdown Lesson Architecture**:
-   - Create lessons from the **Import Lessons** screen with a separate lesson-name field and YAML editor. The YAML starts empty; a neutral example is shown as hint text.
+   - Create lessons from the **Import Lessons** screen with a separate lesson-name field and Markdown editor. The field starts empty; its example shows YAML frontmatter with an optional Markdown body.
    - Use `/` in the lesson name to separate hierarchy levels. For example, `Unit 2 / Lesson 26` groups the lesson under `Unit 2`; `Topic / Subtopic / Lesson A` creates a deeper hierarchy.
    - Import a directory recursively; Markdown files are read from their `vocabulary:` frontmatter section and grouped by their parent folder (for example, `unit-2` becomes Unit 2).
-   - YAML is checked as you type, with parse errors and an import preview. Import is enabled only when the YAML is valid.
+   - YAML and Markdown frontmatter are parsed in a background isolate with parse errors and an import preview. Folder import parsing also runs off the UI isolate.
    - Unit titles group lessons in the library; each lesson appears as a subsection. Vocabulary frontmatter can define alphabetically sorted, collapsible sections at any depth. Re-importing updates matching lessons and vocabulary in place while retaining SRS progress and entries not present in the import.
    - Imported vocabulary with the same target form and meaning shares SRS progress across sections. Different meanings receive separate generated IDs; an optional `id` on a vocabulary entry can explicitly control sharing.
+   - Importing Markdown lessons keeps the document body for reading from the lesson list; it can be edited and saved at any time. Large lesson bodies are rendered in lazy Markdown chunks, and **View Vocabulary** remains a separate view.
    - Pre-loaded with the **Unit 2/Lesson 26** sample dataset (nouns, verbs, adjectives with sentences and audio).
 
 2. **Extensible for Any Language**:
@@ -25,6 +26,8 @@ A Flutter application targeting **Desktop (Windows, macOS, Linux)** and **Mobile
    - **Individual Overrides**: Both directions can be freely toggled on or off per vocabulary item.
    - **Reset Progress**: Reset SRS progress for an entire lesson or an individual vocabulary item without changing card visibility.
    - Delete a section and all nested vocabulary, or delete an individual vocabulary entry. Deleting an entry resets SRS progress for any other entries sharing its ID.
+   - Detects enabled cards with the same front prompt (without comparing their example sentences) and lets you add a disambiguation cue displayed on the card front.
+   - Each card direction has editable Markdown notes displayed on its back.
 
 4. **Front-of-Card Random Sentence with Cloze Deletion**:
    - Each card dynamically selects a **random example sentence** from the vocabulary's pool to display on the front.
@@ -34,7 +37,7 @@ A Flutter application targeting **Desktop (Windows, macOS, Linux)** and **Mobile
 
 5. **Sentence Pooling**:
    - Sentences from all lessons are indexed into a central **Sentence Pool**.
-   - Browse, search, and link any sentence from the pool to any vocabulary item.
+   - Browse, search, edit notes on, and link any sentence from the pool to any vocabulary item.
    - The sentence picker opens with the selected vocabulary as its search query. Korean-aware local tokenization handles Hangul subwords, common particles, and frequent verb/adjective endings without downloading a large model.
    - Create new sentences directly in the pool or while editing a vocabulary item.
 
@@ -130,7 +133,7 @@ lingua_srs/
 
 ---
 
-## 📝 Creating a Lesson from YAML
+## 📝 Creating a Lesson from Markdown with YAML frontmatter
 
 Open **Add Lessons** and enter a lesson name in the single-line **Lesson name** field, for example:
 
@@ -150,9 +153,11 @@ vocabulary:
         en: "example word"
         audio: "https://example.com/word-audio.mp3"
         notes: "Optional HTML or Markdown notes"
+        disambiguation: "fruit"
         examples:
           - ko: "저는 **예시 단어**를 배워요."
             en: "I learn an **example word**."
+            notes: "Optional notes for this sentence."
           - ko: "다른 문장입니다."
             audio: "https://example.com/sentence-audio.mp3"
             en: "This is another sentence."
@@ -161,7 +166,7 @@ vocabulary:
       en: "to make"
 ```
 
-Each entry should include a target-language field (such as `ko`) and a translation field (such as `en`). `audio`, `notes`, and `examples` are optional. Example sentence emphasis uses Markdown `**bold**`; the app uses it for cloze cards. Add an optional `id` when entries should explicitly share SRS progress, or need distinct identities:
+Each entry should include a target-language field (such as `ko`) and a translation field (such as `en`). `audio`, `notes`, `disambiguation`, and `examples` are optional. Notes on individual examples are imported as sentence notes and shown on the review-card back; they can also be edited from the Sentence Pool. Example sentence emphasis uses Markdown `**bold**`; the app uses it for cloze cards. Cards with the same front prompt are flagged even when their context sentences differ; use `disambiguation` to show an extra cue on the card front. Per-card back notes are edited in the vocabulary editor. Add an optional `id` when entries should explicitly share SRS progress, or need distinct identities:
 
 ```yaml
 vocabulary:
@@ -175,26 +180,22 @@ vocabulary:
       en: "pear"
 ```
 
-The **Import YAML** button remains disabled until valid YAML can be previewed. Fix any displayed parse errors, review the lesson and vocabulary preview, then import. You can also use **Pick File** to load a YAML/YML/TXT/Markdown file, or **Pick Folder** to scan Markdown files recursively. Folder imports use only files with a `vocabulary:` map in their YAML frontmatter; ordinary Markdown body text is ignored. Re-importing updates matching lessons and vocabulary while preserving SRS progress and keeping unmatched vocabulary.
+The import button remains disabled until Markdown with YAML frontmatter containing `vocabulary:` can be previewed. The vocabulary map may be empty, and the Markdown body is optional. Fix any displayed parse errors, review the lesson and vocabulary preview, then import. Use **Pick File** to load a YAML/YML/TXT/Markdown file, or **Pick Folder** to scan Markdown files recursively. Folder imports use only files with a `vocabulary:` key in their YAML frontmatter; ordinary Markdown body text is retained for lesson reading but is not imported as vocabulary. Re-importing updates matching lessons and vocabulary while preserving SRS progress and keeping unmatched vocabulary.
 
 ### Markdown frontmatter format
 
-For folder imports, Markdown files must have YAML frontmatter containing a `vocabulary:` map. The first Markdown heading supplies the lesson title unless a lesson name is supplied separately:
+Markdown imports must have YAML frontmatter containing a `vocabulary:` key. It can be empty and the Markdown body can be omitted. The first Markdown heading supplies the lesson title unless a lesson name is supplied separately:
 
 ```markdown
 ---
 vocabulary:
-  nouns:
-    - ko: "예시 단어"
-      en: "example word"
 ---
 # Lesson 1: Example title
 
-Lesson notes go here and are not imported as vocabulary.
+Lesson notes go here.
 ```
 
-Vocabulary sections can be nested to any depth. Entries with the same explicit
-vocabulary `id` share SRS progress, including across sections. Use different IDs
-to force separate progress identities when needed. Without an explicit ID, the
-app shares progress for the same target form and meaning, while different
-meanings receive separate generated IDs.
+Imported lesson Markdown can be edited from its reader view. The reader renders `<AudioButton>` and `<TTS>` controls. YouTube embeds are not a
+current app feature. Spoiler spans (`<span class="spoiler">...</span>`) are blurred until hovered on desktop or tapped on touch devices; tapping toggles their visibility.
+
+Vocabulary sections can be nested to any depth. Entries with the same explicit vocabulary `id` share SRS progress, including across sections. Use different IDs to force separate progress identities when needed. Without an explicit ID, the app shares progress for the same target form and meaning, while different meanings receive separate generated IDs.

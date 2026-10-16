@@ -10,6 +10,7 @@ class Lesson {
   String targetLanguage; // e.g. 'ko', 'es', 'ja', 'fr'
   String nativeLanguage; // e.g. 'en'
   List<VocabItem> vocabularies;
+  String markdownContent;
 
   Lesson({
     String? id,
@@ -18,6 +19,7 @@ class Lesson {
     this.targetLanguage = 'ko',
     this.nativeLanguage = 'en',
     List<VocabItem>? vocabularies,
+    this.markdownContent = '',
   }) : id = id ?? const Uuid().v4(),
        vocabularies = vocabularies ?? [];
 
@@ -107,6 +109,7 @@ class Lesson {
     unitTitle: json['unitTitle'] as String?,
     targetLanguage: json['targetLanguage'] as String? ?? 'ko',
     nativeLanguage: json['nativeLanguage'] as String? ?? 'en',
+    markdownContent: json['markdownContent'] as String? ?? '',
     vocabularies:
         (json['vocabularies'] as List<dynamic>?)
             ?.map(

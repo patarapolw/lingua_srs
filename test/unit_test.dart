@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lingua_srs/models/lesson.dart';
 import 'package:lingua_srs/models/srs_card.dart';
@@ -12,6 +14,24 @@ import 'package:lingua_srs/services/srs_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  final markdownStorageDirectory = Directory.systemTemp.createTempSync(
+    'lingua_srs_markdown_test_',
+  );
+  const pathProviderChannel = MethodChannel('plugins.flutter.io/path_provider');
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(pathProviderChannel, (call) async {
+        if (call.method == 'getApplicationSupportDirectory') {
+          return markdownStorageDirectory.path;
+        }
+        throw MissingPluginException('Unexpected method: ${call.method}');
+      });
+  tearDownAll(() async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(pathProviderChannel, null);
+    await markdownStorageDirectory.delete(recursive: true);
+  });
+
   group('YAML Parser & Vocabulary Models', () {
     const sampleYaml = '''
 Lesson: Unit 2/Lesson 26
@@ -53,6 +73,233 @@ verbs:
       expect(verb.cardTargetToNative.isEnabled, isFalse);
       expect(verb.cardNativeToTarget.isEnabled, isTrue);
     });
+
+    test('Parses and serializes disambiguation and sentence/card notes', () {
+      final parsed = YamlParserService.parseLessonYaml('''
+---
+vocabulary:
+  nouns:
+    - ko: 배
+      en: pear
+      disambiguation: fruit
+      examples:
+        - ko: 저는 **배**를 먹었어요
+          en: I ate a **pear**
+          notes: Note about this example.
+---
+# Lesson 1: Notes
+''');
+      final vocab = parsed.lesson.vocabularies.single;
+      final sentence = parsed.sentences.single;
+      vocab.cardTargetToNative.backNotes = 'Back note';
+
+      final restoredVocab = VocabItem.fromJson(
+        Map<String, dynamic>.from(vocab.toJson()),
+      );
+      final restoredSentence = Sentence.fromJson(
+        Map<String, dynamic>.from(sentence.toJson()),
+      );
+
+      expect(restoredVocab.disambiguation, 'fruit');
+      expect(restoredVocab.cardTargetToNative.backNotes, 'Back note');
+      expect(restoredSentence.notes, 'Note about this example.');
+    });
+
+    test(
+      'Stores Markdown body while parsing vocabulary and sentence notes',
+      () {
+        const markdown = '''
+---
+vocabulary:
+  nouns:
+    - ko: 배
+      en: pear
+      examples:
+        - ko: 저는 **배**를 먹었어요
+          en: I ate a **pear**
+          notes: This sentence note is imported.
+---
+# Lesson 1: Pears
+
+## Introduction
+
+The full lesson text remains available to render.
+''';
+        final parsed = YamlParserService.parseLessonYaml(markdown);
+
+        expect(parsed.lesson.markdownContent, contains('## Introduction'));
+        expect(
+          parsed.lesson.markdownContent,
+          contains('The full lesson text remains available to render.'),
+        );
+        expect(parsed.lesson.markdownContent, isNot(contains('vocabulary:')));
+        expect(
+          parsed.sentences.single.notes,
+          'This sentence note is imported.',
+        );
+      },
+    );
+
+    test('Accepts empty Markdown vocabulary frontmatter without a body', () {
+      const markdown = '---\nvocabulary:\n---';
+
+      final parsed = YamlParserService.parseLessonYaml(markdown);
+
+      expect(parsed.lesson.vocabularies, isEmpty);
+      expect(parsed.sentences, isEmpty);
+      expect(parsed.lesson.markdownContent, isEmpty);
+      expect(YamlParserService.hasVocabularyFrontmatter(markdown), isTrue);
+    });
+
+    test('Persists full Markdown separately from lesson JSON', () async {
+      SharedPreferences.setMockInitialValues({
+        'lingua_srs_windows_legacy_migration_complete': true,
+        'lingua_srs_lessons': '[]',
+        'lingua_srs_sentences': '[]',
+      });
+      final provider = AppProvider();
+      while (provider.isLoading) {
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      final imported = await provider.importYaml('''
+---
+vocabulary:
+  nouns:
+    - ko: 배
+      en: pear
+---
+# Lesson 1: Pears
+
+The complete lesson body.
+''');
+      final storedJson = jsonDecode(
+        (await SharedPreferences.getInstance()).getString(
+          'lingua_srs_lessons',
+        )!,
+      ) as List<dynamic>;
+      expect(storedJson.single, isNot(contains('markdownContent')));
+
+      final reloadedProvider = AppProvider();
+      while (reloadedProvider.isLoading) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      final reloadedLesson = reloadedProvider.lessons.single;
+      expect(reloadedLesson.id, imported.id);
+      expect(
+        reloadedLesson.markdownContent,
+        contains('The complete lesson body.'),
+      );
+      provider.dispose();
+      reloadedProvider.dispose();
+    });
+
+    test('Edits and persists imported lesson Markdown', () async {
+      SharedPreferences.setMockInitialValues({
+        'lingua_srs_windows_legacy_migration_complete': true,
+        'lingua_srs_lessons': '[]',
+        'lingua_srs_sentences': '[]',
+      });
+      final provider = AppProvider();
+      while (provider.isLoading) {
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      final lesson = await provider.importYaml('''
+---
+vocabulary:
+---
+# Lesson 26
+Original text.
+''');
+      await provider.updateLessonMarkdown(lesson.id, '# Lesson 26\nEdited.');
+
+      expect(lesson.markdownContent, '# Lesson 26\nEdited.');
+      final reloadedProvider = AppProvider();
+      while (reloadedProvider.isLoading) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(
+        reloadedProvider.lessons.single.markdownContent,
+        '# Lesson 26\nEdited.',
+      );
+      provider.dispose();
+      reloadedProvider.dispose();
+    });
+
+    test(
+      'Detects duplicate card prompts independently of context sentences',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'lingua_srs_windows_legacy_migration_complete': true,
+          'lingua_srs_lessons': '[]',
+          'lingua_srs_sentences': '[]',
+        });
+        final provider = AppProvider();
+        while (provider.isLoading) {
+          await Future<void>.delayed(Duration.zero);
+        }
+
+        final lesson = await provider.importYaml('''
+---
+vocabulary:
+  nouns:
+    - ko: 배
+      en: pear
+      examples:
+        - ko: 저는 **배**를 먹었어요
+          en: I ate a **pear**
+    - ko: 배
+      en: boat
+      examples:
+        - ko: 저는 **배**를 탔어요
+          en: I took a **boat**
+    - ko: 사과
+      en: fruit
+    - ko: 과일
+      en: fruit
+---
+# Lesson 1: Duplicate prompts
+''');
+        final pear = lesson.vocabularies.firstWhere(
+          (vocab) => vocab.translation == 'pear',
+        );
+        final boat = lesson.vocabularies.firstWhere(
+          (vocab) => vocab.translation == 'boat',
+        );
+        final apple = lesson.vocabularies.firstWhere(
+          (vocab) => vocab.targetWord == '사과',
+        );
+        final fruit = lesson.vocabularies.firstWhere(
+          (vocab) => vocab.targetWord == '과일',
+        );
+        apple.cardNativeToTarget.isEnabled = true;
+        fruit.cardNativeToTarget.isEnabled = true;
+
+        expect(
+          provider.getDuplicateFrontVocabularies(
+            pear,
+            CardDirection.targetToNative,
+          ),
+          [boat],
+        );
+        expect(
+          provider.getDuplicateFrontVocabularies(
+            apple,
+            CardDirection.nativeToTarget,
+          ),
+          [fruit],
+        );
+        expect(
+          provider.getDuplicateFrontVocabularies(
+            pear,
+            CardDirection.nativeToTarget,
+          ),
+          isEmpty,
+        );
+        provider.dispose();
+      },
+    );
 
     test('Parses Markdown vocabulary frontmatter and lesson hierarchy', () {
       const markdown = r'''
@@ -695,63 +942,72 @@ vocabulary:
       expect(card.lapses, 1); // retains total lapse count
     });
 
-    test('AppProvider prioritizes oldest inserted lessons while shuffling by POS', () async {
-      SharedPreferences.setMockInitialValues({
-        'lingua_srs_windows_legacy_migration_complete': true,
-        'lingua_srs_lessons': '[]',
-      });
-      final provider = AppProvider();
-      while (provider.isLoading) {
-        await Future<void>.delayed(const Duration(milliseconds: 10));
-      }
-      provider.lessons.clear();
-
-      // Create Lesson 1 (older) with nouns and verbs
-      final lesson1 = Lesson(title: 'Lesson 1');
-      lesson1.vocabularies.addAll([
-        VocabItem(targetWord: '사과', translation: 'apple', pos: 'nouns'),
-        VocabItem(targetWord: '바나나', translation: 'banana', pos: 'nouns'),
-        VocabItem(targetWord: '먹다', translation: 'to eat', pos: 'verbs'),
-        VocabItem(targetWord: '마시다', translation: 'to drink', pos: 'verbs'),
-      ]);
-
-      // Create Lesson 2 (newer) with adjectives
-      final lesson2 = Lesson(title: 'Lesson 2');
-      lesson2.vocabularies.addAll([
-        VocabItem(targetWord: '크다', translation: 'big', pos: 'adjectives'),
-        VocabItem(targetWord: '작다', translation: 'small', pos: 'adjectives'),
-      ]);
-
-      provider.lessons.addAll([lesson1, lesson2]);
-
-      final queue = provider.getStudyQueue(dueOnly: false);
-      expect(queue, hasLength(6));
-
-      // All cards from Lesson 1 must come before all cards from Lesson 2
-      final lesson1Indices = <int>[];
-      final lesson2Indices = <int>[];
-      for (var i = 0; i < queue.length; i++) {
-        if (queue[i].lesson.id == lesson1.id) {
-          lesson1Indices.add(i);
-        } else if (queue[i].lesson.id == lesson2.id) {
-          lesson2Indices.add(i);
+    test(
+      'AppProvider prioritizes oldest inserted lessons while shuffling by POS',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'lingua_srs_windows_legacy_migration_complete': true,
+          'lingua_srs_lessons': '[]',
+        });
+        final provider = AppProvider();
+        while (provider.isLoading) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
         }
-      }
+        provider.lessons.clear();
 
-      expect(lesson1Indices.length, 4);
-      expect(lesson2Indices.length, 2);
-      expect(lesson1Indices.last < lesson2Indices.first, isTrue,
-          reason: 'Oldest inserted lessons must be prioritized first');
+        // Create Lesson 1 (older) with nouns and verbs
+        final lesson1 = Lesson(title: 'Lesson 1');
+        lesson1.vocabularies.addAll([
+          VocabItem(targetWord: '사과', translation: 'apple', pos: 'nouns'),
+          VocabItem(targetWord: '바나나', translation: 'banana', pos: 'nouns'),
+          VocabItem(targetWord: '먹다', translation: 'to eat', pos: 'verbs'),
+          VocabItem(targetWord: '마시다', translation: 'to drink', pos: 'verbs'),
+        ]);
 
-      // Test Recent Mistakes queue filter
-      expect(provider.totalRecentMistakes, 0);
-      SrsService.processReview(lesson1.vocabularies[0].cardTargetToNative, SrsRating.again);
-      expect(provider.totalRecentMistakes, 1);
+        // Create Lesson 2 (newer) with adjectives
+        final lesson2 = Lesson(title: 'Lesson 2');
+        lesson2.vocabularies.addAll([
+          VocabItem(targetWord: '크다', translation: 'big', pos: 'adjectives'),
+          VocabItem(targetWord: '작다', translation: 'small', pos: 'adjectives'),
+        ]);
 
-      final mistakesQueue = provider.getRecentMistakesQueue();
-      expect(mistakesQueue, hasLength(1));
-      expect(mistakesQueue.first.vocab.targetWord, '사과');
-    });
+        provider.lessons.addAll([lesson1, lesson2]);
+
+        final queue = provider.getStudyQueue(dueOnly: false);
+        expect(queue, hasLength(6));
+
+        // All cards from Lesson 1 must come before all cards from Lesson 2
+        final lesson1Indices = <int>[];
+        final lesson2Indices = <int>[];
+        for (var i = 0; i < queue.length; i++) {
+          if (queue[i].lesson.id == lesson1.id) {
+            lesson1Indices.add(i);
+          } else if (queue[i].lesson.id == lesson2.id) {
+            lesson2Indices.add(i);
+          }
+        }
+
+        expect(lesson1Indices.length, 4);
+        expect(lesson2Indices.length, 2);
+        expect(
+          lesson1Indices.last < lesson2Indices.first,
+          isTrue,
+          reason: 'Oldest inserted lessons must be prioritized first',
+        );
+
+        // Test Recent Mistakes queue filter
+        expect(provider.totalRecentMistakes, 0);
+        SrsService.processReview(
+          lesson1.vocabularies[0].cardTargetToNative,
+          SrsRating.again,
+        );
+        expect(provider.totalRecentMistakes, 1);
+
+        final mistakesQueue = provider.getRecentMistakesQueue();
+        expect(mistakesQueue, hasLength(1));
+        expect(mistakesQueue.first.vocab.targetWord, '사과');
+      },
+    );
 
     test('Again and Hard repeat in less than 24 hours, and 24h review limit is enforced', () async {
       final now = DateTime.now();
@@ -772,7 +1028,10 @@ vocabulary:
       final hardCard = SrsCard(direction: CardDirection.targetToNative);
       SrsService.processReview(hardCard, SrsRating.hard);
       expect(hardCard.interval, 0);
-      expect(hardCard.dueDate.difference(now).inHours, 12); // 12 hours (less than 24h)
+      expect(
+        hardCard.dueDate.difference(now).inHours,
+        12,
+      ); // 12 hours (less than 24h)
       expect(hardCard.isDue, isFalse);
 
       // 3. 24-hour review limit in AppProvider

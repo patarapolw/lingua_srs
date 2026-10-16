@@ -11,6 +11,7 @@ class VocabItem {
   List<String> sectionPath;
   String? audioUrl;
   String notes; // Markdown / HTML formatted notes
+  String disambiguation;
   List<String> sentenceIds; // Reference to sentences in the pool
   SrsCard cardTargetToNative; // e.g. KO -> EN
   SrsCard cardNativeToTarget; // e.g. EN -> KO
@@ -24,6 +25,7 @@ class VocabItem {
     List<String>? sectionPath,
     this.audioUrl,
     this.notes = '',
+    this.disambiguation = '',
     List<String>? sentenceIds,
     SrsCard? cardTargetToNative,
     SrsCard? cardNativeToTarget,
@@ -65,6 +67,7 @@ class VocabItem {
     'sectionPath': sectionPath,
     'audioUrl': audioUrl,
     'notes': notes,
+    'disambiguation': disambiguation,
     'sentenceIds': sentenceIds,
     'cardTargetToNative': cardTargetToNative.toJson(),
     'cardNativeToTarget': cardNativeToTarget.toJson(),
@@ -81,6 +84,7 @@ class VocabItem {
         .toList(),
     audioUrl: json['audioUrl'] as String?,
     notes: json['notes'] as String? ?? '',
+    disambiguation: json['disambiguation'] as String? ?? '',
     sentenceIds:
         (json['sentenceIds'] as List<dynamic>?)
             ?.map((e) => e.toString())

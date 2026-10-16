@@ -137,6 +137,54 @@ class _StudyViewState extends State<StudyView> {
     audioService.prefetchAudios(urlsToPreload);
   }
 
+  Widget _notePanel(BuildContext context, String title, String content) {
+    if (content.trim().isEmpty) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.secondaryContainer.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: theme.textTheme.labelMedium),
+          const SizedBox(height: 6),
+          MarkdownContent(content: content),
+        ],
+      ),
+    );
+  }
+
+  Widget _disambiguationCue(BuildContext context, String cue) {
+    if (cue.trim().isEmpty) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: theme.colorScheme.tertiaryContainer,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          child: MarkdownContent(
+            content: cue,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onTertiaryContainer,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   void _toggleFlip() {
     if (_isAnswerRevealed) {
       // Flip back to front
@@ -434,7 +482,9 @@ class _StudyViewState extends State<StudyView> {
 
       return Scaffold(
         appBar: AppBar(
-          title: Text(isMistakesMode ? 'Recent Mistakes Complete' : 'Study Complete'),
+          title: Text(
+            isMistakesMode ? 'Recent Mistakes Complete' : 'Study Complete',
+          ),
         ),
         body: Center(
           child: Column(
@@ -453,8 +503,8 @@ class _StudyViewState extends State<StudyView> {
               Text(
                 isMistakesMode
                     ? (hasPostponedCard
-                        ? 'Mistakes Review Finished'
-                        : 'All Recent Mistakes Cleared!')
+                          ? 'Mistakes Review Finished'
+                          : 'All Recent Mistakes Cleared!')
                     : 'Session Complete!',
                 style: theme.textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.bold,
@@ -465,8 +515,8 @@ class _StudyViewState extends State<StudyView> {
                 hasPostponedCard
                     ? '1 difficult card was postponed for your next review session.'
                     : (_queue.isEmpty
-                        ? 'No cards found matching this queue.'
-                        : 'You have completed all cards in this review queue.'),
+                          ? 'No cards found matching this queue.'
+                          : 'You have completed all cards in this review queue.'),
                 style: theme.textTheme.bodyLarge?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -566,14 +616,19 @@ class _StudyViewState extends State<StudyView> {
                   children: [
                     if (widget.recentMistakesOnly) ...[
                       const Text('Recent Mistakes Review'),
-                      Text('Card $currentNumber of $total', style: Theme.of(context).textTheme.labelSmall),
+                      Text(
+                        'Card $currentNumber of $total',
+                        style: Theme.of(context).textTheme.labelSmall,
+                      ),
                     ] else ...[
                       if (item.lesson.effectiveUnitTitle != null)
                         Text(
                           item.lesson.effectiveUnitTitle!,
                           style: Theme.of(context).textTheme.labelSmall,
                         ),
-                      Text('${item.lesson.displayTitle} ($currentNumber/$total)'),
+                      Text(
+                        '${item.lesson.displayTitle} ($currentNumber/$total)',
+                      ),
                     ],
                   ],
                 ),
@@ -675,8 +730,10 @@ class _StudyViewState extends State<StudyView> {
                     (rightCount / totalCards).clamp(0.0, 1.0) * totalWidth;
                 final wrongWidth =
                     (wrongCount / totalCards).clamp(0.0, 1.0) * totalWidth;
-                final remainingWidth =
-                    max(0.0, totalWidth - rightWidth - wrongWidth);
+                final remainingWidth = max(
+                  0.0,
+                  totalWidth - rightWidth - wrongWidth,
+                );
 
                 return SizedBox(
                   height: 6,
@@ -822,6 +879,10 @@ class _StudyViewState extends State<StudyView> {
                                             ),
                                       ),
                                     ),
+                                    _disambiguationCue(
+                                      context,
+                                      item.vocab.disambiguation,
+                                    ),
                                     const SizedBox(height: 20),
                                     // One Random Sentence always on front
                                     if (item.sentence != null)
@@ -851,16 +912,9 @@ class _StudyViewState extends State<StudyView> {
                                                   Icons.format_quote_rounded,
                                                   size: 18,
                                                 ),
-                                                const SizedBox(width: 6),
-                                                Text(
-                                                  'Context Sentence:',
-                                                  style: theme
-                                                      .textTheme
-                                                      .labelMedium,
-                                                ),
                                               ],
                                             ),
-                                            const SizedBox(height: 8),
+                                            const SizedBox(height: 4),
                                             MarkdownContent(
                                               content:
                                                   item.sentence!.targetText,
@@ -882,6 +936,10 @@ class _StudyViewState extends State<StudyView> {
                                             ),
                                         textAlign: TextAlign.center,
                                       ),
+                                    ),
+                                    _disambiguationCue(
+                                      context,
+                                      item.vocab.disambiguation,
                                     ),
                                     const SizedBox(height: 20),
                                     // One Random Sentence with Cloze Deletion
@@ -1052,10 +1110,16 @@ class _StudyViewState extends State<StudyView> {
                                             mainAxisAlignment:
                                                 MainAxisAlignment.spaceBetween,
                                             children: [
-                                              Text(
-                                                'Full Example Sentence:',
-                                                style:
-                                                    theme.textTheme.labelMedium,
+                                              MarkdownContent(
+                                                content:
+                                                    item.sentence!.targetText,
+                                                style: theme
+                                                    .textTheme
+                                                    .titleMedium
+                                                    ?.copyWith(
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
                                               ),
                                               AudioButton(
                                                 audioUrl:
@@ -1070,15 +1134,8 @@ class _StudyViewState extends State<StudyView> {
                                           ),
                                           const SizedBox(height: 6),
                                           MarkdownContent(
-                                            content: item.sentence!.targetText,
-                                            style: theme.textTheme.titleMedium
-                                                ?.copyWith(
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                          ),
-                                          const SizedBox(height: 6),
-                                          MarkdownContent(
-                                            content: item.sentence!.translationText,
+                                            content:
+                                                item.sentence!.translationText,
                                             style: theme.textTheme.bodyMedium
                                                 ?.copyWith(
                                                   color: theme
@@ -1091,6 +1148,18 @@ class _StudyViewState extends State<StudyView> {
                                     ),
                                     const SizedBox(height: 16),
                                   ],
+
+                                  _notePanel(
+                                    context,
+                                    'Back notes',
+                                    item.card.backNotes,
+                                  ),
+                                  if (item.sentence != null)
+                                    _notePanel(
+                                      context,
+                                      'Sentence notes',
+                                      item.sentence!.notes,
+                                    ),
 
                                   // Notes (Markdown / HTML)
                                   if (item.vocab.notes.isNotEmpty) ...[

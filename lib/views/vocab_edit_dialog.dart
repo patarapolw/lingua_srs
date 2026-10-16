@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
+import '../models/srs_card.dart';
 import '../models/vocab_item.dart';
 import '../models/sentence.dart';
 import '../providers/app_provider.dart';
@@ -38,6 +39,9 @@ class _VocabEditDialogState extends State<VocabEditDialog>
   late TextEditingController _posCtrl;
   late TextEditingController _audioCtrl;
   late TextEditingController _notesCtrl;
+  late TextEditingController _disambiguationCtrl;
+  late TextEditingController _targetToNativeBackNotesCtrl;
+  late TextEditingController _nativeToTargetBackNotesCtrl;
   late TextEditingController _idCtrl;
   late String _originalId;
 
@@ -55,6 +59,15 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     _posCtrl = TextEditingController(text: widget.vocab.pos);
     _audioCtrl = TextEditingController(text: widget.vocab.audioUrl ?? '');
     _notesCtrl = TextEditingController(text: widget.vocab.notes);
+    _disambiguationCtrl = TextEditingController(
+      text: widget.vocab.disambiguation,
+    );
+    _targetToNativeBackNotesCtrl = TextEditingController(
+      text: widget.vocab.cardTargetToNative.backNotes,
+    );
+    _nativeToTargetBackNotesCtrl = TextEditingController(
+      text: widget.vocab.cardNativeToTarget.backNotes,
+    );
     _originalId = widget.vocab.id;
     _idCtrl = TextEditingController(
       text: widget.vocab.idIsExplicit ? widget.vocab.id : '',
@@ -72,6 +85,9 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     _posCtrl.dispose();
     _audioCtrl.dispose();
     _notesCtrl.dispose();
+    _disambiguationCtrl.dispose();
+    _targetToNativeBackNotesCtrl.dispose();
+    _nativeToTargetBackNotesCtrl.dispose();
     _idCtrl.dispose();
     super.dispose();
   }
@@ -85,6 +101,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
         ? null
         : _audioCtrl.text.trim();
     widget.vocab.notes = _notesCtrl.text.trim();
+    widget.vocab.disambiguation = _disambiguationCtrl.text.trim();
     final explicitId = _idCtrl.text.trim();
     if (explicitId.isNotEmpty) {
       widget.vocab
@@ -99,9 +116,30 @@ class _VocabEditDialogState extends State<VocabEditDialog>
 
     widget.vocab.cardTargetToNative.isEnabled = _enableTargetToNative;
     widget.vocab.cardNativeToTarget.isEnabled = _enableNativeToTarget;
+    widget.vocab.cardTargetToNative.backNotes = _targetToNativeBackNotesCtrl
+        .text
+        .trim();
+    widget.vocab.cardNativeToTarget.backNotes = _nativeToTargetBackNotesCtrl
+        .text
+        .trim();
 
     provider.updateVocab(widget.vocab, previousId: _originalId);
     Navigator.of(context).pop();
+  }
+
+  Widget _sideNotesField(String label, TextEditingController controller) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: TextField(
+        controller: controller,
+        minLines: 2,
+        maxLines: 4,
+        decoration: InputDecoration(
+          labelText: label,
+          border: const OutlineInputBorder(),
+        ),
+      ),
+    );
   }
 
   void _openSentencePicker() {
@@ -350,6 +388,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     final targetCtrl = TextEditingController();
     final transCtrl = TextEditingController();
     final audioCtrl = TextEditingController();
+    final notesCtrl = TextEditingController();
 
     showDialog(
       context: context,
@@ -380,6 +419,15 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                   labelText: 'Audio URL (Optional)',
                 ),
               ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: notesCtrl,
+                minLines: 2,
+                maxLines: 5,
+                decoration: const InputDecoration(
+                  labelText: 'Sentence Notes (Markdown / HTML)',
+                ),
+              ),
             ],
           ),
         ),
@@ -397,6 +445,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                   audioUrl: audioCtrl.text.trim().isEmpty
                       ? null
                       : audioCtrl.text.trim(),
+                  notes: notesCtrl.text.trim(),
                   lessonId: widget.lessonId,
                 );
                 final canonical = await context
@@ -413,6 +462,37 @@ class _VocabEditDialogState extends State<VocabEditDialog>
             child: const Text('Create & Link'),
           ),
         ],
+      ),
+    ).whenComplete(() {
+      targetCtrl.dispose();
+      transCtrl.dispose();
+      audioCtrl.dispose();
+      notesCtrl.dispose();
+    });
+  }
+
+  Widget _duplicateFrontWarning(AppProvider provider, CardDirection direction) {
+    final duplicates = provider.getDuplicateFrontVocabularies(
+      widget.vocab,
+      direction,
+    );
+    if (duplicates.isEmpty) return const SizedBox.shrink();
+
+    final directionLabel = direction == CardDirection.targetToNative
+        ? 'Target → Native'
+        : 'Native → Target';
+    final meanings = duplicates
+        .map((vocab) => '${vocab.targetWord} — ${vocab.translation}')
+        .join('; ');
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Text(
+        '$directionLabel has the same front prompt as another enabled card: '
+        '$meanings. Add a disambiguation cue below to tell them apart.',
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.error,
+          fontSize: 12,
+        ),
       ),
     );
   }
@@ -495,6 +575,26 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                       ],
                     ),
                     const SizedBox(height: 16),
+                    TextField(
+                      controller: _disambiguationCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Front-side disambiguation cue (optional)',
+                        hintText: 'e.g. fruit, vehicle, body part',
+                        helperText:
+                            'Shown on the front of both card directions when '
+                            'you need to distinguish cards with the same prompt.',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    _duplicateFrontWarning(
+                      provider,
+                      CardDirection.targetToNative,
+                    ),
+                    _duplicateFrontWarning(
+                      provider,
+                      CardDirection.nativeToTarget,
+                    ),
+                    const SizedBox(height: 20),
 
                     // Part of speech / Category & Audio URL
                     Row(
@@ -594,6 +694,23 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                           ],
                         ),
                       ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    Text(
+                      'Card back notes (Markdown / HTML)',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _sideNotesField(
+                      'Target → Native · Back notes',
+                      _targetToNativeBackNotesCtrl,
+                    ),
+                    _sideNotesField(
+                      'Native → Target · Back notes',
+                      _nativeToTargetBackNotesCtrl,
                     ),
                     const SizedBox(height: 20),
 

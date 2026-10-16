@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../models/lesson.dart';
 import '../providers/app_provider.dart';
 import 'lesson_detail_view.dart';
+import 'lesson_reader_view.dart';
 import 'study_view.dart';
 import 'yaml_import_view.dart';
 
@@ -433,7 +434,9 @@ class LessonListView extends StatelessWidget {
                                     ),
                                     borderRadius: BorderRadius.circular(6),
                                     child: Padding(
-                                      padding: const EdgeInsets.symmetric(vertical: 2),
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 2,
+                                      ),
                                       child: Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
@@ -523,11 +526,11 @@ class LessonListView extends StatelessWidget {
                                   ),
                                   onPressed: availableDue == 0
                                       ? (isDailyLimitReached
-                                          ? () => _showLimitReachedDialog(
-                                              context,
-                                              provider,
-                                            )
-                                          : null)
+                                            ? () => _showLimitReachedDialog(
+                                                context,
+                                                provider,
+                                              )
+                                            : null)
                                       : () {
                                           Navigator.push(
                                             context,
@@ -782,7 +785,7 @@ class LessonListView extends StatelessWidget {
                                 context,
                                 MaterialPageRoute(
                                   builder: (_) =>
-                                      LessonDetailView(lessonId: lesson.id),
+                                      LessonReaderView(lessonId: lesson.id),
                                 ),
                               );
                             },

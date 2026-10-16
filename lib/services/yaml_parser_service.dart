@@ -48,10 +48,12 @@ class YamlParserService {
   }) {
     var frontMatter = yamlString.trim();
     String? markdownTitle;
+    String markdownContent = '';
     final isMarkdown = frontMatter.startsWith('---');
     if (isMarkdown) {
       final frontMatterParts = _splitMarkdownFrontmatter(frontMatter);
       final markdownBody = frontMatterParts.$2;
+      markdownContent = markdownBody.trim();
       final headingTitle = RegExp(
         r'^#\s+(.+)$',
         multiLine: true,
@@ -64,7 +66,9 @@ class YamlParserService {
     if (doc is! Map) {
       throw const FormatException('YAML root must be a map/dictionary.');
     }
-    if (isMarkdown && doc['vocabulary'] is! Map) {
+    if (isMarkdown &&
+        (!doc.containsKey('vocabulary') ||
+            (doc['vocabulary'] != null && doc['vocabulary'] is! Map))) {
       throw const FormatException(
         'Markdown frontmatter must contain a vocabulary map.',
       );
@@ -96,7 +100,7 @@ class YamlParserService {
 
     final vocabulary = doc['vocabulary'];
     final vocabularyDoc = isMarkdown
-        ? vocabulary as Map
+        ? (vocabulary as Map? ?? const <dynamic, dynamic>{})
         : vocabulary is Map
         ? vocabulary
         : doc;
@@ -120,6 +124,7 @@ class YamlParserService {
         String? vocabId;
         String? vocabAudio;
         String notes = '';
+        String disambiguation = '';
         final List<String> itemSentenceIds = [];
 
         for (final field in item.entries) {
@@ -135,6 +140,9 @@ class YamlParserService {
         }
         if (item['notes'] != null) {
           notes = item['notes'].toString().trim();
+        }
+        if (item['disambiguation'] != null) {
+          disambiguation = item['disambiguation'].toString().trim();
         }
 
         for (final field in item.entries) {
@@ -162,9 +170,13 @@ class YamlParserService {
             String exTarget = '';
             String exTrans = '';
             String? exAudio;
+            String exNotes = '';
 
             if (ex['audio'] != null) {
               exAudio = ex['audio'].toString().trim();
+            }
+            if (ex['notes'] != null) {
+              exNotes = ex['notes'].toString().trim();
             }
 
             for (final exField in ex.entries) {
@@ -183,6 +195,7 @@ class YamlParserService {
                 targetText: exTarget,
                 translationText: exTrans,
                 audioUrl: exAudio,
+                notes: exNotes,
               );
               allSentences.add(sentence);
               itemSentenceIds.add(sentence.id);
@@ -202,6 +215,7 @@ class YamlParserService {
             sectionPath: sectionPath,
             audioUrl: vocabAudio,
             notes: notes,
+            disambiguation: disambiguation,
             sentenceIds: itemSentenceIds,
           );
           vocabList.add(vocab);
@@ -222,6 +236,7 @@ class YamlParserService {
       targetLanguage: targetLang,
       nativeLanguage: nativeLang,
       vocabularies: vocabList,
+      markdownContent: markdownContent,
     );
 
     // Link sentence lessonId
@@ -237,7 +252,9 @@ class YamlParserService {
     if (!source.startsWith('---')) return false;
     final frontMatter = _splitMarkdownFrontmatter(source).$1;
     final doc = loadYaml(frontMatter);
-    return doc is Map && doc['vocabulary'] is Map;
+    return doc is Map &&
+        doc.containsKey('vocabulary') &&
+        (doc['vocabulary'] == null || doc['vocabulary'] is Map);
   }
 
   static (String, String) _splitMarkdownFrontmatter(String markdown) {

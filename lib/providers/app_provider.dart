@@ -114,8 +114,12 @@ class AppProvider extends ChangeNotifier {
 
       final canonicalHasAudio = canonical.audioUrl?.trim().isNotEmpty == true;
       final sentenceHasAudio = sentence.audioUrl?.trim().isNotEmpty == true;
+      if (canonical.notes.trim().isEmpty && sentence.notes.trim().isNotEmpty) {
+        canonical.notes = sentence.notes;
+      }
       if (!canonicalHasAudio && sentenceHasAudio) {
         sentence.lessonId ??= canonical.lessonId;
+        sentence.notes = canonical.notes;
         canonicalSentences[canonicalIndexes[signature]!] = sentence;
         canonicalBySignature[signature] = sentence;
         redirectedIds[canonical.id] = sentence.id;
@@ -179,15 +183,18 @@ class AppProvider extends ChangeNotifier {
     return canonical;
   }
 
-  Sentence _upsertSentence(Sentence incoming) {
+  Sentence _upsertSentence(
+    Sentence incoming, {
+    Map<String, List<Sentence>>? bySignature,
+  }) {
     final signature = _sentenceSignature(incoming);
-    final duplicates = _sentences
-        .where(
-          (sentence) =>
-              !identical(sentence, incoming) &&
-              _sentenceSignature(sentence) == signature,
-        )
-        .toList();
+    final duplicates =
+        (bySignature?[signature] ??
+                _sentences.where(
+                  (sentence) => _sentenceSignature(sentence) == signature,
+                ))
+            .where((sentence) => !identical(sentence, incoming))
+            .toList();
     final candidates = [incoming, ...duplicates];
     final canonical = candidates.firstWhere(
       (sentence) => sentence.audioUrl?.trim().isNotEmpty == true,
@@ -199,10 +206,14 @@ class AppProvider extends ChangeNotifier {
           (audio) => audio?.trim().isNotEmpty == true,
           orElse: () => null,
         );
+    final notes = candidates
+        .map((sentence) => sentence.notes)
+        .firstWhere((notes) => notes.trim().isNotEmpty, orElse: () => '');
     canonical
       ..targetText = incoming.targetText
       ..translationText = incoming.translationText
       ..audioUrl = audioUrl
+      ..notes = notes
       ..lessonId ??= incoming.lessonId;
     if (!_sentences.any((sentence) => identical(sentence, canonical))) {
       _sentences.add(canonical);
@@ -225,6 +236,7 @@ class AppProvider extends ChangeNotifier {
             !identical(sentence, canonical) && removedIds.contains(sentence.id),
       );
     }
+    bySignature?[signature] = [canonical];
     return canonical;
   }
 
@@ -268,11 +280,27 @@ class AppProvider extends ChangeNotifier {
   }
 
   Future<List<Lesson>> importParsedLessons(
-    List<YamlParseResult> parsedLessons,
-  ) async {
+    List<YamlParseResult> parsedLessons, {
+    void Function(int current, int total)? onProgress,
+  }) async {
     final importedLessons = <Lesson>[];
-    for (final parsed in parsedLessons) {
-      importedLessons.add(_applyParsedLesson(parsed));
+    final sentenceIndex = <String, List<Sentence>>{};
+    for (final sentence in _sentences) {
+      sentenceIndex
+          .putIfAbsent(_sentenceSignature(sentence), () => [])
+          .add(sentence);
+    }
+    final vocabIndex = _newVocabProgressIndex();
+    for (var index = 0; index < parsedLessons.length; index++) {
+      importedLessons.add(
+        _applyParsedLesson(
+          parsedLessons[index],
+          sentenceIndex: sentenceIndex,
+          vocabIndex: vocabIndex,
+        ),
+      );
+      onProgress?.call(index + 1, parsedLessons.length);
+      await Future<void>.delayed(Duration.zero);
     }
     if (parsedLessons.isNotEmpty) {
       _linkSharedVocabProgress();
@@ -282,7 +310,11 @@ class AppProvider extends ChangeNotifier {
     return importedLessons;
   }
 
-  Lesson _applyParsedLesson(YamlParseResult parsed) {
+  Lesson _applyParsedLesson(
+    YamlParseResult parsed, {
+    Map<String, List<Sentence>>? sentenceIndex,
+    Map<String, VocabItem>? vocabIndex,
+  }) {
     final existingIndex = _lessons.indexWhere(
       (lesson) =>
           _normalizeLessonPart(lesson.effectiveUnitTitle) ==
@@ -296,12 +328,22 @@ class AppProvider extends ChangeNotifier {
           parsed.lesson.unitTitle ?? existingLesson.unitTitle;
       existingLesson.targetLanguage = parsed.lesson.targetLanguage;
       existingLesson.nativeLanguage = parsed.lesson.nativeLanguage;
-      _mergeImportedLesson(existingLesson, parsed);
+      if (parsed.lesson.markdownContent.isNotEmpty) {
+        existingLesson.markdownContent = parsed.lesson.markdownContent;
+      }
+      _mergeImportedLesson(existingLesson, parsed, sentenceIndex);
     } else {
-      _reuseExistingVocabProgress(parsed.lesson.vocabularies);
+      if (vocabIndex == null) {
+        _reuseExistingVocabProgress(parsed.lesson.vocabularies);
+      } else {
+        _reuseVocabProgressFromIndex(parsed.lesson.vocabularies, vocabIndex);
+      }
       final sentenceIds = <String, String>{};
       for (final sentence in parsed.sentences) {
-        sentenceIds[sentence.id] = _upsertSentence(sentence).id;
+        sentenceIds[sentence.id] = _upsertSentence(
+          sentence,
+          bySignature: sentenceIndex,
+        ).id;
       }
       for (final vocab in parsed.lesson.vocabularies) {
         vocab.sentenceIds = _unique(
@@ -331,14 +373,19 @@ class AppProvider extends ChangeNotifier {
         lesson.displayTitle.trim().toLowerCase();
   }
 
-  void _mergeImportedLesson(Lesson lesson, YamlParseResult parsed) {
+  void _mergeImportedLesson(
+    Lesson lesson,
+    YamlParseResult parsed,
+    Map<String, List<Sentence>>? sentenceIndex,
+  ) {
+    final lessonSentenceIds = lesson.vocabularies
+        .expand((vocab) => vocab.sentenceIds)
+        .toSet();
     final oldSentences = _sentences
         .where(
           (sentence) =>
               sentence.lessonId == lesson.id ||
-              lesson.vocabularies.any(
-                (vocab) => vocab.sentenceIds.contains(sentence.id),
-              ),
+              lessonSentenceIds.contains(sentence.id),
         )
         .toList();
     final sentencesByContent = <String, List<Sentence>>{};
@@ -354,7 +401,7 @@ class AppProvider extends ChangeNotifier {
       final signature = _sentenceSignature(sentence);
       final previousImport = importedSentenceBySignature[signature];
       if (previousImport != null) {
-        final canonical = _upsertSentence(sentence);
+        final canonical = _upsertSentence(sentence, bySignature: sentenceIndex);
         importedSentenceIds[sentence.id] = canonical.id;
         continue;
       }
@@ -364,7 +411,7 @@ class AppProvider extends ChangeNotifier {
           : matches.removeAt(0);
       if (existingSentence == null) {
         sentence.lessonId = lesson.id;
-        final canonical = _upsertSentence(sentence);
+        final canonical = _upsertSentence(sentence, bySignature: sentenceIndex);
         importedSentenceIds[sentence.id] = canonical.id;
       } else {
         existingSentence
@@ -373,17 +420,30 @@ class AppProvider extends ChangeNotifier {
           ..audioUrl = existingSentence.audioUrl?.trim().isNotEmpty == true
               ? existingSentence.audioUrl
               : sentence.audioUrl
+          ..notes = sentence.notes.trim().isNotEmpty
+              ? sentence.notes
+              : existingSentence.notes
           ..lessonId = lesson.id;
-        importedSentenceIds[sentence.id] = _upsertSentence(existingSentence).id;
+        importedSentenceIds[sentence.id] = _upsertSentence(
+          existingSentence,
+          bySignature: sentenceIndex,
+        ).id;
       }
       importedSentenceBySignature[signature] =
           importedSentenceIds[sentence.id]!;
     }
 
-    final existingVocabularies = _lessons
-        .where((candidate) => candidate.id != lesson.id)
-        .expand((candidate) => candidate.vocabularies)
-        .toList();
+    final vocabById = <String, List<VocabItem>>{};
+    final vocabByMeaning = <String, List<VocabItem>>{};
+    for (final vocab in lesson.vocabularies) {
+      _addVocabToIndexes(vocab, vocabById, vocabByMeaning);
+    }
+    for (final vocab
+        in _lessons
+            .where((candidate) => candidate.id != lesson.id)
+            .expand((candidate) => candidate.vocabularies)) {
+      _addVocabToIndexes(vocab, vocabById, vocabByMeaning);
+    }
     final matchedLessonVocabularies = <VocabItem>{};
     final newVocabularies = <VocabItem>[];
     for (final importedVocab in parsed.lesson.vocabularies) {
@@ -391,13 +451,12 @@ class AppProvider extends ChangeNotifier {
           .map((id) => importedSentenceIds[id] ?? id)
           .toList();
 
-      final previousVocab = _findExistingVocab(importedVocab, [
-        ...lesson.vocabularies.where(
-          (vocab) => !matchedLessonVocabularies.contains(vocab),
-        ),
-        ...existingVocabularies,
-        ...newVocabularies,
-      ]);
+      final previousVocab = _findExistingVocabInIndexes(
+        importedVocab,
+        vocabById,
+        vocabByMeaning,
+        matchedLessonVocabularies,
+      );
       final lessonMatch =
           previousVocab != null && lesson.vocabularies.contains(previousVocab)
           ? previousVocab
@@ -407,10 +466,12 @@ class AppProvider extends ChangeNotifier {
           _reuseProgress(importedVocab, previousVocab);
         }
         newVocabularies.add(importedVocab);
+        _addVocabToIndexes(importedVocab, vocabById, vocabByMeaning);
         continue;
       }
 
       matchedLessonVocabularies.add(lessonMatch);
+      _removeVocabFromIndexes(lessonMatch, vocabById, vocabByMeaning);
       lessonMatch
         ..id = lessonMatch.idIsExplicit ? lessonMatch.id : importedVocab.id
         ..idIsExplicit = lessonMatch.idIsExplicit || importedVocab.idIsExplicit
@@ -420,12 +481,66 @@ class AppProvider extends ChangeNotifier {
         ..sectionPath = importedVocab.sectionPath
         ..audioUrl = importedVocab.audioUrl
         ..notes = importedVocab.notes
+        ..disambiguation = importedVocab.disambiguation
         ..sentenceIds = importedVocab.sentenceIds;
+      _addVocabToIndexes(lessonMatch, vocabById, vocabByMeaning);
       if (previousVocab != null && !identical(previousVocab, lessonMatch)) {
         _reuseProgress(lessonMatch, previousVocab);
       }
     }
     lesson.vocabularies = [...lesson.vocabularies, ...newVocabularies];
+  }
+
+  static VocabItem? _findExistingVocabInIndexes(
+    VocabItem imported,
+    Map<String, List<VocabItem>> byId,
+    Map<String, List<VocabItem>> byMeaning,
+    Set<VocabItem> matchedLessonVocabularies,
+  ) {
+    List<VocabItem> unmatched(List<VocabItem>? values) =>
+        values
+            ?.where((vocab) => !matchedLessonVocabularies.contains(vocab))
+            .toList() ??
+        const [];
+
+    final matchingId = unmatched(byId[imported.id]);
+    if (matchingId.length == 1) return matchingId.single;
+    if (matchingId.isNotEmpty) {
+      for (final vocab in matchingId) {
+        if (_sameSectionPath(vocab, imported)) return vocab;
+      }
+      return matchingId.first;
+    }
+    if (imported.idIsExplicit) return null;
+
+    final exactMeaning = unmatched(byMeaning[_vocabMeaningIdentity(imported)]);
+    if (exactMeaning.isNotEmpty) return exactMeaning.first;
+
+    return null;
+  }
+
+  static void _addVocabToIndexes(
+    VocabItem vocab,
+    Map<String, List<VocabItem>> byId,
+    Map<String, List<VocabItem>> byMeaning,
+  ) {
+    byId.putIfAbsent(vocab.id, () => []).add(vocab);
+    byMeaning.putIfAbsent(_vocabMeaningIdentity(vocab), () => []).add(vocab);
+  }
+
+  static void _removeVocabFromIndexes(
+    VocabItem vocab,
+    Map<String, List<VocabItem>> byId,
+    Map<String, List<VocabItem>> byMeaning,
+  ) {
+    final idMatches = byId[vocab.id]!;
+    idMatches.removeWhere((candidate) => identical(candidate, vocab));
+    if (idMatches.isEmpty) byId.remove(vocab.id);
+
+    final meaningIdentity = _vocabMeaningIdentity(vocab);
+    final meaningMatches = byMeaning[meaningIdentity]!;
+    meaningMatches.removeWhere((candidate) => identical(candidate, vocab));
+    if (meaningMatches.isEmpty) byMeaning.remove(meaningIdentity);
   }
 
   VocabItem? _findExistingVocab(
@@ -445,11 +560,9 @@ class AppProvider extends ChangeNotifier {
     }
     if (imported.idIsExplicit) return null;
 
-    final exactMeaning = vocabularies.where(
-      (vocab) => _sameVocabMeaning(vocab, imported),
-    );
-    if (exactMeaning.isNotEmpty) return exactMeaning.first;
-
+    for (final vocab in vocabularies) {
+      if (_sameVocabMeaning(vocab, imported)) return vocab;
+    }
     return null;
   }
 
@@ -466,24 +579,35 @@ class AppProvider extends ChangeNotifier {
   }
 
   static bool _sameVocabMeaning(VocabItem first, VocabItem second) =>
-      _normalizeVocabWord(first.targetWord) ==
-          _normalizeVocabWord(second.targetWord) &&
-      _normalizeVocabWord(first.translation) ==
-          _normalizeVocabWord(second.translation);
+      _vocabMeaningIdentity(first) == _vocabMeaningIdentity(second);
+
+  static String _vocabMeaningIdentity(VocabItem vocab) =>
+      '${_normalizeVocabWord(vocab.targetWord)}\u0000'
+      '${_normalizeVocabWord(vocab.translation)}';
 
   static String _normalizeVocabWord(String word) =>
       word.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
 
   void _reuseExistingVocabProgress(List<VocabItem> imported) {
-    final existing = _lessons.expand((lesson) => lesson.vocabularies).toList();
-    final newByIdentity = <String, VocabItem>{};
+    _reuseVocabProgressFromIndex(imported, _newVocabProgressIndex());
+  }
+
+  Map<String, VocabItem> _newVocabProgressIndex() {
+    final index = <String, VocabItem>{};
+    for (final vocab in _lessons.expand((lesson) => lesson.vocabularies)) {
+      index.putIfAbsent(_progressIdentity(vocab), () => vocab);
+    }
+    return index;
+  }
+
+  void _reuseVocabProgressFromIndex(
+    List<VocabItem> imported,
+    Map<String, VocabItem> index,
+  ) {
     for (final vocab in imported) {
-      final previous = _findExistingVocab(vocab, [
-        ...existing,
-        ...newByIdentity.values,
-      ]);
+      final previous = index[_progressIdentity(vocab)];
       if (previous != null) _reuseProgress(vocab, previous);
-      newByIdentity.putIfAbsent(_progressIdentity(vocab), () => vocab);
+      index.putIfAbsent(_progressIdentity(vocab), () => vocab);
     }
   }
 
@@ -524,6 +648,33 @@ class AppProvider extends ChangeNotifier {
             .replaceAll(RegExp(r'\s+'), ' ');
     return '${normalize(sentence.targetText)}\u0000'
         '${normalize(sentence.translationText)}';
+  }
+
+  List<VocabItem> getDuplicateFrontVocabularies(
+    VocabItem vocab,
+    CardDirection direction,
+  ) {
+    final prompt = direction == CardDirection.targetToNative
+        ? vocab.targetWord
+        : vocab.translation;
+    final normalizedPrompt = _normalizeVocabWord(prompt);
+    if (normalizedPrompt.isEmpty) return [];
+
+    return _lessons.expand((lesson) => lesson.vocabularies).where((candidate) {
+      if (identical(candidate, vocab) ||
+          candidate.id == vocab.id ||
+          _normalizeVocabWord(
+                direction == CardDirection.targetToNative
+                    ? candidate.targetWord
+                    : candidate.translation,
+              ) !=
+              normalizedPrompt) {
+        return false;
+      }
+      return direction == CardDirection.targetToNative
+          ? candidate.cardTargetToNative.isEnabled
+          : candidate.cardNativeToTarget.isEnabled;
+    }).toList();
   }
 
   // Toggle card directions
@@ -717,14 +868,16 @@ class AppProvider extends ChangeNotifier {
               ? card.hasRecentMistake
               : (!dueOnly || card.isDue);
           if (isEligible && seenCardIds.add(card.id)) {
-            posGroups.putIfAbsent(posKey, () => []).add(
-              StudyCardItem(
-                vocab: vocab,
-                card: card,
-                lesson: lesson,
-                sentence: getRandomSentenceForVocab(vocab),
-              ),
-            );
+            posGroups
+                .putIfAbsent(posKey, () => [])
+                .add(
+                  StudyCardItem(
+                    vocab: vocab,
+                    card: card,
+                    lesson: lesson,
+                    sentence: getRandomSentenceForVocab(vocab),
+                  ),
+                );
           }
         }
 
@@ -735,14 +888,16 @@ class AppProvider extends ChangeNotifier {
               ? card.hasRecentMistake
               : (!dueOnly || card.isDue);
           if (isEligible && seenCardIds.add(card.id)) {
-            posGroups.putIfAbsent(posKey, () => []).add(
-              StudyCardItem(
-                vocab: vocab,
-                card: card,
-                lesson: lesson,
-                sentence: getRandomSentenceForVocab(vocab),
-              ),
-            );
+            posGroups
+                .putIfAbsent(posKey, () => [])
+                .add(
+                  StudyCardItem(
+                    vocab: vocab,
+                    card: card,
+                    lesson: lesson,
+                    sentence: getRandomSentenceForVocab(vocab),
+                  ),
+                );
           }
         }
       }
@@ -804,6 +959,16 @@ class AppProvider extends ChangeNotifier {
   Future<void> saveState() async {
     await StorageService.saveLessons(_lessons);
     await StorageService.saveSentences(_sentences);
+    notifyListeners();
+  }
+
+  Future<void> updateLessonMarkdown(String lessonId, String markdown) async {
+    final index = _lessons.indexWhere((lesson) => lesson.id == lessonId);
+    if (index == -1) {
+      throw StateError('Cannot update Markdown for missing lesson $lessonId.');
+    }
+    _lessons[index].markdownContent = markdown;
+    await StorageService.saveLessons(_lessons);
     notifyListeners();
   }
 }

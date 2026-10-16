@@ -26,6 +26,7 @@ class _SentencePoolViewState extends State<SentencePoolView> {
     final targetCtrl = TextEditingController(text: sentence?.targetText ?? '');
     final transCtrl = TextEditingController(text: sentence?.translationText ?? '');
     final audioCtrl = TextEditingController(text: sentence?.audioUrl ?? '');
+    final notesCtrl = TextEditingController(text: sentence?.notes ?? '');
 
     showDialog(
       context: context,
@@ -57,6 +58,15 @@ class _SentencePoolViewState extends State<SentencePoolView> {
                   labelText: 'Audio URL (Optional)',
                 ),
               ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: notesCtrl,
+                minLines: 2,
+                maxLines: 5,
+                decoration: const InputDecoration(
+                  labelText: 'Sentence Notes (Markdown / HTML)',
+                ),
+              ),
             ],
           ),
         ),
@@ -71,12 +81,14 @@ class _SentencePoolViewState extends State<SentencePoolView> {
                     targetText: targetCtrl.text.trim(),
                     translationText: transCtrl.text.trim(),
                     audioUrl: audioCtrl.text.trim().isEmpty ? null : audioCtrl.text.trim(),
+                    notes: notesCtrl.text.trim(),
                   );
                   await provider.addSentenceToPool(newSentence);
                 } else {
                   sentence.targetText = targetCtrl.text.trim();
                   sentence.translationText = transCtrl.text.trim();
                   sentence.audioUrl = audioCtrl.text.trim().isEmpty ? null : audioCtrl.text.trim();
+                  sentence.notes = notesCtrl.text.trim();
                   await provider.updateSentenceInPool(sentence);
                 }
                 if (!ctx.mounted) return;
@@ -87,7 +99,12 @@ class _SentencePoolViewState extends State<SentencePoolView> {
           ),
         ],
       ),
-    );
+    ).whenComplete(() {
+      targetCtrl.dispose();
+      transCtrl.dispose();
+      audioCtrl.dispose();
+      notesCtrl.dispose();
+    });
   }
 
   @override
@@ -99,7 +116,8 @@ class _SentencePoolViewState extends State<SentencePoolView> {
       if (_filter.isEmpty) return true;
       final query = _filter.toLowerCase();
       return s.targetText.toLowerCase().contains(query) ||
-          s.translationText.toLowerCase().contains(query);
+          s.translationText.toLowerCase().contains(query) ||
+          s.notes.toLowerCase().contains(query);
     }).toList();
 
     return Scaffold(
@@ -225,12 +243,29 @@ class _SentencePoolViewState extends State<SentencePoolView> {
                                 ],
                               ),
                               const SizedBox(height: 6),
-                              Text(
-                                item.translationText,
+                              MarkdownContent(
+                                content: item.translationText,
                                 style: theme.textTheme.bodyMedium?.copyWith(
                                   color: theme.colorScheme.onSurfaceVariant,
                                 ),
                               ),
+                              if (item.notes.trim().isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    color: theme.colorScheme.secondaryContainer
+                                        .withValues(alpha: 0.3),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(10),
+                                    child: MarkdownContent(
+                                      content: item.notes,
+                                      style: theme.textTheme.bodySmall,
+                                    ),
+                                  ),
+                                ),
+                              ],
                               const SizedBox(height: 8),
                               Row(
                                 children: [
