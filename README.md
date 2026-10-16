@@ -77,21 +77,18 @@ A Flutter application targeting **Desktop (Windows, macOS, Linux)** and **Mobile
 
 ## 🚀 Running the App
 
-### 1. Set as Active Workspace
-We recommend setting `C:\Users\HP\.gemini\antigravity\scratch\lingua_srs` as your active workspace in your IDE.
-
-### 2. Run on Desktop (Windows)
+### Run on Desktop (Windows)
 ```bash
 cd lingua_srs
 flutter run -d windows
 ```
 
-### 3. Run on Mobile (Android / iOS)
+### Run on Mobile (Android / iOS)
 ```bash
 flutter run -d <android-device-id-or-emulator>
 ```
 
-### 4. Run Unit Tests
+### Run Unit Tests
 ```bash
 flutter test test/unit_test.dart
 ```
