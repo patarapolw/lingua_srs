@@ -15,6 +15,10 @@ class Sentence {
     this.lessonId,
   }) : id = id ?? const Uuid().v4();
 
+  static String withoutEmphasis(String text) => text
+      .replaceAllMapped(RegExp(r'\*\*([^*]+)\*\*'), (match) => match[1] ?? '')
+      .replaceAllMapped(RegExp(r'__([^_]+)__'), (match) => match[1] ?? '');
+
   /// Generates cloze deletion sentence for target word.
   /// 1. If target word is wrapped in markdown bold (**word**), replaces **word** with (___).
   /// 2. If targetWord matches directly, replaces with (___).

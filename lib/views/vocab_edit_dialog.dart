@@ -192,14 +192,18 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                               trailing: Checkbox(
                                 value: isAttached,
                                 onChanged: (val) {
-                                  setSheetState(() {
-                                    if (val == true) {
-                                      _sentenceIds.add(sentence.id);
-                                    } else {
+                                  if (val == true && !isAttached) {
+                                    _editAndLinkSentence(
+                                      context: ctx,
+                                      sentence: sentence,
+                                      setSheetState: setSheetState,
+                                    );
+                                  } else if (val != true && isAttached) {
+                                    setSheetState(() {
                                       _sentenceIds.remove(sentence.id);
-                                    }
-                                  });
-                                  setState(() {});
+                                    });
+                                    setState(() {});
+                                  }
                                 },
                               ),
                             ),
@@ -214,6 +218,132 @@ class _VocabEditDialogState extends State<VocabEditDialog>
         );
       },
     ).whenComplete(searchCtrl.dispose);
+  }
+
+  Future<void> _editAndLinkSentence({
+    required BuildContext context,
+    required Sentence sentence,
+    required StateSetter setSheetState,
+  }) async {
+    final provider = this.context.read<AppProvider>();
+    final targetCtrl = TextEditingController(
+      text: _suggestEmphasis(
+        sentence.targetText,
+        widget.vocab.targetWord,
+        korean: true,
+      ),
+    );
+    final translationCtrl = TextEditingController(
+      text: _suggestEmphasis(
+        sentence.translationText,
+        widget.vocab.translation,
+      ),
+    );
+    final shouldLink = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Emphasize vocabulary in sentence'),
+        content: SizedBox(
+          width: 520,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: targetCtrl,
+                  minLines: 2,
+                  maxLines: 5,
+                  decoration: const InputDecoration(
+                    labelText: 'Korean sentence',
+                    helperText: 'Edit the suggested **vocabulary** emphasis.',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: translationCtrl,
+                  minLines: 2,
+                  maxLines: 5,
+                  decoration: const InputDecoration(
+                    labelText: 'Translation',
+                    helperText: 'Edit the suggested **meaning** emphasis.',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Link sentence'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldLink == true && mounted) {
+      sentence
+        ..targetText = targetCtrl.text.trim()
+        ..translationText = translationCtrl.text.trim();
+      final canonical = await provider.updateSentenceInPool(sentence);
+      if (mounted && context.mounted) {
+        setSheetState(() {
+          if (!_sentenceIds.contains(canonical.id)) {
+            _sentenceIds.add(canonical.id);
+          }
+        });
+        setState(() {});
+      }
+    }
+    targetCtrl.dispose();
+    translationCtrl.dispose();
+  }
+
+  static String _suggestEmphasis(
+    String text,
+    String vocabulary, {
+    bool korean = false,
+  }) {
+    if (text.contains('**')) return text;
+    final candidates = korean
+        ? [vocabulary.trim()]
+        : vocabulary
+              .split(RegExp(r'[,;/]'))
+              .map((candidate) => candidate.trim())
+              .where((candidate) => candidate.isNotEmpty)
+              .toList();
+    for (final candidate in candidates) {
+      if (candidate.isEmpty) continue;
+      final exact = RegExp(RegExp.escape(candidate), caseSensitive: false);
+      if (exact.hasMatch(text)) {
+        return text.replaceFirstMapped(exact, (match) => '**${match[0]}**');
+      }
+      if (korean) {
+        final stem = candidate.endsWith('하다')
+            ? candidate.substring(0, candidate.length - 2)
+            : candidate.endsWith('다')
+            ? candidate.substring(0, candidate.length - 1)
+            : candidate;
+        if (stem.isEmpty) continue;
+        final conjugated = RegExp(
+          '${RegExp.escape(stem)}[가-힣]*',
+          caseSensitive: false,
+        );
+        if (conjugated.hasMatch(text)) {
+          return text.replaceFirstMapped(
+            conjugated,
+            (match) => '**${match[0]}**',
+          );
+        }
+      }
+    }
+    return text;
   }
 
   void _openCreateSentenceDialog() {
@@ -259,7 +389,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () {
+            onPressed: () async {
               if (targetCtrl.text.trim().isNotEmpty) {
                 final newSentence = Sentence(
                   targetText: targetCtrl.text.trim(),
@@ -269,11 +399,15 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                       : audioCtrl.text.trim(),
                   lessonId: widget.lessonId,
                 );
-                context.read<AppProvider>().addSentenceToPool(newSentence);
+                final canonical = await context
+                    .read<AppProvider>()
+                    .addSentenceToPool(newSentence);
                 setState(() {
-                  _sentenceIds.add(newSentence.id);
+                  if (!_sentenceIds.contains(canonical.id)) {
+                    _sentenceIds.add(canonical.id);
+                  }
                 });
-                Navigator.pop(ctx);
+                if (ctx.mounted) Navigator.pop(ctx);
               }
             },
             child: const Text('Create & Link'),

@@ -7,9 +7,10 @@ A Flutter application targeting **Desktop (Windows, macOS, Linux)** and **Mobile
 ## 🌟 Key Features
 
 1. **YAML/Markdown Lesson Architecture**:
-   - Create and import lessons using human-readable YAML or Markdown documents with YAML frontmatter.
+   - Create lessons from the **Import Lessons** screen with a separate lesson-name field and YAML editor. The YAML starts empty; a neutral example is shown as hint text.
+   - Use `/` in the lesson name to separate hierarchy levels. For example, `Unit 2 / Lesson 26` groups the lesson under `Unit 2`; `Topic / Subtopic / Lesson A` creates a deeper hierarchy.
    - Import a directory recursively; Markdown files are read from their `vocabulary:` frontmatter section and grouped by their parent folder (for example, `unit-2` becomes Unit 2).
-   - Built-in parser with live syntax checking, error reporting, and visual preview.
+   - YAML is checked as you type, with parse errors and an import preview. Import is enabled only when the YAML is valid.
    - Unit titles group lessons in the library; each lesson appears as a subsection. Vocabulary frontmatter can define alphabetically sorted, collapsible sections at any depth. Re-importing updates matching lessons and vocabulary in place while retaining SRS progress and entries not present in the import.
    - Imported vocabulary with the same target form and meaning shares SRS progress across sections. Different meanings receive separate generated IDs; an optional `id` on a vocabulary entry can explicitly control sharing.
    - Pre-loaded with the **Unit 2/Lesson 26** sample dataset (nouns, verbs, adjectives with sentences and audio).
@@ -123,43 +124,71 @@ lingua_srs/
 
 ---
 
-## 📝 Example YAML Lesson Format
+## 📝 Creating a Lesson from YAML
 
-```yaml
-Lesson: Unit 2/Lesson 26
+Open **Add Lessons** and enter a lesson name in the single-line **Lesson name** field, for example:
 
-nouns:
-  - ko: 아줌마
-    audio: https://example.com/audio/2016/01/Lesson26v2.mp3
-    en: middle aged/older woman
-    notes: |
-      <p>The word "아주머니" is commonly used as well</p>
-      <p>아줌마 and 아주머니 are commonly used to refer to an older woman that you don't know the name of.</p>
-    examples:
-      - ko: 저는 **아줌마**를 위해 문을 열었어요
-        en: I opened the door for **an older lady**
-
-verbs:
-  - ko: 도착하다
-    audio: https://example.com/audio/2016/01/Lesson26v8.mp3
-    en: to arrive
-    examples:
-      - ko: 우리는 공항에 정각에 **도착했어요**
-        en: We arrived at the airport on time
+```text
+Unit 2 / Lesson 26
 ```
 
-Vocabulary sections can be nested to any depth. An optional vocabulary `id`
-explicitly identifies entries that should share SRS progress across sections:
+The first part becomes the parent unit; remaining parts form the lesson title and any deeper hierarchy. A single name such as `Greetings` creates a top-level lesson. Then enter the vocabulary in the multiline **YAML** field. The field starts empty; its neutral placeholder is an example only and is not imported.
+
+Use a `vocabulary:` root, then group vocabulary under any number of section levels. Example:
 
 ```yaml
 vocabulary:
   nouns:
-    food:
-      - id: shared-pear
-        ko: 배
-        en: pear
-  examples:
-    - id: shared-pear
-      ko: 배
-      en: pear
+    everyday:
+      - ko: "예시 단어"
+        en: "example word"
+        audio: "https://example.com/word-audio.mp3"
+        notes: "Optional HTML or Markdown notes"
+        examples:
+          - ko: "저는 **예시 단어**를 배워요."
+            en: "I learn an **example word**."
+          - ko: "다른 문장입니다."
+            audio: "https://example.com/sentence-audio.mp3"
+            en: "This is another sentence."
+  verbs:
+    - ko: "만들다"
+      en: "to make"
 ```
+
+Each entry should include a target-language field (such as `ko`) and a translation field (such as `en`). `audio`, `notes`, and `examples` are optional. Example sentence emphasis uses Markdown `**bold**`; the app uses it for cloze cards. Add an optional `id` when entries should explicitly share SRS progress, or need distinct identities:
+
+```yaml
+vocabulary:
+  fruit:
+    - id: pear-entry
+      ko: "배"
+      en: "pear"
+  common-words:
+    - id: pear-entry
+      ko: "배"
+      en: "pear"
+```
+
+The **Import YAML** button remains disabled until valid YAML can be previewed. Fix any displayed parse errors, review the lesson and vocabulary preview, then import. You can also use **Pick File** to load a YAML/YML/TXT/Markdown file, or **Pick Folder** to scan Markdown files recursively. Folder imports use only files with a `vocabulary:` map in their YAML frontmatter; ordinary Markdown body text is ignored. Re-importing updates matching lessons and vocabulary while preserving SRS progress and keeping unmatched vocabulary.
+
+### Markdown frontmatter format
+
+For folder imports, Markdown files must have YAML frontmatter containing a `vocabulary:` map. The first Markdown heading supplies the lesson title unless a lesson name is supplied separately:
+
+```markdown
+---
+vocabulary:
+  nouns:
+    - ko: "예시 단어"
+      en: "example word"
+---
+# Lesson 1: Example title
+
+Lesson notes go here and are not imported as vocabulary.
+```
+
+Vocabulary sections can be nested to any depth. Entries with the same explicit
+vocabulary `id` share SRS progress, including across sections. Use different IDs
+to force separate progress identities when needed. Without an explicit ID, the
+app shares progress for the same target form and meaning, while different
+meanings receive separate generated IDs.

@@ -63,7 +63,7 @@ class _SentencePoolViewState extends State<SentencePoolView> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
-            onPressed: () {
+            onPressed: () async {
               if (targetCtrl.text.trim().isNotEmpty) {
                 final provider = context.read<AppProvider>();
                 if (sentence == null) {
@@ -72,13 +72,14 @@ class _SentencePoolViewState extends State<SentencePoolView> {
                     translationText: transCtrl.text.trim(),
                     audioUrl: audioCtrl.text.trim().isEmpty ? null : audioCtrl.text.trim(),
                   );
-                  provider.addSentenceToPool(newSentence);
+                  await provider.addSentenceToPool(newSentence);
                 } else {
                   sentence.targetText = targetCtrl.text.trim();
                   sentence.translationText = transCtrl.text.trim();
                   sentence.audioUrl = audioCtrl.text.trim().isEmpty ? null : audioCtrl.text.trim();
-                  provider.saveState();
+                  await provider.updateSentenceInPool(sentence);
                 }
+                if (!ctx.mounted) return;
                 Navigator.pop(ctx);
               }
             },

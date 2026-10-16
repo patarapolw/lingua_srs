@@ -50,19 +50,67 @@ class AudioService extends ChangeNotifier {
 
   Future<void> _initCacheDir() async {
     try {
-      // Use application sandbox cache directory (e.g. AppData on Windows, cache on Android/iOS)
       Directory baseDir;
       try {
         baseDir = await getApplicationCacheDirectory();
       } catch (_) {
         baseDir = await getApplicationSupportDirectory();
       }
-      _cacheDir = Directory('${baseDir.path}/audio_cache');
+
+      final targetDir = Platform.isWindows
+          ? Directory(
+              '${Platform.environment['LOCALAPPDATA'] ?? baseDir.path}${Platform.pathSeparator}cc.polv${Platform.pathSeparator}lingua.srs${Platform.pathSeparator}audio_cache',
+            )
+          : Directory('${baseDir.path}${Platform.pathSeparator}audio_cache');
+
+      _cacheDir = targetDir;
       if (!await _cacheDir!.exists()) {
         await _cacheDir!.create(recursive: true);
       }
+
+      await _migrateLegacyCacheIfNeeded();
     } catch (e) {
       debugPrint('Error initializing audio sandbox cache directory: $e');
+    }
+  }
+
+  Future<void> _migrateLegacyCacheIfNeeded() async {
+    if (_cacheDir == null || !Platform.isWindows) return;
+
+    final legacyDir = Directory(
+      '${Platform.environment['APPDATA'] ?? ''}${Platform.pathSeparator}com.example${Platform.pathSeparator}lingua_srs${Platform.pathSeparator}audio_cache',
+    );
+    if (!await legacyDir.exists()) return;
+
+    final cachedEntities = await _cacheDir!.list().toList();
+    if (cachedEntities.any((entity) => entity is File || entity is Directory)) {
+      return;
+    }
+
+    await _copyCacheTree(legacyDir, _cacheDir!);
+  }
+
+  Future<void> _copyCacheTree(Directory sourceDir, Directory targetDir) async {
+    await for (final entity in sourceDir.list(
+      recursive: false,
+      followLinks: false,
+    )) {
+      final fileName = entity.path.split(Platform.pathSeparator).last;
+      final destinationPath =
+          '${targetDir.path}${Platform.pathSeparator}$fileName';
+
+      if (entity is File) {
+        final destination = File(destinationPath);
+        if (!await destination.exists()) {
+          await entity.copy(destination.path);
+        }
+      } else if (entity is Directory) {
+        final childTarget = Directory(destinationPath);
+        if (!await childTarget.exists()) {
+          await childTarget.create(recursive: true);
+        }
+        await _copyCacheTree(entity, childTarget);
+      }
     }
   }
 

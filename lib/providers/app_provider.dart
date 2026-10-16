@@ -59,6 +59,10 @@ class AppProvider extends ChangeNotifier {
     _autoplayAudio = await StorageService.loadAutoplay();
     _sentences = await StorageService.loadSentences();
     _lessons = await StorageService.loadLessons();
+    if (_canonicalizeSentencePool()) {
+      await StorageService.saveSentences(_sentences);
+      await StorageService.saveLessons(_lessons);
+    }
     _linkSharedVocabProgress();
 
     if (_lessons.isNotEmpty) {
@@ -67,6 +71,47 @@ class AppProvider extends ChangeNotifier {
 
     _isLoading = false;
     notifyListeners();
+  }
+
+  bool _canonicalizeSentencePool() {
+    final canonicalBySignature = <String, Sentence>{};
+    final canonicalIndexes = <String, int>{};
+    final canonicalSentences = <Sentence>[];
+    final redirectedIds = <String, String>{};
+
+    for (final sentence in _sentences) {
+      final signature = _sentenceSignature(sentence);
+      final canonical = canonicalBySignature[signature];
+      if (canonical == null) {
+        canonicalBySignature[signature] = sentence;
+        canonicalIndexes[signature] = canonicalSentences.length;
+        canonicalSentences.add(sentence);
+        continue;
+      }
+
+      final canonicalHasAudio = canonical.audioUrl?.trim().isNotEmpty == true;
+      final sentenceHasAudio = sentence.audioUrl?.trim().isNotEmpty == true;
+      if (!canonicalHasAudio && sentenceHasAudio) {
+        sentence.lessonId ??= canonical.lessonId;
+        canonicalSentences[canonicalIndexes[signature]!] = sentence;
+        canonicalBySignature[signature] = sentence;
+        redirectedIds[canonical.id] = sentence.id;
+      } else {
+        canonical.audioUrl ??= sentence.audioUrl;
+        canonical.lessonId ??= sentence.lessonId;
+        redirectedIds[sentence.id] = canonical.id;
+      }
+    }
+
+    if (redirectedIds.isEmpty) return false;
+
+    for (final vocab in _lessons.expand((lesson) => lesson.vocabularies)) {
+      vocab.sentenceIds = _unique(
+        vocab.sentenceIds.map((id) => redirectedIds[id] ?? id),
+      );
+    }
+    _sentences = canonicalSentences;
+    return true;
   }
 
   void selectLesson(String? lessonId) {
@@ -96,10 +141,73 @@ class AppProvider extends ChangeNotifier {
         .toList();
   }
 
-  Future<void> addSentenceToPool(Sentence sentence) async {
-    _sentences.add(sentence);
+  Future<Sentence> addSentenceToPool(Sentence sentence) async {
+    final canonical = _upsertSentence(sentence);
     await StorageService.saveSentences(_sentences);
     notifyListeners();
+    return canonical;
+  }
+
+  Future<Sentence> updateSentenceInPool(Sentence sentence) async {
+    final canonical = _upsertSentence(sentence);
+    await StorageService.saveSentences(_sentences);
+    await StorageService.saveLessons(_lessons);
+    notifyListeners();
+    return canonical;
+  }
+
+  Sentence _upsertSentence(Sentence incoming) {
+    final signature = _sentenceSignature(incoming);
+    final duplicates = _sentences
+        .where(
+          (sentence) =>
+              !identical(sentence, incoming) &&
+              _sentenceSignature(sentence) == signature,
+        )
+        .toList();
+    final candidates = [incoming, ...duplicates];
+    final canonical = candidates.firstWhere(
+      (sentence) => sentence.audioUrl?.trim().isNotEmpty == true,
+      orElse: () => incoming,
+    );
+    final audioUrl = candidates
+        .map((sentence) => sentence.audioUrl)
+        .firstWhere(
+          (audio) => audio?.trim().isNotEmpty == true,
+          orElse: () => null,
+        );
+    canonical
+      ..targetText = incoming.targetText
+      ..translationText = incoming.translationText
+      ..audioUrl = audioUrl
+      ..lessonId ??= incoming.lessonId;
+    if (!_sentences.any((sentence) => identical(sentence, canonical))) {
+      _sentences.add(canonical);
+    }
+
+    final removedIds = {
+      ...duplicates.map((sentence) => sentence.id),
+      if (!identical(canonical, incoming)) incoming.id,
+    }..remove(canonical.id);
+    if (removedIds.isNotEmpty) {
+      for (final vocab in _lessons.expand((lesson) => lesson.vocabularies)) {
+        vocab.sentenceIds = _unique(
+          vocab.sentenceIds.map(
+            (id) => removedIds.contains(id) ? canonical.id : id,
+          ),
+        );
+      }
+      _sentences.removeWhere(
+        (sentence) =>
+            !identical(sentence, canonical) && removedIds.contains(sentence.id),
+      );
+    }
+    return canonical;
+  }
+
+  static List<T> _unique<T>(Iterable<T> values) {
+    final seen = <T>{};
+    return values.where(seen.add).toList();
   }
 
   Future<void> linkSentenceToVocab(VocabItem vocab, String sentenceId) async {
@@ -168,8 +276,16 @@ class AppProvider extends ChangeNotifier {
       _mergeImportedLesson(existingLesson, parsed);
     } else {
       _reuseExistingVocabProgress(parsed.lesson.vocabularies);
+      final sentenceIds = <String, String>{};
+      for (final sentence in parsed.sentences) {
+        sentenceIds[sentence.id] = _upsertSentence(sentence).id;
+      }
+      for (final vocab in parsed.lesson.vocabularies) {
+        vocab.sentenceIds = _unique(
+          vocab.sentenceIds.map((id) => sentenceIds[id] ?? id),
+        );
+      }
       _lessons.add(parsed.lesson);
-      _sentences.addAll(parsed.sentences);
       _selectedLessonId = parsed.lesson.id;
     }
     return existingLesson ?? parsed.lesson;
@@ -210,23 +326,35 @@ class AppProvider extends ChangeNotifier {
     }
 
     final importedSentenceIds = <String, String>{};
+    final importedSentenceBySignature = <String, String>{};
     for (final sentence in parsed.sentences) {
-      final matches = sentencesByContent[_sentenceSignature(sentence)];
+      final signature = _sentenceSignature(sentence);
+      final previousImport = importedSentenceBySignature[signature];
+      if (previousImport != null) {
+        final canonical = _upsertSentence(sentence);
+        importedSentenceIds[sentence.id] = canonical.id;
+        continue;
+      }
+      final matches = sentencesByContent[signature];
       final existingSentence = matches == null || matches.isEmpty
           ? null
           : matches.removeAt(0);
       if (existingSentence == null) {
         sentence.lessonId = lesson.id;
-        _sentences.add(sentence);
-        importedSentenceIds[sentence.id] = sentence.id;
+        final canonical = _upsertSentence(sentence);
+        importedSentenceIds[sentence.id] = canonical.id;
       } else {
         existingSentence
           ..targetText = sentence.targetText
           ..translationText = sentence.translationText
-          ..audioUrl = sentence.audioUrl
+          ..audioUrl = existingSentence.audioUrl?.trim().isNotEmpty == true
+              ? existingSentence.audioUrl
+              : sentence.audioUrl
           ..lessonId = lesson.id;
-        importedSentenceIds[sentence.id] = existingSentence.id;
+        importedSentenceIds[sentence.id] = _upsertSentence(existingSentence).id;
       }
+      importedSentenceBySignature[signature] =
+          importedSentenceIds[sentence.id]!;
     }
 
     final existingVocabularies = _lessons
@@ -365,8 +493,15 @@ class AppProvider extends ChangeNotifier {
       ..cardNativeToTarget = source.cardNativeToTarget;
   }
 
-  static String _sentenceSignature(Sentence sentence) =>
-      '${sentence.targetText.trim()}\u0000${sentence.translationText.trim()}';
+  static String _sentenceSignature(Sentence sentence) {
+    String normalize(String text) =>
+        Sentence.withoutEmphasis(text)
+            .trim()
+            .toLowerCase()
+            .replaceAll(RegExp(r'\s+'), ' ');
+    return '${normalize(sentence.targetText)}\u0000'
+        '${normalize(sentence.translationText)}';
+  }
 
   // Toggle card directions
   Future<void> toggleCardDirection(

@@ -166,6 +166,69 @@ vocabulary:
     });
 
     test(
+      'Startup merges duplicate sentences in one pass and keeps audio',
+      () async {
+        final lesson = Lesson(
+          id: 'lesson-with-duplicates',
+          title: 'Duplicate sentences',
+          vocabularies: [
+            VocabItem(
+              targetWord: '배',
+              translation: 'pear',
+              pos: 'nouns',
+              sentenceIds: ['sentence-without-audio'],
+            ),
+            VocabItem(
+              targetWord: '배',
+              translation: 'boat',
+              pos: 'nouns',
+              sentenceIds: ['sentence-with-audio', 'sentence-without-audio'],
+            ),
+          ],
+        );
+        SharedPreferences.setMockInitialValues({
+          'lingua_srs_windows_legacy_migration_complete': true,
+          'lingua_srs_lessons': jsonEncode([lesson.toJson()]),
+          'lingua_srs_sentences': jsonEncode([
+            Sentence(
+              id: 'sentence-without-audio',
+              targetText: '저는 배를 탔어요',
+              translationText: 'I took the boat.',
+              lessonId: lesson.id,
+            ).toJson(),
+            Sentence(
+              id: 'sentence-with-audio',
+              targetText: '저는 **배**를 탔어요',
+              translationText: 'I took the **boat**.',
+              audioUrl: 'https://example.com/sentence.mp3',
+              lessonId: lesson.id,
+            ).toJson(),
+          ]),
+        });
+
+        final provider = AppProvider();
+        while (provider.isLoading) {
+          await Future<void>.delayed(Duration.zero);
+        }
+
+        expect(provider.sentences, hasLength(1));
+        expect(provider.sentences.single.id, 'sentence-with-audio');
+        expect(
+          provider.sentences.single.audioUrl,
+          'https://example.com/sentence.mp3',
+        );
+        expect(provider.lessons.single.vocabularies[0].sentenceIds, [
+          'sentence-with-audio',
+        ]);
+        expect(provider.lessons.single.vocabularies[1].sentenceIds, [
+          'sentence-with-audio',
+        ]);
+
+        provider.dispose();
+      },
+    );
+
+    test(
       'Reimport updates matching vocabulary and preserves SRS progress',
       () async {
         SharedPreferences.setMockInitialValues({
