@@ -11,7 +11,7 @@ A Flutter application targeting **Desktop (Windows, macOS, Linux)** and **Mobile
    - Use `/` in the lesson name to separate hierarchy levels. For example, `Unit 2 / Lesson 26` groups the lesson under `Unit 2`; `Topic / Subtopic / Lesson A` creates a deeper hierarchy.
    - Import a directory recursively; choose which Markdown lessons to import (all unchecked initially, with **Check all** and **Uncheck all** controls). Folder hierarchy is preserved.
    - YAML and Markdown frontmatter are parsed in a background isolate with parse errors and an import preview. Folder import parsing also runs off the UI isolate.
-   - Unit and nested folder groups in the library are expanded by default; expansion states and sibling order are saved across view changes and app restarts. Drag lessons and folders to reorder them. Vocabulary frontmatter can define alphabetically sorted, collapsible sections at any depth. Re-importing updates matching lessons and vocabulary in place while retaining SRS progress and entries not present in the import.
+   - Unit and nested folder groups in the library are expanded by default; expansion states and sibling order are saved across view changes and app restarts. Drag lessons and folders to reorder them, or use their menus to move them between folders. Slash-separated lesson paths create nested folders. Vocabulary frontmatter can define alphabetically sorted, collapsible sections at any depth. Re-importing updates matching lessons and vocabulary in place while retaining SRS progress and entries not present in the import.
    - Imported vocabulary with the same target form and meaning shares SRS progress across sections. Different meanings receive separate generated IDs; an optional `id` on a vocabulary entry can explicitly control sharing.
    - Importing Markdown lessons keeps the document body for reading from the lesson list; it can be edited and saved at any time. Large lesson bodies are rendered in lazy Markdown chunks, and **View Vocabulary** remains a separate view.
    - Pre-loaded with the **Unit 2/Lesson 26** sample dataset (nouns, verbs, adjectives with sentences and audio).
@@ -208,10 +208,16 @@ Vocabulary sections can be nested to any depth. Entries with the same explicit v
 
 ## TODO
 
-- Markdown render in `Webview` may be more reliable for lesson explanation contents.
-- Folder hierachy renaming in import view and Lesson list view.
+### Features
+
+- Markdown render in `Webview` may be more reliable for lesson explanation details. `<YouTube>` tags and other actual HTML tags could be more reliably rendered there.
+- Lesson folder hierarchy should indent appropriately.
 - Sync between mobile and desktop, and between devices. Quick connect via QR code. I am probably using Cloudflare D1 worker for this.
 
-## Bugs
+### Bugs
 
-- Hierarchy view isn't draggable yet.
+- Dragging reorders items within their current parent still doesn't work; use the item menus to move lessons or folders to another parent.
+
+## Thoughts
+
+- Dragging feature might not be important. Consider removing.

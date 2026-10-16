@@ -467,6 +467,19 @@ vocabulary:
       expect(lesson.displayTitle, 'Lesson 26');
     });
 
+    test('Uses slash-separated lesson paths for nested folders', () {
+      final lesson = Lesson(title: 'Topic / Subtopic / Lesson A');
+      final lessonWithParent = Lesson(
+        title: 'Subtopic/Lesson B',
+        unitTitle: 'Topic',
+      );
+
+      expect(lesson.effectiveUnitTitle, 'Topic/Subtopic');
+      expect(lesson.displayTitle, 'Lesson A');
+      expect(lessonWithParent.effectiveUnitTitle, 'Topic/Subtopic');
+      expect(lessonWithParent.displayTitle, 'Lesson B');
+    });
+
     test(
       'Startup merges duplicate sentences in one pass and keeps audio',
       () async {
@@ -831,6 +844,75 @@ vocabulary:
       expect(provider.lessons.any((lesson) => lesson.id == first.id), isFalse);
       provider.dispose();
     });
+
+    test(
+      'Moving lessons and nested folders preserves their hierarchy',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'lingua_srs_windows_legacy_migration_complete': true,
+          'lingua_srs_lessons': '[]',
+          'lingua_srs_sentences': '[]',
+        });
+        final provider = AppProvider();
+        while (provider.isLoading) {
+          await Future<void>.delayed(Duration.zero);
+        }
+
+        final movedLesson = await provider.importYaml(
+          'Lesson: Lesson A\nnouns: []',
+          defaultUnitTitle: 'Topic/Subtopic',
+        );
+        final nestedLesson = await provider.importYaml(
+          'Lesson: Lesson B\nnouns: []',
+          defaultUnitTitle: 'Topic/Subtopic/Inner',
+        );
+        await provider.setLessonFolderExpanded('folder:topic/subtopic', false);
+        await provider.setLessonFolderExpanded(
+          'folder:topic/subtopic/inner',
+          true,
+        );
+
+        await provider.moveLessonToFolder(movedLesson.id, 'Other');
+        expect(movedLesson.effectiveUnitTitle, 'Other');
+
+        await provider.moveLessonGroup('Topic/Subtopic', 'Destination');
+
+        expect(movedLesson.effectiveUnitTitle, 'Other');
+        expect(nestedLesson.effectiveUnitTitle, 'Destination/Subtopic/Inner');
+        expect(
+          provider.lessonFolderExpansion['folder:destination/subtopic'],
+          isFalse,
+        );
+        expect(
+          provider.lessonFolderExpansion['folder:destination/subtopic/inner'],
+          isTrue,
+        );
+        await expectLater(
+          provider.moveLessonGroup(
+            'Destination/Subtopic',
+            'Destination/Subtopic/Inner',
+          ),
+          throwsArgumentError,
+        );
+
+        final reloadedProvider = AppProvider();
+        while (reloadedProvider.isLoading) {
+          await Future<void>.delayed(Duration.zero);
+        }
+        expect(
+          reloadedProvider.lessons
+              .singleWhere((lesson) => lesson.id == nestedLesson.id)
+              .effectiveUnitTitle,
+          'Destination/Subtopic/Inner',
+        );
+        expect(
+          reloadedProvider.lessonFolderExpansion['folder:destination/subtopic'],
+          isFalse,
+        );
+        provider.dispose();
+        reloadedProvider.dispose();
+      },
+    );
 
     test('Markdown imports require and read only vocabulary frontmatter', () {
       expect(

@@ -37,7 +37,7 @@ class LessonListView extends StatelessWidget {
             TextField(
               controller: titleCtrl,
               decoration: const InputDecoration(
-                labelText: 'Lesson Title (e.g. Unit 3/Lesson 1)',
+                labelText: 'Lesson Path (e.g. Topic / Subtopic / Lesson A)',
               ),
             ),
             const SizedBox(height: 12),
@@ -268,6 +268,115 @@ class LessonListView extends StatelessWidget {
     await provider.deleteLessonGroup(unitTitle);
   }
 
+  List<String> _folderPaths(AppProvider provider) {
+    final pathsByKey = <String, String>{};
+    for (final lesson in provider.lessons) {
+      final parts = lesson.effectiveUnitTitle
+          ?.split(RegExp(r'[/\\]'))
+          .map((part) => part.trim())
+          .where((part) => part.isNotEmpty)
+          .toList();
+      if (parts == null) continue;
+      for (var index = 0; index < parts.length; index++) {
+        final path = parts.take(index + 1).join('/');
+        pathsByKey.putIfAbsent(path.toLowerCase(), () => path);
+      }
+    }
+    return pathsByKey.values.toList();
+  }
+
+  Future<String?> _chooseFolderPath(
+    BuildContext context,
+    String title,
+    List<String> folderPaths,
+  ) => showDialog<String>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text(title),
+      content: SizedBox(
+        width: 400,
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.home_outlined),
+              title: const Text('Root (no folder)'),
+              onTap: () => Navigator.pop(dialogContext, ''),
+            ),
+            for (final path in folderPaths)
+              ListTile(
+                leading: const Icon(Icons.folder_outlined),
+                title: Text(path),
+                onTap: () => Navigator.pop(dialogContext, path),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('Cancel'),
+        ),
+      ],
+    ),
+  );
+
+  Future<void> _moveLessonToFolder(
+    BuildContext context,
+    AppProvider provider,
+    Lesson lesson,
+  ) async {
+    final destination = await _chooseFolderPath(
+      context,
+      'Move "${lesson.displayTitle}" to folder',
+      _folderPaths(provider),
+    );
+    if (destination == null || !context.mounted) return;
+    try {
+      await provider.moveLessonToFolder(
+        lesson.id,
+        destination.isEmpty ? null : destination,
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not move lesson: $error')));
+    }
+  }
+
+  Future<void> _moveLessonGroup(
+    BuildContext context,
+    AppProvider provider,
+    String folderPath,
+  ) async {
+    final normalizedPath = folderPath.toLowerCase();
+    final destinations = _folderPaths(provider)
+        .where(
+          (path) =>
+              path.toLowerCase() != normalizedPath &&
+              !path.toLowerCase().startsWith('$normalizedPath/'),
+        )
+        .toList();
+    final destinationParent = await _chooseFolderPath(
+      context,
+      'Move "$folderPath" under folder',
+      destinations,
+    );
+    if (destinationParent == null || !context.mounted) return;
+    try {
+      await provider.moveLessonGroup(
+        folderPath,
+        destinationParent.isEmpty ? null : destinationParent,
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not move folder: $error')));
+    }
+  }
+
   Future<void> _saveHierarchyOrder(
     BuildContext context,
     AppProvider provider,
@@ -383,6 +492,8 @@ class LessonListView extends StatelessWidget {
               onSelected: (value) {
                 if (value == 'reset_srs') {
                   _confirmResetLesson(context, lesson);
+                } else if (value == 'move') {
+                  _moveLessonToFolder(context, provider, lesson);
                 } else if (value == 'delete') {
                   provider.deleteLesson(lesson.id);
                 }
@@ -395,6 +506,16 @@ class LessonListView extends StatelessWidget {
                       Icon(Icons.restart_alt, color: Colors.orange, size: 18),
                       SizedBox(width: 8),
                       Text('Reset SRS Progress'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'move',
+                  child: Row(
+                    children: [
+                      Icon(Icons.drive_file_move_outline, size: 18),
+                      SizedBox(width: 8),
+                      Text('Move to Folder...'),
                     ],
                   ),
                 ),
@@ -780,6 +901,8 @@ class LessonListView extends StatelessWidget {
                               key,
                               expanded,
                             ),
+                        onMoveFolder: (path) =>
+                            _moveLessonGroup(context, provider, path),
                         onDeleteFolder: (path, count) =>
                             _confirmDeleteLessonGroup(
                               context,

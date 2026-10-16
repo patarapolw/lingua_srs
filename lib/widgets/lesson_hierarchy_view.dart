@@ -30,6 +30,7 @@ class LessonHierarchyView extends StatelessWidget {
   final Future<void> Function(List<String> siblingKeys) onOrderChanged;
   final Future<void> Function(String folderKey, bool expanded)
   onFolderExpansionChanged;
+  final void Function(String folderPath) onMoveFolder;
   final void Function(String folderPath, int lessonCount) onDeleteFolder;
 
   const LessonHierarchyView({
@@ -40,6 +41,7 @@ class LessonHierarchyView extends StatelessWidget {
     required this.lessonBuilder,
     required this.onOrderChanged,
     required this.onFolderExpansionChanged,
+    required this.onMoveFolder,
     required this.onDeleteFolder,
   });
 
@@ -55,10 +57,30 @@ class LessonHierarchyView extends StatelessWidget {
       buildDefaultDragHandles: false,
       itemCount: rows.length,
       onReorderItem: (oldIndex, newIndex) {
-        if (oldIndex == newIndex || oldIndex >= rows.length) return;
+        if (oldIndex == newIndex || oldIndex < 0 || oldIndex >= rows.length) {
+          return;
+        }
         final reordered = [...rows];
         final moved = reordered.removeAt(oldIndex);
-        reordered.insert(newIndex.clamp(0, reordered.length).toInt(), moved);
+        final insertionIndex = newIndex.clamp(0, reordered.length).toInt();
+        final validSiblingGaps = <int>{};
+        for (var index = 0; index < reordered.length; index++) {
+          final sibling = reordered[index];
+          if (sibling.parentKey != moved.parentKey) continue;
+          validSiblingGaps.add(index);
+          var subtreeEnd = index + 1;
+          if (sibling.isFolder) {
+            while (subtreeEnd < reordered.length &&
+                reordered[subtreeEnd].depth > sibling.depth) {
+              subtreeEnd++;
+            }
+          }
+          for (var gap = index; gap <= subtreeEnd; gap++) {
+            validSiblingGaps.add(gap);
+          }
+        }
+        if (!validSiblingGaps.contains(insertionIndex)) return;
+        reordered.insert(insertionIndex, moved);
         final siblingKeys = reordered
             .where((row) => row.parentKey == moved.parentKey)
             .map((row) => row.key)
@@ -81,11 +103,7 @@ class LessonHierarchyView extends StatelessWidget {
   List<_HierarchyNode> _buildTree() {
     final roots = <_HierarchyNode>[];
     final foldersByPath = <String, _HierarchyNode>{};
-    for (
-      var lessonIndex = 0;
-      lessonIndex < lessons.length;
-      lessonIndex++
-    ) {
+    for (var lessonIndex = 0; lessonIndex < lessons.length; lessonIndex++) {
       final lesson = lessons[lessonIndex];
       final folders = (lesson.effectiveUnitTitle ?? '')
           .split(RegExp(r'[/\\]'))
@@ -208,7 +226,17 @@ class LessonHierarchyView extends StatelessWidget {
                   Icons.delete_outline,
                   color: theme.colorScheme.error,
                 ),
-                onPressed: () => onDeleteFolder(row.folderPath!, row.lessonCount),
+                onPressed: () =>
+                    onDeleteFolder(row.folderPath!, row.lessonCount),
+              ),
+              PopupMenuButton<String>(
+                tooltip: 'Manage ${row.folderPath}',
+                onSelected: (action) {
+                  if (action == 'move') onMoveFolder(row.folderPath!);
+                },
+                itemBuilder: (context) => const [
+                  PopupMenuItem(value: 'move', child: Text('Move folder...')),
+                ],
               ),
               Icon(expanded ? Icons.expand_less : Icons.expand_more),
             ],

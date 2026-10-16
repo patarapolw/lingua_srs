@@ -406,11 +406,12 @@ class AppProvider extends ChangeNotifier {
   static String _normalizeLessonPart(String? value) =>
       value?.trim().toLowerCase() ?? '';
 
-  static String _normalizeHierarchyPath(String? value) => value
-      ?.split(RegExp(r'[/\\]'))
-      .map((part) => part.trim().toLowerCase())
-      .where((part) => part.isNotEmpty)
-      .join('/') ??
+  static String _normalizeHierarchyPath(String? value) =>
+      value
+          ?.split(RegExp(r'[/\\]'))
+          .map((part) => part.trim().toLowerCase())
+          .where((part) => part.isNotEmpty)
+          .join('/') ??
       '';
 
   static String _lessonIdentity(Lesson lesson) {
@@ -835,13 +836,11 @@ class AppProvider extends ChangeNotifier {
   Future<void> deleteLessonGroup(String unitTitle) async {
     final normalizedTitle = _normalizeHierarchyPath(unitTitle);
     final deletedIds = _lessons
-        .where(
-          (lesson) {
-            final path = _normalizeHierarchyPath(lesson.effectiveUnitTitle);
-            return path == normalizedTitle ||
-                path.startsWith('$normalizedTitle/');
-          },
-        )
+        .where((lesson) {
+          final path = _normalizeHierarchyPath(lesson.effectiveUnitTitle);
+          return path == normalizedTitle ||
+              path.startsWith('$normalizedTitle/');
+        })
         .map((lesson) => lesson.id)
         .toSet();
     if (deletedIds.isEmpty) return;
@@ -851,6 +850,120 @@ class AppProvider extends ChangeNotifier {
       _selectedLessonId = _lessons.isNotEmpty ? _lessons.first.id : null;
     }
     await saveState();
+  }
+
+  Future<void> moveLessonToFolder(String lessonId, String? folderPath) async {
+    final lesson = _lessons.firstWhere(
+      (candidate) => candidate.id == lessonId,
+      orElse: () => throw StateError('Cannot move missing lesson $lessonId.'),
+    );
+    final destinationPath = _hierarchyPathParts(folderPath).join('/');
+    final destination = _normalizeHierarchyPath(destinationPath);
+    if (_normalizeHierarchyPath(lesson.effectiveUnitTitle) == destination) {
+      return;
+    }
+
+    lesson
+      ..unitTitle = destinationPath.isEmpty ? null : destinationPath
+      ..title = lesson.displayTitle;
+    await saveState();
+  }
+
+  Future<void> moveLessonGroup(
+    String folderPath,
+    String? destinationParentPath,
+  ) async {
+    final source = _normalizeHierarchyPath(folderPath);
+    if (source.isEmpty) {
+      throw ArgumentError.value(folderPath, 'folderPath', 'Must not be empty.');
+    }
+    final destinationParent = _normalizeHierarchyPath(destinationParentPath);
+    if (destinationParent == source ||
+        destinationParent.startsWith('$source/')) {
+      throw ArgumentError(
+        'A folder cannot be moved into itself or one of its descendants.',
+      );
+    }
+
+    final affectedLessons = _lessons.where((lesson) {
+      final path = _normalizeHierarchyPath(lesson.effectiveUnitTitle);
+      return path == source || path.startsWith('$source/');
+    }).toList();
+    if (affectedLessons.isEmpty) {
+      throw StateError('Cannot move missing lesson folder "$folderPath".');
+    }
+
+    final sourceParts = _hierarchyPathParts(folderPath);
+    final destinationParts = _hierarchyPathParts(destinationParentPath);
+    final newFolderParts = [...destinationParts, sourceParts.last];
+    final newFolderPath = newFolderParts.join('/');
+    final normalizedNewFolderPath = _normalizeHierarchyPath(newFolderPath);
+    if (normalizedNewFolderPath == source) return;
+
+    final movesIntoExistingFolder = _lessons.any((lesson) {
+      if (affectedLessons.contains(lesson)) return false;
+      final path = _normalizeHierarchyPath(lesson.effectiveUnitTitle);
+      return path == normalizedNewFolderPath ||
+          path.startsWith('$normalizedNewFolderPath/');
+    });
+    if (movesIntoExistingFolder) {
+      throw StateError('A folder already exists at "$newFolderPath".');
+    }
+
+    for (final lesson in affectedLessons) {
+      final oldParts = _hierarchyPathParts(lesson.effectiveUnitTitle);
+      final suffix = oldParts.skip(sourceParts.length);
+      lesson
+        ..unitTitle = [...newFolderParts, ...suffix].join('/')
+        ..title = lesson.displayTitle;
+    }
+
+    final oldKeyPrefix = 'folder:$source';
+    final newKeyPrefix = 'folder:$normalizedNewFolderPath';
+    _lessonHierarchyOrder = _replaceFolderKeyPrefix(
+      _lessonHierarchyOrder,
+      oldKeyPrefix,
+      newKeyPrefix,
+      omitExact: true,
+    );
+    _lessonFolderExpansion = _replaceFolderKeyPrefix(
+      _lessonFolderExpansion,
+      oldKeyPrefix,
+      newKeyPrefix,
+    );
+
+    await StorageService.saveLessons(_lessons);
+    await StorageService.saveLessonHierarchyOrder(_lessonHierarchyOrder);
+    await StorageService.saveLessonFolderExpansion(_lessonFolderExpansion);
+    notifyListeners();
+  }
+
+  static List<String> _hierarchyPathParts(String? path) =>
+      path
+          ?.split(RegExp(r'[/\\]'))
+          .map((part) => part.trim())
+          .where((part) => part.isNotEmpty)
+          .toList() ??
+      [];
+
+  static Map<String, T> _replaceFolderKeyPrefix<T>(
+    Map<String, T> values,
+    String oldPrefix,
+    String newPrefix, {
+    bool omitExact = false,
+  }) {
+    final updated = <String, T>{};
+    for (final entry in values.entries) {
+      if (entry.key == oldPrefix) {
+        if (!omitExact) updated[newPrefix] = entry.value;
+      } else if (entry.key.startsWith('$oldPrefix/')) {
+        updated['$newPrefix${entry.key.substring(oldPrefix.length)}'] =
+            entry.value;
+      } else {
+        updated[entry.key] = entry.value;
+      }
+    }
+    return updated;
   }
 
   // Reset SRS learning state for an individual vocabulary item

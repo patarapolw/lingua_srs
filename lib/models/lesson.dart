@@ -24,22 +24,31 @@ class Lesson {
        vocabularies = vocabularies ?? [];
 
   String? get effectiveUnitTitle {
-    final explicitUnit = unitTitle?.trim();
-    if (explicitUnit != null && explicitUnit.isNotEmpty) return explicitUnit;
-
-    final match = RegExp(
-      r'^(Unit\s+\d+)\s*[/\\]\s*(.+)$',
-      caseSensitive: false,
-    ).firstMatch(title.trim());
-    return match?.group(1);
+    final explicitParts = _hierarchyParts(unitTitle);
+    var titleParts = _hierarchyParts(title);
+    var repeatsExplicitPath =
+        explicitParts.isNotEmpty && titleParts.length >= explicitParts.length;
+    for (
+      var index = 0;
+      repeatsExplicitPath && index < explicitParts.length;
+      index++
+    ) {
+      repeatsExplicitPath =
+          explicitParts[index].toLowerCase() == titleParts[index].toLowerCase();
+    }
+    if (repeatsExplicitPath) {
+      titleParts = titleParts.skip(explicitParts.length).toList();
+    }
+    final folderParts = [
+      ...explicitParts,
+      ...titleParts.take(titleParts.isEmpty ? 0 : titleParts.length - 1),
+    ];
+    return folderParts.isEmpty ? null : folderParts.join('/');
   }
 
   String get displayTitle {
-    final match = RegExp(
-      r'^Unit\s+\d+\s*[/\\]\s*(.+)$',
-      caseSensitive: false,
-    ).firstMatch(title.trim());
-    return match?.group(1) ?? title;
+    final titleParts = _hierarchyParts(title);
+    return titleParts.isEmpty ? title : titleParts.last;
   }
 
   int get activeCardsCount {
@@ -119,3 +128,11 @@ class Lesson {
         [],
   );
 }
+
+List<String> _hierarchyParts(String? path) =>
+    path
+        ?.split(RegExp(r'[/\\]'))
+        .map((part) => part.trim())
+        .where((part) => part.isNotEmpty)
+        .toList() ??
+    [];

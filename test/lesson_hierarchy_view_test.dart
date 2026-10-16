@@ -30,6 +30,7 @@ void main() {
                   expansionChanges.add((key, expanded));
                   setState(() => expansion[key] = expanded);
                 },
+                onMoveFolder: (_) {},
                 onDeleteFolder: (_, _) {},
               ),
             ),
@@ -84,6 +85,7 @@ void main() {
                 reorderedKeys = keys;
               },
               onFolderExpansionChanged: (_, _) async {},
+              onMoveFolder: (_) {},
               onDeleteFolder: (_, _) {},
             ),
           ),
@@ -132,6 +134,7 @@ void main() {
                 reorderedKeys = keys;
               },
               onFolderExpansionChanged: (_, _) async {},
+              onMoveFolder: (_) {},
               onDeleteFolder: (_, _) {},
             ),
           ),
@@ -153,5 +156,39 @@ void main() {
 
     expect(reorderedKeys, hasLength(2));
     expect(reorderedKeys!.first, 'lesson:lesson-2');
+  });
+
+  testWidgets('slash-separated lesson titles create nested folders', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            height: 700,
+            child: LessonHierarchyView(
+              lessons: [
+                Lesson(
+                  id: 'nested-lesson',
+                  title: 'Topic / Subtopic / Lesson A',
+                ),
+              ],
+              order: const {},
+              folderExpansion: const {},
+              lessonBuilder: (context, lesson) =>
+                  ListTile(title: Text(lesson.displayTitle)),
+              onOrderChanged: (_) async {},
+              onFolderExpansionChanged: (_, _) async {},
+              onMoveFolder: (_) {},
+              onDeleteFolder: (_, _) {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Topic'), findsOneWidget);
+    expect(find.text('Subtopic'), findsOneWidget);
+    expect(find.text('Lesson A'), findsOneWidget);
   });
 }
