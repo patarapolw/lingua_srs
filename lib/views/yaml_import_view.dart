@@ -66,7 +66,7 @@ class _YamlImportViewState extends State<YamlImportView> {
     setState(() {
       _errorMessage = null;
       _previewResult = null;
-      _progressMessage = 'Parsing lesson in the background...';
+      _progressMessage = 'Parsing lesson...';
     });
     _parseTimer = Timer(const Duration(milliseconds: 300), () async {
       try {
@@ -169,16 +169,6 @@ class _YamlImportViewState extends State<YamlImportView> {
           files.add(entity);
         }
       }
-      String fileName(File file) => file.uri.pathSegments.isEmpty
-          ? file.path
-          : file.uri.pathSegments.last;
-      files.sort((first, second) {
-        final byName = fileName(first)
-            .toLowerCase()
-            .compareTo(fileName(second).toLowerCase());
-        if (byName != 0) return byName;
-        return first.path.toLowerCase().compareTo(second.path.toLowerCase());
-      });
       if (mounted) {
         setState(() {
           _progressTotal = files.length;
@@ -197,6 +187,9 @@ class _YamlImportViewState extends State<YamlImportView> {
         files.map((file) => file.path).toList(),
         directoryPath,
       );
+      result.imports.sort((first, second) {
+        return first.path.toLowerCase().compareTo(second.path.toLowerCase());
+      });
 
       if (!mounted) return;
       setState(() {
@@ -438,7 +431,7 @@ class _YamlImportViewState extends State<YamlImportView> {
                             '          en: "Another translation"\n'
                             '---\n'
                             '\n'
-                            '# Lesson 1\n'
+                            '# Lesson 26\n'
                             '\n'
                             'Lesson contents go **here**.',
                         hintStyle: TextStyle(

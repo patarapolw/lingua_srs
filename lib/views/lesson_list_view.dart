@@ -863,12 +863,12 @@ class LessonListView extends StatelessWidget {
                           ),
                           const SizedBox(height: 12),
                           const Text(
-                            'No lessons found. Import from YAML or create one!',
+                            'No lessons found. Import from markdown/YAML or create one!',
                           ),
                           const SizedBox(height: 16),
                           FilledButton.icon(
                             icon: const Icon(Icons.code),
-                            label: const Text('Import Sample YAML'),
+                            label: const Text('Import a new lesson'),
                             onPressed: () {
                               Navigator.push(
                                 context,
