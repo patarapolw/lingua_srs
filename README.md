@@ -9,9 +9,9 @@ A Flutter application targeting **Desktop (Windows, macOS, Linux)** and **Mobile
 1. **YAML/Markdown Lesson Architecture**:
    - Create lessons from the **Import Lessons** screen with a separate lesson-name field and Markdown editor. The field starts empty; its example shows YAML frontmatter with an optional Markdown body.
    - Use `/` in the lesson name to separate hierarchy levels. For example, `Unit 2 / Lesson 26` groups the lesson under `Unit 2`; `Topic / Subtopic / Lesson A` creates a deeper hierarchy.
-   - Import a directory recursively; Markdown files are read from their `vocabulary:` frontmatter section and grouped by their parent folder (for example, `unit-2` becomes Unit 2).
+   - Import a directory recursively; choose which Markdown lessons to import (all unchecked initially, with **Check all** and **Uncheck all** controls). Folder hierarchy is preserved.
    - YAML and Markdown frontmatter are parsed in a background isolate with parse errors and an import preview. Folder import parsing also runs off the UI isolate.
-   - Unit titles group lessons in the library; each lesson appears as a subsection. Vocabulary frontmatter can define alphabetically sorted, collapsible sections at any depth. Re-importing updates matching lessons and vocabulary in place while retaining SRS progress and entries not present in the import.
+   - Unit and nested folder groups in the library are expanded by default; expansion states and sibling order are saved across view changes and app restarts. Drag lessons and folders to reorder them. Vocabulary frontmatter can define alphabetically sorted, collapsible sections at any depth. Re-importing updates matching lessons and vocabulary in place while retaining SRS progress and entries not present in the import.
    - Imported vocabulary with the same target form and meaning shares SRS progress across sections. Different meanings receive separate generated IDs; an optional `id` on a vocabulary entry can explicitly control sharing.
    - Importing Markdown lessons keeps the document body for reading from the lesson list; it can be edited and saved at any time. Large lesson bodies are rendered in lazy Markdown chunks, and **View Vocabulary** remains a separate view.
    - Pre-loaded with the **Unit 2/Lesson 26** sample dataset (nouns, verbs, adjectives with sentences and audio).
@@ -180,7 +180,7 @@ vocabulary:
       en: "pear"
 ```
 
-The import button remains disabled until Markdown with YAML frontmatter containing `vocabulary:` can be previewed. The vocabulary map may be empty, and the Markdown body is optional. Fix any displayed parse errors, review the lesson and vocabulary preview, then import. Use **Pick File** to load a YAML/YML/TXT/Markdown file, or **Pick Folder** to scan Markdown files recursively. Folder imports use only files with a `vocabulary:` key in their YAML frontmatter; ordinary Markdown body text is retained for lesson reading but is not imported as vocabulary. Re-importing updates matching lessons and vocabulary while preserving SRS progress and keeping unmatched vocabulary.
+The import button remains disabled until Markdown with YAML frontmatter containing `vocabulary:` can be previewed. The vocabulary map may be empty, and the Markdown body is optional. Fix any displayed parse errors, review the lesson and vocabulary preview, then import. Use **Pick File** to load a YAML/YML/TXT/Markdown file, or **Pick Folder** to scan Markdown files recursively. Folder results start unchecked; select individual lessons or choose **Check all**. Only selected lessons are imported. Folder imports use only files with a `vocabulary:` key in their YAML frontmatter; ordinary Markdown body text is retained for lesson reading but is not imported as vocabulary. Re-importing updates matching lessons and vocabulary while preserving SRS progress and keeping unmatched vocabulary.
 
 ### Markdown frontmatter format
 

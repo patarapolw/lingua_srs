@@ -32,6 +32,8 @@ class AppProvider extends ChangeNotifier {
   bool _autoplayAudio = true;
   bool _isLoading = true;
   String? _selectedLessonId;
+  Map<String, int> _lessonHierarchyOrder = {};
+  Map<String, bool> _lessonFolderExpansion = {};
 
   int _maxReviews24h = 100;
   List<DateTime> _reviewTimestamps24h = [];
@@ -42,6 +44,10 @@ class AppProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get selectedLessonId => _selectedLessonId;
   int get maxReviews24h => _maxReviews24h;
+  Map<String, int> get lessonHierarchyOrder =>
+      Map.unmodifiable(_lessonHierarchyOrder);
+  Map<String, bool> get lessonFolderExpansion =>
+      Map.unmodifiable(_lessonFolderExpansion);
 
   int get reviewsInLast24Hours {
     final now = DateTime.now();
@@ -80,6 +86,8 @@ class AppProvider extends ChangeNotifier {
     _autoplayAudio = await StorageService.loadAutoplay();
     _maxReviews24h = await StorageService.loadMaxReviews24h();
     _reviewTimestamps24h = await StorageService.loadReviewTimestamps();
+    _lessonHierarchyOrder = await StorageService.loadLessonHierarchyOrder();
+    _lessonFolderExpansion = await StorageService.loadLessonFolderExpansion();
     _sentences = await StorageService.loadSentences();
     _lessons = await StorageService.loadLessons();
     if (_canonicalizeSentencePool()) {
@@ -363,6 +371,13 @@ class AppProvider extends ChangeNotifier {
 
   static String _normalizeLessonPart(String? value) =>
       value?.trim().toLowerCase() ?? '';
+
+  static String _normalizeHierarchyPath(String? value) => value
+      ?.split(RegExp(r'[/\\]'))
+      .map((part) => part.trim().toLowerCase())
+      .where((part) => part.isNotEmpty)
+      .join('/') ??
+      '';
 
   static String _lessonIdentity(Lesson lesson) {
     final lessonNumber = RegExp(
@@ -784,12 +799,14 @@ class AppProvider extends ChangeNotifier {
   }
 
   Future<void> deleteLessonGroup(String unitTitle) async {
-    final normalizedTitle = _normalizeLessonPart(unitTitle);
+    final normalizedTitle = _normalizeHierarchyPath(unitTitle);
     final deletedIds = _lessons
         .where(
-          (lesson) =>
-              _normalizeLessonPart(lesson.effectiveUnitTitle) ==
-              normalizedTitle,
+          (lesson) {
+            final path = _normalizeHierarchyPath(lesson.effectiveUnitTitle);
+            return path == normalizedTitle ||
+                path.startsWith('$normalizedTitle/');
+          },
         )
         .map((lesson) => lesson.id)
         .toSet();
@@ -970,5 +987,23 @@ class AppProvider extends ChangeNotifier {
     _lessons[index].markdownContent = markdown;
     await StorageService.saveLessons(_lessons);
     notifyListeners();
+  }
+
+  Future<void> saveLessonHierarchyOrder(List<String> siblingKeys) async {
+    final updatedOrder = Map<String, int>.from(_lessonHierarchyOrder);
+    for (var index = 0; index < siblingKeys.length; index++) {
+      updatedOrder[siblingKeys[index]] = index;
+    }
+    _lessonHierarchyOrder = updatedOrder;
+    await StorageService.saveLessonHierarchyOrder(updatedOrder);
+    notifyListeners();
+  }
+
+  Future<void> setLessonFolderExpanded(String folderKey, bool expanded) async {
+    final updatedExpansion = Map<String, bool>.from(_lessonFolderExpansion)
+      ..[folderKey] = expanded;
+    _lessonFolderExpansion = updatedExpansion;
+    notifyListeners();
+    await StorageService.saveLessonFolderExpansion(updatedExpansion);
   }
 }

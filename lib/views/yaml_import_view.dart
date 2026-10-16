@@ -23,6 +23,7 @@ class _YamlImportViewState extends State<YamlImportView> {
   YamlParseResult? _previewResult;
   String? _defaultUnitTitle;
   List<_MarkdownImportFile> _directoryFiles = [];
+  final Set<String> _selectedDirectoryPaths = {};
   List<String> _directoryErrors = [];
   int _directorySkipped = 0;
   bool _isParsing = false;
@@ -47,6 +48,7 @@ class _YamlImportViewState extends State<YamlImportView> {
     final text = _yamlController.text.trim();
     if (_directoryFiles.isNotEmpty) {
       _directoryFiles = [];
+      _selectedDirectoryPaths.clear();
       _directoryErrors = [];
       _directorySkipped = 0;
     }
@@ -119,6 +121,7 @@ class _YamlImportViewState extends State<YamlImportView> {
             ? null
             : 'Unit ${unitMatch.group(1)}';
         _directoryFiles = [];
+        _selectedDirectoryPaths.clear();
         _directoryErrors = [];
         _directorySkipped = 0;
         _lessonNameController.clear();
@@ -198,6 +201,7 @@ class _YamlImportViewState extends State<YamlImportView> {
       if (!mounted) return;
       setState(() {
         _directoryFiles = result.imports;
+        _selectedDirectoryPaths.clear();
         _directoryErrors = result.errors;
         _directorySkipped = result.skipped;
         _progressCurrent = files.length;
@@ -259,16 +263,19 @@ class _YamlImportViewState extends State<YamlImportView> {
   }
 
   Future<void> _executeDirectoryImport() async {
+    final selectedFiles = _directoryFiles
+        .where((file) => _selectedDirectoryPaths.contains(file.path))
+        .toList();
     setState(() {
       _isParsing = true;
       _progressMessage = 'Importing lessons...';
       _progressCurrent = 0;
-      _progressTotal = _directoryFiles.length;
+      _progressTotal = selectedFiles.length;
     });
     final provider = context.read<AppProvider>();
     try {
       final importedLessons = await provider.importParsedLessons(
-        _directoryFiles.map((file) => file.preview).toList(),
+        selectedFiles.map((file) => file.preview).toList(),
         onProgress: (current, total) {
           if (!mounted) return;
           setState(() {
@@ -338,10 +345,11 @@ class _YamlImportViewState extends State<YamlImportView> {
             label: Text(
               _directoryFiles.isEmpty
                   ? 'Import Markdown'
-                  : 'Import ${_directoryFiles.length} Lessons',
+                  : 'Import ${_selectedDirectoryPaths.length} Lessons',
             ),
             onPressed:
-                (_previewResult != null || _directoryFiles.isNotEmpty) &&
+                (_previewResult != null ||
+                    _selectedDirectoryPaths.isNotEmpty) &&
                     !_isParsing
                 ? _executeImport
                 : null,
@@ -486,6 +494,36 @@ class _YamlImportViewState extends State<YamlImportView> {
                     ),
 
                   if (_directoryFiles.isNotEmpty) ...[
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${_directoryFiles.length} lessons found; '
+                            '${_selectedDirectoryPaths.length} selected.',
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: _isParsing
+                              ? null
+                              : () => setState(() {
+                                  _selectedDirectoryPaths
+                                    ..clear()
+                                    ..addAll(
+                                      _directoryFiles.map((file) => file.path),
+                                    );
+                                }),
+                          child: const Text('Check all'),
+                        ),
+                        TextButton(
+                          onPressed: _isParsing
+                              ? null
+                              : () => setState(
+                                  _selectedDirectoryPaths.clear,
+                                ),
+                          child: const Text('Uncheck all'),
+                        ),
+                      ],
+                    ),
                     Card(
                       child: Padding(
                         padding: const EdgeInsets.all(16),
@@ -500,7 +538,8 @@ class _YamlImportViewState extends State<YamlImportView> {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              '${_directoryFiles.length} lessons to import, '
+                              '${_directoryFiles.length} lessons found; '
+                              '${_selectedDirectoryPaths.length} selected, '
                               '$_directorySkipped files skipped.',
                             ),
                             const SizedBox(height: 4),
@@ -550,6 +589,18 @@ class _YamlImportViewState extends State<YamlImportView> {
                             margin: const EdgeInsets.symmetric(vertical: 4),
                             child: ListTile(
                               dense: true,
+                              leading: Checkbox(
+                                value: _selectedDirectoryPaths.contains(
+                                  file.path,
+                                ),
+                                onChanged: (checked) => setState(() {
+                                  if (checked == true) {
+                                    _selectedDirectoryPaths.add(file.path);
+                                  } else {
+                                    _selectedDirectoryPaths.remove(file.path);
+                                  }
+                                }),
+                              ),
                               title: Text(lesson.displayTitle),
                               subtitle: Text(
                                 '${lesson.effectiveUnitTitle ?? file.path} · '
@@ -726,7 +777,7 @@ _MarkdownDirectoryResult _parseMarkdownFiles(
       }
       final preview = YamlParserService.parseLessonYaml(
         contents,
-        defaultUnitTitle: _unitTitleForPath(relativePath, path),
+        defaultUnitTitle: _unitTitleForPath(relativePath),
       );
       imports.add(_MarkdownImportFile(path: relativePath, preview: preview));
     } catch (error) {
@@ -740,21 +791,23 @@ _MarkdownDirectoryResult _parseMarkdownFiles(
   );
 }
 
-String? _unitTitleForPath(String relativePath, String absolutePath) {
-  final unitMatch = RegExp(
-    r'(?:^|/)(unit[-_ ](\d+))(?:/|$)',
-    caseSensitive: false,
-  ).firstMatch(absolutePath.replaceAll('\\', '/'));
-  if (unitMatch != null) return 'Unit ${unitMatch.group(2)}';
-
-  final firstDirectory = relativePath.split('/').first;
-  if (relativePath.contains('/')) {
-    final words = firstDirectory
-        .replaceAll(RegExp(r'[-_]'), ' ')
-        .split(' ')
-        .where((word) => word.isNotEmpty)
-        .map((word) => '${word[0].toUpperCase()}${word.substring(1)}');
-    return words.join(' ');
-  }
-  return null;
+String? _unitTitleForPath(String relativePath) {
+  final pathParts = relativePath.split('/');
+  if (pathParts.length < 2) return null;
+  return pathParts
+      .take(pathParts.length - 1)
+      .map((part) {
+        final unitMatch = RegExp(
+          r'^unit[-_ ](\d+)$',
+          caseSensitive: false,
+        ).firstMatch(part);
+        if (unitMatch != null) return 'Unit ${unitMatch.group(1)}';
+        final words = part
+            .replaceAll(RegExp(r'[-_]'), ' ')
+            .split(' ')
+            .where((word) => word.isNotEmpty)
+            .map((word) => '${word[0].toUpperCase()}${word.substring(1)}');
+        return words.join(' ');
+      })
+      .join('/');
 }

@@ -227,6 +227,61 @@ Original text.
       reloadedProvider.dispose();
     });
 
+    test('Persists lesson hierarchy reorder ranks', () async {
+      SharedPreferences.setMockInitialValues({
+        'lingua_srs_windows_legacy_migration_complete': true,
+        'lingua_srs_lessons': '[]',
+        'lingua_srs_sentences': '[]',
+      });
+      final provider = AppProvider();
+      while (provider.isLoading) {
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      await provider.saveLessonHierarchyOrder([
+        'folder:unit 2',
+        'folder:unit 1',
+        'lesson:second',
+      ]);
+      expect(provider.lessonHierarchyOrder['folder:unit 2'], 0);
+      expect(provider.lessonHierarchyOrder['folder:unit 1'], 1);
+
+      final reloadedProvider = AppProvider();
+      while (reloadedProvider.isLoading) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(reloadedProvider.lessonHierarchyOrder['folder:unit 2'], 0);
+      expect(reloadedProvider.lessonHierarchyOrder['folder:unit 1'], 1);
+      provider.dispose();
+      reloadedProvider.dispose();
+    });
+
+    test('Persists lesson folder expansion state', () async {
+      SharedPreferences.setMockInitialValues({
+        'lingua_srs_windows_legacy_migration_complete': true,
+        'lingua_srs_lessons': '[]',
+        'lingua_srs_sentences': '[]',
+      });
+      final provider = AppProvider();
+      while (provider.isLoading) {
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      await provider.setLessonFolderExpanded('folder:unit 2', false);
+      await provider.setLessonFolderExpanded('folder:unit 1', true);
+      expect(provider.lessonFolderExpansion['folder:unit 2'], isFalse);
+      expect(provider.lessonFolderExpansion['folder:unit 1'], isTrue);
+
+      final reloadedProvider = AppProvider();
+      while (reloadedProvider.isLoading) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(reloadedProvider.lessonFolderExpansion['folder:unit 2'], isFalse);
+      expect(reloadedProvider.lessonFolderExpansion['folder:unit 1'], isTrue);
+      provider.dispose();
+      reloadedProvider.dispose();
+    });
+
     test(
       'Detects duplicate card prompts independently of context sentences',
       () async {

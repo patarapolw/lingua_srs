@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../models/lesson.dart';
 import '../providers/app_provider.dart';
+import '../widgets/lesson_hierarchy_view.dart';
 import 'lesson_detail_view.dart';
 import 'lesson_reader_view.dart';
 import 'study_view.dart';
@@ -266,6 +267,163 @@ class LessonListView extends StatelessWidget {
     await provider.deleteLessonGroup(unitTitle);
   }
 
+  Future<void> _saveHierarchyOrder(
+    BuildContext context,
+    AppProvider provider,
+    List<String> keys,
+  ) async {
+    try {
+      await provider.saveLessonHierarchyOrder(keys);
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not save lesson order: $error')),
+      );
+    }
+  }
+
+  Future<void> _saveFolderExpansion(
+    BuildContext context,
+    AppProvider provider,
+    String folderKey,
+    bool expanded,
+  ) async {
+    try {
+      await provider.setLessonFolderExpanded(folderKey, expanded);
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not save folder expansion: $error')),
+      );
+    }
+  }
+
+  Widget _buildLessonCard(
+    BuildContext context,
+    AppProvider provider,
+    ThemeData theme,
+    Lesson lesson,
+  ) {
+    final due = lesson.dueCardsCount;
+    final active = lesson.activeCardsCount;
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 20,
+          vertical: 10,
+        ),
+        leading: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.drag_handle, color: theme.colorScheme.outline),
+            const SizedBox(width: 4),
+            CircleAvatar(
+              radius: 24,
+              backgroundColor: theme.colorScheme.secondaryContainer,
+              child: Text(
+                lesson.targetLanguage.toUpperCase(),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: theme.colorScheme.onSecondaryContainer,
+                ),
+              ),
+            ),
+          ],
+        ),
+        title: Text(
+          lesson.displayTitle,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              Text('${lesson.vocabularies.length} Words • $active Cards'),
+              if (due > 0)
+                Badge(
+                  label: Text('$due Due'),
+                  backgroundColor: Colors.amber.shade800,
+                ),
+            ],
+          ),
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            FilledButton.tonalIcon(
+              icon: const Icon(Icons.play_arrow, size: 18),
+              label: const Text('Study'),
+              onPressed: active == 0
+                  ? null
+                  : () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => StudyView(lessonId: lesson.id),
+                      ),
+                    ),
+            ),
+            const SizedBox(width: 8),
+            IconButton(
+              icon: const Icon(Icons.arrow_forward_ios, size: 16),
+              tooltip: 'View Vocabulary',
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => LessonDetailView(lessonId: lesson.id),
+                ),
+              ),
+            ),
+            PopupMenuButton<String>(
+              onSelected: (value) {
+                if (value == 'reset_srs') {
+                  _confirmResetLesson(context, lesson);
+                } else if (value == 'delete') {
+                  provider.deleteLesson(lesson.id);
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'reset_srs',
+                  child: Row(
+                    children: [
+                      Icon(Icons.restart_alt, color: Colors.orange, size: 18),
+                      SizedBox(width: 8),
+                      Text('Reset SRS Progress'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'delete',
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete, color: Colors.red, size: 18),
+                      SizedBox(width: 8),
+                      Text(
+                        'Delete Lesson',
+                        style: TextStyle(color: Colors.red),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => LessonReaderView(lessonId: lesson.id),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
@@ -288,18 +446,6 @@ class LessonListView extends StatelessWidget {
           }
         }
       }
-    }
-
-    final lessonsByUnit = <String?, List<Lesson>>{};
-    for (final lesson in provider.lessons) {
-      lessonsByUnit
-          .putIfAbsent(lesson.effectiveUnitTitle, () => [])
-          .add(lesson);
-    }
-    final lessonRows = <Object>[];
-    for (final entry in lessonsByUnit.entries) {
-      if (entry.key != null) lessonRows.add(entry.key!);
-      lessonRows.addAll(entry.value);
     }
 
     final availableDue = min(totalDue, provider.remainingReviews24h);
@@ -606,194 +752,36 @@ class LessonListView extends StatelessWidget {
                       ),
                     ),
                   )
-                else
-                  SliverPadding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    sliver: SliverList(
-                      delegate: SliverChildBuilderDelegate((context, idx) {
-                        final row = lessonRows[idx];
-                        if (row is String) {
-                          final groupLessonCount =
-                              lessonsByUnit[row]?.length ?? 0;
-                          return Padding(
-                            padding: const EdgeInsets.fromLTRB(4, 20, 4, 4),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    row,
-                                    style: theme.textTheme.titleMedium
-                                        ?.copyWith(
-                                          fontWeight: FontWeight.bold,
-                                          color: theme.colorScheme.primary,
-                                        ),
-                                  ),
-                                ),
-                                IconButton(
-                                  icon: Icon(
-                                    Icons.delete_outline,
-                                    color: theme.colorScheme.error,
-                                  ),
-                                  tooltip: 'Delete $row and its lessons',
-                                  onPressed: () => _confirmDeleteLessonGroup(
-                                    context,
-                                    provider,
-                                    row,
-                                    groupLessonCount,
-                                  ),
-                                ),
-                              ],
+                else ...[
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: LessonHierarchyView(
+                        lessons: provider.lessons,
+                        order: provider.lessonHierarchyOrder,
+                        folderExpansion: provider.lessonFolderExpansion,
+                        lessonBuilder: (context, lesson) =>
+                            _buildLessonCard(context, provider, theme, lesson),
+                        onOrderChanged: (keys) =>
+                            _saveHierarchyOrder(context, provider, keys),
+                        onFolderExpansionChanged: (key, expanded) =>
+                            _saveFolderExpansion(
+                              context,
+                              provider,
+                              key,
+                              expanded,
                             ),
-                          );
-                        }
-                        final lesson = row as Lesson;
-                        final due = lesson.dueCardsCount;
-                        final active = lesson.activeCardsCount;
-
-                        return Card(
-                          margin: const EdgeInsets.symmetric(vertical: 6),
-                          elevation: 1,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 10,
+                        onDeleteFolder: (path, count) =>
+                            _confirmDeleteLessonGroup(
+                              context,
+                              provider,
+                              path,
+                              count,
                             ),
-                            leading: CircleAvatar(
-                              radius: 24,
-                              backgroundColor:
-                                  theme.colorScheme.secondaryContainer,
-                              child: Text(
-                                lesson.targetLanguage.toUpperCase(),
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: theme.colorScheme.onSecondaryContainer,
-                                ),
-                              ),
-                            ),
-                            title: Text(
-                              lesson.displayTitle,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 17,
-                              ),
-                            ),
-                            subtitle: Padding(
-                              padding: const EdgeInsets.only(top: 4),
-                              child: Row(
-                                children: [
-                                  Text(
-                                    '${lesson.vocabularies.length} Words • $active Cards',
-                                  ),
-                                  const SizedBox(width: 8),
-                                  if (due > 0)
-                                    Badge(
-                                      label: Text('$due Due'),
-                                      backgroundColor: Colors.amber.shade800,
-                                    ),
-                                ],
-                              ),
-                            ),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                FilledButton.tonalIcon(
-                                  icon: const Icon(Icons.play_arrow, size: 18),
-                                  label: const Text('Study'),
-                                  onPressed: active == 0
-                                      ? null
-                                      : () {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (_) => StudyView(
-                                                lessonId: lesson.id,
-                                              ),
-                                            ),
-                                          );
-                                        },
-                                ),
-                                const SizedBox(width: 8),
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.arrow_forward_ios,
-                                    size: 16,
-                                  ),
-                                  tooltip: 'View Vocabulary',
-                                  onPressed: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => LessonDetailView(
-                                          lessonId: lesson.id,
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                                PopupMenuButton<String>(
-                                  onSelected: (val) {
-                                    if (val == 'reset_srs') {
-                                      _confirmResetLesson(context, lesson);
-                                    } else if (val == 'delete') {
-                                      provider.deleteLesson(lesson.id);
-                                    }
-                                  },
-                                  itemBuilder: (ctx) => [
-                                    const PopupMenuItem(
-                                      value: 'reset_srs',
-                                      child: Row(
-                                        children: [
-                                          Icon(
-                                            Icons.restart_alt,
-                                            color: Colors.orange,
-                                            size: 18,
-                                          ),
-                                          SizedBox(width: 8),
-                                          Text('Reset SRS Progress'),
-                                        ],
-                                      ),
-                                    ),
-                                    const PopupMenuItem(
-                                      value: 'delete',
-                                      child: Row(
-                                        children: [
-                                          Icon(
-                                            Icons.delete,
-                                            color: Colors.red,
-                                            size: 18,
-                                          ),
-                                          SizedBox(width: 8),
-                                          Text(
-                                            'Delete Lesson',
-                                            style: TextStyle(color: Colors.red),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      LessonReaderView(lessonId: lesson.id),
-                                ),
-                              );
-                            },
-                          ),
-                        );
-                      }, childCount: lessonRows.length),
+                      ),
                     ),
                   ),
+                ],
               ],
             ),
     );

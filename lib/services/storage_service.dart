@@ -16,6 +16,10 @@ class StorageService {
   static const String _keyLessonMarkdownIds = 'lingua_srs_lesson_markdown_ids';
   static const String _keySentences = 'lingua_srs_sentences';
   static const String _keyAutoplay = 'lingua_srs_autoplay';
+  static const String _keyLessonHierarchyOrder =
+      'lingua_srs_lesson_hierarchy_order';
+  static const String _keyLessonFolderExpansion =
+      'lingua_srs_lesson_folder_expansion';
   static const String _keyWindowsMigration =
       'lingua_srs_windows_legacy_migration_complete';
 
@@ -102,6 +106,54 @@ adjectives:
   static Future<void> saveAutoplay(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyAutoplay, value);
+  }
+
+  static Future<Map<String, int>> loadLessonHierarchyOrder() async {
+    final prefs = await SharedPreferences.getInstance();
+    final json = prefs.getString(_keyLessonHierarchyOrder);
+    if (json == null || json.isEmpty) return {};
+
+    final decoded = jsonDecode(json);
+    if (decoded is! Map) {
+      throw const FormatException('Lesson hierarchy order must be a map.');
+    }
+    return decoded.map((key, value) {
+      if (value is! int) {
+        throw FormatException('Invalid order value for "$key".');
+      }
+      return MapEntry(key.toString(), value);
+    });
+  }
+
+  static Future<void> saveLessonHierarchyOrder(
+    Map<String, int> order,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyLessonHierarchyOrder, jsonEncode(order));
+  }
+
+  static Future<Map<String, bool>> loadLessonFolderExpansion() async {
+    final prefs = await SharedPreferences.getInstance();
+    final json = prefs.getString(_keyLessonFolderExpansion);
+    if (json == null || json.isEmpty) return {};
+
+    final decoded = jsonDecode(json);
+    if (decoded is! Map) {
+      throw const FormatException('Lesson folder expansion must be a map.');
+    }
+    return decoded.map((key, value) {
+      if (value is! bool) {
+        throw FormatException('Invalid expansion value for "$key".');
+      }
+      return MapEntry(key.toString(), value);
+    });
+  }
+
+  static Future<void> saveLessonFolderExpansion(
+    Map<String, bool> expansion,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyLessonFolderExpansion, jsonEncode(expansion));
   }
 
   static Future<int> loadMaxReviews24h() async {
