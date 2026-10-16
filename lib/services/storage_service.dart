@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/ai_discussion_message.dart';
 import '../models/lesson.dart';
 import '../models/sentence.dart';
 import '../models/srs_card.dart';
@@ -15,6 +16,8 @@ class StorageService {
   static const String _keyLessons = 'lingua_srs_lessons';
   static const String _keyLessonMarkdownIds = 'lingua_srs_lesson_markdown_ids';
   static const String _keySentences = 'lingua_srs_sentences';
+  static const String _keyDeepSeekApiKey = 'lingua_srs_deepseek_api_key';
+  static const String _keyAiDiscussions = 'lingua_srs_ai_discussions';
   static const String _keyAutoplay = 'lingua_srs_autoplay';
   static const String _keyLessonHierarchyOrder =
       'lingua_srs_lesson_hierarchy_order';
@@ -96,6 +99,69 @@ adjectives:
   static const String _keyReviewTimestamps = 'lingua_srs_review_timestamps_24h';
   static final Map<String, String> _lessonMarkdownCache = {};
   static Set<String> _storedLessonMarkdownIds = {};
+
+  static Future<String> loadDeepSeekApiKey() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyDeepSeekApiKey) ?? '';
+  }
+
+  static Future<void> saveDeepSeekApiKey(String apiKey) async {
+    final prefs = await SharedPreferences.getInstance();
+    final trimmedApiKey = apiKey.trim();
+    if (trimmedApiKey.isEmpty) {
+      await prefs.remove(_keyDeepSeekApiKey);
+    } else {
+      await prefs.setString(_keyDeepSeekApiKey, trimmedApiKey);
+    }
+  }
+
+  static Future<Map<String, List<AiDiscussionMessage>>>
+  loadAiDiscussions() async {
+    final prefs = await SharedPreferences.getInstance();
+    final json = prefs.getString(_keyAiDiscussions);
+    if (json == null || json.isEmpty) return {};
+
+    final decoded = jsonDecode(json);
+    if (decoded is! Map) {
+      throw const FormatException('AI discussions must be a map.');
+    }
+    final discussions = <String, List<AiDiscussionMessage>>{};
+    for (final entry in decoded.entries) {
+      if (entry.value is! List) {
+        throw FormatException(
+          'Invalid AI discussion history for "${entry.key}".',
+        );
+      }
+      discussions[entry.key.toString()] = (entry.value as List)
+          .map((message) {
+            if (message is! Map) {
+              throw const FormatException('Invalid AI discussion message.');
+            }
+            return AiDiscussionMessage.fromJson(
+              Map<String, dynamic>.from(message),
+            );
+          })
+          .toList();
+    }
+    return discussions;
+  }
+
+  static Future<void> saveAiDiscussions(
+    Map<String, List<AiDiscussionMessage>> discussions,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _keyAiDiscussions,
+      jsonEncode(
+        discussions.map(
+          (key, messages) => MapEntry(
+            key,
+            messages.map((message) => message.toJson()).toList(),
+          ),
+        ),
+      ),
+    );
+  }
 
   static Future<bool> loadAutoplay() async {
     final prefs = await SharedPreferences.getInstance();

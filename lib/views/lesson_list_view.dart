@@ -9,6 +9,7 @@ import '../widgets/lesson_hierarchy_view.dart';
 import 'lesson_detail_view.dart';
 import 'lesson_reader_view.dart';
 import 'study_view.dart';
+import 'deepseek_settings_dialog.dart';
 import 'yaml_import_view.dart';
 
 class LessonListView extends StatelessWidget {
@@ -512,6 +513,14 @@ class LessonListView extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 4),
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: 'Settings',
+            onPressed: () => showDialog<void>(
+              context: context,
+              builder: (_) => const DeepSeekSettingsDialog(),
+            ),
+          ),
           if (onToggleTheme != null)
             IconButton(
               icon: Icon(isDarkMode ? Icons.light_mode : Icons.dark_mode),

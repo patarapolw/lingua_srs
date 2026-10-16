@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
+import '../models/ai_discussion_message.dart';
 import '../models/lesson.dart';
 import '../models/vocab_item.dart';
 import '../models/sentence.dart';
@@ -30,6 +31,8 @@ class AppProvider extends ChangeNotifier {
   List<Lesson> _lessons = [];
   List<Sentence> _sentences = [];
   bool _autoplayAudio = true;
+  String _deepSeekApiKey = '';
+  Map<String, List<AiDiscussionMessage>> _aiDiscussions = {};
   bool _isLoading = true;
   String? _selectedLessonId;
   Map<String, int> _lessonHierarchyOrder = {};
@@ -41,6 +44,7 @@ class AppProvider extends ChangeNotifier {
   List<Lesson> get lessons => _lessons;
   List<Sentence> get sentences => _sentences;
   bool get autoplayAudio => _autoplayAudio;
+  String get deepSeekApiKey => _deepSeekApiKey;
   bool get isLoading => _isLoading;
   String? get selectedLessonId => _selectedLessonId;
   int get maxReviews24h => _maxReviews24h;
@@ -84,6 +88,8 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
 
     _autoplayAudio = await StorageService.loadAutoplay();
+    _deepSeekApiKey = await StorageService.loadDeepSeekApiKey();
+    _aiDiscussions = await StorageService.loadAiDiscussions();
     _maxReviews24h = await StorageService.loadMaxReviews24h();
     _reviewTimestamps24h = await StorageService.loadReviewTimestamps();
     _lessonHierarchyOrder = await StorageService.loadLessonHierarchyOrder();
@@ -157,6 +163,34 @@ class AppProvider extends ChangeNotifier {
   Future<void> toggleAutoplay() async {
     _autoplayAudio = !_autoplayAudio;
     await StorageService.saveAutoplay(_autoplayAudio);
+    notifyListeners();
+  }
+
+  Future<void> setDeepSeekApiKey(String apiKey) async {
+    final trimmedApiKey = apiKey.trim();
+    await StorageService.saveDeepSeekApiKey(trimmedApiKey);
+    _deepSeekApiKey = trimmedApiKey;
+    notifyListeners();
+  }
+
+  List<AiDiscussionMessage> getAiDiscussion(String discussionId) =>
+      List.unmodifiable(_aiDiscussions[discussionId] ?? const []);
+
+  Future<void> addAiDiscussionMessage(
+    String discussionId,
+    AiDiscussionMessage message,
+  ) async {
+    final messages = List<AiDiscussionMessage>.from(
+      _aiDiscussions[discussionId] ?? const [],
+    )..add(message);
+    _aiDiscussions[discussionId] = messages;
+    await StorageService.saveAiDiscussions(_aiDiscussions);
+    notifyListeners();
+  }
+
+  Future<void> deleteAiDiscussion(String discussionId) async {
+    if (_aiDiscussions.remove(discussionId) == null) return;
+    await StorageService.saveAiDiscussions(_aiDiscussions);
     notifyListeners();
   }
 

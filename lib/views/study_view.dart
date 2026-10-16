@@ -9,6 +9,7 @@ import '../providers/app_provider.dart';
 import '../services/audio_service.dart';
 import '../widgets/audio_button.dart';
 import '../widgets/markdown_content.dart';
+import 'ai_discussion_dialog.dart';
 import 'vocab_edit_dialog.dart';
 
 class ReviewHistoryRecord {
@@ -471,6 +472,22 @@ class _StudyViewState extends State<StudyView> {
     });
   }
 
+  void _openAiDiscussion(StudyCardItem item) {
+    final sentence = item.sentence;
+    showDialog<void>(
+      context: context,
+      builder: (_) => AiDiscussionDialog(
+        discussionId: '${item.vocab.id}:${sentence?.id ?? 'no-sentence'}',
+        targetWord: item.vocab.targetWord,
+        translation: item.vocab.translation,
+        targetLanguage: item.lesson.targetLanguage,
+        nativeLanguage: item.lesson.nativeLanguage,
+        sentenceTarget: sentence?.targetText,
+        sentenceTranslation: sentence?.translationText,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -717,6 +734,11 @@ class _StudyViewState extends State<StudyView> {
               icon: const Icon(Icons.edit_outlined),
               tooltip: 'Edit Card (E)',
               onPressed: _openEditCurrentCard,
+            ),
+            IconButton(
+              icon: const Icon(Icons.forum_outlined),
+              tooltip: 'Ask AI about this vocabulary and sentence',
+              onPressed: () => _openAiDiscussion(item),
             ),
             const SizedBox(width: 14),
           ],

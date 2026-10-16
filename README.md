@@ -75,6 +75,11 @@ A Flutter application targeting **Desktop (Windows, macOS, Linux)** and **Mobile
    - **24-Hour Review Window Limit**: Caps daily review volume to a rolling 24-hour limit (default: 100 cards), customizable or set to unlimited from the dashboard.
    - **Sub-24h Repetition for Difficult Cards**: Cards marked *Again* are scheduled to repeat after a sensible 1-hour minimum delay (rather than waiting an entire day), while early *Hard* reviews repeat in 12 hours.
    - **POS-Category Shuffling**: Cards within each lesson are shuffled and interleaved across parts of speech (nouns, verbs, adjectives, etc.) rather than displaying oldest-inserted cards first, while continuing to prioritize oldest-inserted lessons first.
+11. **AI-Assisted Quiz Discussions**:
+   - Configure a DeepSeek API key from the dashboard settings, then ask questions about the current vocabulary and context sentence during a quiz. Answers stream into the chat and render as Markdown.
+   - Start with suggested questions about etymology/Hanja, key sentence vocabulary, everyday usage, and examples; get suggested follow-ups during the discussion.
+   - Press Enter to send a chat message and Shift+Enter or Ctrl+Enter to add a new line.
+   - Discussions are saved locally per vocabulary and sentence, restored when revisiting that card, and can be deleted from the discussion view.
 
 ---
 
@@ -190,6 +195,7 @@ Markdown imports must have YAML frontmatter containing a `vocabulary:` key. It c
 ---
 vocabulary:
 ---
+
 # Lesson 1: Example title
 
 Lesson notes go here.
@@ -199,3 +205,13 @@ Imported lesson Markdown can be edited from its reader view. The reader renders 
 current app feature. Spoiler spans (`<span class="spoiler">...</span>`) are blurred until hovered on desktop or tapped on touch devices; tapping toggles their visibility.
 
 Vocabulary sections can be nested to any depth. Entries with the same explicit vocabulary `id` share SRS progress, including across sections. Use different IDs to force separate progress identities when needed. Without an explicit ID, the app shares progress for the same target form and meaning, while different meanings receive separate generated IDs.
+
+## TODO
+
+- Markdown render in `Webview` may be more reliable for lesson explanation contents.
+- Folder hierachy renaming in import view and Lesson list view.
+- Sync between mobile and desktop, and between devices. Quick connect via QR code. I am probably using Cloudflare D1 worker for this.
+
+## Bugs
+
+- Hierarchy view isn't draggable yet.
