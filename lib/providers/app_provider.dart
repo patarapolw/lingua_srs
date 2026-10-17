@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
@@ -257,16 +258,22 @@ class AppProvider extends ChangeNotifier {
     return canonical;
   }
 
+  // Identity set of [_sentences], only maintained during a batch import.
+  Set<Sentence>? _importSentenceSet;
+
   Sentence _upsertSentence(
     Sentence incoming, {
     Map<String, List<Sentence>>? bySignature,
   }) {
     final signature = _sentenceSignature(incoming);
+    // With an index, a missing signature means no duplicates; rescanning the
+    // whole pool per sentence made large batch imports quadratic.
     final duplicates =
-        (bySignature?[signature] ??
-                _sentences.where(
-                  (sentence) => _sentenceSignature(sentence) == signature,
-                ))
+        (bySignature != null
+                ? bySignature[signature] ?? const <Sentence>[]
+                : _sentences.where(
+                    (sentence) => _sentenceSignature(sentence) == signature,
+                  ))
             .where((sentence) => !identical(sentence, incoming))
             .toList();
     final candidates = [incoming, ...duplicates];
@@ -289,7 +296,10 @@ class AppProvider extends ChangeNotifier {
       ..audioUrl = audioUrl
       ..notes = notes
       ..lessonId ??= incoming.lessonId;
-    if (!_sentences.any((sentence) => identical(sentence, canonical))) {
+    final known = _importSentenceSet;
+    if (known != null) {
+      if (known.add(canonical)) _sentences.add(canonical);
+    } else if (!_sentences.any((sentence) => identical(sentence, canonical))) {
       _sentences.add(canonical);
     }
 
@@ -305,10 +315,12 @@ class AppProvider extends ChangeNotifier {
           ),
         );
       }
-      _sentences.removeWhere(
-        (sentence) =>
-            !identical(sentence, canonical) && removedIds.contains(sentence.id),
-      );
+      _sentences.removeWhere((sentence) {
+        final remove =
+            !identical(sentence, canonical) && removedIds.contains(sentence.id);
+        if (remove) known?.remove(sentence);
+        return remove;
+      });
     }
     bySignature?[signature] = [canonical];
     return canonical;
@@ -365,16 +377,21 @@ class AppProvider extends ChangeNotifier {
           .add(sentence);
     }
     final vocabIndex = _newVocabProgressIndex();
-    for (var index = 0; index < parsedLessons.length; index++) {
-      importedLessons.add(
-        _applyParsedLesson(
-          parsedLessons[index],
-          sentenceIndex: sentenceIndex,
-          vocabIndex: vocabIndex,
-        ),
-      );
-      onProgress?.call(index + 1, parsedLessons.length);
-      await Future<void>.delayed(Duration.zero);
+    _importSentenceSet = HashSet<Sentence>.identity()..addAll(_sentences);
+    try {
+      for (var index = 0; index < parsedLessons.length; index++) {
+        importedLessons.add(
+          _applyParsedLesson(
+            parsedLessons[index],
+            sentenceIndex: sentenceIndex,
+            vocabIndex: vocabIndex,
+          ),
+        );
+        onProgress?.call(index + 1, parsedLessons.length);
+        await Future<void>.delayed(Duration.zero);
+      }
+    } finally {
+      _importSentenceSet = null;
     }
     if (parsedLessons.isNotEmpty) {
       _linkSharedVocabProgress();

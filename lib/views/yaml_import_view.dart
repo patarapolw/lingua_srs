@@ -1,13 +1,16 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../models/lesson.dart';
 import '../providers/app_provider.dart';
+import '../services/storage_service.dart';
 import '../services/yaml_parser_service.dart';
 
 class YamlImportView extends StatefulWidget {
@@ -27,6 +30,7 @@ class _YamlImportViewState extends State<YamlImportView> {
   final Set<String> _selectedDirectoryPaths = {};
   List<String> _directoryErrors = [];
   int _directorySkipped = 0;
+  int _directoryUnchanged = 0;
   bool _isParsing = false;
   String? _progressMessage;
   int _progressCurrent = 0;
@@ -52,6 +56,7 @@ class _YamlImportViewState extends State<YamlImportView> {
       _selectedDirectoryPaths.clear();
       _directoryErrors = [];
       _directorySkipped = 0;
+      _directoryUnchanged = 0;
     }
     if (text.isEmpty) {
       setState(() {
@@ -124,6 +129,7 @@ class _YamlImportViewState extends State<YamlImportView> {
         _selectedDirectoryPaths.clear();
         _directoryErrors = [];
         _directorySkipped = 0;
+        _directoryUnchanged = 0;
         _lessonNameController.clear();
         _yamlController.text = content;
         _parseCurrentYaml();
@@ -151,6 +157,7 @@ class _YamlImportViewState extends State<YamlImportView> {
         _directoryFiles = [];
         _directoryErrors = [];
         _directorySkipped = 0;
+        _directoryUnchanged = 0;
         _errorMessage = null;
         _progressMessage = 'Scanning Markdown files...';
         _progressCurrent = 0;
@@ -176,6 +183,8 @@ class _YamlImportViewState extends State<YamlImportView> {
         });
       }
 
+      final importedSources =
+          await StorageService.loadImportedMarkdownSources();
       if (mounted) {
         setState(() {
           _progressMessage = 'Parsing Markdown files in the background...';
@@ -186,6 +195,7 @@ class _YamlImportViewState extends State<YamlImportView> {
       final result = await _parseMarkdownDirectoryInBackground(
         files.map((file) => file.path).toList(),
         directoryPath,
+        importedSources,
       );
       result.imports.sort((first, second) {
         return first.path.toLowerCase().compareTo(second.path.toLowerCase());
@@ -197,12 +207,16 @@ class _YamlImportViewState extends State<YamlImportView> {
         _selectedDirectoryPaths.clear();
         _directoryErrors = result.errors;
         _directorySkipped = result.skipped;
+        _directoryUnchanged = result.unchanged;
         _progressCurrent = files.length;
         _isParsing = false;
         _progressMessage = null;
         if (result.imports.isEmpty) {
           _errorMessage = result.errors.isEmpty
-              ? 'No Markdown files with a vocabulary frontmatter section were found.'
+              ? result.unchanged > 0
+                    ? 'No changed Markdown files found. '
+                          '${result.unchanged} unchanged files were skipped.'
+                    : 'No Markdown files with a vocabulary frontmatter section were found.'
               : 'No importable Markdown files found. ${result.errors.length} files '
                     'could not be parsed:\n${result.errors.take(5).join('\n')}';
         }
@@ -278,6 +292,13 @@ class _YamlImportViewState extends State<YamlImportView> {
         },
       );
       final importedCount = importedLessons.length;
+      final importedSources =
+          await StorageService.loadImportedMarkdownSources();
+      for (final file in selectedFiles) {
+        importedSources[_markdownSourceKey(file.absolutePath)] =
+            file.sourceHash;
+      }
+      await StorageService.saveImportedMarkdownSources(importedSources);
       if (!mounted) return;
       setState(() {
         _progressCurrent = importedCount;
@@ -287,7 +308,8 @@ class _YamlImportViewState extends State<YamlImportView> {
         SnackBar(
           content: Text(
             'Imported $importedCount lessons; skipped $_directorySkipped '
-            'files without vocabulary frontmatter; '
+            'files without vocabulary frontmatter, $_directoryUnchanged '
+            'unchanged Markdown files; '
             '${_directoryErrors.length} invalid files excluded. '
             'Existing SRS progress was preserved.',
           ),
@@ -538,7 +560,8 @@ class _YamlImportViewState extends State<YamlImportView> {
                           Text(
                             '${_directoryFiles.length} lessons found; '
                             '${_selectedDirectoryPaths.length} selected, '
-                            '$_directorySkipped files skipped.',
+                            '$_directorySkipped files skipped and '
+                            '$_directoryUnchanged unchanged.',
                           ),
                           const SizedBox(height: 4),
                           const Text(
@@ -740,20 +763,29 @@ class _YamlImportViewState extends State<YamlImportView> {
 
 class _MarkdownImportFile {
   final String path;
+  final String absolutePath;
+  final String sourceHash;
   final YamlParseResult preview;
 
-  const _MarkdownImportFile({required this.path, required this.preview});
+  const _MarkdownImportFile({
+    required this.path,
+    required this.absolutePath,
+    required this.sourceHash,
+    required this.preview,
+  });
 }
 
 class _MarkdownDirectoryResult {
   final List<_MarkdownImportFile> imports;
   final List<String> errors;
   final int skipped;
+  final int unchanged;
 
   const _MarkdownDirectoryResult({
     required this.imports,
     required this.errors,
     required this.skipped,
+    required this.unchanged,
   });
 }
 
@@ -772,15 +804,20 @@ Future<YamlParseResult> _parseLessonInBackground(
 Future<_MarkdownDirectoryResult> _parseMarkdownDirectoryInBackground(
   List<String> paths,
   String directoryPath,
-) => Isolate.run(() => _parseMarkdownFiles(paths, directoryPath));
+  Map<String, String> importedSources,
+) => Isolate.run(
+  () => _parseMarkdownFiles(paths, directoryPath, importedSources),
+);
 
 _MarkdownDirectoryResult _parseMarkdownFiles(
   List<String> paths,
   String directoryPath,
+  Map<String, String> importedSources,
 ) {
   final imports = <_MarkdownImportFile>[];
   final errors = <String>[];
   var skipped = 0;
+  var unchanged = 0;
   final normalizedDirectory = directoryPath.replaceAll('\\', '/');
 
   for (final path in paths) {
@@ -790,6 +827,11 @@ _MarkdownDirectoryResult _parseMarkdownFiles(
         .replaceFirst(RegExp(r'^/+'), '');
     try {
       final contents = File(path).readAsStringSync();
+      final sourceHash = sha256.convert(utf8.encode(contents)).toString();
+      if (importedSources[_markdownSourceKey(path)] == sourceHash) {
+        unchanged++;
+        continue;
+      }
       if (!YamlParserService.hasVocabularyFrontmatter(contents)) {
         skipped++;
         continue;
@@ -798,7 +840,14 @@ _MarkdownDirectoryResult _parseMarkdownFiles(
         contents,
         defaultUnitTitle: _unitTitleForPath(relativePath),
       );
-      imports.add(_MarkdownImportFile(path: relativePath, preview: preview));
+      imports.add(
+        _MarkdownImportFile(
+          path: relativePath,
+          absolutePath: path,
+          sourceHash: sourceHash,
+          preview: preview,
+        ),
+      );
     } catch (error) {
       errors.add('$relativePath: $error');
     }
@@ -807,7 +856,13 @@ _MarkdownDirectoryResult _parseMarkdownFiles(
     imports: imports,
     errors: errors,
     skipped: skipped,
+    unchanged: unchanged,
   );
+}
+
+String _markdownSourceKey(String path) {
+  final normalizedPath = path.replaceAll('\\', '/');
+  return Platform.isWindows ? normalizedPath.toLowerCase() : normalizedPath;
 }
 
 String? _unitTitleForPath(String relativePath) {

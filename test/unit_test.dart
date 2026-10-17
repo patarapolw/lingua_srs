@@ -811,6 +811,43 @@ vocabulary:
     );
 
     test(
+      'App Markdown edits do not change imported source fingerprints',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'lingua_srs_windows_legacy_migration_complete': true,
+          'lingua_srs_lessons': '[]',
+          'lingua_srs_sentences': '[]',
+        });
+        final provider = AppProvider();
+        while (provider.isLoading) {
+          await Future<void>.delayed(Duration.zero);
+        }
+        final importedSource = YamlParserService.parseLessonYaml('''
+---
+vocabulary:
+  fruit:
+    - ko: 배
+      en: pear
+---
+# Lesson 1: Fruit
+''');
+        final lesson = (await provider.importParsedLessons([importedSource]))
+            .single;
+        await StorageService.saveImportedMarkdownSources({
+          r'c:\lessons\fruit.md': 'source-fingerprint',
+        });
+
+        await provider.updateLessonMarkdown(lesson.id, '# Edited in the app');
+
+        expect(await StorageService.loadImportedMarkdownSources(), {
+          r'c:\lessons\fruit.md': 'source-fingerprint',
+        });
+        expect(provider.lessons.single.markdownContent, '# Edited in the app');
+        provider.dispose();
+      },
+    );
+
+    test(
       'Deleting a section removes descendants and resets shared progress',
       () async {
         SharedPreferences.setMockInitialValues({

@@ -14,6 +14,8 @@ import 'yaml_parser_service.dart';
 class StorageService {
   static const String _keyLessons = 'lingua_srs_lessons';
   static const String _keyLessonMarkdownIds = 'lingua_srs_lesson_markdown_ids';
+  static const String _keyImportedMarkdownSources =
+      'lingua_srs_imported_markdown_sources';
   static const String _keySentences = 'lingua_srs_sentences';
   static const String _keyDeepSeekApiKey = 'lingua_srs_deepseek_api_key';
   static const String _keyAiDiscussions = 'lingua_srs_ai_discussions';
@@ -146,6 +148,30 @@ Another paragraph for scrolling. 문장을 소리 내어 읽어 보세요.
     } else {
       await prefs.setString(_keyDeepSeekApiKey, trimmedApiKey);
     }
+  }
+
+  static Future<Map<String, String>> loadImportedMarkdownSources() async {
+    final prefs = await SharedPreferences.getInstance();
+    final json = prefs.getString(_keyImportedMarkdownSources);
+    if (json == null || json.isEmpty) return {};
+
+    final decoded = jsonDecode(json);
+    if (decoded is! Map) {
+      throw const FormatException('Imported Markdown sources must be a map.');
+    }
+    return decoded.map((key, value) {
+      if (value is! String) {
+        throw FormatException('Invalid source fingerprint for "$key".');
+      }
+      return MapEntry(key.toString(), value);
+    });
+  }
+
+  static Future<void> saveImportedMarkdownSources(
+    Map<String, String> sources,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyImportedMarkdownSources, jsonEncode(sources));
   }
 
   static Future<Map<String, List<AiDiscussionMessage>>>
