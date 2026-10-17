@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
 
+import '../models/lesson.dart';
 import '../providers/app_provider.dart';
 import '../services/yaml_parser_service.dart';
 
@@ -93,14 +94,13 @@ class _YamlImportViewState extends State<YamlImportView> {
   }
 
   static ({String? title, String? unitTitle}) _lessonNameParts(String value) {
-    final parts = value
-        .split('/')
-        .map((part) => part.trim())
-        .where((part) => part.isNotEmpty)
-        .toList();
+    final parts = splitHierarchyPath(value);
     if (parts.isEmpty) return (title: null, unitTitle: null);
     if (parts.length == 1) return (title: parts.single, unitTitle: null);
-    return (title: parts.skip(1).join(' / '), unitTitle: parts.first);
+    return (
+      title: parts.last,
+      unitTitle: joinHierarchyPath(parts.take(parts.length - 1)),
+    );
   }
 
   Future<void> _pickFile() async {
@@ -342,7 +342,7 @@ class _YamlImportViewState extends State<YamlImportView> {
             ),
             onPressed:
                 (_previewResult != null ||
-                    _selectedDirectoryPaths.isNotEmpty) &&
+                        _selectedDirectoryPaths.isNotEmpty) &&
                     !_isParsing
                 ? _executeImport
                 : null,
@@ -384,8 +384,8 @@ class _YamlImportViewState extends State<YamlImportView> {
                     textInputAction: TextInputAction.next,
                     decoration: const InputDecoration(
                       border: OutlineInputBorder(),
-                      hintText: 'e.g. Unit 2 / Lesson 26',
-                      helperText: 'Use / to separate hierarchy levels.',
+                      hintText: 'e.g. Unit 2::Lesson 26',
+                      helperText: 'Use :: to separate hierarchy levels.',
                     ),
                     onChanged: (_) => _parseCurrentYaml(),
                   ),
@@ -510,9 +510,7 @@ class _YamlImportViewState extends State<YamlImportView> {
                         TextButton(
                           onPressed: _isParsing
                               ? null
-                              : () => setState(
-                                  _selectedDirectoryPaths.clear,
-                                ),
+                              : () => setState(_selectedDirectoryPaths.clear),
                           child: const Text('Uncheck all'),
                         ),
                       ],
@@ -787,20 +785,19 @@ _MarkdownDirectoryResult _parseMarkdownFiles(
 String? _unitTitleForPath(String relativePath) {
   final pathParts = relativePath.split('/');
   if (pathParts.length < 2) return null;
-  return pathParts
-      .take(pathParts.length - 1)
-      .map((part) {
-        final unitMatch = RegExp(
-          r'^unit[-_ ](\d+)$',
-          caseSensitive: false,
-        ).firstMatch(part);
-        if (unitMatch != null) return 'Unit ${unitMatch.group(1)}';
-        final words = part
-            .replaceAll(RegExp(r'[-_]'), ' ')
-            .split(' ')
-            .where((word) => word.isNotEmpty)
-            .map((word) => '${word[0].toUpperCase()}${word.substring(1)}');
-        return words.join(' ');
-      })
-      .join('/');
+  return joinHierarchyPath(
+    pathParts.take(pathParts.length - 1).map((part) {
+      final unitMatch = RegExp(
+        r'^unit[-_ ](\d+)$',
+        caseSensitive: false,
+      ).firstMatch(part);
+      if (unitMatch != null) return 'Unit ${unitMatch.group(1)}';
+      final words = part
+          .replaceAll(RegExp(r'[-_]'), ' ')
+          .split(' ')
+          .where((word) => word.isNotEmpty)
+          .map((word) => '${word[0].toUpperCase()}${word.substring(1)}');
+      return words.join(' ');
+    }),
+  );
 }

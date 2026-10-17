@@ -6,7 +6,7 @@ class LessonHierarchyRow {
   final String key;
   final String parentKey;
   final int depth;
-  final String? folderPath;
+  final List<String>? folderPath;
   final Lesson? lesson;
   final int lessonCount;
 
@@ -30,8 +30,8 @@ class LessonHierarchyView extends StatelessWidget {
   final Future<void> Function(List<String> siblingKeys) onOrderChanged;
   final Future<void> Function(String folderKey, bool expanded)
   onFolderExpansionChanged;
-  final void Function(String folderPath) onMoveFolder;
-  final void Function(String folderPath, int lessonCount) onDeleteFolder;
+  final void Function(List<String> folderPath) onMoveFolder;
+  final void Function(List<String> folderPath, int lessonCount) onDeleteFolder;
 
   static const double _indentPerLevel = 24;
 
@@ -96,7 +96,10 @@ class LessonHierarchyView extends StatelessWidget {
             : ReorderableDelayedDragStartListener(
                 index: index,
                 child: Padding(
-                  padding: EdgeInsets.only(left: _indentPerLevel * row.depth, right: 6),
+                  padding: EdgeInsets.only(
+                    left: _indentPerLevel * row.depth,
+                    right: 6,
+                  ),
                   child: lessonBuilder(context, row.lesson!),
                 ),
               );
@@ -110,21 +113,17 @@ class LessonHierarchyView extends StatelessWidget {
     final foldersByPath = <String, _HierarchyNode>{};
     for (var lessonIndex = 0; lessonIndex < lessons.length; lessonIndex++) {
       final lesson = lessons[lessonIndex];
-      final folders = (lesson.effectiveUnitTitle ?? '')
-          .split(' / ')
-          .map((part) => part.trim())
-          .where((part) => part.isNotEmpty)
-          .toList();
+      final folders = lesson.folderPath;
       var siblings = roots;
-      var parentPath = '';
+      final parentPath = <String>[];
       for (final folder in folders) {
-        parentPath = parentPath.isEmpty ? folder : '$parentPath/$folder';
-        final folderKey = _folderKey(parentPath);
+        parentPath.add(folder);
+        final folderKey = hierarchyFolderKey(parentPath);
         var node = foldersByPath[folderKey];
         if (node == null) {
           node = _HierarchyNode.folder(
             key: folderKey,
-            path: parentPath,
+            path: List.unmodifiable(parentPath),
             originOrder: lessonIndex,
           );
           foldersByPath[folderKey] = node;
@@ -213,7 +212,7 @@ class LessonHierarchyView extends StatelessWidget {
           dense: true,
           leading: Icon(Icons.drag_handle, color: theme.colorScheme.outline),
           title: Text(
-            row.folderPath!.split('/').last,
+            row.folderPath!.last,
             style: theme.textTheme.titleMedium?.copyWith(
               color: theme.colorScheme.primary,
               fontWeight: FontWeight.bold,
@@ -226,7 +225,8 @@ class LessonHierarchyView extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               IconButton(
-                tooltip: 'Delete ${row.folderPath} and its lessons',
+                tooltip:
+                    'Delete ${formatHierarchyPath(row.folderPath!)} and its lessons',
                 icon: Icon(
                   Icons.delete_outline,
                   color: theme.colorScheme.error,
@@ -235,7 +235,7 @@ class LessonHierarchyView extends StatelessWidget {
                     onDeleteFolder(row.folderPath!, row.lessonCount),
               ),
               PopupMenuButton<String>(
-                tooltip: 'Manage ${row.folderPath}',
+                tooltip: 'Manage ${formatHierarchyPath(row.folderPath!)}',
                 onSelected: (action) {
                   if (action == 'move') onMoveFolder(row.folderPath!);
                 },
@@ -251,14 +251,11 @@ class LessonHierarchyView extends StatelessWidget {
       ),
     );
   }
-
-  static String _folderKey(String path) =>
-      'folder:${path.trim().toLowerCase().replaceAll('\\', '/')}';
 }
 
 class _HierarchyNode {
   final String key;
-  final String? path;
+  final List<String>? path;
   final Lesson? lesson;
   final List<_HierarchyNode> children = [];
   int originOrder;
@@ -272,7 +269,7 @@ class _HierarchyNode {
 
   factory _HierarchyNode.folder({
     required String key,
-    required String path,
+    required List<String> path,
     required int originOrder,
   }) => _HierarchyNode._(key: key, path: path, originOrder: originOrder);
 

@@ -34,7 +34,7 @@ void main() {
 
   group('YAML Parser & Vocabulary Models', () {
     const sampleYaml = '''
-Lesson: Unit 2 / Lesson 26
+Lesson: Unit 2::Lesson 26
 
 nouns:
   - ko: 아줌마
@@ -54,7 +54,7 @@ verbs:
 
     test('Parses lesson title, categories and cards', () {
       final res = YamlParserService.parseLessonYaml(sampleYaml);
-      expect(res.lesson.title, 'Unit 2 / Lesson 26');
+      expect(res.lesson.title, 'Unit 2::Lesson 26');
       expect(res.lesson.vocabularies.length, 2);
 
       final noun = res.lesson.vocabularies[0];
@@ -459,25 +459,28 @@ vocabulary:
       ]);
     });
 
-    test('Splits legacy Unit/Lesson title into hierarchy display fields', () {
+    test('Splits Unit::Lesson title into hierarchy display fields', () {
       final lesson = YamlParserService.parseLessonYaml(sampleYaml).lesson;
 
-      expect(lesson.title, 'Unit 2 / Lesson 26');
-      expect(lesson.effectiveUnitTitle, 'Unit 2');
+      expect(lesson.title, 'Unit 2::Lesson 26');
+      expect(lesson.folderPath, ['Unit 2']);
       expect(lesson.displayTitle, 'Lesson 26');
     });
 
-    test('Uses slash-separated lesson paths for nested folders', () {
-      final lesson = Lesson(title: 'Topic / Subtopic / Lesson A');
+    test('Uses :: separated lesson paths and keeps slashes literal', () {
+      final lesson = Lesson(title: 'Topic::Subtopic::Lesson A');
       final lessonWithParent = Lesson(
-        title: 'Subtopic / Lesson B',
+        title: 'Subtopic::Lesson B',
         unitTitle: 'Topic',
       );
+      final slashed = Lesson(title: 'Verbs / Adjectives::Lesson C');
 
-      expect(lesson.effectiveUnitTitle, 'Topic / Subtopic');
+      expect(lesson.folderPath, ['Topic', 'Subtopic']);
       expect(lesson.displayTitle, 'Lesson A');
-      expect(lessonWithParent.effectiveUnitTitle, 'Topic / Subtopic');
+      expect(lessonWithParent.folderPath, ['Topic', 'Subtopic']);
       expect(lessonWithParent.displayTitle, 'Lesson B');
+      expect(slashed.folderPath, ['Verbs / Adjectives']);
+      expect(slashed.displayTitle, 'Lesson C');
     });
 
     test(
@@ -551,7 +554,7 @@ vocabulary:
           'lingua_srs_lessons': jsonEncode([
             Lesson(
               id: 'existing-lesson',
-              title: 'Unit 2/Lesson 26',
+              title: 'Unit 2::Lesson 26',
               vocabularies: [
                 VocabItem(
                   targetWord: '목적지',
@@ -837,7 +840,7 @@ vocabulary:
       );
       expect(provider.lessons, hasLength(3));
 
-      await provider.deleteLessonGroup('unit 1');
+      await provider.deleteLessonGroup(['unit 1']);
 
       expect(provider.lessons, hasLength(1));
       expect(provider.lessons.single, same(remaining));
@@ -860,37 +863,37 @@ vocabulary:
 
         final movedLesson = await provider.importYaml(
           'Lesson: Lesson A\nnouns: []',
-          defaultUnitTitle: 'Topic/Subtopic',
+          defaultUnitTitle: 'Topic::Subtopic',
         );
         final nestedLesson = await provider.importYaml(
           'Lesson: Lesson B\nnouns: []',
-          defaultUnitTitle: 'Topic/Subtopic/Inner',
+          defaultUnitTitle: 'Topic::Subtopic::Inner',
         );
-        await provider.setLessonFolderExpanded('folder:topic/subtopic', false);
+        await provider.setLessonFolderExpanded('folder:topic::subtopic', false);
         await provider.setLessonFolderExpanded(
-          'folder:topic/subtopic/inner',
+          'folder:topic::subtopic::inner',
           true,
         );
 
-        await provider.moveLessonToFolder(movedLesson.id, 'Other');
-        expect(movedLesson.effectiveUnitTitle, 'Other');
+        await provider.moveLessonToFolder(movedLesson.id, ['Other']);
+        expect(movedLesson.folderPath, ['Other']);
 
-        await provider.moveLessonGroup('Topic/Subtopic', 'Destination');
+        await provider.moveLessonGroup(['Topic', 'Subtopic'], ['Destination']);
 
-        expect(movedLesson.effectiveUnitTitle, 'Other');
-        expect(nestedLesson.effectiveUnitTitle, 'Destination/Subtopic/Inner');
+        expect(movedLesson.folderPath, ['Other']);
+        expect(nestedLesson.folderPath, ['Destination', 'Subtopic', 'Inner']);
         expect(
-          provider.lessonFolderExpansion['folder:destination/subtopic'],
+          provider.lessonFolderExpansion['folder:destination::subtopic'],
           isFalse,
         );
         expect(
-          provider.lessonFolderExpansion['folder:destination/subtopic/inner'],
+          provider.lessonFolderExpansion['folder:destination::subtopic::inner'],
           isTrue,
         );
         await expectLater(
           provider.moveLessonGroup(
-            'Destination/Subtopic',
-            'Destination/Subtopic/Inner',
+            ['Destination', 'Subtopic'],
+            ['Destination', 'Subtopic', 'Inner'],
           ),
           throwsArgumentError,
         );
@@ -902,11 +905,12 @@ vocabulary:
         expect(
           reloadedProvider.lessons
               .singleWhere((lesson) => lesson.id == nestedLesson.id)
-              .effectiveUnitTitle,
-          'Destination/Subtopic/Inner',
+              .folderPath,
+          ['Destination', 'Subtopic', 'Inner'],
         );
         expect(
-          reloadedProvider.lessonFolderExpansion['folder:destination/subtopic'],
+          reloadedProvider
+              .lessonFolderExpansion['folder:destination::subtopic'],
           isFalse,
         );
         provider.dispose();

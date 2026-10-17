@@ -237,13 +237,14 @@ class LessonListView extends StatelessWidget {
   Future<void> _confirmDeleteLessonGroup(
     BuildContext context,
     AppProvider provider,
-    String unitTitle,
+    List<String> folderPath,
     int lessonCount,
   ) async {
+    final label = formatHierarchyPath(folderPath);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Delete "$unitTitle" and its lessons?'),
+        title: Text('Delete "$label" and its lessons?'),
         content: Text(
           'This will delete $lessonCount '
           '${lessonCount == 1 ? 'lesson' : 'lessons'} in this section and all '
@@ -265,31 +266,26 @@ class LessonListView extends StatelessWidget {
       ),
     );
     if (confirmed != true || !context.mounted) return;
-    await provider.deleteLessonGroup(unitTitle);
+    await provider.deleteLessonGroup(folderPath);
   }
 
-  List<String> _folderPaths(AppProvider provider) {
-    final pathsByKey = <String, String>{};
+  List<List<String>> _folderPaths(AppProvider provider) {
+    final pathsByKey = <String, List<String>>{};
     for (final lesson in provider.lessons) {
-      final parts = lesson.effectiveUnitTitle
-          ?.split(' / ')
-          .map((part) => part.trim())
-          .where((part) => part.isNotEmpty)
-          .toList();
-      if (parts == null) continue;
+      final parts = lesson.folderPath;
       for (var index = 0; index < parts.length; index++) {
-        final path = parts.take(index + 1).join('/');
-        pathsByKey.putIfAbsent(path.toLowerCase(), () => path);
+        final path = parts.take(index + 1).toList();
+        pathsByKey.putIfAbsent(hierarchyFolderKey(path), () => path);
       }
     }
     return pathsByKey.values.toList();
   }
 
-  Future<String?> _chooseFolderPath(
+  Future<List<String>?> _chooseFolderPath(
     BuildContext context,
     String title,
-    List<String> folderPaths,
-  ) => showDialog<String>(
+    List<List<String>> folderPaths,
+  ) => showDialog<List<String>>(
     context: context,
     builder: (dialogContext) => AlertDialog(
       title: Text(title),
@@ -301,12 +297,12 @@ class LessonListView extends StatelessWidget {
             ListTile(
               leading: const Icon(Icons.home_outlined),
               title: const Text('Root (no folder)'),
-              onTap: () => Navigator.pop(dialogContext, ''),
+              onTap: () => Navigator.pop(dialogContext, <String>[]),
             ),
             for (final path in folderPaths)
               ListTile(
                 leading: const Icon(Icons.folder_outlined),
-                title: Text(path),
+                title: Text(formatHierarchyPath(path)),
                 onTap: () => Navigator.pop(dialogContext, path),
               ),
           ],
@@ -333,10 +329,7 @@ class LessonListView extends StatelessWidget {
     );
     if (destination == null || !context.mounted) return;
     try {
-      await provider.moveLessonToFolder(
-        lesson.id,
-        destination.isEmpty ? null : destination,
-      );
+      await provider.moveLessonToFolder(lesson.id, destination);
     } catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(
@@ -348,27 +341,19 @@ class LessonListView extends StatelessWidget {
   Future<void> _moveLessonGroup(
     BuildContext context,
     AppProvider provider,
-    String folderPath,
+    List<String> folderPath,
   ) async {
-    final normalizedPath = folderPath.toLowerCase();
     final destinations = _folderPaths(provider)
-        .where(
-          (path) =>
-              path.toLowerCase() != normalizedPath &&
-              !path.toLowerCase().startsWith('$normalizedPath/'),
-        )
+        .where((path) => !isHierarchyPathWithin(path, folderPath))
         .toList();
     final destinationParent = await _chooseFolderPath(
       context,
-      'Move "$folderPath" under folder',
+      'Move "${formatHierarchyPath(folderPath)}" under folder',
       destinations,
     );
     if (destinationParent == null || !context.mounted) return;
     try {
-      await provider.moveLessonGroup(
-        folderPath,
-        destinationParent.isEmpty ? null : destinationParent,
-      );
+      await provider.moveLessonGroup(folderPath, destinationParent);
     } catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(
@@ -580,7 +565,7 @@ class LessonListView extends StatelessWidget {
           children: [
             Icon(Icons.auto_stories_rounded),
             SizedBox(width: 10),
-            Text('LinguaSRS'),
+            Flexible(child: Text('LinguaSRS', overflow: TextOverflow.ellipsis)),
           ],
         ),
         actions: [

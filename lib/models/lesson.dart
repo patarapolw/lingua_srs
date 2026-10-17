@@ -23,32 +23,35 @@ class Lesson {
   }) : id = id ?? const Uuid().v4(),
        vocabularies = vocabularies ?? [];
 
-  String? get effectiveUnitTitle {
-    final explicitParts = _hierarchyParts(unitTitle);
-    var titleParts = _hierarchyParts(title);
-    var repeatsExplicitPath =
-        explicitParts.isNotEmpty && titleParts.length >= explicitParts.length;
-    for (
-      var index = 0;
-      repeatsExplicitPath && index < explicitParts.length;
-      index++
-    ) {
-      repeatsExplicitPath =
-          explicitParts[index].toLowerCase() == titleParts[index].toLowerCase();
-    }
-    if (repeatsExplicitPath) {
+  /// Folder segments containing this lesson, from [unitTitle] plus any leading
+  /// segments of [title].
+  List<String> get folderPath {
+    final explicitParts = splitHierarchyPath(unitTitle);
+    var titleParts = splitHierarchyPath(title);
+    if (isHierarchyPathWithin(titleParts, explicitParts)) {
       titleParts = titleParts.skip(explicitParts.length).toList();
     }
-    final folderParts = [
+    return [
       ...explicitParts,
       ...titleParts.take(titleParts.isEmpty ? 0 : titleParts.length - 1),
     ];
-    return folderParts.isEmpty ? null : folderParts.join(' / ');
+  }
+
+  /// Display-only form of [folderPath].
+  String? get effectiveUnitTitle {
+    final path = folderPath;
+    return path.isEmpty ? null : formatHierarchyPath(path);
   }
 
   String get displayTitle {
-    final titleParts = _hierarchyParts(title);
+    final titleParts = splitHierarchyPath(title);
     return titleParts.isEmpty ? title : titleParts.last;
+  }
+
+  void moveToFolder(List<String> folder) {
+    final leafTitle = displayTitle;
+    unitTitle = folder.isEmpty ? null : joinHierarchyPath(folder);
+    title = leafTitle;
   }
 
   int get activeCardsCount {
@@ -129,10 +132,36 @@ class Lesson {
   );
 }
 
-List<String> _hierarchyParts(String? path) =>
+const hierarchySeparator = '::';
+
+/// The only place a stored/typed path string is split. Everything else passes
+/// `List<String>` so segments containing `/` or spaces are never mangled.
+List<String> splitHierarchyPath(String? path) =>
     path
-        ?.split(' / ')
+        ?.split(hierarchySeparator)
         .map((part) => part.trim())
         .where((part) => part.isNotEmpty)
         .toList() ??
     [];
+
+String joinHierarchyPath(Iterable<String> path) =>
+    path.join(hierarchySeparator);
+
+String formatHierarchyPath(Iterable<String> path) => path.join(' › ');
+
+String hierarchyFolderKey(Iterable<String> path) =>
+    'folder:${path.map((part) => part.toLowerCase()).join(hierarchySeparator)}';
+
+/// Whether [path] equals [ancestor] or is nested beneath it (case-insensitive).
+bool isHierarchyPathWithin(List<String> path, List<String> ancestor) {
+  if (ancestor.isEmpty || path.length < ancestor.length) return false;
+  for (var index = 0; index < ancestor.length; index++) {
+    if (path[index].toLowerCase() != ancestor[index].toLowerCase()) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool isSameHierarchyPath(List<String> a, List<String> b) =>
+    a.length == b.length && (a.isEmpty || isHierarchyPathWithin(a, b));

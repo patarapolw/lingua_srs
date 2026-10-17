@@ -8,7 +8,7 @@ void main() {
     tester,
   ) async {
     final lessons = [
-      Lesson(id: 'lesson-a', title: 'Lesson A', unitTitle: 'Unit 2/Grammar'),
+      Lesson(id: 'lesson-a', title: 'Lesson A', unitTitle: 'Unit 2::Grammar'),
     ];
     final expansionChanges = <(String, bool)>[];
     final expansion = <String, bool>{};
@@ -56,7 +56,7 @@ void main() {
 
     await tester.tap(find.text('Grammar'));
     await tester.pumpAndSettle();
-    expect(expansionChanges.last, ('folder:unit 2/grammar', false));
+    expect(expansionChanges.last, ('folder:unit 2::grammar', false));
     expect(find.text('Lesson A'), findsNothing);
   });
 
@@ -168,10 +168,7 @@ void main() {
             height: 700,
             child: LessonHierarchyView(
               lessons: [
-                Lesson(
-                  id: 'nested-lesson',
-                  title: 'Topic / Subtopic / Lesson A',
-                ),
+                Lesson(id: 'nested-lesson', title: 'Topic::Subtopic::Lesson A'),
               ],
               order: const {},
               folderExpansion: const {},

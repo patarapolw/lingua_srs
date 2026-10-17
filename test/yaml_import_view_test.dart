@@ -13,7 +13,7 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: YamlImportView()));
     await tester.pumpAndSettle();
 
-    expect(find.text('e.g. Unit 2 / Lesson 26'), findsOneWidget);
+    expect(find.text('e.g. Unit 2::Lesson 26'), findsOneWidget);
     expect(tester.widgetList<TextField>(find.byType(TextField)).length, 2);
     final markdownInput = tester
         .widgetList<TextField>(find.byType(TextField))
@@ -21,22 +21,18 @@ void main() {
     expect(markdownInput.maxLines, isNull);
     expect(markdownInput.expands, isTrue);
     expect(markdownInput.style?.fontFamily, 'monospace');
+    expect(markdownInput.controller?.text, isEmpty);
     expect(
       markdownInput.decoration!.hintText,
-      '---\n'
-      'vocabulary:\n'
-      '---\n'
-      '\n'
-      '# Lesson 26\n'
-      '\n'
-      '...',
+      contains('  nouns:  # Replace with a part of speech or section name'),
     );
     final parsedHint = YamlParserService.parseLessonYaml(
       markdownInput.decoration!.hintText!,
     );
     expect(parsedHint.lesson.title, 'Lesson 26');
-    expect(parsedHint.lesson.vocabularies, isEmpty);
-    expect(parsedHint.sentences, isEmpty);
+    expect(parsedHint.lesson.vocabularies, hasLength(1));
+    expect(parsedHint.lesson.vocabularies.single.targetWord, 'Korean word');
+    expect(parsedHint.sentences, hasLength(2));
     expect(find.text('Enter Markdown to see preview'), findsOneWidget);
 
     final importButton = tester.widget<FilledButton>(

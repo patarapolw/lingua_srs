@@ -41,7 +41,7 @@ class _SectionRow {
   String get key => path.join('\u0000');
   String get parentLabel => path.length < 2
       ? ''
-      : '${path.sublist(0, path.length - 1).join(' / ')} · ';
+      : '${formatHierarchyPath(path.sublist(0, path.length - 1))} · ';
   String get subtitle =>
       '$parentLabel$vocabularyCount vocabulary ${vocabularyCount == 1 ? 'item' : 'items'}';
 }
@@ -306,7 +306,10 @@ class _LessonDetailViewState extends State<LessonDetailView> {
             tooltip: 'Add Vocabulary',
             onPressed: () => _showAddVocabDialog(lesson),
           ),
-          if (context.watch<AppProvider>().getRecentMistakesCount(lessonId: lesson.id) > 0) ...[
+          if (context.watch<AppProvider>().getRecentMistakesCount(
+                lessonId: lesson.id,
+              ) >
+              0) ...[
             FilledButton.tonalIcon(
               style: FilledButton.styleFrom(
                 backgroundColor: theme.colorScheme.errorContainer,
@@ -543,8 +546,7 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                                               AudioButton(
                                                 audioUrl: vocab.audioUrl,
                                                 fallbackText: vocab.targetWord,
-                                                language:
-                                                    lesson.targetLanguage,
+                                                language: lesson.targetLanguage,
                                                 compact: true,
                                               ),
                                             ],
