@@ -17,6 +17,31 @@ void main() {
     );
   });
 
+  testWidgets('renders horizontal rules as thin dividers', (tester) async {
+    for (final content in [
+      'before\n\n---\n\nafter',
+      'before\n\n<hr>\n\nafter',
+    ]) {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: MarkdownContent(content: content)),
+        ),
+      );
+
+      expect(
+        find.byWidgetPredicate((widget) {
+          if (widget is! Container || widget.decoration is! BoxDecoration) {
+            return false;
+          }
+          final border = (widget.decoration! as BoxDecoration).border;
+          return border is Border && border.top.width == 1;
+        }),
+        findsOneWidget,
+        reason: 'Expected a 1-pixel rule for: $content',
+      );
+    }
+  });
+
   testWidgets('spoiler text reveals on tap for touch interaction', (
     tester,
   ) async {
