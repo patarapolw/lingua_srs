@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
 import 'audio_button.dart';
+import 'youtube_embed.dart';
 
 class MarkdownContent extends StatelessWidget {
   final String content;
@@ -35,9 +36,27 @@ class MarkdownContent extends StatelessWidget {
         },
       );
 
+  static String prepareYouTube(String input) => input.replaceAllMapped(
+    RegExp(
+      r'<YouTube\b([^>]*?)/>|<YouTube\b([^>]*)>(?:[\s\S]*?</YouTube\s*>)?',
+      caseSensitive: false,
+    ),
+    (match) {
+      final embedUrl = YouTubeEmbed.embedUrlFromAttributes(
+        match[1] ?? match[2] ?? '',
+      );
+      if (embedUrl == null) return '';
+      final uri = Uri(
+        scheme: 'lingua-youtube',
+        queryParameters: {'url': embedUrl},
+      );
+      return '\n\n![YouTube](<$uri>)\n\n';
+    },
+  );
+
   /// Cleans up raw HTML <p> tags into markdown friendly newlines
   String _normalizeContent(String input) {
-    String text = input;
+    String text = prepareYouTube(input);
     // Replace <p> with empty or single newline and </p> with double newlines
     text = text.replaceAll(RegExp(r'<p\s*>', caseSensitive: false), '');
     text = text.replaceAll(RegExp(r'</p\s*>', caseSensitive: false), '\n\n');
@@ -77,6 +96,17 @@ class MarkdownContent extends StatelessWidget {
       sizedImageBuilder: (image) {
         if (image.uri.scheme == 'lingua-spoiler') {
           return SpoilerText(text: image.uri.queryParameters['text'] ?? '');
+        }
+        if (image.uri.scheme == 'lingua-youtube') {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: SizedBox(
+              width: (MediaQuery.sizeOf(context).width - 48).clamp(200.0, 640.0),
+              child: YouTubeEmbed(
+                embedUrl: image.uri.queryParameters['url'] ?? '',
+              ),
+            ),
+          );
         }
         if (image.uri.scheme == 'lingua-audio') {
           final textToSpeak = image.uri.queryParameters['text'];
