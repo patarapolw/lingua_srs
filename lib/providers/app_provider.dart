@@ -87,14 +87,27 @@ class AppProvider extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
 
-    _autoplayAudio = await StorageService.loadAutoplay();
-    _deepSeekApiKey = await StorageService.loadDeepSeekApiKey();
-    _aiDiscussions = await StorageService.loadAiDiscussions();
-    _maxReviews24h = await StorageService.loadMaxReviews24h();
-    _reviewTimestamps24h = await StorageService.loadReviewTimestamps();
-    _lessonHierarchyOrder = await StorageService.loadLessonHierarchyOrder();
-    _lessonFolderExpansion = await StorageService.loadLessonFolderExpansion();
-    _sentences = await StorageService.loadSentences();
+    // Let the first frame render before heavy storage work starts.
+    await Future<void>.delayed(Duration.zero);
+
+    final results = await (
+      StorageService.loadAutoplay(),
+      StorageService.loadDeepSeekApiKey(),
+      StorageService.loadAiDiscussions(),
+      StorageService.loadMaxReviews24h(),
+      StorageService.loadReviewTimestamps(),
+      StorageService.loadLessonHierarchyOrder(),
+      StorageService.loadLessonFolderExpansion(),
+      StorageService.loadSentences(),
+    ).wait;
+    _autoplayAudio = results.$1;
+    _deepSeekApiKey = results.$2;
+    _aiDiscussions = results.$3;
+    _maxReviews24h = results.$4;
+    _reviewTimestamps24h = results.$5;
+    _lessonHierarchyOrder = results.$6;
+    _lessonFolderExpansion = results.$7;
+    _sentences = results.$8;
     _lessons = await StorageService.loadLessons();
     if (_canonicalizeSentencePool()) {
       await StorageService.saveSentences(_sentences);

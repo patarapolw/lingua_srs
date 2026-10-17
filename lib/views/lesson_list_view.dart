@@ -447,170 +447,185 @@ class LessonListView extends StatelessWidget {
   ) {
     final due = lesson.dueCardsCount;
     final active = lesson.activeCardsCount;
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      elevation: 1,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 20,
-          vertical: 10,
-        ),
-        leading: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.drag_handle, color: theme.colorScheme.outline),
-            const SizedBox(width: 4),
-            CircleAvatar(
-              radius: 24,
-              backgroundColor: theme.colorScheme.secondaryContainer,
-              child: Text(
-                lesson.targetLanguage.toUpperCase(),
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: theme.colorScheme.onSecondaryContainer,
-                ),
-              ),
-            ),
-          ],
-        ),
-        title: Text(
-          lesson.displayTitle,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            children: [
-              Text('${lesson.vocabularies.length} Words • $active Cards'),
-              if (due > 0)
-                Badge(
-                  label: Text('$due Due'),
-                  backgroundColor: Colors.amber.shade800,
-                ),
-            ],
+    void openStudy() => Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => StudyView(lessonId: lesson.id)),
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // On narrow screens the leading/trailing widgets would squeeze the title.
+        final compact = constraints.maxWidth < 560;
+        return Card(
+          margin: const EdgeInsets.symmetric(vertical: 6),
+          elevation: 1,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
           ),
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            FilledButton.tonalIcon(
-              icon: const Icon(Icons.play_arrow, size: 18),
-              label: const Text('Study'),
-              onPressed: active == 0
-                  ? null
-                  : () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => StudyView(lessonId: lesson.id),
-                      ),
-                    ),
+          child: ListTile(
+            contentPadding: EdgeInsets.symmetric(
+              horizontal: compact ? 12 : 20,
+              vertical: 10,
             ),
-            const SizedBox(width: 8),
-            IconButton(
-              icon: const Icon(Icons.arrow_forward_ios, size: 16),
-              tooltip: 'View Vocabulary',
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => LessonDetailView(lessonId: lesson.id),
-                ),
-              ),
-            ),
-            PopupMenuButton<String>(
-              onSelected: (value) {
-                if (value == 'move_up') {
-                  orderActions.moveUp();
-                } else if (value == 'move_down') {
-                  orderActions.moveDown();
-                } else if (value == 'reset_srs') {
-                  _confirmResetLesson(context, lesson);
-                } else if (value == 'move') {
-                  _moveLessonToFolder(context, provider, lesson);
-                } else if (value == 'delete') {
-                  provider.deleteLesson(lesson.id);
-                }
-              },
-              itemBuilder: (context) => [
-                PopupMenuItem(
-                  value: 'move_up',
-                  enabled: orderActions.canMoveUp,
-                  child: const Row(
+            leading: compact
+                ? null
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.arrow_upward, size: 18),
-                      SizedBox(width: 8),
-                      Text('Move up'),
-                    ],
-                  ),
-                ),
-                PopupMenuItem(
-                  value: 'move_down',
-                  enabled: orderActions.canMoveDown,
-                  child: const Row(
-                    children: [
-                      Icon(Icons.arrow_downward, size: 18),
-                      SizedBox(width: 8),
-                      Text('Move down'),
-                    ],
-                  ),
-                ),
-                const PopupMenuDivider(),
-                PopupMenuItem(
-                  value: 'reset_srs',
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.restart_alt,
-                        color: Colors.orange,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                      const Expanded(
+                      Icon(Icons.drag_handle, color: theme.colorScheme.outline),
+                      const SizedBox(width: 4),
+                      CircleAvatar(
+                        radius: 24,
+                        backgroundColor: theme.colorScheme.secondaryContainer,
                         child: Text(
-                          'Reset SRS Progress',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                          lesson.targetLanguage.toUpperCase(),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: theme.colorScheme.onSecondaryContainer,
+                          ),
                         ),
                       ),
                     ],
                   ),
-                ),
-                const PopupMenuItem(
-                  value: 'move',
-                  child: Row(
-                    children: [
-                      Icon(Icons.drive_file_move_outline, size: 18),
-                      SizedBox(width: 8),
-                      Text('Move to Folder...'),
-                    ],
+            title: Text(
+              lesson.displayTitle,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+            ),
+            subtitle: Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  Text('${lesson.vocabularies.length} Words • $active Cards'),
+                  if (due > 0)
+                    Badge(
+                      label: Text('$due Due'),
+                      backgroundColor: Colors.amber.shade800,
+                    ),
+                  if (compact)
+                    FilledButton.tonalIcon(
+                      icon: const Icon(Icons.play_arrow, size: 18),
+                      label: const Text('Study'),
+                      onPressed: active == 0 ? null : openStudy,
+                    ),
+                ],
+              ),
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (!compact) ...[
+                  FilledButton.tonalIcon(
+                    icon: const Icon(Icons.play_arrow, size: 18),
+                    label: const Text('Study'),
+                    onPressed: active == 0 ? null : openStudy,
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                IconButton(
+                  icon: const Icon(Icons.arrow_forward_ios, size: 16),
+                  tooltip: 'View Vocabulary',
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => LessonDetailView(lessonId: lesson.id),
+                    ),
                   ),
                 ),
-                const PopupMenuItem(
-                  value: 'delete',
-                  child: Row(
-                    children: [
-                      Icon(Icons.delete, color: Colors.red, size: 18),
-                      SizedBox(width: 8),
-                      Text(
-                        'Delete Lesson',
-                        style: TextStyle(color: Colors.red),
+                PopupMenuButton<String>(
+                  onSelected: (value) {
+                    if (value == 'move_up') {
+                      orderActions.moveUp();
+                    } else if (value == 'move_down') {
+                      orderActions.moveDown();
+                    } else if (value == 'reset_srs') {
+                      _confirmResetLesson(context, lesson);
+                    } else if (value == 'move') {
+                      _moveLessonToFolder(context, provider, lesson);
+                    } else if (value == 'delete') {
+                      provider.deleteLesson(lesson.id);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      value: 'move_up',
+                      enabled: orderActions.canMoveUp,
+                      child: const Row(
+                        children: [
+                          Icon(Icons.arrow_upward, size: 18),
+                          SizedBox(width: 8),
+                          Text('Move up'),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                    PopupMenuItem(
+                      value: 'move_down',
+                      enabled: orderActions.canMoveDown,
+                      child: const Row(
+                        children: [
+                          Icon(Icons.arrow_downward, size: 18),
+                          SizedBox(width: 8),
+                          Text('Move down'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuDivider(),
+                    PopupMenuItem(
+                      value: 'reset_srs',
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.restart_alt,
+                            color: Colors.orange,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          const Expanded(
+                            child: Text(
+                              'Reset SRS Progress',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'move',
+                      child: Row(
+                        children: [
+                          Icon(Icons.drive_file_move_outline, size: 18),
+                          SizedBox(width: 8),
+                          Text('Move to Folder...'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete, color: Colors.red, size: 18),
+                          SizedBox(width: 8),
+                          Text(
+                            'Delete Lesson',
+                            style: TextStyle(color: Colors.red),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ],
-        ),
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => LessonReaderView(lessonId: lesson.id),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => LessonReaderView(lessonId: lesson.id),
+              ),
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 

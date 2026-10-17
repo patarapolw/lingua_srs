@@ -285,6 +285,9 @@ adjectives:
     }
 
     // Default sample on first run
+    // Sample data is for development only; release builds start empty.
+    if (!kDebugMode) return [];
+
     final parsed = YamlParserService.parseLessonYaml(defaultSampleYaml);
     await saveLessons([parsed.lesson]);
     await saveSentences(parsed.sentences);

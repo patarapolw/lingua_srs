@@ -308,21 +308,35 @@ class _YamlImportViewState extends State<YamlImportView> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final compactBar = MediaQuery.sizeOf(context).width < 700;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Import Lessons'),
         actions: [
-          TextButton.icon(
-            icon: const Icon(Icons.file_upload_outlined),
-            label: const Text('Pick File'),
-            onPressed: _isParsing ? null : _pickFile,
-          ),
-          TextButton.icon(
-            icon: const Icon(Icons.folder_open_outlined),
-            label: const Text('Pick Folder'),
-            onPressed: _isParsing ? null : _pickDirectory,
-          ),
+          if (compactBar) ...[
+            IconButton(
+              icon: const Icon(Icons.file_upload_outlined),
+              tooltip: 'Pick File',
+              onPressed: _isParsing ? null : _pickFile,
+            ),
+            IconButton(
+              icon: const Icon(Icons.folder_open_outlined),
+              tooltip: 'Pick Folder',
+              onPressed: _isParsing ? null : _pickDirectory,
+            ),
+          ] else ...[
+            TextButton.icon(
+              icon: const Icon(Icons.file_upload_outlined),
+              label: const Text('Pick File'),
+              onPressed: _isParsing ? null : _pickFile,
+            ),
+            TextButton.icon(
+              icon: const Icon(Icons.folder_open_outlined),
+              label: const Text('Pick Folder'),
+              onPressed: _isParsing ? null : _pickDirectory,
+            ),
+          ],
           const SizedBox(width: 8),
           FilledButton.icon(
             icon: _isParsing
@@ -337,7 +351,7 @@ class _YamlImportViewState extends State<YamlImportView> {
                 : const Icon(Icons.check),
             label: Text(
               _directoryFiles.isEmpty
-                  ? 'Import Markdown'
+                  ? (compactBar ? 'Import' : 'Import Markdown')
                   : 'Import ${_selectedDirectoryPaths.length} Lessons',
             ),
             onPressed:
@@ -350,13 +364,9 @@ class _YamlImportViewState extends State<YamlImportView> {
           const SizedBox(width: 16),
         ],
       ),
-      body: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Left: YAML Editor
-          Expanded(
-            flex: 6,
-            child: Padding(
+      body: LayoutBuilder(builder: (context, constraints) {
+        final narrow = constraints.maxWidth < 700;
+        final editor = Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -449,15 +459,9 @@ class _YamlImportViewState extends State<YamlImportView> {
                   ),
                 ],
               ),
-            ),
-          ),
+            );
 
-          const VerticalDivider(width: 1),
-
-          // Right: Preview & Validation
-          Expanded(
-            flex: 5,
-            child: Padding(
+        final preview = Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -702,10 +706,33 @@ class _YamlImportViewState extends State<YamlImportView> {
                     ),
                 ],
               ),
+            );
+
+        if (narrow) {
+          return DefaultTabController(
+            length: 2,
+            child: Column(
+              children: [
+                const TabBar(
+                  tabs: [
+                    Tab(text: 'Editor'),
+                    Tab(text: 'Preview'),
+                  ],
+                ),
+                Expanded(child: TabBarView(children: [editor, preview])),
+              ],
             ),
-          ),
-        ],
-      ),
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(flex: 6, child: editor),
+            const VerticalDivider(width: 1),
+            Expanded(flex: 5, child: preview),
+          ],
+        );
+      }),
     );
   }
 }

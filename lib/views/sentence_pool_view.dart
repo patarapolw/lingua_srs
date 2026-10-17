@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../models/sentence.dart';
 import '../providers/app_provider.dart';
 import '../widgets/audio_button.dart';
@@ -24,14 +25,18 @@ class _SentencePoolViewState extends State<SentencePoolView> {
 
   void _showAddEditDialog({Sentence? sentence}) {
     final targetCtrl = TextEditingController(text: sentence?.targetText ?? '');
-    final transCtrl = TextEditingController(text: sentence?.translationText ?? '');
+    final transCtrl = TextEditingController(
+      text: sentence?.translationText ?? '',
+    );
     final audioCtrl = TextEditingController(text: sentence?.audioUrl ?? '');
     final notesCtrl = TextEditingController(text: sentence?.notes ?? '');
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(sentence == null ? 'Add Sentence to Pool' : 'Edit Sentence'),
+        title: Text(
+          sentence == null ? 'Add Sentence to Pool' : 'Edit Sentence',
+        ),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -71,7 +76,10 @@ class _SentencePoolViewState extends State<SentencePoolView> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
             onPressed: () async {
               if (targetCtrl.text.trim().isNotEmpty) {
@@ -80,14 +88,18 @@ class _SentencePoolViewState extends State<SentencePoolView> {
                   final newSentence = Sentence(
                     targetText: targetCtrl.text.trim(),
                     translationText: transCtrl.text.trim(),
-                    audioUrl: audioCtrl.text.trim().isEmpty ? null : audioCtrl.text.trim(),
+                    audioUrl: audioCtrl.text.trim().isEmpty
+                        ? null
+                        : audioCtrl.text.trim(),
                     notes: notesCtrl.text.trim(),
                   );
                   await provider.addSentenceToPool(newSentence);
                 } else {
                   sentence.targetText = targetCtrl.text.trim();
                   sentence.translationText = transCtrl.text.trim();
-                  sentence.audioUrl = audioCtrl.text.trim().isEmpty ? null : audioCtrl.text.trim();
+                  sentence.audioUrl = audioCtrl.text.trim().isEmpty
+                      ? null
+                      : audioCtrl.text.trim();
                   sentence.notes = notesCtrl.text.trim();
                   await provider.updateSentenceInPool(sentence);
                 }
@@ -145,8 +157,13 @@ class _SentencePoolViewState extends State<SentencePoolView> {
                     decoration: InputDecoration(
                       prefixIcon: const Icon(Icons.search),
                       hintText: 'Search sentences by target or translation...',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
                       suffixIcon: _filter.isNotEmpty
                           ? IconButton(
                               icon: const Icon(Icons.clear),
@@ -177,7 +194,11 @@ class _SentencePoolViewState extends State<SentencePoolView> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.format_quote_outlined, size: 64, color: theme.colorScheme.outline),
+                        Icon(
+                          Icons.format_quote_outlined,
+                          size: 64,
+                          color: theme.colorScheme.outline,
+                        ),
                         const SizedBox(height: 12),
                         Text(
                           _filter.isEmpty
@@ -195,9 +216,13 @@ class _SentencePoolViewState extends State<SentencePoolView> {
                     ),
                   )
                 : ListView.separated(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
                     itemCount: filtered.length,
-                    separatorBuilder: (context, index) => const SizedBox(height: 8),
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: 8),
                     itemBuilder: (context, index) {
                       final item = filtered[index];
 
@@ -213,78 +238,97 @@ class _SentencePoolViewState extends State<SentencePoolView> {
 
                       return Card(
                         elevation: 1,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    child: MarkdownContent(
-                                      content: item.targetText,
-                                      style: theme.textTheme.titleMedium?.copyWith(
-                                        fontWeight: FontWeight.w600,
+                        clipBehavior: Clip.antiAlias,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: InkWell(
+                          onTap: () => _showAddEditDialog(sentence: item),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      child: MarkdownContent(
+                                        content: item.targetText,
+                                        style: theme.textTheme.titleMedium
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                      ),
+                                    ),
+                                    AudioButton(
+                                      audioUrl: item.audioUrl,
+                                      fallbackText: item.targetText,
+                                      compact: true,
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.edit_outlined,
+                                        size: 20,
+                                      ),
+                                      tooltip: 'Edit Sentence',
+                                      onPressed: () =>
+                                          _showAddEditDialog(sentence: item),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                MarkdownContent(
+                                  content: item.translationText,
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                                if (item.notes.trim().isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      color: theme
+                                          .colorScheme
+                                          .secondaryContainer
+                                          .withValues(alpha: 0.3),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(10),
+                                      child: MarkdownContent(
+                                        content: item.notes,
+                                        style: theme.textTheme.bodySmall,
                                       ),
                                     ),
                                   ),
-                                  AudioButton(
-                                    audioUrl: item.audioUrl,
-                                    fallbackText: item.targetText,
-                                    compact: true,
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.edit_outlined, size: 20),
-                                    tooltip: 'Edit Sentence',
-                                    onPressed: () => _showAddEditDialog(sentence: item),
-                                  ),
                                 ],
-                              ),
-                              const SizedBox(height: 6),
-                              MarkdownContent(
-                                content: item.translationText,
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                              if (item.notes.trim().isNotEmpty) ...[
                                 const SizedBox(height: 8),
-                                DecoratedBox(
-                                  decoration: BoxDecoration(
-                                    color: theme.colorScheme.secondaryContainer
-                                        .withValues(alpha: 0.3),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(10),
-                                    child: MarkdownContent(
-                                      content: item.notes,
-                                      style: theme.textTheme.bodySmall,
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 4,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    Badge(
+                                      label: Text('$vocabUsageCount vocabs'),
+                                      backgroundColor:
+                                          theme.colorScheme.secondaryContainer,
+                                      textColor: theme
+                                          .colorScheme
+                                          .onSecondaryContainer,
                                     ),
-                                  ),
+                                    Text(
+                                      'Cloze Preview: ${item.toCloze()}',
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(
+                                            fontStyle: FontStyle.italic,
+                                            color: theme.colorScheme.outline,
+                                          ),
+                                    ),
+                                  ],
                                 ),
                               ],
-                              const SizedBox(height: 8),
-                              Row(
-                                children: [
-                                  Badge(
-                                    label: Text('$vocabUsageCount vocabs'),
-                                    backgroundColor: theme.colorScheme.secondaryContainer,
-                                    textColor: theme.colorScheme.onSecondaryContainer,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Cloze Preview: ${item.toCloze()}',
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      fontStyle: FontStyle.italic,
-                                      color: theme.colorScheme.outline,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
+                            ),
                           ),
                         ),
                       );
