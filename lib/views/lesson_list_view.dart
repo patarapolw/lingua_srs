@@ -37,7 +37,7 @@ class LessonListView extends StatelessWidget {
             TextField(
               controller: titleCtrl,
               decoration: const InputDecoration(
-                labelText: 'Lesson Path (e.g. Topic / Subtopic / Lesson A)',
+                labelText: 'Lesson Path (e.g. Topic::Subtopic::Lesson A)',
               ),
             ),
             const SizedBox(height: 12),

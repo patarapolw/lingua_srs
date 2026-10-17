@@ -25,67 +25,107 @@ class StorageService {
   static const String _keyWindowsMigration =
       'lingua_srs_windows_legacy_migration_complete';
 
-  static const String defaultSampleYaml = '''
-Lesson: Unit 2/Lesson 26
+  /// Debug-only seed lesson: Markdown with YAML frontmatter that exercises the
+  /// lesson reader (headings, lists, tables, code, quotes, spoilers, TTS).
+  static const String debugSeedMarkdown = '''
+---
+vocabulary:
+  nouns:
+    - ko: 아줌마
+      en: middle aged/older woman
+      notes: |
+        Commonly used for an older woman whose name you do not know.
 
-nouns:
-  - ko: 아줌마
-    en: middle aged/older woman
-    notes: |
-      <p>The word "아주머니" is commonly used as well</p>
-      <p>아줌마 and 아주머니 are commonly used to refer to an older woman that you don't know the name of, or even do know the name of but aren't close enough to call her by her name. This also extends to older women who work in a restaurant.</p>
-      <p>The age that you could call a female an "아줌마" is ambiguous, but I would say that somewhere between late-thirties to mid-sixties would be appropriate. Any younger, and you would probably be offending a younger woman by thinking she is too old. Any older, and you are better off calling the woman "할머니."</p>
-    examples:
-      - ko: 저는 **아줌마**를 위해 문을 열었어요
-        en: I opened the door for **an older lady**
+        * Polite alternative: **아주머니**
+        * Use **할머니** for a much older woman.
+      examples:
+        - ko: 저는 **아줌마**를 위해 문을 열었어요
+          en: I opened the door for **an older lady**
+          notes: "Cloze test: the bold word is hidden on EN ➔ KO cards."
+    - ko: 물건
+      en: thing, item, goods
+      examples:
+        - ko: "제가 산 **물건**을 언제 받을 수 있어요?"
+          en: When can I receive the **goods** I purchased?
+        - ko: 가게에 **물건**이 많아요
+          en: There are many **items** in the shop
+    - ko: 복도
+      en: hall, hallway
+      notes: The pronunciation is closer to "복또".
+      examples:
+        - ko: "**복도**에서 달리면 위험해요"
+          en: It is dangerous to run in the **hallway**
+  verbs:
+    - ko: 도착하다
+      en: to arrive
+      notes: Regular verb. Followed by 에 for the destination.
+      examples:
+        - ko: 우리는 공항에 정각에 **도착했어요**
+          en: We arrived at the airport on time
+        - ko: 기차가 곧 **도착할** 거예요
+          en: The train will arrive soon
+  adjectives:
+    - ko: 복잡하다
+      en: complicated, crowded
+      notes: Used for complicated situations or crowded places.
+      examples:
+        - ko: 이 문제는 너무 **복잡해요**
+          en: This problem is too complicated
+        - ko: 출퇴근 시간에 지하철은 매우 **복잡해요**
+          en: The subway is very crowded during rush hour
+---
 
-  - ko: 물건
-    en: thing, item, goods
-    examples:
-      - ko: "제가 산 **물건**을 언제 받을 수 있어요?"
-        en: When can I receive the **goods** I purchased?
-      - ko: 한국에서는 세금이 **물건** 값에 포함돼요
-        en: In Korea, tax is included in the price of **goods**
+# Debug Seed::Markdown Rendering
 
-  - ko: 복도
-    en: hall, hallway
-    notes: The pronunciation of this word is closer to "복또"
-    examples:
-      - ko: "**복도**에서 달리는 것은 위험해요"
-        en: It is dangerous to run in the **hallway**
-      - ko: 이 **복도**를 걸레로 다 청소하는 데 시간이 많이 필요할 것 같아요
-        en: It will probably take a long time to clean this **hallway** with just a rag
+This lesson is generated debug data for checking Markdown rendering in the
+lesson reader. It is only seeded on a fresh debug install.
 
-  - ko: 목적
-    en: purpose, aim, goal
-    notes: The pronunciation of this word is closer to "목쩍"
-    examples:
-      - ko: 저는 **목적**을 이루지 못했어요
-        en: I couldn't achieve my **goal**
-      - ko: "우리 학교의 **목적**은 국제고등학교가 되는 것이다"
-        en: Our school's **goal** is becoming an international school
-      - ko: 친구와 여행의 **목적**을 정하고 여행 일정을 대충 만들었어요
-        en: I set the **goals** of the trip with my friend and then made rough travel plans
+## Text styles
 
-verbs:
-  - ko: 도착하다
-    en: to arrive
-    notes: Regular verb. Followed by 에 for destination.
-    examples:
-      - ko: 우리는 공항에 정각에 **도착했어요**
-        en: We arrived at the airport on time
-      - ko: 기차가 곧 **도착할** 거예요
-        en: The train will arrive soon
+**Bold**, *italic*, ~~strikethrough~~, `inline code`, and a
+[link](https://example.com).
 
-adjectives:
-  - ko: 복잡하다
-    en: complicated, crowded
-    notes: Used for complicated situations or crowded streets/places.
-    examples:
-      - ko: 이 문제는 너무 **복잡해요**
-        en: This problem is too complicated
-      - ko: 출퇴근 시간에 지하철은 매우 **복잡해요**
-        en: The subway is very crowded during rush hour
+## Lists
+
+1. First item
+2. Second item
+   * Nested bullet
+   * Another nested bullet
+3. Third item
+
+- [x] Task list item (done)
+- [ ] Task list item (todo)
+
+## Table
+
+| Pattern | Meaning | Example |
+|---------|---------|---------|
+| 았/었어요 | past tense | 도착했어요 |
+| 을/를 | object marker | 물건을 |
+| 에 | destination | 공항에 |
+
+## Quote and code
+
+> Notes and warnings can be written as block quotes.
+
+```text
+Fenced code blocks keep their spacing.
+  도착하다 -> 도착했어요
+```
+
+---
+
+## Lesson components
+
+Read aloud: <TTS>안녕하세요, 만나서 반갑습니다.</TTS>
+
+Hidden answer: <span class="spoiler">정답은 **복잡해요**</span> (hover or tap to reveal).
+
+## Long section
+
+Paragraph for scrolling. 한국어 문장을 천천히 읽어 보세요.
+
+Another paragraph for scrolling. 문장을 소리 내어 읽어 보세요.
 ''';
 
   static const String _keyMaxReviews24h = 'lingua_srs_max_reviews_24h';
@@ -284,11 +324,10 @@ adjectives:
       }
     }
 
-    // Default sample on first run
-    // Sample data is for development only; release builds start empty.
+    // Debug seed data is for development only; release builds start empty.
     if (!kDebugMode) return [];
 
-    final parsed = YamlParserService.parseLessonYaml(defaultSampleYaml);
+    final parsed = YamlParserService.parseLessonYaml(debugSeedMarkdown);
     await saveLessons([parsed.lesson]);
     await saveSentences(parsed.sentences);
     final lessons = [parsed.lesson];
@@ -488,7 +527,7 @@ adjectives:
                 Sentence.fromJson(Map<String, dynamic>.from(sentence as Map)),
           )
           .toList();
-      final sample = YamlParserService.parseLessonYaml(defaultSampleYaml);
+      final sample = YamlParserService.parseLessonYaml(debugSeedMarkdown);
       if (currentLesson.title != sample.lesson.title ||
           currentLesson.targetLanguage != sample.lesson.targetLanguage ||
           currentLesson.nativeLanguage != sample.lesson.nativeLanguage ||

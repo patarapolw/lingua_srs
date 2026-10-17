@@ -98,7 +98,6 @@ class AppProvider extends ChangeNotifier {
       StorageService.loadReviewTimestamps(),
       StorageService.loadLessonHierarchyOrder(),
       StorageService.loadLessonFolderExpansion(),
-      StorageService.loadSentences(),
     ).wait;
     _autoplayAudio = results.$1;
     _deepSeekApiKey = results.$2;
@@ -107,8 +106,9 @@ class AppProvider extends ChangeNotifier {
     _reviewTimestamps24h = results.$5;
     _lessonHierarchyOrder = results.$6;
     _lessonFolderExpansion = results.$7;
-    _sentences = results.$8;
     _lessons = await StorageService.loadLessons();
+    // Loaded after lessons because a fresh debug install seeds sentences there.
+    _sentences = await StorageService.loadSentences();
     if (_canonicalizeSentencePool()) {
       await StorageService.saveSentences(_sentences);
       await StorageService.saveLessons(_lessons);

@@ -24,7 +24,7 @@ void main() {
     expect(markdownInput.controller?.text, isEmpty);
     expect(
       markdownInput.decoration!.hintText,
-      contains('  nouns:  # Replace with a part of speech or section name'),
+      contains('  nouns:  # Replace with a part of speech'),
     );
     final parsedHint = YamlParserService.parseLessonYaml(
       markdownInput.decoration!.hintText!,

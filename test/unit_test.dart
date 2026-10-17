@@ -11,6 +11,7 @@ import 'package:lingua_srs/providers/app_provider.dart';
 import 'package:lingua_srs/services/korean_text_search.dart';
 import 'package:lingua_srs/services/yaml_parser_service.dart';
 import 'package:lingua_srs/services/srs_service.dart';
+import 'package:lingua_srs/services/storage_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -33,6 +34,20 @@ void main() {
   });
 
   group('YAML Parser & Vocabulary Models', () {
+    test('debug seed is a Markdown lesson with POS-keyed vocabulary', () {
+      final result = YamlParserService.parseLessonYaml(
+        StorageService.debugSeedMarkdown,
+      );
+      expect(result.lesson.title, 'Debug Seed::Markdown Rendering');
+      expect(result.lesson.markdownContent, startsWith('# Debug Seed'));
+      expect(result.lesson.markdownContent, contains('<TTS>'));
+      expect(
+        result.lesson.vocabularies.map((v) => v.pos).toSet(),
+        {'nouns', 'verbs', 'adjectives'},
+      );
+      expect(result.sentences, isNotEmpty);
+    });
+
     const sampleYaml = '''
 Lesson: Unit 2::Lesson 26
 
@@ -149,6 +164,27 @@ The full lesson text remains available to render.
       expect(parsed.sentences, isEmpty);
       expect(parsed.lesson.markdownContent, isEmpty);
       expect(YamlParserService.hasVocabularyFrontmatter(markdown), isTrue);
+    });
+
+    test('Fresh debug install seeds lessons and a non-empty sentence pool', () async {
+      SharedPreferences.setMockInitialValues({
+        'lingua_srs_windows_legacy_migration_complete': true,
+      });
+      final provider = AppProvider();
+      while (provider.isLoading) {
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      expect(provider.lessons, hasLength(1));
+      expect(provider.sentences, isNotEmpty);
+      final linkedIds = provider.lessons.single.vocabularies
+          .expand((vocab) => vocab.sentenceIds)
+          .toSet();
+      expect(linkedIds, isNotEmpty);
+      expect(
+        provider.sentences.map((sentence) => sentence.id),
+        containsAll(linkedIds),
+      );
     });
 
     test('Persists full Markdown separately from lesson JSON', () async {

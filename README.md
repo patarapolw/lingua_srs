@@ -7,25 +7,25 @@ A Flutter application targeting **Desktop (Windows, macOS, Linux)** and **Mobile
 ## 🌟 Key Features
 
 1. **YAML/Markdown Lesson Architecture**:
-   - Create lessons from the **Import Lessons** screen with a separate lesson-name field and Markdown editor. The field starts empty; its example shows YAML frontmatter with an optional Markdown body.
-   - Use `/` in the lesson name to separate hierarchy levels. For example, `Unit 2 / Lesson 26` groups the lesson under `Unit 2`; `Topic / Subtopic / Lesson A` creates a deeper hierarchy.
+   - Create lessons from the **Import Lessons** screen (**Add Lessons** in the desktop sidebar, **Import** in the mobile navigation) with a lesson-name field and a Markdown editor. Both start empty; the editor shows a placeholder example of Markdown with YAML frontmatter and an optional Markdown body.
+   - Use `::` in the lesson name to separate hierarchy levels. For example, `Unit 2::Lesson 26` groups the lesson under `Unit 2`; `Topic::Subtopic::Lesson A` creates a deeper hierarchy.
    - Import a directory recursively; choose which Markdown lessons to import (all unchecked initially, with **Check all** and **Uncheck all** controls). Folder hierarchy is preserved.
    - YAML and Markdown frontmatter are parsed in a background isolate with parse errors and an import preview. Folder import parsing also runs off the UI isolate.
-   - Unit and nested folder groups in the library are expanded by default; expansion states and sibling order are saved across view changes and app restarts. Drag lessons and folders to reorder them, or use their menus to move them between folders. Slash-separated lesson paths create nested folders. Vocabulary frontmatter can define alphabetically sorted, collapsible sections at any depth. Re-importing updates matching lessons and vocabulary in place while retaining SRS progress and entries not present in the import.
-   - Imported vocabulary with the same target form and meaning shares SRS progress across sections. Different meanings receive separate generated IDs; an optional `id` on a vocabulary entry can explicitly control sharing.
-   - Importing Markdown lessons keeps the document body for reading from the lesson list; it can be edited and saved at any time. Large lesson bodies are rendered in lazy Markdown chunks, and **View Vocabulary** remains a separate view.
-   - Pre-loaded with the **Unit 2/Lesson 26** sample dataset (nouns, verbs, adjectives with sentences and audio).
+   - Unit and nested folder groups in the library are expanded by default; expansion states and sibling order are saved across view changes and app restarts. Drag lessons and folders to reorder them, or use their menus to move them between folders. `::`-separated lesson paths create nested folders. Vocabulary frontmatter uses `vocabulary:` as the root, with part-of-speech keys directly beneath it and vocabulary entries listed under each key. Re-importing updates matching lessons and vocabulary in place while retaining SRS progress and entries not present in the import.
+   - Imported vocabulary with the same target form and meaning shares SRS progress across part-of-speech groups. Different meanings receive separate generated IDs; an optional `id` on a vocabulary entry can explicitly control sharing.
+   - Importing Markdown lessons keeps the document body for reading from the lesson list; it can be edited and saved at any time. The reader renders the whole lesson as a single document in a WebView, and **View Vocabulary** remains a separate view.
+   - In debug builds only, a fresh install is seeded with a generated Markdown lesson (`Debug Seed::Markdown Rendering`, see `StorageService.debugSeedMarkdown`) that exercises headings, lists, tables, code, quotes, spoilers and TTS, plus sample vocabulary and sentences. Release builds start empty.
 
-2. **Extensible for Any Language**:
-   - Supports Korean (KO ➔ EN, EN ➔ KO) and any other language pair (e.g. Japanese, Chinese, Spanish, French, German).
-   - Auto-detects target language keys or uses root `language: ...` and `native: ...` settings.
+2. **Language Support**:
+   - Currently only Korean to English is supported: use `ko:` for the target text and `en:` for the translation in vocabulary entries and examples.
+   - Other language pairs are not supported yet.
 
 3. **Intelligent Flashcard Visibility Rules**:
    - **Target ➔ Native (KO ➔ EN)**: Hidden by default for verbs and adjectives; enabled by default for other parts of speech (e.g., nouns).
    - **Native ➔ Target (EN ➔ KO)**: Enabled by default for verbs and adjectives; hidden by default for other cards.
    - **Individual Overrides**: Both directions can be freely toggled on or off per vocabulary item.
    - **Reset Progress**: Reset SRS progress for an entire lesson or an individual vocabulary item without changing card visibility.
-   - Delete a section and all nested vocabulary, or delete an individual vocabulary entry. Deleting an entry resets SRS progress for any other entries sharing its ID.
+   - Delete a part-of-speech group and its vocabulary, or delete an individual vocabulary entry. Deleting an entry resets SRS progress for any other entries sharing its ID.
    - Detects enabled cards with the same front prompt (without comparing their example sentences) and lets you add a disambiguation cue displayed on the card front.
    - Each card direction has editable Markdown notes displayed on its back.
 
@@ -45,7 +45,6 @@ A Flutter application targeting **Desktop (Windows, macOS, Linux)** and **Mobile
    - **Stream-on-First-Play**: Audio starts streaming immediately on the very first play with zero wait time.
    - **Background Caching**: Simultaneously downloads and stores the `.mp3` bytes in the app's sandbox cache directory (`audio_cache/`), not in My Documents.
    - On Windows, the cache parent directory uses the app's company and product metadata (`%LOCALAPPDATA%\\cc.polv\\lingua.srs\\audio_cache`).
-   - Windows preferences from the previous `com.example\\lingua_srs` app directory are migrated on first launch when the new directory is empty or contains only the untouched sample lesson.
    - **Instant Offline Playback**: Subsequent plays of that vocabulary or sentence play directly from the local disk file with **zero network latency** and 100% offline availability.
    - **Pre-buffering**: Automatically pre-buffers upcoming cards in the background so cards play instantaneously without delays.
 
@@ -98,7 +97,7 @@ flutter run -d <android-device-id-or-emulator>
 
 ### Run Unit Tests
 ```bash
-flutter test test/unit_test.dart
+flutter test
 ```
 
 ---
@@ -113,27 +112,35 @@ lingua_srs/
 │   │   ├── lesson.dart                # Lesson model with language pair and stats
 │   │   ├── vocab_item.dart            # Vocab model with POS, notes, toggles
 │   │   ├── sentence.dart              # Sentence model with cloze deletion generator
-│   │   └── srs_card.dart              # SRS state (SM-2 intervals, reps, due date)
+│   │   ├── srs_card.dart              # SRS state (SM-2 intervals, reps, due date)
+│   │   └── ai_discussion_message.dart # Saved AI discussion messages
 │   ├── providers/
 │   │   └── app_provider.dart          # State management (lessons, queues, review handling)
 │   ├── services/
 │   │   ├── srs_service.dart           # SM-2 algorithm implementation
-│   │   ├── yaml_parser_service.dart   # Flexible YAML lesson & sentence parser
-│   │   ├── audio_service.dart         # Audio player with sequential autoplay
-│   │   └── storage_service.dart       # Local persistence via SharedPreferences
+│   │   ├── yaml_parser_service.dart   # Markdown/YAML lesson & sentence parser
+│   │   ├── audio_service.dart         # Audio playback, TTS and offline caching
+│   │   ├── deepseek_service.dart      # DeepSeek chat client for quiz discussions
+│   │   ├── korean_text_search.dart    # Korean-aware sentence search tokenizer
+│   │   └── storage_service.dart       # Local persistence and debug seed data
 │   ├── views/
 │   │   ├── study_view.dart            # Flashcard study view with cloze & shortcuts
 │   │   ├── lesson_list_view.dart      # Lessons dashboard & due queue counter
+│   │   ├── lesson_reader_view.dart    # Lesson Markdown reader & editor
 │   │   ├── lesson_detail_view.dart    # Vocab list, POS filters, direction toggles
 │   │   ├── sentence_pool_view.dart    # Global & lesson sentence pool browser
-│   │   ├── yaml_import_view.dart      # File picker, YAML text editor & validator
-│   │   └── vocab_edit_dialog.dart     # On-the-go editor for any field
+│   │   ├── yaml_import_view.dart      # File/folder import, editor, validator & preview
+│   │   ├── vocab_edit_dialog.dart     # On-the-go editor for any field
+│   │   ├── ai_discussion_dialog.dart  # AI-assisted quiz discussion chat
+│   │   └── deepseek_settings_dialog.dart # DeepSeek API key settings
 │   └── widgets/
 │       ├── adaptive_scaffold.dart     # Responsive layout (Rail vs BottomNav)
 │       ├── audio_button.dart          # Audio play/stop indicator
-│       └── markdown_content.dart      # Markdown & HTML renderer
-└── test/
-    └── unit_test.dart                 # Automated tests for parser, cloze & SM-2
+│       ├── lesson_hierarchy_view.dart # Lesson folder tree with reordering
+│       ├── lesson_html_view.dart      # Lesson Markdown reader (WebView document)
+│       ├── markdown_content.dart      # Markdown renderer for notes and chat
+│       └── youtube_embed.dart         # YouTube embed for lesson Markdown
+└── test/                              # Parser, SRS, storage, import and widget tests
 ```
 
 ---
@@ -143,47 +150,33 @@ lingua_srs/
 Open **Add Lessons** and enter a lesson name in the single-line **Lesson name** field, for example:
 
 ```text
-Unit 2 / Lesson 26
+Unit 2::Lesson 26
 ```
 
 The first part becomes the parent unit; remaining parts form the lesson title and any deeper hierarchy. A single name such as `Greetings` creates a top-level lesson. Then enter the vocabulary in the multiline **YAML** field. The field starts empty; its neutral placeholder is an example only and is not imported.
 
-Use a `vocabulary:` root, then group vocabulary under any number of section levels. Example:
+Use `vocabulary:` as the root, with part-of-speech keys (such as `nouns` and `verbs`) directly beneath it. Each key contains a list of vocabulary entries; do not insert another grouping key between a part-of-speech key and its entries. Example:
 
 ```yaml
 vocabulary:
   nouns:
-    everyday:
-      - ko: "예시 단어"
-        en: "example word"
-        audio: "https://example.com/word-audio.mp3"
-        notes: "Optional HTML or Markdown notes"
-        disambiguation: "fruit"
-        examples:
-          - ko: "저는 **예시 단어**를 배워요."
-            en: "I learn an **example word**."
-            notes: "Optional notes for this sentence."
-          - ko: "다른 문장입니다."
-            audio: "https://example.com/sentence-audio.mp3"
-            en: "This is another sentence."
+    - ko: "예시 단어"
+      en: "example word"
+      audio: "https://example.com/word-audio.mp3"
+      notes: "Optional **Markdown** notes"
+      examples:
+       - ko: "저는 **예시 단어**를 배워요."
+         en: "I learn an **example word**."
+         notes: "Optional *Markdown* notes for this sentence."
+       - ko: "다른 문장입니다."
+         audio: "https://example.com/sentence-audio.mp3"
+         en: "This is another sentence."
   verbs:
     - ko: "만들다"
       en: "to make"
 ```
 
-Each entry should include a target-language field (such as `ko`) and a translation field (such as `en`). `audio`, `notes`, `disambiguation`, and `examples` are optional. Notes on individual examples are imported as sentence notes and shown on the review-card back; they can also be edited from the Sentence Pool. Example sentence emphasis uses Markdown `**bold**`; the app uses it for cloze cards. Cards with the same front prompt are flagged even when their context sentences differ; use `disambiguation` to show an extra cue on the card front. Per-card back notes are edited in the vocabulary editor. Add an optional `id` when entries should explicitly share SRS progress, or need distinct identities:
-
-```yaml
-vocabulary:
-  fruit:
-    - id: pear-entry
-      ko: "배"
-      en: "pear"
-  common-words:
-    - id: pear-entry
-      ko: "배"
-      en: "pear"
-```
+Each entry should include a target-language field (such as `ko`) and a translation field (such as `en`). `audio`, `notes`, `disambiguation`, and `examples` are optional. Write vocabulary and sentence notes in Markdown; for example, use `**bold**` or `*italic*` formatting. Notes on individual examples are imported as sentence notes and shown on the review-card back; they can also be edited from the Sentence Pool. Example sentence emphasis uses Markdown `**bold**`; the app uses it for cloze cards. Cards with the same front prompt are flagged even when their context sentences differ; use `disambiguation` to show an extra cue on the card front. Per-card back notes are edited in the vocabulary editor. Add an optional `id` when entries should explicitly share SRS progress or need distinct identities.
 
 The import button remains disabled until Markdown with YAML frontmatter containing `vocabulary:` can be previewed. The vocabulary map may be empty, and the Markdown body is optional. Fix any displayed parse errors, review the lesson and vocabulary preview, then import. Use **Pick File** to load a YAML/YML/TXT/Markdown file, or **Pick Folder** to scan Markdown files recursively. Folder results start unchecked; select individual lessons or choose **Check all**. Only selected lessons are imported. Folder imports use only files with a `vocabulary:` key in their YAML frontmatter; ordinary Markdown body text is retained for lesson reading but is not imported as vocabulary. Re-importing updates matching lessons and vocabulary while preserving SRS progress and keeping unmatched vocabulary.
 
@@ -201,16 +194,14 @@ vocabulary:
 Lesson notes go here.
 ```
 
-Imported lesson Markdown can be edited from its reader view. The reader renders `<AudioButton>` and `<TTS>` controls. YouTube embeds are not a
-current app feature. Spoiler spans (`<span class="spoiler">...</span>`) are blurred until hovered on desktop or tapped on touch devices; tapping toggles their visibility.
+Imported lesson Markdown can be edited from its reader view. The reader renders `<AudioButton src="...">` and `<TTS>...</TTS>` controls, and `<YouTube id="...">` embeds (also `list` or `src` attributes). Spoiler spans (`<span class="spoiler">...</span>`) are blurred until hovered on desktop or tapped on touch devices; tapping toggles their visibility.
 
-Vocabulary sections can be nested to any depth. Entries with the same explicit vocabulary `id` share SRS progress, including across sections. Use different IDs to force separate progress identities when needed. Without an explicit ID, the app shares progress for the same target form and meaning, while different meanings receive separate generated IDs.
+Under `vocabulary:`, use part-of-speech keys only, with entries directly in each key's list. Entries with the same explicit vocabulary `id` share SRS progress, including across part-of-speech groups. Use different IDs to force separate progress identities when needed. Without an explicit ID, the app shares progress for the same target form and meaning, while different meanings receive separate generated IDs.
 
 ## TODO
 
 ### Features
 
-- Markdown render in `Webview` may be more reliable for lesson explanation details. `<YouTube>` tags and other actual HTML tags could be more reliably rendered there.
 - Sync between mobile and desktop, and between devices. Quick connect via QR code. I am probably using Cloudflare D1 worker for this.
 
 ### Bugs

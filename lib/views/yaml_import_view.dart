@@ -428,11 +428,11 @@ class _YamlImportViewState extends State<YamlImportView> {
                         hintText:
                             '---\n'
                             'vocabulary:\n'
-                            '  nouns:  # Replace with a part of speech or section name\n'
+                            '  nouns:  # Replace with a part of speech\n'
                             '    - ko: "Korean word"\n'
                             '      audio: "https://example.com/word-audio.mp3"\n'
                             '      en: "English meaning"\n'
-                            '      notes: "Optional HTML or Markdown notes"\n'
+                            '      notes: "Optional **Markdown** notes"\n'
                             '      examples:\n'
                             '        - ko: "Sentence with **word**"\n'
                             '          en: "Translated sentence with **meaning**"\n'
