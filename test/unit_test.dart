@@ -848,6 +848,74 @@ vocabulary:
       provider.dispose();
     });
 
+    test('Resetting a lesson group resets nested lessons only', () async {
+      SharedPreferences.setMockInitialValues({
+        'lingua_srs_windows_legacy_migration_complete': true,
+        'lingua_srs_lessons': '[]',
+        'lingua_srs_sentences': '[]',
+      });
+      final provider = AppProvider();
+      while (provider.isLoading) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      final directLesson = await provider.importYaml(
+        'Lesson: Direct\nnouns:\n  - ko: 하나\n    en: one',
+        defaultUnitTitle: 'Unit 1',
+      );
+      final nestedLesson = await provider.importYaml(
+        'Lesson: Nested\nnouns:\n  - ko: 둘\n    en: two',
+        defaultUnitTitle: 'Unit 1::Nested',
+      );
+      final otherLesson = await provider.importYaml(
+        'Lesson: Other\nnouns:\n  - ko: 셋\n    en: three',
+        defaultUnitTitle: 'Unit 10',
+      );
+
+      for (final lesson in provider.lessons) {
+        for (final vocab in lesson.vocabularies) {
+          for (final card in [
+            vocab.cardTargetToNative,
+            vocab.cardNativeToTarget,
+          ]) {
+            card
+              ..repetitions = 4
+              ..interval = 6
+              ..status = SrsStatus.review;
+          }
+        }
+      }
+
+      await provider.resetLessonGroupSrs(['unit 1']);
+
+      for (final lesson in [directLesson, nestedLesson]) {
+        final cards = [
+          lesson.vocabularies.single.cardTargetToNative,
+          lesson.vocabularies.single.cardNativeToTarget,
+        ];
+        for (final card in cards) {
+          expect(card.repetitions, 0);
+          expect(card.interval, 0);
+          expect(card.status, SrsStatus.isNew);
+        }
+      }
+      expect(otherLesson.vocabularies.single.cardTargetToNative.repetitions, 4);
+      expect(otherLesson.vocabularies.single.cardNativeToTarget.repetitions, 4);
+
+      final reloadedProvider = AppProvider();
+      while (reloadedProvider.isLoading) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      final reloadedNested = reloadedProvider.lessons.singleWhere(
+        (lesson) => lesson.id == nestedLesson.id,
+      );
+      expect(
+        reloadedNested.vocabularies.single.cardTargetToNative.status,
+        SrsStatus.isNew,
+      );
+      provider.dispose();
+      reloadedProvider.dispose();
+    });
+
     test(
       'Moving lessons and nested folders preserves their hierarchy',
       () async {

@@ -23,7 +23,7 @@ void main() {
                 lessons: lessons,
                 order: const {},
                 folderExpansion: expansion,
-                lessonBuilder: (context, lesson) =>
+                lessonBuilder: (context, lesson, _) =>
                     ListTile(title: Text(lesson.displayTitle)),
                 onOrderChanged: (_) async {},
                 onFolderExpansionChanged: (key, expanded) async {
@@ -31,6 +31,7 @@ void main() {
                   setState(() => expansion[key] = expanded);
                 },
                 onMoveFolder: (_) {},
+                onResetFolder: (_, _) {},
                 onDeleteFolder: (_, _) {},
               ),
             ),
@@ -79,13 +80,14 @@ void main() {
               lessons: lessons,
               order: const {},
               folderExpansion: const {},
-              lessonBuilder: (context, lesson) =>
+              lessonBuilder: (context, lesson, _) =>
                   ListTile(title: Text(lesson.displayTitle)),
               onOrderChanged: (keys) async {
                 reorderedKeys = keys;
               },
               onFolderExpansionChanged: (_, _) async {},
               onMoveFolder: (_) {},
+              onResetFolder: (_, _) {},
               onDeleteFolder: (_, _) {},
             ),
           ),
@@ -128,13 +130,14 @@ void main() {
               lessons: lessons,
               order: const {},
               folderExpansion: const {},
-              lessonBuilder: (context, lesson) =>
+              lessonBuilder: (context, lesson, _) =>
                   ListTile(title: Text(lesson.displayTitle)),
               onOrderChanged: (keys) async {
                 reorderedKeys = keys;
               },
               onFolderExpansionChanged: (_, _) async {},
               onMoveFolder: (_) {},
+              onResetFolder: (_, _) {},
               onDeleteFolder: (_, _) {},
             ),
           ),
@@ -158,6 +161,89 @@ void main() {
     expect(reorderedKeys!.first, 'lesson:lesson-2');
   });
 
+  testWidgets('dropdown actions reorder lessons and folders', (tester) async {
+    final lessons = [
+      Lesson(id: 'lesson-a', title: 'Lesson A', unitTitle: 'Unit 1'),
+      Lesson(id: 'lesson-b', title: 'Lesson B', unitTitle: 'Unit 1'),
+      Lesson(id: 'lesson-c', title: 'Lesson C', unitTitle: 'Unit 2'),
+    ];
+    List<String>? reorderedKeys;
+    (List<String>, int)? resetFolder;
+    (List<String>, int)? deletedFolder;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            height: 700,
+            child: LessonHierarchyView(
+              lessons: lessons,
+              order: const {},
+              folderExpansion: const {},
+              lessonBuilder: (context, lesson, orderActions) =>
+                  PopupMenuButton<String>(
+                    key: ValueKey('lesson-menu-${lesson.id}'),
+                    onSelected: (action) {
+                      if (action == 'up') orderActions.moveUp();
+                      if (action == 'down') orderActions.moveDown();
+                    },
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'up',
+                        enabled: orderActions.canMoveUp,
+                        child: const Text('Move up'),
+                      ),
+                      PopupMenuItem(
+                        value: 'down',
+                        enabled: orderActions.canMoveDown,
+                        child: const Text('Move down'),
+                      ),
+                    ],
+                  ),
+              onOrderChanged: (keys) async {
+                reorderedKeys = keys;
+              },
+              onFolderExpansionChanged: (_, _) async {},
+              onMoveFolder: (_) {},
+              onResetFolder: (path, count) {
+                resetFolder = (path, count);
+              },
+              onDeleteFolder: (path, count) {
+                deletedFolder = (path, count);
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('lesson-menu-lesson-b')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Move up'));
+    await tester.pumpAndSettle();
+    expect(reorderedKeys, ['lesson:lesson-b', 'lesson:lesson-a']);
+
+    await tester.tap(find.byTooltip('Manage Unit 2'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Move up'));
+    await tester.pumpAndSettle();
+    expect(reorderedKeys, ['folder:unit 2', 'folder:unit 1']);
+
+    await tester.tap(find.byTooltip('Manage Unit 2'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Reset SRS Progress'));
+    await tester.pumpAndSettle();
+    expect(resetFolder?.$1, ['Unit 2']);
+    expect(resetFolder?.$2, 1);
+
+    await tester.tap(find.byTooltip('Manage Unit 2'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete folder'));
+    await tester.pumpAndSettle();
+    expect(deletedFolder?.$1, ['Unit 2']);
+    expect(deletedFolder?.$2, 1);
+  });
+
   testWidgets('slash-separated lesson titles create nested folders', (
     tester,
   ) async {
@@ -172,11 +258,12 @@ void main() {
               ],
               order: const {},
               folderExpansion: const {},
-              lessonBuilder: (context, lesson) =>
+              lessonBuilder: (context, lesson, _) =>
                   ListTile(title: Text(lesson.displayTitle)),
               onOrderChanged: (_) async {},
               onFolderExpansionChanged: (_, _) async {},
               onMoveFolder: (_) {},
+              onResetFolder: (_, _) {},
               onDeleteFolder: (_, _) {},
             ),
           ),

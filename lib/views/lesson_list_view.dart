@@ -131,6 +131,51 @@ class LessonListView extends StatelessWidget {
     );
   }
 
+  Future<void> _confirmResetLessonGroup(
+    BuildContext context,
+    AppProvider provider,
+    List<String> folderPath,
+    int lessonCount,
+  ) async {
+    final folderTitle = formatHierarchyPath(folderPath);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Reset SRS Progress for "$folderTitle"?'),
+        content: Text(
+          'This will reset all vocabulary cards in these $lessonCount lessons, including lessons in nested sections, back to New. Are you sure?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.orange.shade800,
+            ),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Reset to New'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+    try {
+      await provider.resetLessonGroupSrs(folderPath);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Reset SRS progress for "$folderTitle".')),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not reset SRS progress: $error')),
+      );
+    }
+  }
+
   void _showEditMaxReviewsDialog(BuildContext context, AppProvider provider) {
     final controller = TextEditingController(
       text: provider.maxReviews24h > 0 ? '${provider.maxReviews24h}' : '0',
@@ -398,6 +443,7 @@ class LessonListView extends StatelessWidget {
     AppProvider provider,
     ThemeData theme,
     Lesson lesson,
+    LessonOrderActions orderActions,
   ) {
     final due = lesson.dueCardsCount;
     final active = lesson.activeCardsCount;
@@ -475,7 +521,11 @@ class LessonListView extends StatelessWidget {
             ),
             PopupMenuButton<String>(
               onSelected: (value) {
-                if (value == 'reset_srs') {
+                if (value == 'move_up') {
+                  orderActions.moveUp();
+                } else if (value == 'move_down') {
+                  orderActions.moveDown();
+                } else if (value == 'reset_srs') {
                   _confirmResetLesson(context, lesson);
                 } else if (value == 'move') {
                   _moveLessonToFolder(context, provider, lesson);
@@ -484,13 +534,46 @@ class LessonListView extends StatelessWidget {
                 }
               },
               itemBuilder: (context) => [
-                const PopupMenuItem(
+                PopupMenuItem(
+                  value: 'move_up',
+                  enabled: orderActions.canMoveUp,
+                  child: const Row(
+                    children: [
+                      Icon(Icons.arrow_upward, size: 18),
+                      SizedBox(width: 8),
+                      Text('Move up'),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'move_down',
+                  enabled: orderActions.canMoveDown,
+                  child: const Row(
+                    children: [
+                      Icon(Icons.arrow_downward, size: 18),
+                      SizedBox(width: 8),
+                      Text('Move down'),
+                    ],
+                  ),
+                ),
+                const PopupMenuDivider(),
+                PopupMenuItem(
                   value: 'reset_srs',
                   child: Row(
                     children: [
-                      Icon(Icons.restart_alt, color: Colors.orange, size: 18),
-                      SizedBox(width: 8),
-                      Text('Reset SRS Progress'),
+                      const Icon(
+                        Icons.restart_alt,
+                        color: Colors.orange,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          'Reset SRS Progress',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -875,8 +958,14 @@ class LessonListView extends StatelessWidget {
                         lessons: provider.lessons,
                         order: provider.lessonHierarchyOrder,
                         folderExpansion: provider.lessonFolderExpansion,
-                        lessonBuilder: (context, lesson) =>
-                            _buildLessonCard(context, provider, theme, lesson),
+                        lessonBuilder: (context, lesson, orderActions) =>
+                            _buildLessonCard(
+                              context,
+                              provider,
+                              theme,
+                              lesson,
+                              orderActions,
+                            ),
                         onOrderChanged: (keys) =>
                             _saveHierarchyOrder(context, provider, keys),
                         onFolderExpansionChanged: (key, expanded) =>
@@ -888,6 +977,13 @@ class LessonListView extends StatelessWidget {
                             ),
                         onMoveFolder: (path) =>
                             _moveLessonGroup(context, provider, path),
+                        onResetFolder: (path, count) =>
+                            _confirmResetLessonGroup(
+                              context,
+                              provider,
+                              path,
+                              count,
+                            ),
                         onDeleteFolder: (path, count) =>
                             _confirmDeleteLessonGroup(
                               context,

@@ -940,11 +940,25 @@ class AppProvider extends ChangeNotifier {
   // Reset SRS learning state for all vocabulary items in a lesson
   Future<void> resetLessonSrs(String lessonId) async {
     final lesson = _lessons.firstWhere((l) => l.id == lessonId);
+    _resetLessonSrsProgress(lesson);
+    await saveState();
+  }
+
+  Future<void> resetLessonGroupSrs(List<String> folderPath) async {
+    final lessons = _lessons.where(
+      (lesson) => isHierarchyPathWithin(lesson.folderPath, folderPath),
+    );
+    for (final lesson in lessons) {
+      _resetLessonSrsProgress(lesson);
+    }
+    await saveState();
+  }
+
+  void _resetLessonSrsProgress(Lesson lesson) {
     for (final vocab in lesson.vocabularies) {
       vocab.cardTargetToNative.resetProgress();
       vocab.cardNativeToTarget.resetProgress();
     }
-    await saveState();
   }
 
   /// Picks one random sentence linked to the vocab, or falls back to any pool sentence containing the word.
