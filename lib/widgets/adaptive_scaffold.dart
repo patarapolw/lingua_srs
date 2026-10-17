@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../views/recent_ai_discussions_view.dart';
 import '../views/lesson_list_view.dart';
 import '../views/sentence_pool_view.dart';
-import '../views/yaml_import_view.dart';
 
 class AdaptiveScaffold extends StatefulWidget {
   final VoidCallback? onToggleTheme;
@@ -33,7 +32,6 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
         isDarkMode: widget.isDarkMode,
       ),
       const SentencePoolView(),
-      const YamlImportView(),
       const RecentAiDiscussionsView(),
     ];
 
@@ -107,11 +105,6 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
                   label: Text('Sentence Pool'),
                 ),
                 NavigationRailDestination(
-                  icon: Icon(Icons.file_upload_outlined),
-                  selectedIcon: Icon(Icons.file_upload),
-                  label: Text('Add Lessons'),
-                ),
-                NavigationRailDestination(
                   icon: Icon(Icons.forum_outlined),
                   selectedIcon: Icon(Icons.forum),
                   label: Text('Recent Discussions'),
@@ -140,12 +133,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
           NavigationDestination(
             icon: Icon(Icons.format_quote_outlined),
             selectedIcon: Icon(Icons.format_quote),
-            label: 'Pool',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.file_upload_outlined),
-            selectedIcon: Icon(Icons.file_upload),
-            label: 'Import',
+            label: 'Sentences',
           ),
           NavigationDestination(
             icon: Icon(Icons.forum_outlined),
