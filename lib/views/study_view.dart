@@ -1,5 +1,7 @@
 import 'dart:math';
 
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -8,6 +10,7 @@ import '../models/srs_card.dart';
 import '../providers/app_provider.dart';
 import '../services/audio_service.dart';
 import '../widgets/audio_button.dart';
+import '../widgets/icon_switch.dart';
 import '../widgets/markdown_content.dart';
 import 'ai_discussion_dialog.dart';
 import 'vocab_edit_dialog.dart';
@@ -66,6 +69,14 @@ class _StudyViewState extends State<StudyView> {
   final Set<String> _sessionRatedCardIds = {};
   final FocusNode _keyboardFocusNode = FocusNode();
 
+  // Keyboard hints are noise on touch platforms; the handlers still work for
+  // attached keyboards.
+  bool get _showKeyHints => switch (defaultTargetPlatform) {
+    TargetPlatform.android ||
+    TargetPlatform.iOS ||
+    TargetPlatform.fuchsia => false,
+    _ => true,
+  };
   int get rightCount =>
       _history.where((r) => r.ratingGiven != SrsRating.again).length;
   int get wrongCount =>
@@ -551,7 +562,9 @@ class _StudyViewState extends State<StudyView> {
                   if (_history.isNotEmpty) ...[
                     FilledButton.tonalIcon(
                       icon: const Icon(Icons.undo),
-                      label: const Text('Undo Last Card (Z)'),
+                      label: Text(
+                        _showKeyHints ? 'Undo Last Card (Z)' : 'Undo Last Card',
+                      ),
                       onPressed: _undo,
                     ),
                     const SizedBox(width: 16),
@@ -637,7 +650,9 @@ class _StudyViewState extends State<StudyView> {
                         'Card $currentNumber of $total',
                         style: Theme.of(context).textTheme.labelSmall,
                       ),
-                    ] else ...[
+                    ] else if (MediaQuery.sizeOf(context).width < 700)
+                      Text('$currentNumber / $total')
+                    else ...[
                       if (item.lesson.effectiveUnitTitle != null)
                         Text(
                           item.lesson.effectiveUnitTitle!,
@@ -687,14 +702,16 @@ class _StudyViewState extends State<StudyView> {
             // Back button (without undoing)
             IconButton(
               icon: const Icon(Icons.chevron_left),
-              tooltip: 'Previous Card (Left Arrow)',
+              tooltip: _showKeyHints
+                  ? 'Previous Card (Left Arrow)'
+                  : 'Previous Card',
               onPressed: canGoBack ? _navigateBack : null,
             ),
             // Forward button (no forward beyond unanswered cards)
             IconButton(
               icon: const Icon(Icons.chevron_right),
               tooltip: canGoForward
-                  ? 'Next Card (Right Arrow)'
+                  ? (_showKeyHints ? 'Next Card (Right Arrow)' : 'Next Card')
                   : 'Cannot go forward beyond unanswered cards',
               onPressed: canGoForward ? _navigateForward : null,
             ),
@@ -702,45 +719,75 @@ class _StudyViewState extends State<StudyView> {
             IconButton(
               icon: const Icon(Icons.undo),
               tooltip: canUndo
-                  ? 'Undo Last Rating (Z / Ctrl+Z)'
+                  ? (_showKeyHints
+                        ? 'Undo Last Rating (Z / Ctrl+Z)'
+                        : 'Undo Last Rating')
                   : 'Nothing to undo',
               onPressed: canUndo ? _undo : null,
             ),
-            const VerticalDivider(width: 20, indent: 12, endIndent: 12),
-            // Autoplay toggle
-            Tooltip(
-              message: 'Autoplay audio (with instant local caching)',
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    provider.autoplayAudio ? Icons.volume_up : Icons.volume_off,
-                    size: 20,
-                    color: provider.autoplayAudio
-                        ? theme.colorScheme.primary
-                        : theme.colorScheme.outline,
+            if (MediaQuery.sizeOf(context).width < 700)
+              PopupMenuButton<String>(
+                tooltip: 'More',
+                onSelected: (value) {
+                  switch (value) {
+                    case 'autoplay':
+                      provider.toggleAutoplay();
+                    case 'edit':
+                      _openEditCurrentCard();
+                    case 'ai':
+                      _openAiDiscussion(item);
+                  }
+                },
+                itemBuilder: (context) => [
+                  CheckedPopupMenuItem(
+                    value: 'autoplay',
+                    checked: provider.autoplayAudio,
+                    child: const Text('Autoplay audio'),
                   ),
-                  const SizedBox(width: 4),
-                  Switch(
-                    value: provider.autoplayAudio,
-                    onChanged: (_) => provider.toggleAutoplay(),
+                  const PopupMenuItem(
+                    value: 'edit',
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.edit_outlined),
+                      title: Text('Edit card'),
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'ai',
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.forum_outlined),
+                      title: Text('Ask AI'),
+                    ),
                   ),
                 ],
+              )
+            else ...[
+              const VerticalDivider(width: 20, indent: 12, endIndent: 12),
+              Tooltip(
+                message: 'Autoplay audio',
+                child: IconSwitch(
+                  leading: Icons.volume_off,
+                  trailing: Icons.volume_up,
+                  value: provider.autoplayAudio,
+                  onChanged: (_) => provider.toggleAutoplay(),
+                ),
               ),
-            ),
-            const SizedBox(width: 6),
-            // Edit card button
-            IconButton(
-              icon: const Icon(Icons.edit_outlined),
-              tooltip: 'Edit Card (E)',
-              onPressed: _openEditCurrentCard,
-            ),
-            IconButton(
-              icon: const Icon(Icons.forum_outlined),
-              tooltip: 'Ask AI about this vocabulary and sentence',
-              onPressed: () => _openAiDiscussion(item),
-            ),
-            const SizedBox(width: 14),
+              const SizedBox(width: 6),
+              IconButton(
+                icon: const Icon(Icons.edit_outlined),
+                tooltip: _showKeyHints ? 'Edit Card (E)' : 'Edit Card',
+                onPressed: _openEditCurrentCard,
+              ),
+              IconButton(
+                icon: const Icon(Icons.forum_outlined),
+                tooltip: 'Ask AI about this vocabulary and sentence',
+                onPressed: () => _openAiDiscussion(item),
+              ),
+            ],
+            const SizedBox(width: 8),
           ],
           bottom: PreferredSize(
             preferredSize: const Size.fromHeight(6),
@@ -813,11 +860,13 @@ class _StudyViewState extends State<StudyView> {
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 // Top Badges Row
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 4,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
                                   children: [
                                     Chip(
+                                      visualDensity: VisualDensity.compact,
                                       avatar: Icon(
                                         isTargetToNative
                                             ? Icons.translate
@@ -840,48 +889,38 @@ class _StudyViewState extends State<StudyView> {
                                             .onPrimaryContainer,
                                       ),
                                     ),
-                                    Row(
-                                      children: [
-                                        Chip(
-                                          label: Text(
-                                            item.vocab.pos.toUpperCase(),
-                                          ),
-                                          backgroundColor: theme
-                                              .colorScheme
-                                              .surfaceContainerHighest,
+                                    Chip(
+                                      visualDensity: VisualDensity.compact,
+                                      label: Text(item.vocab.pos.toUpperCase()),
+                                      backgroundColor: theme
+                                          .colorScheme
+                                          .surfaceContainerHighest,
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: _isAnswerRevealed
+                                            ? Colors.green.withValues(
+                                                alpha: 0.15,
+                                              )
+                                            : Colors.blue.withValues(
+                                                alpha: 0.15,
+                                              ),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        _isAnswerRevealed ? 'BACK' : 'FRONT',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: _isAnswerRevealed
+                                              ? Colors.green.shade800
+                                              : Colors.blue.shade800,
                                         ),
-                                        const SizedBox(width: 6),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 4,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: _isAnswerRevealed
-                                                ? Colors.green.withValues(
-                                                    alpha: 0.15,
-                                                  )
-                                                : Colors.blue.withValues(
-                                                    alpha: 0.15,
-                                                  ),
-                                            borderRadius: BorderRadius.circular(
-                                              8,
-                                            ),
-                                          ),
-                                          child: Text(
-                                            _isAnswerRevealed
-                                                ? 'BACK (Answer)'
-                                                : 'FRONT (Prompt)',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.bold,
-                                              color: _isAnswerRevealed
-                                                  ? Colors.green.shade800
-                                                  : Colors.blue.shade800,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -986,30 +1025,6 @@ class _StudyViewState extends State<StudyView> {
                                           crossAxisAlignment:
                                               CrossAxisAlignment.start,
                                           children: [
-                                            Row(
-                                              children: [
-                                                Icon(
-                                                  Icons.quiz_outlined,
-                                                  size: 18,
-                                                  color:
-                                                      theme.colorScheme.primary,
-                                                ),
-                                                const SizedBox(width: 6),
-                                                Text(
-                                                  'Fill in the blank (Cloze Deletion):',
-                                                  style: theme
-                                                      .textTheme
-                                                      .labelMedium
-                                                      ?.copyWith(
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                        color: theme
-                                                            .colorScheme
-                                                            .primary,
-                                                      ),
-                                                ),
-                                              ],
-                                            ),
                                             const SizedBox(height: 10),
                                             MarkdownContent(
                                               content: item.sentence!.toCloze(
@@ -1041,8 +1056,10 @@ class _StudyViewState extends State<StudyView> {
                                         ),
                                       ),
                                       icon: const Icon(Icons.touch_app),
-                                      label: const Text(
-                                        'Show Answer (Space / Enter)',
+                                      label: Text(
+                                        _showKeyHints
+                                            ? 'Show Answer (Space / Enter)'
+                                            : 'Show Answer',
                                       ),
                                       onPressed: _revealAnswer,
                                     ),
@@ -1054,55 +1071,40 @@ class _StudyViewState extends State<StudyView> {
                                   Center(
                                     child: Column(
                                       children: [
-                                        Text(
-                                          item.vocab.targetWord,
-                                          style: theme.textTheme.headlineMedium
-                                              ?.copyWith(
-                                                fontWeight: FontWeight.bold,
-                                                color:
-                                                    theme.colorScheme.primary,
-                                              ),
-                                          textAlign: TextAlign.center,
-                                        ),
-                                        const SizedBox(height: 6),
-                                        Text(
-                                          item.vocab.translation,
-                                          style: theme.textTheme.titleLarge,
-                                          textAlign: TextAlign.center,
-                                        ),
-                                        const SizedBox(height: 14),
-
-                                        // Audio Controls with Caching and TTS
-                                        Wrap(
-                                          spacing: 12,
-                                          runSpacing: 8,
-                                          alignment: WrapAlignment.center,
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
                                           children: [
+                                            Flexible(
+                                              child: Text(
+                                                item.vocab.targetWord,
+                                                style: theme
+                                                    .textTheme
+                                                    .headlineMedium
+                                                    ?.copyWith(
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      color: theme
+                                                          .colorScheme
+                                                          .primary,
+                                                    ),
+                                                textAlign: TextAlign.center,
+                                              ),
+                                            ),
                                             AudioButton(
                                               audioUrl: item.vocab.audioUrl,
                                               fallbackText:
                                                   item.vocab.targetWord,
                                               language:
                                                   item.lesson.targetLanguage,
-                                              label: item.vocab.audioUrl != null
-                                                  ? 'Vocab Audio (R)'
-                                                  : 'Vocab TTS (R)',
+                                              compact: true,
                                             ),
-                                            if (item.sentence != null)
-                                              AudioButton(
-                                                audioUrl:
-                                                    item.sentence!.audioUrl,
-                                                fallbackText:
-                                                    item.sentence!.targetText,
-                                                language:
-                                                    item.lesson.targetLanguage,
-                                                label:
-                                                    item.sentence!.audioUrl !=
-                                                        null
-                                                    ? 'Sentence Audio (S)'
-                                                    : 'Sentence TTS (S)',
-                                              ),
                                           ],
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          item.vocab.translation,
+                                          style: theme.textTheme.titleLarge,
+                                          textAlign: TextAlign.center,
                                         ),
                                       ],
                                     ),
@@ -1132,16 +1134,18 @@ class _StudyViewState extends State<StudyView> {
                                             mainAxisAlignment:
                                                 MainAxisAlignment.spaceBetween,
                                             children: [
-                                              MarkdownContent(
-                                                content:
-                                                    item.sentence!.targetText,
-                                                style: theme
-                                                    .textTheme
-                                                    .titleMedium
-                                                    ?.copyWith(
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                    ),
+                                              Expanded(
+                                                child: MarkdownContent(
+                                                  content:
+                                                      item.sentence!.targetText,
+                                                  style: theme
+                                                      .textTheme
+                                                      .titleMedium
+                                                      ?.copyWith(
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                      ),
+                                                ),
                                               ),
                                               AudioButton(
                                                 audioUrl:
@@ -1183,7 +1187,7 @@ class _StudyViewState extends State<StudyView> {
                                       item.sentence!.notes,
                                     ),
 
-                                  // Notes (Markdown / HTML)
+                                  // Notes (Markdown)
                                   if (item.vocab.notes.isNotEmpty) ...[
                                     Container(
                                       width: double.infinity,
@@ -1227,8 +1231,10 @@ class _StudyViewState extends State<StudyView> {
                                   Center(
                                     child: OutlinedButton.icon(
                                       icon: const Icon(Icons.flip_to_front),
-                                      label: const Text(
-                                        'Flip Back to Front (Space)',
+                                      label: Text(
+                                        _showKeyHints
+                                            ? 'Flip Back to Front (Space)'
+                                            : 'Flip Back to Front',
                                       ),
                                       onPressed: _toggleFlip,
                                     ),
@@ -1279,19 +1285,20 @@ class _StudyViewState extends State<StudyView> {
                                     ),
                                   ),
                                   onPressed: () => _rateCard(SrsRating.again),
-                                  child: const Column(
+                                  child: Column(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       Text(
-                                        'Again [⌫]',
-                                        style: TextStyle(
+                                        _showKeyHints ? 'Again [⌫]' : 'Again',
+                                        style: const TextStyle(
                                           fontWeight: FontWeight.bold,
                                         ),
                                       ),
-                                      Text(
-                                        'Key 1 / Backspace',
-                                        style: TextStyle(fontSize: 10),
-                                      ),
+                                      if (_showKeyHints)
+                                        const Text(
+                                          'Key 1 / Backspace',
+                                          style: TextStyle(fontSize: 10),
+                                        ),
                                     ],
                                   ),
                                 ),
@@ -1307,19 +1314,20 @@ class _StudyViewState extends State<StudyView> {
                                     ),
                                   ),
                                   onPressed: () => _rateCard(SrsRating.hard),
-                                  child: const Column(
+                                  child: Column(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Text(
+                                      const Text(
                                         'Hard',
                                         style: TextStyle(
                                           fontWeight: FontWeight.bold,
                                         ),
                                       ),
-                                      Text(
-                                        'Key 2',
-                                        style: TextStyle(fontSize: 10),
-                                      ),
+                                      if (_showKeyHints)
+                                        const Text(
+                                          'Key 2',
+                                          style: TextStyle(fontSize: 10),
+                                        ),
                                     ],
                                   ),
                                 ),
@@ -1336,20 +1344,23 @@ class _StudyViewState extends State<StudyView> {
                                     ),
                                   ),
                                   onPressed: () => _rateCard(SrsRating.good),
-                                  child: const Column(
+                                  child: Column(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       Text(
-                                        'Good [Enter ↵]',
-                                        style: TextStyle(
+                                        _showKeyHints
+                                            ? 'Good [Enter ↵]'
+                                            : 'Good',
+                                        style: const TextStyle(
                                           fontWeight: FontWeight.bold,
                                           fontSize: 16,
                                         ),
                                       ),
-                                      Text(
-                                        'Key 3 or Enter',
-                                        style: TextStyle(fontSize: 10),
-                                      ),
+                                      if (_showKeyHints)
+                                        const Text(
+                                          'Key 3 or Enter',
+                                          style: TextStyle(fontSize: 10),
+                                        ),
                                     ],
                                   ),
                                 ),
@@ -1365,37 +1376,40 @@ class _StudyViewState extends State<StudyView> {
                                     ),
                                   ),
                                   onPressed: () => _rateCard(SrsRating.easy),
-                                  child: const Column(
+                                  child: Column(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Text(
+                                      const Text(
                                         'Easy',
                                         style: TextStyle(
                                           fontWeight: FontWeight.bold,
                                         ),
                                       ),
-                                      Text(
-                                        'Key 4',
-                                        style: TextStyle(fontSize: 10),
-                                      ),
+                                      if (_showKeyHints)
+                                        const Text(
+                                          'Key 4',
+                                          style: TextStyle(fontSize: 10),
+                                        ),
                                     ],
                                   ),
                                 ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 6),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                'Shortcuts: [Space] Flip • [Enter] Good • [Backspace] Again • [← / →] Back/Fwd • [Z] Undo',
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.outline,
+                          if (_showKeyHints) ...[
+                            const SizedBox(height: 6),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  'Shortcuts: [Space] Flip • [Enter] Good • [Backspace] Again • [← / →] Back/Fwd • [Z] Undo',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: theme.colorScheme.outline,
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
+                              ],
+                            ),
+                          ],
                         ],
                       ),
                     ),

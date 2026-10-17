@@ -62,27 +62,30 @@ class Sentence {
 
   /// Strips markdown and cloze syntax for clean Text-to-Speech
   static String cleanForSpeech(String text) {
-    String clean = text.replaceAllMapped(RegExp(r'\*\*([^*]+)\*\*'), (m) => m[1] ?? '');
+    String clean = text.replaceAllMapped(
+      RegExp(r'\*\*([^*]+)\*\*'),
+      (m) => m[1] ?? '',
+    );
     clean = clean.replaceAll(RegExp(r'\[___*\]|\(___*_*\)'), '');
     clean = clean.replaceAll(RegExp(r'[#*_~`]'), '');
     return clean.trim();
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'targetText': targetText,
-        'translationText': translationText,
-        'audioUrl': audioUrl,
-        'notes': notes,
-        'lessonId': lessonId,
-      };
+    'id': id,
+    'targetText': targetText,
+    'translationText': translationText,
+    'audioUrl': audioUrl,
+    'notes': notes,
+    'lessonId': lessonId,
+  };
 
   factory Sentence.fromJson(Map<String, dynamic> json) => Sentence(
-        id: json['id'] as String?,
-        targetText: json['targetText'] as String? ?? '',
-        translationText: json['translationText'] as String? ?? '',
-        audioUrl: json['audioUrl'] as String?,
-        notes: json['notes'] as String? ?? '',
-        lessonId: json['lessonId'] as String?,
-      );
+    id: json['id'] as String?,
+    targetText: json['targetText'] as String? ?? '',
+    translationText: json['translationText'] as String? ?? '',
+    audioUrl: json['audioUrl'] as String?,
+    notes: json['notes'] as String? ?? '',
+    lessonId: json['lessonId'] as String?,
+  );
 }

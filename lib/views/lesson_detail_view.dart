@@ -49,7 +49,15 @@ class _SectionRow {
 class _LessonDetailViewState extends State<LessonDetailView> {
   String _selectedCategory = 'All';
   String _searchQuery = '';
+  bool _searchOpen = false;
+  final TextEditingController _searchCtrl = TextEditingController();
   final Set<String> _collapsedSections = {};
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
 
   Future<void> _confirmResetLesson(Lesson lesson) async {
     final confirmed = await showDialog<bool>(
@@ -282,6 +290,8 @@ class _LessonDetailViewState extends State<LessonDetailView> {
 
     flattenSections(rootSection, const [], 0);
 
+    final compact = MediaQuery.sizeOf(context).width < 700;
+
     return Scaffold(
       appBar: AppBar(
         title: Column(
@@ -292,15 +302,19 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                 lesson.effectiveUnitTitle!,
                 style: theme.textTheme.labelSmall,
               ),
-            Text(lesson.displayTitle),
+            Text(
+              lesson.displayTitle,
+              style: compact ? theme.textTheme.titleMedium : null,
+            ),
           ],
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.restart_alt),
-            tooltip: 'Reset all SRS progress in this lesson',
-            onPressed: () => _confirmResetLesson(lesson),
-          ),
+          if (!compact)
+            IconButton(
+              icon: const Icon(Icons.restart_alt),
+              tooltip: 'Reset all SRS progress in this lesson',
+              onPressed: () => _confirmResetLesson(lesson),
+            ),
           IconButton(
             icon: const Icon(Icons.add_circle_outline),
             tooltip: 'Add Vocabulary',
@@ -310,32 +324,61 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                 lessonId: lesson.id,
               ) >
               0) ...[
-            FilledButton.tonalIcon(
-              style: FilledButton.styleFrom(
-                backgroundColor: theme.colorScheme.errorContainer,
-                foregroundColor: theme.colorScheme.onErrorContainer,
-              ),
-              icon: const Icon(Icons.history_edu_rounded),
-              label: Text(
-                'Mistakes (${context.watch<AppProvider>().getRecentMistakesCount(lessonId: lesson.id)})',
-              ),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => StudyView(
-                      lessonId: lesson.id,
-                      recentMistakesOnly: true,
-                    ),
+            if (compact)
+              IconButton(
+                icon: Badge(
+                  label: Text(
+                    '${context.watch<AppProvider>().getRecentMistakesCount(lessonId: lesson.id)}',
                   ),
-                );
-              },
-            ),
+                  backgroundColor: theme.colorScheme.error,
+                  child: const Icon(Icons.history_edu_rounded),
+                ),
+                tooltip: 'Review recent mistakes',
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => StudyView(
+                        lessonId: lesson.id,
+                        recentMistakesOnly: true,
+                      ),
+                    ),
+                  );
+                },
+              )
+            else
+              FilledButton.tonalIcon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: theme.colorScheme.errorContainer,
+                  foregroundColor: theme.colorScheme.onErrorContainer,
+                ),
+                icon: const Icon(Icons.history_edu_rounded),
+                label: Text(
+                  'Mistakes (${context.watch<AppProvider>().getRecentMistakesCount(lessonId: lesson.id)})',
+                ),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => StudyView(
+                        lessonId: lesson.id,
+                        recentMistakesOnly: true,
+                      ),
+                    ),
+                  );
+                },
+              ),
             const SizedBox(width: 8),
           ],
           FilledButton.icon(
             icon: const Icon(Icons.play_arrow_rounded),
-            label: Text('Study (${lesson.dueCardsCount} Due)'),
+            label: Text(
+              compact
+                  ? (lesson.dueCardsCount > 0
+                        ? 'Study ${lesson.dueCardsCount}'
+                        : 'Study')
+                  : 'Study (${lesson.dueCardsCount} Due)',
+            ),
             onPressed: lesson.activeCardsCount == 0
                 ? null
                 : () {
@@ -347,7 +390,7 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                     );
                   },
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 8),
         ],
       ),
       body: Column(
@@ -380,22 +423,57 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                   ),
                 ),
                 const SizedBox(width: 12),
-                SizedBox(
-                  width: 220,
-                  height: 40,
-                  child: TextField(
-                    decoration: InputDecoration(
-                      prefixIcon: const Icon(Icons.search, size: 20),
-                      hintText: 'Search vocab...',
-                      contentPadding: EdgeInsets.zero,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(20),
+                if (MediaQuery.sizeOf(context).width >= 700)
+                  SizedBox(
+                    width: 220,
+                    height: 40,
+                    child: TextField(
+                      controller: _searchCtrl,
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.search, size: 20),
+                        hintText: 'Search vocab',
+                        contentPadding: EdgeInsets.zero,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
                       ),
+                      onChanged: (val) =>
+                          setState(() => _searchQuery = val.trim()),
                     ),
-                    onChanged: (val) =>
-                        setState(() => _searchQuery = val.trim()),
+                  )
+                else if (_searchOpen || _searchQuery.isNotEmpty)
+                  SizedBox(
+                    width: 150,
+                    height: 40,
+                    child: TextField(
+                      controller: _searchCtrl,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        hintText: 'Search',
+                        contentPadding: const EdgeInsets.only(left: 14),
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.close, size: 18),
+                          tooltip: 'Close search',
+                          onPressed: () => setState(() {
+                            _searchOpen = false;
+                            _searchQuery = '';
+                            _searchCtrl.clear();
+                          }),
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                      ),
+                      onChanged: (val) =>
+                          setState(() => _searchQuery = val.trim()),
+                    ),
+                  )
+                else
+                  IconButton(
+                    icon: const Icon(Icons.search),
+                    tooltip: 'Search vocab',
+                    onPressed: () => setState(() => _searchOpen = true),
                   ),
-                ),
               ],
             ),
           ),
@@ -559,31 +637,51 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                                         ],
                                       ),
                                     ),
-                                    IconButton(
-                                      icon: const Icon(Icons.edit_outlined),
-                                      tooltip: 'Edit on the go',
-                                      onPressed: () => VocabEditDialog.show(
-                                        context,
-                                        vocab,
-                                        lessonId: lesson.id,
-                                      ),
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(Icons.restart_alt),
-                                      tooltip:
-                                          'Reset SRS progress for ${vocab.targetWord}',
-                                      onPressed: () =>
-                                          _confirmResetVocab(vocab),
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(
-                                        Icons.delete_outline,
-                                        color: Colors.red,
-                                      ),
-                                      tooltip: 'Delete',
-                                      onPressed: () {
-                                        _confirmDeleteVocab(lesson, vocab);
+                                    PopupMenuButton<String>(
+                                      tooltip: 'More actions',
+                                      onSelected: (action) {
+                                        switch (action) {
+                                          case 'edit':
+                                            VocabEditDialog.show(
+                                              context,
+                                              vocab,
+                                              lessonId: lesson.id,
+                                            );
+                                          case 'reset':
+                                            _confirmResetVocab(vocab);
+                                          case 'delete':
+                                            _confirmDeleteVocab(lesson, vocab);
+                                        }
                                       },
+                                      itemBuilder: (_) => const [
+                                        PopupMenuItem(
+                                          value: 'edit',
+                                          child: ListTile(
+                                            leading: Icon(Icons.edit_outlined),
+                                            title: Text('Edit'),
+                                            contentPadding: EdgeInsets.zero,
+                                          ),
+                                        ),
+                                        PopupMenuItem(
+                                          value: 'reset',
+                                          child: ListTile(
+                                            leading: Icon(Icons.restart_alt),
+                                            title: Text('Reset SRS'),
+                                            contentPadding: EdgeInsets.zero,
+                                          ),
+                                        ),
+                                        PopupMenuItem(
+                                          value: 'delete',
+                                          child: ListTile(
+                                            leading: Icon(
+                                              Icons.delete_outline,
+                                              color: Colors.red,
+                                            ),
+                                            title: Text('Delete'),
+                                            contentPadding: EdgeInsets.zero,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),
@@ -609,13 +707,6 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                                 // Sentences list
                                 if (sentences.isNotEmpty) ...[
                                   const SizedBox(height: 8),
-                                  Text(
-                                    'Example Sentences (${sentences.length}):',
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
                                   ...sentences.map(
                                     (s) => Padding(
                                       padding: const EdgeInsets.symmetric(

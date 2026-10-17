@@ -10,7 +10,7 @@ class VocabItem {
   String pos; // Part of speech or category (e.g. nouns, verbs, adjectives)
   List<String> sectionPath;
   String? audioUrl;
-  String notes; // Markdown / HTML formatted notes
+  String notes; // Markdown formatted notes
   String disambiguation;
   List<String> sentenceIds; // Reference to sentences in the pool
   SrsCard cardTargetToNative; // e.g. KO -> EN

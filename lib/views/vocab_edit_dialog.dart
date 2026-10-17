@@ -144,7 +144,10 @@ class _VocabEditDialogState extends State<VocabEditDialog>
 
   void _openSentencePicker() {
     final provider = context.read<AppProvider>();
-    final searchCtrl = TextEditingController(text: widget.vocab.targetWord);
+    final word = widget.vocab.targetWord.trim();
+    final searchCtrl = TextEditingController(
+      text: word.length <= 30 ? word : '',
+    );
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -168,7 +171,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text(
-                        'Select from Sentence Pool',
+                        'Select examples from the pool',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -185,7 +188,8 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                     autofocus: true,
                     decoration: InputDecoration(
                       prefixIcon: const Icon(Icons.search),
-                      hintText: 'Search using ${widget.vocab.targetWord}...',
+                      hintText: 'Search examples',
+                      hintMaxLines: 1,
                       border: const OutlineInputBorder(),
                       suffixIcon: searchCtrl.text.isEmpty
                           ? null
@@ -255,7 +259,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
           },
         );
       },
-    ).whenComplete(searchCtrl.dispose);
+    ).whenComplete(() => _disposeAfterRouteExit([searchCtrl]));
   }
 
   Future<void> _editAndLinkSentence({
@@ -339,8 +343,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
         setState(() {});
       }
     }
-    targetCtrl.dispose();
-    translationCtrl.dispose();
+    _disposeAfterRouteExit([targetCtrl, translationCtrl]);
   }
 
   static String _suggestEmphasis(
@@ -401,23 +404,21 @@ class _VocabEditDialogState extends State<VocabEditDialog>
               TextField(
                 controller: targetCtrl,
                 decoration: const InputDecoration(
-                  labelText: 'Target Sentence (Markdown, e.g. 저는 **단어**를...)',
-                  hintText: 'Use **word** for bolding/cloze',
+                  labelText: 'Korean sentence',
+                  hintText: 'Use **word** for bold/cloze',
                 ),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: transCtrl,
                 decoration: const InputDecoration(
-                  labelText: 'Translation Sentence',
+                  labelText: 'English translation',
                 ),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: audioCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Audio URL (Optional)',
-                ),
+                decoration: const InputDecoration(labelText: 'Audio URL'),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -425,7 +426,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                 minLines: 2,
                 maxLines: 5,
                 decoration: const InputDecoration(
-                  labelText: 'Sentence Notes (Markdown / HTML)',
+                  labelText: 'Notes (Markdown)',
                 ),
               ),
             ],
@@ -463,11 +464,19 @@ class _VocabEditDialogState extends State<VocabEditDialog>
           ),
         ],
       ),
-    ).whenComplete(() {
-      targetCtrl.dispose();
-      transCtrl.dispose();
-      audioCtrl.dispose();
-      notesCtrl.dispose();
+    ).whenComplete(
+      () =>
+          _disposeAfterRouteExit([targetCtrl, transCtrl, audioCtrl, notesCtrl]),
+    );
+  }
+
+  // The route's exit animation still builds its text fields after the route
+  // future completes, so controllers must outlive it.
+  static void _disposeAfterRouteExit(List<TextEditingController> controllers) {
+    Future<void>.delayed(const Duration(seconds: 1), () {
+      for (final controller in controllers) {
+        controller.dispose();
+      }
     });
   }
 
@@ -479,8 +488,8 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     if (duplicates.isEmpty) return const SizedBox.shrink();
 
     final directionLabel = direction == CardDirection.targetToNative
-        ? 'Target → Native'
-        : 'Native → Target';
+        ? 'KO ➔ EN card'
+        : 'EN ➔ KO card';
     final meanings = duplicates
         .map((vocab) => '${vocab.targetWord} — ${vocab.translation}')
         .join('; ');
@@ -521,7 +530,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Edit Vocabulary: ${widget.vocab.targetWord}',
+                      widget.vocab.targetWord,
                       style: theme.textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
@@ -556,7 +565,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                           child: TextField(
                             controller: _targetWordCtrl,
                             decoration: const InputDecoration(
-                              labelText: 'Target Word / Term *',
+                              labelText: 'Korean *',
                               border: OutlineInputBorder(),
                             ),
                           ),
@@ -567,7 +576,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                           child: TextField(
                             controller: _translationCtrl,
                             decoration: const InputDecoration(
-                              labelText: 'Translation / Native *',
+                              labelText: 'English *',
                               border: OutlineInputBorder(),
                             ),
                           ),
@@ -578,11 +587,11 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                     TextField(
                       controller: _disambiguationCtrl,
                       decoration: const InputDecoration(
-                        labelText: 'Front-side disambiguation cue (optional)',
-                        hintText: 'e.g. fruit, vehicle, body part',
+                        labelText: 'Front hint (optional)',
+                        hintText: 'e.g. fruit, vehicle',
                         helperText:
-                            'Shown on the front of both card directions when '
-                            'you need to distinguish cards with the same prompt.',
+                            'Shown on card fronts to tell duplicates apart.',
+                        helperMaxLines: 3,
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -605,8 +614,8 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                           child: TextField(
                             controller: _posCtrl,
                             decoration: const InputDecoration(
-                              labelText: 'Part of Speech / Category',
-                              hintText: 'e.g. nouns, verbs, adjectives',
+                              labelText: 'Part of speech',
+                              hintText: 'e.g. nouns',
                               border: OutlineInputBorder(),
                             ),
                           ),
@@ -617,7 +626,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                           child: TextField(
                             controller: _audioCtrl,
                             decoration: InputDecoration(
-                              labelText: 'Vocab Audio URL or Path',
+                              labelText: 'Audio URL',
                               border: const OutlineInputBorder(),
                               suffixIcon: AudioButton(
                                 audioUrl: _audioCtrl.text,
@@ -633,11 +642,9 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                     TextField(
                       controller: _idCtrl,
                       decoration: const InputDecoration(
-                        labelText: 'Vocabulary ID (optional)',
-                        hintText: 'Set an ID to share or separate SRS progress',
-                        helperText:
-                            'The same ID shares SRS progress across sections. '
-                            'Leave blank to use the word and meaning.',
+                        labelText: 'ID (optional)',
+                        helperText: 'Same ID shares SRS progress. Blank uses word + meaning.',
+                        helperMaxLines: 3,
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -663,29 +670,25 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'SRS Flashcard Directions',
+                              'Cards',
                               style: theme.textTheme.titleSmall?.copyWith(
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
                             const SizedBox(height: 8),
                             SwitchListTile(
-                              title: const Text(
-                                'Target ➔ Native (KO ➔ EN) Card',
-                              ),
+                              title: const Text('KO ➔ EN'),
                               subtitle: const Text(
-                                'Hidden by default for verbs and adjectives',
+                                'Off by default for verbs, adjectives',
                               ),
                               value: _enableTargetToNative,
                               onChanged: (val) =>
                                   setState(() => _enableTargetToNative = val),
                             ),
                             SwitchListTile(
-                              title: const Text(
-                                'Native ➔ Target (EN ➔ KO) Card [with Cloze]',
-                              ),
+                              title: const Text('EN ➔ KO (cloze)'),
                               subtitle: const Text(
-                                'Hidden by default for other cards',
+                                'Off by default for other cards',
                               ),
                               value: _enableNativeToTarget,
                               onChanged: (val) =>
@@ -698,41 +701,34 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                     const SizedBox(height: 20),
 
                     Text(
-                      'Card back notes (Markdown / HTML)',
+                      'Review notes',
                       style: theme.textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     const SizedBox(height: 8),
-                    _sideNotesField(
-                      'Target → Native · Back notes',
-                      _targetToNativeBackNotesCtrl,
-                    ),
-                    _sideNotesField(
-                      'Native → Target · Back notes',
-                      _nativeToTargetBackNotesCtrl,
-                    ),
+                    _sideNotesField('KO ➔ EN', _targetToNativeBackNotesCtrl),
+                    _sideNotesField('EN ➔ KO', _nativeToTargetBackNotesCtrl),
                     const SizedBox(height: 20),
 
                     // Notes Section (with Markdown preview toggle)
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          'Notes (Markdown / HTML)',
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.bold,
+                        Expanded(
+                          child: Text(
+                            'Vocab notes',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                         TextButton.icon(
                           icon: Icon(
                             _showNotesPreview ? Icons.edit : Icons.preview,
+                            size: 18,
                           ),
-                          label: Text(
-                            _showNotesPreview
-                                ? 'Edit Notes'
-                                : 'Preview Markdown',
-                          ),
+                          label: Text(_showNotesPreview ? 'Edit' : 'Preview'),
                           onPressed: () => setState(
                             () => _showNotesPreview = !_showNotesPreview,
                           ),
@@ -765,7 +761,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                         controller: _notesCtrl,
                         maxLines: 5,
                         decoration: const InputDecoration(
-                          hintText: 'Enter notes in markdown or HTML (<p>, **bold**, etc.)...',
+                          hintText: 'Markdown notes, e.g. **bold**, lists',
                           border: OutlineInputBorder(),
                         ),
                       ),
@@ -775,29 +771,24 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          'Linked Sentences (${_sentenceIds.length})',
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.bold,
+                        Expanded(
+                          child: Text(
+                            'Examples (${_sentenceIds.length})',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
-                        Wrap(
-                          spacing: 8,
-                          children: [
-                            OutlinedButton.icon(
-                              icon: const Icon(Icons.add, size: 18),
-                              label: const Text('From Pool'),
-                              onPressed: _openSentencePicker,
-                            ),
-                            FilledButton.tonalIcon(
-                              icon: const Icon(
-                                Icons.add_circle_outline,
-                                size: 18,
-                              ),
-                              label: const Text('Create New'),
-                              onPressed: _openCreateSentenceDialog,
-                            ),
-                          ],
+                        IconButton.outlined(
+                          icon: const Icon(Icons.library_add_outlined),
+                          tooltip: 'Add from pool',
+                          onPressed: _openSentencePicker,
+                        ),
+                        const SizedBox(width: 4),
+                        IconButton.filledTonal(
+                          icon: const Icon(Icons.add),
+                          tooltip: 'Create new sentence',
+                          onPressed: _openCreateSentenceDialog,
                         ),
                       ],
                     ),
@@ -808,7 +799,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                         padding: const EdgeInsets.symmetric(vertical: 20),
                         alignment: Alignment.center,
                         child: Text(
-                          'No sentences linked yet. Add one from the pool or create a new sentence.',
+                          'No examples yet. Add one from the pool or create a new one.',
                           style: TextStyle(
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
@@ -868,7 +859,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
             // Footer Actions
             const Divider(height: 1),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
@@ -877,10 +868,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                     child: const Text('Cancel'),
                   ),
                   const SizedBox(width: 12),
-                  FilledButton(
-                    onPressed: _save,
-                    child: const Text('Save Changes'),
-                  ),
+                  FilledButton(onPressed: _save, child: const Text('Save')),
                 ],
               ),
             ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../services/audio_service.dart';
 
 class AudioButton extends StatelessWidget {
@@ -21,7 +22,8 @@ class AudioButton extends StatelessWidget {
   });
 
   bool get _hasAudioUrl => audioUrl != null && audioUrl!.trim().isNotEmpty;
-  bool get _hasFallbackText => fallbackText != null && fallbackText!.trim().isNotEmpty;
+  bool get _hasFallbackText =>
+      fallbackText != null && fallbackText!.trim().isNotEmpty;
 
   @override
   Widget build(BuildContext context) {
@@ -30,8 +32,12 @@ class AudioButton extends StatelessWidget {
     }
 
     final audioService = context.watch<AudioService>();
-    final keyToMatch = _hasAudioUrl ? audioUrl!.trim() : 'tts_${fallbackText!.trim()}';
-    final isPlayingThis = audioService.isPlaying && audioService.currentlyPlayingKey == keyToMatch;
+    final keyToMatch = _hasAudioUrl
+        ? audioUrl!.trim()
+        : 'tts_${fallbackText!.trim()}';
+    final isPlayingThis =
+        audioService.isPlaying &&
+        audioService.currentlyPlayingKey == keyToMatch;
 
     final colorScheme = Theme.of(context).colorScheme;
     final isTts = !_hasAudioUrl && _hasFallbackText;
@@ -43,14 +49,20 @@ class AudioButton extends StatelessWidget {
         tooltip: isPlayingThis
             ? 'Stop Audio'
             : (isTts ? 'Play Text-to-Speech' : 'Play Audio'),
-        color: isPlayingThis ? colorScheme.primary : colorScheme.onSurfaceVariant,
+        color: isPlayingThis
+            ? colorScheme.primary
+            : colorScheme.onSurfaceVariant,
         icon: isPlayingThis
             ? const SizedBox(
                 width: 18,
                 height: 18,
                 child: CircularProgressIndicator(strokeWidth: 2.2),
               )
-            : Icon(isTts ? Icons.record_voice_over_outlined : Icons.volume_up_rounded),
+            : Icon(
+                isTts
+                    ? Icons.record_voice_over_outlined
+                    : Icons.volume_up_rounded,
+              ),
         onPressed: () {
           if (isPlayingThis) {
             audioService.stop();
@@ -65,16 +77,17 @@ class AudioButton extends StatelessWidget {
       );
     }
 
-    final displayLabel = label ??
-        (isPlayingThis
-            ? 'Playing...'
-            : (isTts ? 'TTS Audio' : 'Play Audio'));
+    final displayLabel =
+        label ??
+        (isPlayingThis ? 'Playing...' : (isTts ? 'TTS Audio' : 'Play Audio'));
 
     return OutlinedButton.icon(
       style: OutlinedButton.styleFrom(
         foregroundColor: isPlayingThis ? colorScheme.primary : null,
         side: BorderSide(
-          color: isPlayingThis ? colorScheme.primary : colorScheme.outlineVariant,
+          color: isPlayingThis
+              ? colorScheme.primary
+              : colorScheme.outlineVariant,
         ),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       ),
@@ -84,7 +97,11 @@ class AudioButton extends StatelessWidget {
               height: 16,
               child: CircularProgressIndicator(strokeWidth: 2),
             )
-          : Icon(isTts ? Icons.record_voice_over_outlined : Icons.volume_up_rounded),
+          : Icon(
+              isTts
+                  ? Icons.record_voice_over_outlined
+                  : Icons.volume_up_rounded,
+            ),
       label: Text(displayLabel),
       onPressed: () {
         if (isPlayingThis) {

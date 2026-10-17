@@ -9,7 +9,7 @@ import '../widgets/lesson_hierarchy_view.dart';
 import 'lesson_detail_view.dart';
 import 'lesson_reader_view.dart';
 import 'study_view.dart';
-import 'deepseek_settings_dialog.dart';
+import 'settings_dialog.dart';
 import 'yaml_import_view.dart';
 
 class LessonListView extends StatelessWidget {
@@ -21,80 +21,6 @@ class LessonListView extends StatelessWidget {
     this.onToggleTheme,
     this.isDarkMode = false,
   });
-
-  void _showCreateLessonDialog(BuildContext context) {
-    final titleCtrl = TextEditingController();
-    final targetLangCtrl = TextEditingController(text: 'ko');
-    final nativeLangCtrl = TextEditingController(text: 'en');
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Create New Lesson'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: titleCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Lesson Path (e.g. Topic::Subtopic::Lesson A)',
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: targetLangCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Target Lang (e.g. ko, ja, es)',
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: nativeLangCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Native Lang (e.g. en)',
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (titleCtrl.text.trim().isNotEmpty) {
-                final newLesson = Lesson(
-                  title: titleCtrl.text.trim(),
-                  targetLanguage: targetLangCtrl.text.trim(),
-                  nativeLanguage: nativeLangCtrl.text.trim(),
-                );
-                final provider = context.read<AppProvider>();
-                provider.lessons.add(newLesson);
-                provider.saveState();
-                Navigator.pop(ctx);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => LessonDetailView(lessonId: newLesson.id),
-                  ),
-                );
-              }
-            },
-            child: const Text('Create'),
-          ),
-        ],
-      ),
-    );
-  }
 
   void _confirmResetLesson(BuildContext context, Lesson lesson) {
     showDialog(
@@ -176,75 +102,6 @@ class LessonListView extends StatelessWidget {
     }
   }
 
-  void _showEditMaxReviewsDialog(BuildContext context, AppProvider provider) {
-    final controller = TextEditingController(
-      text: provider.maxReviews24h > 0 ? '${provider.maxReviews24h}' : '0',
-    );
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('24-Hour Review Limit'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Set the maximum number of reviews allowed in any rolling 24-hour window. Enter 0 for unlimited.',
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: controller,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Max reviews per 24 hours',
-                border: OutlineInputBorder(),
-                suffixText: 'cards',
-              ),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              children: [50, 100, 200, 0].map((val) {
-                final label = val == 0 ? 'Unlimited' : '$val';
-                return ActionChip(
-                  label: Text(label),
-                  onPressed: () {
-                    controller.text = '$val';
-                  },
-                );
-              }).toList(),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final parsed = int.tryParse(controller.text.trim());
-              if (parsed != null && parsed >= 0) {
-                provider.setMaxReviews24h(parsed);
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      parsed == 0
-                          ? '24-hour review limit set to Unlimited.'
-                          : '24-hour review limit set to $parsed cards.',
-                    ),
-                  ),
-                );
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _showLimitReachedDialog(BuildContext context, AppProvider provider) {
     showDialog(
       context: context,
@@ -252,15 +109,18 @@ class LessonListView extends StatelessWidget {
         title: const Text('Daily 24h Review Limit Reached'),
         content: Text(
           'You have reviewed ${provider.reviewsInLast24Hours} cards in the last 24 hours (limit is ${provider.maxReviews24h}).\n\n'
-          'You can adjust your limit, or continue practicing in Cram Mode (which ignores the daily limit).',
+          'You can adjust your limit in Settings, or continue practicing in Cram Mode (which ignores the daily limit).',
         ),
         actions: [
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
-              _showEditMaxReviewsDialog(context, provider);
+              showDialog<void>(
+                context: context,
+                builder: (_) => const SettingsDialog(),
+              );
             },
-            child: const Text('Adjust Limit'),
+            child: const Text('Open Settings'),
           ),
           FilledButton(
             onPressed: () {
@@ -502,11 +362,11 @@ class LessonListView extends StatelessWidget {
                       label: Text('$due Due'),
                       backgroundColor: Colors.amber.shade800,
                     ),
-                  if (compact)
+                  if (compact && active > 0)
                     FilledButton.tonalIcon(
                       icon: const Icon(Icons.play_arrow, size: 18),
                       label: const Text('Study'),
-                      onPressed: active == 0 ? null : openStudy,
+                      onPressed: openStudy,
                     ),
                 ],
               ),
@@ -514,11 +374,11 @@ class LessonListView extends StatelessWidget {
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (!compact) ...[
+                if (!compact && active > 0) ...[
                   FilledButton.tonalIcon(
                     icon: const Icon(Icons.play_arrow, size: 18),
                     label: const Text('Study'),
-                    onPressed: active == 0 ? null : openStudy,
+                    onPressed: openStudy,
                   ),
                   const SizedBox(width: 8),
                 ],
@@ -636,6 +496,11 @@ class LessonListView extends StatelessWidget {
 
     int totalDue = 0;
     final dueCardIds = <String>{};
+    final tomorrowCardIds = <String>{};
+    var dueTomorrow = 0;
+    final now = DateTime.now();
+    final tomorrowStart = DateTime(now.year, now.month, now.day + 1);
+    final dayAfterTomorrowStart = DateTime(now.year, now.month, now.day + 2);
     final mistakeCardIds = <String>{};
     var totalRecentMistakes = 0;
     for (final l in provider.lessons) {
@@ -645,7 +510,13 @@ class LessonListView extends StatelessWidget {
           vocab.cardNativeToTarget,
         ]) {
           if (!card.isEnabled) continue;
-          if (card.isDue && dueCardIds.add(card.id)) totalDue++;
+          if (card.isDue) {
+            if (dueCardIds.add(card.id)) totalDue++;
+          } else if (!card.dueDate.isBefore(tomorrowStart) &&
+              card.dueDate.isBefore(dayAfterTomorrowStart) &&
+              tomorrowCardIds.add(card.id)) {
+            dueTomorrow++;
+          }
           if (card.hasRecentMistake && mistakeCardIds.add(card.id)) {
             totalRecentMistakes++;
           }
@@ -659,90 +530,30 @@ class LessonListView extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Row(
-          children: [
-            Icon(Icons.auto_stories_rounded),
-            SizedBox(width: 10),
-            Flexible(child: Text('LinguaSRS', overflow: TextOverflow.ellipsis)),
-          ],
-        ),
+        title: MediaQuery.sizeOf(context).width < 700
+            ? const Text('LinguaSRS')
+            : const Row(
+                children: [
+                  Icon(Icons.auto_stories_rounded),
+                  SizedBox(width: 10),
+                  Flexible(
+                    child: Text('LinguaSRS', overflow: TextOverflow.ellipsis),
+                  ),
+                ],
+              ),
         actions: [
-          // Top-level Recent Mistakes action
-          IconButton(
-            icon: Badge(
-              isLabelVisible: totalRecentMistakes > 0,
-              label: Text('$totalRecentMistakes'),
-              backgroundColor: theme.colorScheme.error,
-              child: const Icon(Icons.history_edu_rounded),
-            ),
-            tooltip: totalRecentMistakes > 0
-                ? 'Review Recent Mistakes ($totalRecentMistakes)'
-                : 'Recent Mistakes (None)',
-            onPressed: () {
-              if (totalRecentMistakes == 0) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('No recent mistakes to review! Keep it up!'),
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-              } else {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const StudyView(recentMistakesOnly: true),
-                  ),
-                );
-              }
-            },
-          ),
-          // Autoplay toggle
-          Tooltip(
-            message: 'Audio Autoplay on Answer',
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  provider.autoplayAudio ? Icons.volume_up : Icons.volume_off,
-                  size: 20,
-                  color: provider.autoplayAudio
-                      ? theme.colorScheme.primary
-                      : theme.colorScheme.outline,
-                ),
-                Switch(
-                  value: provider.autoplayAudio,
-                  onChanged: (_) => provider.toggleAutoplay(),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 4),
           IconButton(
             icon: const Icon(Icons.settings_outlined),
             tooltip: 'Settings',
             onPressed: () => showDialog<void>(
               context: context,
-              builder: (_) => const DeepSeekSettingsDialog(),
+              builder: (_) => SettingsDialog(
+                isDarkMode: isDarkMode,
+                onToggleTheme: onToggleTheme,
+              ),
             ),
           ),
-          if (onToggleTheme != null)
-            IconButton(
-              icon: Icon(isDarkMode ? Icons.light_mode : Icons.dark_mode),
-              tooltip: 'Toggle Theme',
-              onPressed: onToggleTheme,
-            ),
           const SizedBox(width: 8),
-          FilledButton.icon(
-            icon: const Icon(Icons.code),
-            label: const Text('Add Lessons'),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const YamlImportView()),
-              );
-            },
-          ),
-          const SizedBox(width: 16),
         ],
       ),
       body: provider.isLoading
@@ -776,53 +587,15 @@ class LessonListView extends StatelessWidget {
                                   ),
                                   const SizedBox(height: 6),
                                   Text(
-                                    '$totalDue cards due today • ${provider.reviewsInLast24Hours}/${provider.maxReviews24h > 0 ? provider.maxReviews24h : '∞'} in 24h'
+                                    '$totalDue cards due today'
+                                    '${totalDue == 0 ? ' • $dueTomorrow due tomorrow' : ''}'
+                                    '${provider.reviewsInLast24Hours > 0 ? ' • ${provider.reviewsInLast24Hours} in 24h' : ''}'
                                     '${totalRecentMistakes > 0 ? ' • $totalRecentMistakes mistakes' : ''}',
                                     style: theme.textTheme.bodyMedium?.copyWith(
                                       color: theme
                                           .colorScheme
                                           .onPrimaryContainer
                                           .withValues(alpha: 0.8),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  InkWell(
-                                    onTap: () => _showEditMaxReviewsDialog(
-                                      context,
-                                      provider,
-                                    ),
-                                    borderRadius: BorderRadius.circular(6),
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 2,
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            Icons.tune,
-                                            size: 14,
-                                            color: theme
-                                                .colorScheme
-                                                .onPrimaryContainer
-                                                .withValues(alpha: 0.7),
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            '24h Limit: ${provider.maxReviews24h > 0 ? '${provider.maxReviews24h}' : '∞'} (edit)',
-                                            style: theme.textTheme.labelSmall
-                                                ?.copyWith(
-                                                  color: theme
-                                                      .colorScheme
-                                                      .onPrimaryContainer
-                                                      .withValues(alpha: 0.9),
-                                                  fontWeight: FontWeight.bold,
-                                                  decoration:
-                                                      TextDecoration.underline,
-                                                ),
-                                          ),
-                                        ],
-                                      ),
                                     ),
                                   ),
                                 ],
@@ -913,18 +686,24 @@ class LessonListView extends StatelessWidget {
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          'Your Lessons',
-                          style: theme.textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
+                        Expanded(
+                          child: Text(
+                            'Your Lessons',
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
-                        TextButton.icon(
-                          icon: const Icon(Icons.add),
-                          label: const Text('New Lesson'),
-                          onPressed: () => _showCreateLessonDialog(context),
+                        FilledButton.tonalIcon(
+                          icon: const Icon(Icons.post_add_outlined),
+                          label: const Text('Add Lessons'),
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const YamlImportView(),
+                            ),
+                          ),
                         ),
                       ],
                     ),

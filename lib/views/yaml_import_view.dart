@@ -312,7 +312,7 @@ class _YamlImportViewState extends State<YamlImportView> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Import Lessons'),
+        title: Text(compactBar ? 'Import' : 'Import Lessons'),
         actions: [
           if (compactBar) ...[
             IconButton(
@@ -351,8 +351,10 @@ class _YamlImportViewState extends State<YamlImportView> {
                 : const Icon(Icons.check),
             label: Text(
               _directoryFiles.isEmpty
-                  ? (compactBar ? 'Import' : 'Import Markdown')
-                  : 'Import ${_selectedDirectoryPaths.length} Lessons',
+                  ? (compactBar ? 'Save' : 'Import Markdown')
+                  : (compactBar
+                        ? 'Save ${_selectedDirectoryPaths.length}'
+                        : 'Import ${_selectedDirectoryPaths.length} Lessons'),
             ),
             onPressed:
                 (_previewResult != null ||
@@ -361,378 +363,377 @@ class _YamlImportViewState extends State<YamlImportView> {
                 ? _executeImport
                 : null,
           ),
-          const SizedBox(width: 16),
+          SizedBox(width: compactBar ? 8 : 16),
         ],
       ),
-      body: LayoutBuilder(builder: (context, constraints) {
-        final narrow = constraints.maxWidth < 700;
-        final editor = Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (_progressMessage != null) ...[
-                    Text(_progressMessage!),
-                    const SizedBox(height: 6),
-                    LinearProgressIndicator(
-                      value: _progressTotal == 0
-                          ? null
-                          : _progressCurrent / _progressTotal,
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  Text(
-                    'Lesson name',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final narrow = constraints.maxWidth < 700;
+          final editor = Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (_progressMessage != null) ...[
+                  Text(_progressMessage!),
+                  const SizedBox(height: 6),
+                  LinearProgressIndicator(
+                    value: _progressTotal == 0
+                        ? null
+                        : _progressCurrent / _progressTotal,
                   ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _lessonNameController,
+                  const SizedBox(height: 12),
+                ],
+                Text(
+                  'Lesson name',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _lessonNameController,
+                  enabled: !_isParsing && _directoryFiles.isEmpty,
+                  textInputAction: TextInputAction.next,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    hintText: 'e.g. Unit 2::Lesson 26',
+                    helperText: 'Use :: to separate hierarchy levels.',
+                  ),
+                  onChanged: (_) => _parseCurrentYaml(),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Markdown with YAML frontmatter',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _yamlController,
+                    maxLines: null,
+                    expands: true,
                     enabled: !_isParsing && _directoryFiles.isEmpty,
-                    textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                      hintText: 'e.g. Unit 2::Lesson 26',
-                      helperText: 'Use :: to separate hierarchy levels.',
+                    textAlignVertical: TextAlignVertical.top,
+                    keyboardType: TextInputType.multiline,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 14,
+                      height: 1.45,
+                    ),
+                    decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      alignLabelWithHint: true,
+                      hintText:
+                          '---\n'
+                          'vocabulary:\n'
+                          '  nouns:  # Replace with a part of speech\n'
+                          '    - ko: "Korean word"\n'
+                          '      audio: "https://example.com/word-audio.mp3"\n'
+                          '      en: "English meaning"\n'
+                          '      notes: "Optional **Markdown** notes"\n'
+                          '      examples:\n'
+                          '        - ko: "Sentence with **word**"\n'
+                          '          en: "Translated sentence with **meaning**"\n'
+                          '        - ko: "Another example sentence"\n'
+                          '          audio: "https://example.com/sentence-audio.mp3"\n'
+                          '          en: "Another translation"\n'
+                          '---\n'
+                          '\n'
+                          '# Lesson 26\n'
+                          '\n'
+                          'Lesson contents go **here**.',
+                      hintStyle: TextStyle(
+                        color: theme.colorScheme.onSurfaceVariant.withValues(
+                          alpha: 0.65,
+                        ),
+                        fontFamily: 'monospace',
+                        fontSize: 14,
+                        height: 1.45,
+                      ),
+                      contentPadding: const EdgeInsets.all(16),
                     ),
                     onChanged: (_) => _parseCurrentYaml(),
                   ),
-                  const SizedBox(height: 12),
+                ),
+              ],
+            ),
+          );
+
+          final preview = Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Validation & Preview',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                if (_errorMessage != null)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.errorContainer,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      _errorMessage!,
+                      style: TextStyle(
+                        color: theme.colorScheme.onErrorContainer,
+                      ),
+                    ),
+                  ),
+
+                if (_directoryFiles.isNotEmpty) ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${_directoryFiles.length} lessons found; '
+                          '${_selectedDirectoryPaths.length} selected.',
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _isParsing
+                            ? null
+                            : () => setState(() {
+                                _selectedDirectoryPaths
+                                  ..clear()
+                                  ..addAll(
+                                    _directoryFiles.map((file) => file.path),
+                                  );
+                              }),
+                        child: const Text('Check all'),
+                      ),
+                      TextButton(
+                        onPressed: _isParsing
+                            ? null
+                            : () => setState(_selectedDirectoryPaths.clear),
+                        child: const Text('Uncheck all'),
+                      ),
+                    ],
+                  ),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Markdown folder ready',
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '${_directoryFiles.length} lessons found; '
+                            '${_selectedDirectoryPaths.length} selected, '
+                            '$_directorySkipped files skipped.',
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Matching lessons and vocabulary will be updated '
+                            'in place. Existing vocabulary SRS progress will '
+                            'be preserved; unmatched vocabulary will be kept.',
+                          ),
+                          if (_directoryErrors.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              '${_directoryErrors.length} files could not be '
+                              'parsed and will not be imported.',
+                              style: TextStyle(color: theme.colorScheme.error),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _directoryErrors.take(3).join('\n'),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.error,
+                              ),
+                              maxLines: 5,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   Text(
-                    'Markdown with YAML frontmatter',
-                    style: theme.textTheme.titleMedium?.copyWith(
+                    'Lessons Preview:',
+                    style: theme.textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Expanded(
-                    child: TextField(
-                      controller: _yamlController,
-                      maxLines: null,
-                      expands: true,
-                      enabled: !_isParsing && _directoryFiles.isEmpty,
-                      textAlignVertical: TextAlignVertical.top,
-                      keyboardType: TextInputType.multiline,
-                      autocorrect: false,
-                      enableSuggestions: false,
-                      style: const TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 14,
-                        height: 1.45,
-                      ),
-                      decoration: InputDecoration(
-                        border: const OutlineInputBorder(),
-                        alignLabelWithHint: true,
-                        hintText:
-                            '---\n'
-                            'vocabulary:\n'
-                            '  nouns:  # Replace with a part of speech\n'
-                            '    - ko: "Korean word"\n'
-                            '      audio: "https://example.com/word-audio.mp3"\n'
-                            '      en: "English meaning"\n'
-                            '      notes: "Optional **Markdown** notes"\n'
-                            '      examples:\n'
-                            '        - ko: "Sentence with **word**"\n'
-                            '          en: "Translated sentence with **meaning**"\n'
-                            '        - ko: "Another example sentence"\n'
-                            '          audio: "https://example.com/sentence-audio.mp3"\n'
-                            '          en: "Another translation"\n'
-                            '---\n'
-                            '\n'
-                            '# Lesson 26\n'
-                            '\n'
-                            'Lesson contents go **here**.',
-                        hintStyle: TextStyle(
-                          color: theme.colorScheme.onSurfaceVariant.withValues(
-                            alpha: 0.65,
+                    child: ListView.builder(
+                      itemCount: _directoryFiles.length,
+                      itemBuilder: (context, index) {
+                        final file = _directoryFiles[index];
+                        final lesson = file.preview.lesson;
+                        return Card(
+                          margin: const EdgeInsets.symmetric(vertical: 4),
+                          child: ListTile(
+                            dense: true,
+                            leading: Checkbox(
+                              value: _selectedDirectoryPaths.contains(
+                                file.path,
+                              ),
+                              onChanged: (checked) => setState(() {
+                                if (checked == true) {
+                                  _selectedDirectoryPaths.add(file.path);
+                                } else {
+                                  _selectedDirectoryPaths.remove(file.path);
+                                }
+                              }),
+                            ),
+                            title: Text(lesson.displayTitle),
+                            subtitle: Text(
+                              '${lesson.effectiveUnitTitle ?? file.path} · '
+                              '${lesson.vocabularies.length} vocabulary items',
+                            ),
                           ),
-                          fontFamily: 'monospace',
-                          fontSize: 14,
-                          height: 1.45,
-                        ),
-                        contentPadding: const EdgeInsets.all(16),
-                      ),
-                      onChanged: (_) => _parseCurrentYaml(),
+                        );
+                      },
                     ),
                   ),
-                ],
-              ),
-            );
-
-        final preview = Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+                ] else if (_previewResult != null) ...[
+                  Card(
+                    elevation: 0,
+                    color: theme.colorScheme.surfaceContainerHighest.withValues(
+                      alpha: 0.5,
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _previewResult!.lesson.displayTitle,
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          if (_previewResult!.lesson.effectiveUnitTitle !=
+                              null) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              _previewResult!.lesson.effectiveUnitTitle!,
+                              style: theme.textTheme.labelLarge?.copyWith(
+                                color: theme.colorScheme.primary,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              Chip(
+                                avatar: const Icon(Icons.language, size: 16),
+                                label: Text(
+                                  '${_previewResult!.lesson.targetLanguage.toUpperCase()} ➔ ${_previewResult!.lesson.nativeLanguage.toUpperCase()}',
+                                ),
+                              ),
+                              Chip(
+                                avatar: const Icon(Icons.style, size: 16),
+                                label: Text(
+                                  '${_previewResult!.lesson.vocabularies.length} Vocabs',
+                                ),
+                              ),
+                              Chip(
+                                avatar: const Icon(
+                                  Icons.format_quote,
+                                  size: 16,
+                                ),
+                                label: Text(
+                                  '${_previewResult!.sentences.length} Pooled Sentences',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   Text(
-                    'Validation & Preview',
-                    style: theme.textTheme.titleMedium?.copyWith(
+                    'Vocabulary Items Preview:',
+                    style: theme.textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const SizedBox(height: 12),
-
-                  if (_errorMessage != null)
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.errorContainer,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        _errorMessage!,
-                        style: TextStyle(
-                          color: theme.colorScheme.onErrorContainer,
-                        ),
-                      ),
-                    ),
-
-                  if (_directoryFiles.isNotEmpty) ...[
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '${_directoryFiles.length} lessons found; '
-                            '${_selectedDirectoryPaths.length} selected.',
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: _previewResult!.lesson.vocabularies.length,
+                      itemBuilder: (context, idx) {
+                        final v = _previewResult!.lesson.vocabularies[idx];
+                        return Card(
+                          margin: const EdgeInsets.symmetric(vertical: 4),
+                          child: ListTile(
+                            dense: true,
+                            title: Text(
+                              v.targetWord,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            subtitle: Text(v.translation),
+                            trailing: Chip(
+                              label: Text(v.pos),
+                              visualDensity: VisualDensity.compact,
+                            ),
                           ),
-                        ),
-                        TextButton(
-                          onPressed: _isParsing
-                              ? null
-                              : () => setState(() {
-                                  _selectedDirectoryPaths
-                                    ..clear()
-                                    ..addAll(
-                                      _directoryFiles.map((file) => file.path),
-                                    );
-                                }),
-                          child: const Text('Check all'),
-                        ),
-                        TextButton(
-                          onPressed: _isParsing
-                              ? null
-                              : () => setState(_selectedDirectoryPaths.clear),
-                          child: const Text('Uncheck all'),
-                        ),
-                      ],
+                        );
+                      },
                     ),
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Markdown folder ready',
-                              style: theme.textTheme.titleLarge?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              '${_directoryFiles.length} lessons found; '
-                              '${_selectedDirectoryPaths.length} selected, '
-                              '$_directorySkipped files skipped.',
-                            ),
-                            const SizedBox(height: 4),
-                            const Text(
-                              'Matching lessons and vocabulary will be updated '
-                              'in place. Existing vocabulary SRS progress will '
-                              'be preserved; unmatched vocabulary will be kept.',
-                            ),
-                            if (_directoryErrors.isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              Text(
-                                '${_directoryErrors.length} files could not be '
-                                'parsed and will not be imported.',
-                                style: TextStyle(
-                                  color: theme.colorScheme.error,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                _directoryErrors.take(3).join('\n'),
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.error,
-                                ),
-                                maxLines: 5,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Lessons Preview:',
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Expanded(
-                      child: ListView.builder(
-                        itemCount: _directoryFiles.length,
-                        itemBuilder: (context, index) {
-                          final file = _directoryFiles[index];
-                          final lesson = file.preview.lesson;
-                          return Card(
-                            margin: const EdgeInsets.symmetric(vertical: 4),
-                            child: ListTile(
-                              dense: true,
-                              leading: Checkbox(
-                                value: _selectedDirectoryPaths.contains(
-                                  file.path,
-                                ),
-                                onChanged: (checked) => setState(() {
-                                  if (checked == true) {
-                                    _selectedDirectoryPaths.add(file.path);
-                                  } else {
-                                    _selectedDirectoryPaths.remove(file.path);
-                                  }
-                                }),
-                              ),
-                              title: Text(lesson.displayTitle),
-                              subtitle: Text(
-                                '${lesson.effectiveUnitTitle ?? file.path} · '
-                                '${lesson.vocabularies.length} vocabulary items',
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ] else if (_previewResult != null) ...[
-                    Card(
-                      elevation: 0,
-                      color: theme.colorScheme.surfaceContainerHighest
-                          .withValues(alpha: 0.5),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _previewResult!.lesson.displayTitle,
-                              style: theme.textTheme.titleLarge?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            if (_previewResult!.lesson.effectiveUnitTitle !=
-                                null) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                _previewResult!.lesson.effectiveUnitTitle!,
-                                style: theme.textTheme.labelLarge?.copyWith(
-                                  color: theme.colorScheme.primary,
-                                ),
-                              ),
-                            ],
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: [
-                                Chip(
-                                  avatar: const Icon(Icons.language, size: 16),
-                                  label: Text(
-                                    '${_previewResult!.lesson.targetLanguage.toUpperCase()} ➔ ${_previewResult!.lesson.nativeLanguage.toUpperCase()}',
-                                  ),
-                                ),
-                                Chip(
-                                  avatar: const Icon(Icons.style, size: 16),
-                                  label: Text(
-                                    '${_previewResult!.lesson.vocabularies.length} Vocabs',
-                                  ),
-                                ),
-                                Chip(
-                                  avatar: const Icon(
-                                    Icons.format_quote,
-                                    size: 16,
-                                  ),
-                                  label: Text(
-                                    '${_previewResult!.sentences.length} Pooled Sentences',
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Vocabulary Items Preview:',
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Expanded(
-                      child: ListView.builder(
-                        itemCount: _previewResult!.lesson.vocabularies.length,
-                        itemBuilder: (context, idx) {
-                          final v = _previewResult!.lesson.vocabularies[idx];
-                          return Card(
-                            margin: const EdgeInsets.symmetric(vertical: 4),
-                            child: ListTile(
-                              dense: true,
-                              title: Text(
-                                v.targetWord,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                              ),
-                              subtitle: Text(v.translation),
-                              trailing: Chip(
-                                label: Text(v.pos),
-                                visualDensity: VisualDensity.compact,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ] else if (_errorMessage == null)
-                    const Expanded(
-                      child: Center(
-                        child: Text('Enter Markdown to see preview'),
-                      ),
-                    ),
-                ],
-              ),
-            );
-
-        if (narrow) {
-          return DefaultTabController(
-            length: 2,
-            child: Column(
-              children: [
-                const TabBar(
-                  tabs: [
-                    Tab(text: 'Editor'),
-                    Tab(text: 'Preview'),
-                  ],
-                ),
-                Expanded(child: TabBarView(children: [editor, preview])),
+                  ),
+                ] else if (_errorMessage == null)
+                  const Expanded(
+                    child: Center(child: Text('Enter Markdown to see preview')),
+                  ),
               ],
             ),
           );
-        }
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(flex: 6, child: editor),
-            const VerticalDivider(width: 1),
-            Expanded(flex: 5, child: preview),
-          ],
-        );
-      }),
+
+          if (narrow) {
+            return DefaultTabController(
+              length: 2,
+              child: Column(
+                children: [
+                  const TabBar(
+                    tabs: [
+                      Tab(text: 'Editor'),
+                      Tab(text: 'Preview'),
+                    ],
+                  ),
+                  Expanded(child: TabBarView(children: [editor, preview])),
+                ],
+              ),
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(flex: 6, child: editor),
+              const VerticalDivider(width: 1),
+              Expanded(flex: 5, child: preview),
+            ],
+          );
+        },
+      ),
     );
   }
 }

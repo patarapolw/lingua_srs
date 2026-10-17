@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../views/lesson_list_view.dart';
 import '../views/sentence_pool_view.dart';
 import '../views/yaml_import_view.dart';
@@ -40,10 +41,14 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
           children: [
             NavigationRail(
               selectedIndex: _selectedIndex,
-              onDestinationSelected: (idx) => setState(() => _selectedIndex = idx),
+              onDestinationSelected: (idx) =>
+                  setState(() => _selectedIndex = idx),
               extended: MediaQuery.of(context).size.width >= 1100,
               leading: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 8),
+                padding: const EdgeInsets.symmetric(
+                  vertical: 20,
+                  horizontal: 8,
+                ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -77,8 +82,12 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
                   child: Padding(
                     padding: const EdgeInsets.only(bottom: 20),
                     child: IconButton(
-                      icon: Icon(widget.isDarkMode ? Icons.light_mode : Icons.dark_mode),
-                      tooltip: widget.isDarkMode ? 'Switch to Light' : 'Switch to Dark',
+                      icon: Icon(
+                        widget.isDarkMode ? Icons.light_mode : Icons.dark_mode,
+                      ),
+                      tooltip: widget.isDarkMode
+                          ? 'Switch to Light'
+                          : 'Switch to Dark',
                       onPressed: widget.onToggleTheme,
                     ),
                   ),

@@ -54,11 +54,8 @@ class YamlParserService {
       final frontMatterParts = _splitMarkdownFrontmatter(frontMatter);
       final markdownBody = frontMatterParts.$2;
       markdownContent = markdownBody
-        .replaceFirst(
-          RegExp(r'\n## Vocabulary\r?\n[^]+?\r?\n## '),
-          '\n## ',
-        )
-        .trim();
+          .replaceFirst(RegExp(r'\n## Vocabulary\r?\n[^]+?\r?\n## '), '\n## ')
+          .trim();
       final headingTitle = RegExp(
         r'^#\s+(.+)$',
         multiLine: true,

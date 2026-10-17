@@ -46,10 +46,7 @@ class YouTubeEmbed extends StatefulWidget {
     if (videoId == null && playlistId == null) return null;
 
     final base = 'https://www.youtube.com/embed/${videoId ?? 'videoseries'}';
-    final queryParameters = {
-      'enablejsapi': '1',
-      'list': ?playlistId,
-    };
+    final queryParameters = {'enablejsapi': '1', 'list': ?playlistId};
     return Uri.parse(base).replace(queryParameters: queryParameters).toString();
   }
 
@@ -71,11 +68,14 @@ class _YouTubeEmbedState extends State<YouTubeEmbed> {
   void initState() {
     super.initState();
     final embed = Uri.parse(widget.embedUrl);
-    final src = embed.replace(
-      host: 'www.youtube-nocookie.com',
-      queryParameters: {...embed.queryParameters, 'origin': _origin},
-    ).toString();
-    final script = '''
+    final src = embed
+        .replace(
+          host: 'www.youtube-nocookie.com',
+          queryParameters: {...embed.queryParameters, 'origin': _origin},
+        )
+        .toString();
+    final script =
+        '''
 document.documentElement.innerHTML =
   '<head><meta name="viewport" content="width=device-width, initial-scale=1"></head>' +
   '<body style="margin:0;height:100vh;background:#000"></body>';

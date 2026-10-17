@@ -31,7 +31,7 @@ A Flutter application targeting **Desktop (Windows, macOS, Linux)** and **Mobile
 
 4. **Front-of-Card Random Sentence with Cloze Deletion**:
    - Each card dynamically selects a **random example sentence** from the vocabulary's pool to display on the front.
-   - For **KO ➔ EN** cards: Displays the target word and the Korean context sentence.
+   - For **KO ➔ EN** cards: Displays the target word and the Korean example sentence.
    - For **EN ➔ KO** cards: Displays the English translation prompt and the random sentence with **Cloze Deletion** (e.g. `저는 (___)를 위해 문을 열었어요`), handling bold tags and Korean verb/adjective stems.
    - The user can flip back and forth between front and back anytime (via `Space`, `Enter`, `F`, or tapping the card).
 
@@ -67,15 +67,15 @@ A Flutter application targeting **Desktop (Windows, macOS, Linux)** and **Mobile
    - **Mobile**: Responsive bottom navigation, touch-friendly card taps, swipeable sheet editors.
 
 10. **Recent Mistakes & Adaptive Queueing**:
-   - **Top-Level "Recent Mistakes" Review**: Directly review active mistakes across all lessons (or per lesson) from the top banner or AppBar with live mistake count badges.
+   - **Top-Level "Recent Mistakes" Review**: Directly review active mistakes across all lessons (or per lesson) from the Daily Review Queue card, which shows a **Recent Mistakes** button with a live count only while mistakes exist.
    - **Interleaved Re-queuing**: Cards rated *Again* are automatically re-inserted a few cards ahead in the active session for delayed retrieval practice.
    - **Intelligent Session Completion**: Looping continues as long as multiple unmastered cards remain, and concludes when at most 1 *Again*'d card is left to avoid immediate zero-delay 1-card echo loops.
    - **Color-Coded Review Progress Bar**: Displays live Wrong (Red) and Right (Green) breakdown indicators directly on the top progress bar and AppBar during study sessions.
-   - **24-Hour Review Window Limit**: Caps daily review volume to a rolling 24-hour limit (default: 100 cards), customizable or set to unlimited from the dashboard.
+   - **24-Hour Review Window Limit**: Caps daily review volume to a rolling 24-hour limit (default: 100 cards), customizable or set to unlimited in **Settings** (gear icon). The dashboard shows cards due today (or, when none are due, how many are due tomorrow), plus the number of reviews in the last 24 hours once it is above zero.
    - **Sub-24h Repetition for Difficult Cards**: Cards marked *Again* are scheduled to repeat after a sensible 1-hour minimum delay (rather than waiting an entire day), while early *Hard* reviews repeat in 12 hours.
    - **POS-Category Shuffling**: Cards within each lesson are shuffled and interleaved across parts of speech (nouns, verbs, adjectives, etc.) rather than displaying oldest-inserted cards first, while continuing to prioritize oldest-inserted lessons first.
 11. **AI-Assisted Quiz Discussions**:
-   - Configure a DeepSeek API key from the dashboard settings, then ask questions about the current vocabulary and context sentence during a quiz. Answers stream into the chat and render as Markdown.
+   - Configure a DeepSeek API key in **Settings** (gear icon), then ask questions about the current vocabulary and example sentence during a quiz. Answers stream into the chat and render as Markdown.
    - Start with suggested questions about etymology/Hanja, key sentence vocabulary, everyday usage, and examples; get suggested follow-ups during the discussion.
    - Press Enter to send a chat message and Shift+Enter or Ctrl+Enter to add a new line.
    - Discussions are saved locally per vocabulary and sentence, restored when revisiting that card, and can be deleted from the discussion view.
@@ -176,7 +176,7 @@ vocabulary:
       en: "to make"
 ```
 
-Each entry should include a target-language field (such as `ko`) and a translation field (such as `en`). `audio`, `notes`, `disambiguation`, and `examples` are optional. Write vocabulary and sentence notes in Markdown; for example, use `**bold**` or `*italic*` formatting. Notes on individual examples are imported as sentence notes and shown on the review-card back; they can also be edited from the Sentence Pool. Example sentence emphasis uses Markdown `**bold**`; the app uses it for cloze cards. Cards with the same front prompt are flagged even when their context sentences differ; use `disambiguation` to show an extra cue on the card front. Per-card back notes are edited in the vocabulary editor. Add an optional `id` when entries should explicitly share SRS progress or need distinct identities.
+Each entry should include a target-language field (such as `ko`) and a translation field (such as `en`). `audio`, `notes`, `disambiguation`, and `examples` are optional. Write vocabulary and sentence notes in Markdown; for example, use `**bold**` or `*italic*` formatting. Notes on individual examples are imported as sentence notes and shown on the review-card back; they can also be edited from the Sentence Pool. Example sentence emphasis uses Markdown `**bold**`; the app uses it for cloze cards. Cards with the same front prompt are flagged even when their example sentences differ; use `disambiguation` to show an extra cue on the card front. Per-card back notes are edited in the vocabulary editor. Add an optional `id` when entries should explicitly share SRS progress or need distinct identities.
 
 The import button remains disabled until Markdown with YAML frontmatter containing `vocabulary:` can be previewed. The vocabulary map may be empty, and the Markdown body is optional. Fix any displayed parse errors, review the lesson and vocabulary preview, then import. Use **Pick File** to load a YAML/YML/TXT/Markdown file, or **Pick Folder** to scan Markdown files recursively. Folder results start unchecked; select individual lessons or choose **Check all**. Only selected lessons are imported. Folder imports use only files with a `vocabulary:` key in their YAML frontmatter; ordinary Markdown body text is retained for lesson reading but is not imported as vocabulary. Re-importing updates matching lessons and vocabulary while preserving SRS progress and keeping unmatched vocabulary.
 

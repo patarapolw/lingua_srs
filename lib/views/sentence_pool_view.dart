@@ -69,7 +69,7 @@ class _SentencePoolViewState extends State<SentencePoolView> {
                 minLines: 2,
                 maxLines: 5,
                 decoration: const InputDecoration(
-                  labelText: 'Sentence Notes (Markdown / HTML)',
+                  labelText: 'Sentence Notes (Markdown)',
                 ),
               ),
             ],
@@ -136,12 +136,19 @@ class _SentencePoolViewState extends State<SentencePoolView> {
       appBar: AppBar(
         title: const Text('Sentence Pool'),
         actions: [
-          FilledButton.icon(
-            icon: const Icon(Icons.add),
-            label: const Text('Add Sentence'),
-            onPressed: () => _showAddEditDialog(),
-          ),
-          const SizedBox(width: 16),
+          if (MediaQuery.sizeOf(context).width < 700)
+            IconButton(
+              icon: const Icon(Icons.add_comment_outlined),
+              tooltip: 'Add Sentence',
+              onPressed: () => _showAddEditDialog(),
+            )
+          else
+            FilledButton.icon(
+              icon: const Icon(Icons.add),
+              label: const Text('Add Sentence'),
+              onPressed: () => _showAddEditDialog(),
+            ),
+          SizedBox(width: MediaQuery.sizeOf(context).width < 700 ? 8 : 16),
         ],
       ),
       body: Column(
@@ -156,7 +163,7 @@ class _SentencePoolViewState extends State<SentencePoolView> {
                     controller: _searchCtrl,
                     decoration: InputDecoration(
                       prefixIcon: const Icon(Icons.search),
-                      hintText: 'Search sentences by target or translation...',
+                      hintText: 'Search sentences',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),

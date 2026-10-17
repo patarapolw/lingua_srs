@@ -48,5 +48,15 @@ void main() {
     }
     await tester.pumpAndSettle();
     expect(find.text('LinguaSRS'), findsWidgets);
+    // The seed has 5 due cards, so tomorrow's count is hidden.
+    expect(find.textContaining('5 cards due today'), findsOneWidget);
+    expect(find.textContaining('due tomorrow'), findsNothing);
+    expect(find.textContaining('in 24h'), findsNothing);
+    expect(find.textContaining('24h Limit'), findsNothing);
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    expect(find.text('Max reviews per 24 hours'), findsOneWidget);
+    expect(find.text('DeepSeek API key'), findsOneWidget);
   });
 }

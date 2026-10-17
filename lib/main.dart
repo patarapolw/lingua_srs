@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import 'providers/app_provider.dart';
 import 'services/audio_service.dart';
 import 'widgets/adaptive_scaffold.dart';
@@ -27,12 +28,6 @@ class LinguaSrsApp extends StatefulWidget {
 class _LinguaSrsAppState extends State<LinguaSrsApp> {
   ThemeMode _themeMode = ThemeMode.system;
 
-  void _toggleTheme() {
-    setState(() {
-      _themeMode = _themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     const seedColor = Color(0xFF3F51B5); // Indigo accent
@@ -49,11 +44,16 @@ class _LinguaSrsAppState extends State<LinguaSrsApp> {
         ),
         cardTheme: CardThemeData(
           elevation: 1,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
         inputDecorationTheme: InputDecorationTheme(
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 12,
+          ),
         ),
       ),
       darkTheme: ThemeData(
@@ -64,17 +64,37 @@ class _LinguaSrsAppState extends State<LinguaSrsApp> {
         ),
         cardTheme: CardThemeData(
           elevation: 1,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
         inputDecorationTheme: InputDecorationTheme(
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 12,
+          ),
         ),
       ),
-      home: AdaptiveScaffold(
-        isDarkMode: _themeMode == ThemeMode.dark,
-        onToggleTheme: _toggleTheme,
+      home: Builder(
+        builder: (context) {
+          final isDark = _isDark(context);
+          return AdaptiveScaffold(
+            isDarkMode: isDark,
+            onToggleTheme: () => setState(() {
+              _themeMode = isDark ? ThemeMode.light : ThemeMode.dark;
+            }),
+          );
+        },
       ),
     );
   }
+
+  // In system mode, the effective brightness follows the device setting.
+  bool _isDark(BuildContext context) => switch (_themeMode) {
+    ThemeMode.dark => true,
+    ThemeMode.light => false,
+    ThemeMode.system =>
+      MediaQuery.platformBrightnessOf(context) == Brightness.dark,
+  };
 }

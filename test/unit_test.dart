@@ -41,10 +41,11 @@ void main() {
       expect(result.lesson.title, 'Debug Seed::Markdown Rendering');
       expect(result.lesson.markdownContent, startsWith('# Debug Seed'));
       expect(result.lesson.markdownContent, contains('<TTS>'));
-      expect(
-        result.lesson.vocabularies.map((v) => v.pos).toSet(),
-        {'nouns', 'verbs', 'adjectives'},
-      );
+      expect(result.lesson.vocabularies.map((v) => v.pos).toSet(), {
+        'nouns',
+        'verbs',
+        'adjectives',
+      });
       expect(result.sentences, isNotEmpty);
     });
 
@@ -166,26 +167,29 @@ The full lesson text remains available to render.
       expect(YamlParserService.hasVocabularyFrontmatter(markdown), isTrue);
     });
 
-    test('Fresh debug install seeds lessons and a non-empty sentence pool', () async {
-      SharedPreferences.setMockInitialValues({
-        'lingua_srs_windows_legacy_migration_complete': true,
-      });
-      final provider = AppProvider();
-      while (provider.isLoading) {
-        await Future<void>.delayed(Duration.zero);
-      }
+    test(
+      'Fresh debug install seeds lessons and a non-empty sentence pool',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'lingua_srs_windows_legacy_migration_complete': true,
+        });
+        final provider = AppProvider();
+        while (provider.isLoading) {
+          await Future<void>.delayed(Duration.zero);
+        }
 
-      expect(provider.lessons, hasLength(1));
-      expect(provider.sentences, isNotEmpty);
-      final linkedIds = provider.lessons.single.vocabularies
-          .expand((vocab) => vocab.sentenceIds)
-          .toSet();
-      expect(linkedIds, isNotEmpty);
-      expect(
-        provider.sentences.map((sentence) => sentence.id),
-        containsAll(linkedIds),
-      );
-    });
+        expect(provider.lessons, hasLength(1));
+        expect(provider.sentences, isNotEmpty);
+        final linkedIds = provider.lessons.single.vocabularies
+            .expand((vocab) => vocab.sentenceIds)
+            .toSet();
+        expect(linkedIds, isNotEmpty);
+        expect(
+          provider.sentences.map((sentence) => sentence.id),
+          containsAll(linkedIds),
+        );
+      },
+    );
 
     test('Persists full Markdown separately from lesson JSON', () async {
       SharedPreferences.setMockInitialValues({

@@ -6,7 +6,7 @@ import '../models/ai_discussion_message.dart';
 import '../providers/app_provider.dart';
 import '../services/deepseek_service.dart';
 import '../widgets/markdown_content.dart';
-import 'deepseek_settings_dialog.dart';
+import 'settings_dialog.dart';
 
 class AiDiscussionDialog extends StatefulWidget {
   final String discussionId;
@@ -49,7 +49,7 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
   Future<void> _openSettings() async {
     await showDialog<void>(
       context: context,
-      builder: (_) => const DeepSeekSettingsDialog(),
+      builder: (_) => const SettingsDialog(),
     );
     if (mounted) setState(() {});
   }
@@ -96,8 +96,8 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
       'The learner is studying ${widget.targetLanguage} with ${widget.nativeLanguage} support.',
       'Vocabulary: "${widget.targetWord}" means "${widget.translation}".',
       if (sentence?.isNotEmpty == true)
-        'Context sentence: "$sentence"${sentenceTranslation?.isNotEmpty == true ? ' (translation: "$sentenceTranslation")' : ''}.',
-      'Answer questions about this vocabulary and context sentence clearly. Explain nuances and usage when useful.',
+        'Example sentence: "$sentence"${sentenceTranslation?.isNotEmpty == true ? ' (translation: "$sentenceTranslation")' : ''}.',
+      'Answer questions about this vocabulary and example sentence clearly. Explain nuances and usage when useful.',
       'Format your answer using Markdown.',
     ].join('\n');
   }

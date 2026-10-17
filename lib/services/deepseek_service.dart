@@ -39,9 +39,9 @@ class DeepSeekService {
           .timeout(const Duration(seconds: 60));
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        final body = await response.stream
-            .bytesToString()
-            .timeout(const Duration(seconds: 60));
+        final body = await response.stream.bytesToString().timeout(
+          const Duration(seconds: 60),
+        );
         throw DeepSeekException(
           'DeepSeek request failed (${response.statusCode}): $body',
         );
