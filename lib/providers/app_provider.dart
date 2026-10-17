@@ -15,14 +15,33 @@ class StudyCardItem {
   final VocabItem vocab;
   final SrsCard card;
   final Lesson lesson;
-  Sentence? sentence;
+  final Sentence? Function()? _sentenceResolver;
+  Sentence? _sentence;
+  bool _sentenceResolved;
 
   StudyCardItem({
     required this.vocab,
     required this.card,
     required this.lesson,
-    this.sentence,
-  });
+    Sentence? sentence,
+    Sentence? Function()? sentenceResolver,
+  }) : _sentence = sentence, // ignore: prefer_initializing_formals
+       _sentenceResolver = sentenceResolver,
+       _sentenceResolved = sentenceResolver == null;
+
+  /// Resolved lazily so building a large queue doesn't scan sentences per card.
+  Sentence? get sentence {
+    if (!_sentenceResolved) {
+      _sentence = _sentenceResolver!();
+      _sentenceResolved = true;
+    }
+    return _sentence;
+  }
+
+  set sentence(Sentence? value) {
+    _sentence = value;
+    _sentenceResolved = true;
+  }
 
   bool get isTargetToNative => card.direction == CardDirection.targetToNative;
 }
@@ -1030,7 +1049,7 @@ class AppProvider extends ChangeNotifier {
                     vocab: vocab,
                     card: card,
                     lesson: lesson,
-                    sentence: getRandomSentenceForVocab(vocab),
+                    sentenceResolver: () => getRandomSentenceForVocab(vocab),
                   ),
                 );
           }
@@ -1050,7 +1069,7 @@ class AppProvider extends ChangeNotifier {
                     vocab: vocab,
                     card: card,
                     lesson: lesson,
-                    sentence: getRandomSentenceForVocab(vocab),
+                    sentenceResolver: () => getRandomSentenceForVocab(vocab),
                   ),
                 );
           }

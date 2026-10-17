@@ -194,7 +194,7 @@ class AudioService extends ChangeNotifier {
     }
 
     final ttsUrl = getTtsUrl(clean, language: language);
-    await playAudio(ttsUrl);
+    await playAudio(ttsUrl, playingKey: 'tts_${text.trim()}');
   }
 
   Future<void> _speakWithOfflineAndroidTts(
@@ -266,14 +266,14 @@ class AudioService extends ChangeNotifier {
   /// If it is a remote URL:
   /// - If already cached locally, plays the local file instantly with 0 latency.
   /// - If not cached yet, streams from the URL immediately while caching in the background for subsequent offline runs.
-  Future<void> playAudio(String? urlOrPath) async {
+  Future<void> playAudio(String? urlOrPath, {String? playingKey}) async {
     if (urlOrPath == null || urlOrPath.trim().isEmpty) return;
     final trimmed = urlOrPath.trim();
 
     try {
       await stop();
 
-      _currentlyPlayingKey = trimmed;
+      _currentlyPlayingKey = playingKey ?? trimmed;
       _isPlaying = true;
       notifyListeners();
 

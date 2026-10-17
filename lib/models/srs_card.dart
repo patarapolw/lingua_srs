@@ -28,6 +28,7 @@ class SrsCard {
   int lapses;
   DateTime? lastMistakeDate;
   SrsRating? lastRating;
+  DateTime? mistakesClearedAt;
 
   SrsCard({
     String? id,
@@ -43,6 +44,7 @@ class SrsCard {
     this.lapses = 0,
     this.lastMistakeDate,
     this.lastRating,
+    this.mistakesClearedAt,
   }) : id = id ?? const Uuid().v4(),
        dueDate = dueDate ?? DateTime.now();
 
@@ -52,14 +54,18 @@ class SrsCard {
 
   bool get hasRecentMistake {
     if (!isEnabled) return false;
-    if (lastMistakeDate != null) {
+    bool counts(DateTime d) =>
+        mistakesClearedAt == null || d.isAfter(mistakesClearedAt!);
+    if (lastMistakeDate != null && counts(lastMistakeDate!)) {
       final hours = DateTime.now().difference(lastMistakeDate!).inHours;
       if (hours <= 48 &&
           (lastRating == SrsRating.again || status == SrsStatus.learning)) {
         return true;
       }
     }
-    if (status == SrsStatus.learning && lastReviewed != null) {
+    if (status == SrsStatus.learning &&
+        lastReviewed != null &&
+        counts(lastReviewed!)) {
       final hours = DateTime.now().difference(lastReviewed!).inHours;
       if (hours <= 48) return true;
     }
@@ -76,6 +82,7 @@ class SrsCard {
     lapses = 0;
     lastMistakeDate = null;
     lastRating = null;
+    mistakesClearedAt = null;
   }
 
   Map<String, dynamic> toJson() => {
@@ -92,9 +99,13 @@ class SrsCard {
     'lapses': lapses,
     'lastMistakeDate': lastMistakeDate?.toIso8601String(),
     'lastRating': lastRating?.name,
+    'mistakesClearedAt': mistakesClearedAt?.toIso8601String(),
   };
 
   factory SrsCard.fromJson(Map<String, dynamic> json) => SrsCard(
+    mistakesClearedAt: json['mistakesClearedAt'] != null
+        ? DateTime.parse(json['mistakesClearedAt'] as String)
+        : null,
     id: json['id'] as String?,
     direction: CardDirection.values.firstWhere(
       (e) => e.name == json['direction'],

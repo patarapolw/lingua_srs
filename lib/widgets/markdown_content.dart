@@ -132,6 +132,44 @@ class MarkdownContent extends StatelessWidget {
   }
 }
 
+/// Blurs arbitrary content (e.g. rendered Markdown) until tapped or hovered.
+class SpoilerBlock extends StatefulWidget {
+  final Widget child;
+
+  const SpoilerBlock({super.key, required this.child});
+
+  @override
+  State<SpoilerBlock> createState() => _SpoilerBlockState();
+}
+
+class _SpoilerBlockState extends State<SpoilerBlock> {
+  bool _hovered = false;
+  bool _revealedByTap = false;
+
+  bool get _revealed => _hovered || _revealedByTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: _revealed ? null : 'Spoiler. Tap to reveal.',
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => setState(() => _revealedByTap = !_revealedByTap),
+          child: _revealed
+              ? widget.child
+              : ImageFiltered(
+                  imageFilter: ui.ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+                  child: widget.child,
+                ),
+        ),
+      ),
+    );
+  }
+}
+
 class SpoilerText extends StatefulWidget {
   final String text;
 

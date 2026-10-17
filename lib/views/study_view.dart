@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import '../models/srs_card.dart';
 import '../providers/app_provider.dart';
 import '../services/audio_service.dart';
+import '../services/srs_service.dart';
 import '../widgets/audio_button.dart';
 import '../widgets/icon_switch.dart';
 import '../widgets/markdown_content.dart';
@@ -27,6 +28,8 @@ class ReviewHistoryRecord {
   final SrsRating ratingGiven;
   final int? requeuedIndex;
   final bool wasInAgainSet;
+  final bool wasFirstSessionRating;
+  final DateTime? oldMistakesClearedAt;
 
   ReviewHistoryRecord({
     required this.queueIndex,
@@ -40,6 +43,8 @@ class ReviewHistoryRecord {
     required this.ratingGiven,
     this.requeuedIndex,
     this.wasInAgainSet = false,
+    this.wasFirstSessionRating = true,
+    this.oldMistakesClearedAt,
   });
 }
 
@@ -79,6 +84,22 @@ class _StudyViewState extends State<StudyView> {
   };
   int get rightCount =>
       _history.where((r) => r.ratingGiven != SrsRating.again).length;
+
+  bool get _isReviewingPast => _currentIndex < _answeredCount;
+
+  String _nextIn(SrsRating rating) {
+    final card = _queue[_currentIndex].card;
+    return SrsService.formatDuration(SrsService.previewInterval(card, rating));
+  }
+
+  bool get _isPracticeOnly => widget.recentMistakesOnly;
+
+  // Cards already rated this session (Again interleaving), and all cards in
+  // mistakes practice, only offer Again/Good.
+  bool get _isRepeatCard =>
+      _isPracticeOnly ||
+      (_currentIndex < _queue.length &&
+          _sessionRatedCardIds.contains(_queue[_currentIndex].card.id));
   int get wrongCount =>
       _history.where((r) => r.ratingGiven == SrsRating.again).length;
 
@@ -227,7 +248,11 @@ class _StudyViewState extends State<StudyView> {
   }
 
   void _rateCard(SrsRating rating) {
-    if (_currentIndex >= _queue.length) return;
+    if (_currentIndex >= _queue.length || _isReviewingPast) return;
+    final isRepeat = _isRepeatCard;
+    if (isRepeat && (rating == SrsRating.hard || rating == SrsRating.easy)) {
+      return;
+    }
     context.read<AudioService>().stop();
     final item = _queue[_currentIndex];
     final card = item.card;
@@ -235,6 +260,7 @@ class _StudyViewState extends State<StudyView> {
     final provider = context.read<AppProvider>();
     final wasInAgainSet = _againCardIds.contains(cardId);
 
+    final oldMistakesClearedAt = card.mistakesClearedAt;
     int? requeuedIndex;
 
     final isFirstSessionRating = !_sessionRatedCardIds.contains(cardId);
@@ -242,7 +268,9 @@ class _StudyViewState extends State<StudyView> {
 
     if (rating == SrsRating.again) {
       _againCardIds.add(cardId);
-      if (isFirstSessionRating) {
+      if (_isPracticeOnly) {
+        // Mistakes practice never touches SRS state.
+      } else if (isFirstSessionRating) {
         provider.recordCardReview(card, SrsRating.again);
       } else {
         card.lastMistakeDate = DateTime.now();
@@ -278,7 +306,11 @@ class _StudyViewState extends State<StudyView> {
       }
     } else {
       _againCardIds.remove(cardId);
-      if (isFirstSessionRating) {
+      if (_isPracticeOnly) {
+        // Good in mistakes practice dismisses the mistake without touching SRS.
+        card.mistakesClearedAt = DateTime.now();
+        provider.saveState();
+      } else if (isFirstSessionRating) {
         provider.recordCardReview(card, rating);
       } else {
         card.lastRating = rating;
@@ -300,6 +332,8 @@ class _StudyViewState extends State<StudyView> {
         ratingGiven: rating,
         requeuedIndex: requeuedIndex,
         wasInAgainSet: wasInAgainSet,
+        wasFirstSessionRating: isFirstSessionRating,
+        oldMistakesClearedAt: oldMistakesClearedAt,
       ),
     );
 
@@ -325,6 +359,10 @@ class _StudyViewState extends State<StudyView> {
       _queue.removeAt(record.requeuedIndex!);
     }
 
+    if (record.wasFirstSessionRating) {
+      _sessionRatedCardIds.remove(record.card.id);
+    }
+
     if (record.wasInAgainSet) {
       _againCardIds.add(record.card.id);
     } else {
@@ -338,6 +376,7 @@ class _StudyViewState extends State<StudyView> {
     record.card.dueDate = record.oldDueDate;
     record.card.lastReviewed = record.oldLastReviewed;
     record.card.status = record.oldStatus;
+    record.card.mistakesClearedAt = record.oldMistakesClearedAt;
     provider.saveState();
 
     setState(() {
@@ -876,7 +915,7 @@ class _StudyViewState extends State<StudyView> {
                                       label: Text(
                                         isTargetToNative
                                             ? '${item.lesson.targetLanguage.toUpperCase()} ➔ ${item.lesson.nativeLanguage.toUpperCase()}'
-                                            : '${item.lesson.nativeLanguage.toUpperCase()} ➔ ${item.lesson.targetLanguage.toUpperCase()} (Cloze)',
+                                            : '${item.lesson.nativeLanguage.toUpperCase()} ➔ ${item.lesson.targetLanguage.toUpperCase()}',
                                         style: const TextStyle(
                                           fontWeight: FontWeight.bold,
                                         ),
@@ -965,17 +1004,8 @@ class _StudyViewState extends State<StudyView> {
                                         ),
                                         child: Column(
                                           crossAxisAlignment:
-                                              CrossAxisAlignment.start,
+                                              CrossAxisAlignment.center,
                                           children: [
-                                            Row(
-                                              children: [
-                                                const Icon(
-                                                  Icons.format_quote_rounded,
-                                                  size: 18,
-                                                ),
-                                              ],
-                                            ),
-                                            const SizedBox(height: 4),
                                             MarkdownContent(
                                               content:
                                                   item.sentence!.targetText,
@@ -1023,7 +1053,7 @@ class _StudyViewState extends State<StudyView> {
                                         ),
                                         child: Column(
                                           crossAxisAlignment:
-                                              CrossAxisAlignment.start,
+                                              CrossAxisAlignment.center,
                                           children: [
                                             const SizedBox(height: 10),
                                             MarkdownContent(
@@ -1159,15 +1189,21 @@ class _StudyViewState extends State<StudyView> {
                                             ],
                                           ),
                                           const SizedBox(height: 6),
-                                          MarkdownContent(
-                                            content:
-                                                item.sentence!.translationText,
-                                            style: theme.textTheme.bodyMedium
-                                                ?.copyWith(
-                                                  color: theme
-                                                      .colorScheme
-                                                      .onSurfaceVariant,
-                                                ),
+                                          SpoilerBlock(
+                                            key: ValueKey(
+                                              '$_currentIndex-${item.sentence!.id}',
+                                            ),
+                                            child: MarkdownContent(
+                                              content: item
+                                                  .sentence!
+                                                  .translationText,
+                                              style: theme.textTheme.bodyMedium
+                                                  ?.copyWith(
+                                                    color: theme
+                                                        .colorScheme
+                                                        .onSurfaceVariant,
+                                                  ),
+                                            ),
                                           ),
                                         ],
                                       ),
@@ -1251,7 +1287,7 @@ class _StudyViewState extends State<StudyView> {
               ),
 
               // Bottom SRS Rating Bar (Accessible when answer revealed)
-              if (_isAnswerRevealed)
+              if (_isAnswerRevealed && !_isReviewingPast)
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 24,
@@ -1294,44 +1330,45 @@ class _StudyViewState extends State<StudyView> {
                                           fontWeight: FontWeight.bold,
                                         ),
                                       ),
-                                      if (_showKeyHints)
-                                        const Text(
-                                          'Key 1 / Backspace',
-                                          style: TextStyle(fontSize: 10),
+                                      if (!_isRepeatCard)
+                                        Text(
+                                          _nextIn(SrsRating.again),
+                                          style: const TextStyle(fontSize: 11),
                                         ),
                                     ],
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: FilledButton.tonal(
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor: Colors.orange.shade100,
-                                    foregroundColor: Colors.orange.shade900,
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 14,
+                              if (!_isRepeatCard) ...[
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: FilledButton.tonal(
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: Colors.orange.shade100,
+                                      foregroundColor: Colors.orange.shade900,
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 14,
+                                      ),
+                                    ),
+                                    onPressed: () => _rateCard(SrsRating.hard),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Text(
+                                          'Hard',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        Text(
+                                          _nextIn(SrsRating.hard),
+                                          style: const TextStyle(fontSize: 11),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                  onPressed: () => _rateCard(SrsRating.hard),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Text(
-                                        'Hard',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      if (_showKeyHints)
-                                        const Text(
-                                          'Key 2',
-                                          style: TextStyle(fontSize: 10),
-                                        ),
-                                    ],
-                                  ),
                                 ),
-                              ),
+                              ],
                               const SizedBox(width: 10),
                               Expanded(
                                 flex: 2,
@@ -1356,44 +1393,45 @@ class _StudyViewState extends State<StudyView> {
                                           fontSize: 16,
                                         ),
                                       ),
-                                      if (_showKeyHints)
-                                        const Text(
-                                          'Key 3 or Enter',
-                                          style: TextStyle(fontSize: 10),
+                                      if (!_isRepeatCard)
+                                        Text(
+                                          _nextIn(SrsRating.good),
+                                          style: const TextStyle(fontSize: 11),
                                         ),
                                     ],
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: FilledButton.tonal(
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor: Colors.blue.shade100,
-                                    foregroundColor: Colors.blue.shade900,
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 14,
+                              if (!_isRepeatCard) ...[
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: FilledButton.tonal(
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: Colors.blue.shade100,
+                                      foregroundColor: Colors.blue.shade900,
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 14,
+                                      ),
+                                    ),
+                                    onPressed: () => _rateCard(SrsRating.easy),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Text(
+                                          'Easy',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        Text(
+                                          _nextIn(SrsRating.easy),
+                                          style: const TextStyle(fontSize: 11),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                  onPressed: () => _rateCard(SrsRating.easy),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Text(
-                                        'Easy',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      if (_showKeyHints)
-                                        const Text(
-                                          'Key 4',
-                                          style: TextStyle(fontSize: 10),
-                                        ),
-                                    ],
-                                  ),
                                 ),
-                              ),
+                              ],
                             ],
                           ),
                           if (_showKeyHints) ...[
@@ -1402,7 +1440,9 @@ class _StudyViewState extends State<StudyView> {
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Text(
-                                  'Shortcuts: [Space] Flip • [Enter] Good • [Backspace] Again • [← / →] Back/Fwd • [Z] Undo',
+                                  _isRepeatCard
+                                      ? 'Shortcuts: [Space] Flip • [1 / ⌫] Again • [3 / Enter] Good • [← / →] Back/Fwd • [Z] Undo'
+                                      : 'Shortcuts: [Space] Flip • [1] Again • [2] Hard • [3 / Enter] Good • [4] Easy • [⌫] Again • [← / →] Back/Fwd • [Z] Undo',
                                   style: theme.textTheme.bodySmall?.copyWith(
                                     color: theme.colorScheme.outline,
                                   ),
