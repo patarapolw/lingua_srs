@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../views/recent_ai_discussions_view.dart';
 import '../views/lesson_list_view.dart';
 import '../views/sentence_pool_view.dart';
 import '../views/yaml_import_view.dart';
@@ -33,6 +34,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
       ),
       const SentencePoolView(),
       const YamlImportView(),
+      const RecentAiDiscussionsView(),
     ];
 
     if (isDesktop) {
@@ -109,6 +111,11 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
                   selectedIcon: Icon(Icons.file_upload),
                   label: Text('Add Lessons'),
                 ),
+                NavigationRailDestination(
+                  icon: Icon(Icons.forum_outlined),
+                  selectedIcon: Icon(Icons.forum),
+                  label: Text('Recent Discussions'),
+                ),
               ],
             ),
             const VerticalDivider(width: 1),
@@ -139,6 +146,11 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
             icon: Icon(Icons.file_upload_outlined),
             selectedIcon: Icon(Icons.file_upload),
             label: 'Import',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.forum_outlined),
+            selectedIcon: Icon(Icons.forum),
+            label: 'Discussions',
           ),
         ],
       ),

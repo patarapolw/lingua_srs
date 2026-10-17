@@ -88,9 +88,14 @@ void main() {
       await StorageService.saveDeepSeekApiKey(' test-key ');
       expect(await StorageService.loadDeepSeekApiKey(), 'test-key');
 
-      const messages = [
+      final updatedAt = DateTime.utc(2026, 10, 17, 12);
+      final messages = [
         AiDiscussionMessage(role: 'user', content: 'Question'),
-        AiDiscussionMessage(role: 'assistant', content: 'Answer'),
+        AiDiscussionMessage(
+          role: 'assistant',
+          content: 'Answer',
+          createdAt: updatedAt,
+        ),
       ];
       await StorageService.saveAiDiscussions({'vocab:sentence': messages});
       final restored = await StorageService.loadAiDiscussions();
@@ -98,6 +103,13 @@ void main() {
         'Question',
         'Answer',
       ]);
+      expect(restored['vocab:sentence']?.last.createdAt, updatedAt);
+
+      expect(
+        AiDiscussionMessage.fromJson({'role': 'user', 'content': 'Legacy'})
+            .createdAt,
+        isNull,
+      );
 
       await StorageService.saveAiDiscussions({});
       expect(await StorageService.loadAiDiscussions(), isEmpty);

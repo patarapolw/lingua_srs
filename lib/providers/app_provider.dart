@@ -68,6 +68,15 @@ class AppProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get selectedLessonId => _selectedLessonId;
   int get maxReviews24h => _maxReviews24h;
+  Map<String, List<AiDiscussionMessage>> get aiDiscussions =>
+      Map.unmodifiable(
+        _aiDiscussions.map<String, List<AiDiscussionMessage>>(
+          (id, messages) => MapEntry(
+            id,
+            List<AiDiscussionMessage>.unmodifiable(messages),
+          ),
+        ),
+      );
   Map<String, int> get lessonHierarchyOrder =>
       Map.unmodifiable(_lessonHierarchyOrder);
   Map<String, bool> get lessonFolderExpansion =>
@@ -213,9 +222,16 @@ class AppProvider extends ChangeNotifier {
     String discussionId,
     AiDiscussionMessage message,
   ) async {
+    final savedMessage = message.createdAt == null
+        ? AiDiscussionMessage(
+            role: message.role,
+            content: message.content,
+            createdAt: DateTime.now(),
+          )
+        : message;
     final messages = List<AiDiscussionMessage>.from(
       _aiDiscussions[discussionId] ?? const [],
-    )..add(message);
+    )..add(savedMessage);
     _aiDiscussions[discussionId] = messages;
     await StorageService.saveAiDiscussions(_aiDiscussions);
     notifyListeners();

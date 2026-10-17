@@ -79,6 +79,7 @@ A Flutter application targeting **Desktop (Windows, macOS, Linux)** and **Mobile
    - Start with suggested questions about etymology/Hanja, key sentence vocabulary, everyday usage, and examples; get suggested follow-ups during the discussion.
    - Press Enter to send a chat message and Shift+Enter or Ctrl+Enter to add a new line.
    - Discussions are saved locally per vocabulary and sentence, restored when revisiting that card, and can be deleted from the discussion view.
+   - The **Recent Discussions** tab lists every saved discussion, most recently active first, with the vocabulary, its example sentence, and the latest question. Tap one to reopen it. Discussions saved before timestamps were added are listed last.
 
 ---
 
@@ -132,6 +133,7 @@ lingua_srs/
 │   │   ├── yaml_import_view.dart      # File/folder import, editor, validator & preview
 │   │   ├── vocab_edit_dialog.dart     # On-the-go editor for any field
 │   │   ├── ai_discussion_dialog.dart  # AI-assisted quiz discussion chat
+│   │   ├── recent_ai_discussions_view.dart # Recent Discussions tab
 │   │   └── deepseek_settings_dialog.dart # DeepSeek API key settings
 │   └── widgets/
 │       ├── adaptive_scaffold.dart     # Responsive layout (Rail vs BottomNav)
