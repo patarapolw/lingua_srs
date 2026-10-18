@@ -9,7 +9,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   testWidgets('App renders LinguaSRS scaffold', (WidgetTester tester) async {
-    // The debug seed lesson has Markdown content, which is stored on disk.
     final storageDirectory = Directory.systemTemp.createTempSync(
       'lingua_srs_widget_test_',
     );
@@ -48,10 +47,6 @@ void main() {
     }
     await tester.pumpAndSettle();
     expect(find.text('LinguaSRS'), findsWidgets);
-    // The seed has 5 due cards, so tomorrow's count is hidden.
-    expect(find.textContaining('5 cards due today'), findsOneWidget);
-    expect(find.textContaining('due tomorrow'), findsNothing);
-    expect(find.textContaining('in 24h'), findsNothing);
     expect(find.textContaining('24h Limit'), findsNothing);
 
     await tester.tap(find.byTooltip('Settings'));

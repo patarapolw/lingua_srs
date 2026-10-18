@@ -690,7 +690,12 @@ class _StudyViewState extends State<StudyView> {
                         style: Theme.of(context).textTheme.labelSmall,
                       ),
                     ] else if (MediaQuery.sizeOf(context).width < 700)
-                      Text('$currentNumber / $total')
+                      Text(
+                        '$currentNumber / $total',
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.fade,
+                      )
                     else ...[
                       if (item.lesson.effectiveUnitTitle != null)
                         Text(
@@ -754,21 +759,23 @@ class _StudyViewState extends State<StudyView> {
                   : 'Cannot go forward beyond unanswered cards',
               onPressed: canGoForward ? _navigateForward : null,
             ),
-            // Undo button
-            IconButton(
-              icon: const Icon(Icons.undo),
-              tooltip: canUndo
-                  ? (_showKeyHints
-                        ? 'Undo Last Rating (Z / Ctrl+Z)'
-                        : 'Undo Last Rating')
-                  : 'Nothing to undo',
-              onPressed: canUndo ? _undo : null,
-            ),
+            if (MediaQuery.sizeOf(context).width >= 700)
+              IconButton(
+                icon: const Icon(Icons.undo),
+                tooltip: canUndo
+                    ? (_showKeyHints
+                          ? 'Undo Last Rating (Z / Ctrl+Z)'
+                          : 'Undo Last Rating')
+                    : 'Nothing to undo',
+                onPressed: canUndo ? _undo : null,
+              ),
             if (MediaQuery.sizeOf(context).width < 700)
               PopupMenuButton<String>(
                 tooltip: 'More',
                 onSelected: (value) {
                   switch (value) {
+                    case 'undo':
+                      _undo();
                     case 'autoplay':
                       provider.toggleAutoplay();
                     case 'edit':
@@ -778,6 +785,16 @@ class _StudyViewState extends State<StudyView> {
                   }
                 },
                 itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: 'undo',
+                    enabled: canUndo,
+                    child: const ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.undo),
+                      title: Text('Undo last rating'),
+                    ),
+                  ),
                   CheckedPopupMenuItem(
                     value: 'autoplay',
                     checked: provider.autoplayAudio,

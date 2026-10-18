@@ -725,7 +725,11 @@ class LessonListView extends StatelessWidget {
                           ),
                           const SizedBox(height: 12),
                           const Text(
-                            'No lessons found. Import from markdown/YAML or create one!',
+                            'No lessons found.'
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Import from markdown/YAML or create one!',
                           ),
                           const SizedBox(height: 16),
                           FilledButton.icon(

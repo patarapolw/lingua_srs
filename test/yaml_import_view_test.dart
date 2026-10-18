@@ -1,9 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:lingua_srs/services/yaml_parser_service.dart';
 import 'package:lingua_srs/views/yaml_import_view.dart';
 
 void main() {
+  testWidgets('offers separate file and folder import actions', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(const MaterialApp(home: YamlImportView()));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Files'), findsOneWidget);
+    expect(find.text('Folder'), findsOneWidget);
+    expect(find.byType(DropTarget), findsOneWidget);
+    expect(find.textContaining('.md, .yaml, .yml, or .zip'), findsOneWidget);
+    expect(find.textContaining('plain YAML both work'), findsOneWidget);
+    expect(find.text('Pick File'), findsNothing);
+    expect(find.text('Pick ZIP'), findsNothing);
+  });
+
   testWidgets('starts with empty Markdown input and import disabled', (
     tester,
   ) async {

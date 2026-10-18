@@ -34,21 +34,6 @@ void main() {
   });
 
   group('YAML Parser & Vocabulary Models', () {
-    test('debug seed is a Markdown lesson with POS-keyed vocabulary', () {
-      final result = YamlParserService.parseLessonYaml(
-        StorageService.debugSeedMarkdown,
-      );
-      expect(result.lesson.title, 'Debug Seed::Markdown Rendering');
-      expect(result.lesson.markdownContent, startsWith('# Debug Seed'));
-      expect(result.lesson.markdownContent, contains('<TTS>'));
-      expect(result.lesson.vocabularies.map((v) => v.pos).toSet(), {
-        'nouns',
-        'verbs',
-        'adjectives',
-      });
-      expect(result.sentences, isNotEmpty);
-    });
-
     const sampleYaml = '''
 Lesson: Unit 2::Lesson 26
 
@@ -167,29 +152,18 @@ The full lesson text remains available to render.
       expect(YamlParserService.hasVocabularyFrontmatter(markdown), isTrue);
     });
 
-    test(
-      'Fresh debug install seeds lessons and a non-empty sentence pool',
-      () async {
-        SharedPreferences.setMockInitialValues({
-          'lingua_srs_windows_legacy_migration_complete': true,
-        });
-        final provider = AppProvider();
-        while (provider.isLoading) {
-          await Future<void>.delayed(Duration.zero);
-        }
+    test('Fresh install starts empty', () async {
+      SharedPreferences.setMockInitialValues({
+        'lingua_srs_windows_legacy_migration_complete': true,
+      });
+      final provider = AppProvider();
+      while (provider.isLoading) {
+        await Future<void>.delayed(Duration.zero);
+      }
 
-        expect(provider.lessons, hasLength(1));
-        expect(provider.sentences, isNotEmpty);
-        final linkedIds = provider.lessons.single.vocabularies
-            .expand((vocab) => vocab.sentenceIds)
-            .toSet();
-        expect(linkedIds, isNotEmpty);
-        expect(
-          provider.sentences.map((sentence) => sentence.id),
-          containsAll(linkedIds),
-        );
-      },
-    );
+      expect(provider.lessons, isEmpty);
+      expect(provider.sentences, isEmpty);
+    });
 
     test('Persists full Markdown separately from lesson JSON', () async {
       SharedPreferences.setMockInitialValues({
@@ -444,6 +418,34 @@ Lesson content is not part of the vocabulary data.
       expect(result.lesson.vocabularies.single.sentenceIds, [
         result.sentences.single.id,
       ]);
+    });
+
+    test('frontmatter-only Markdown is equivalent to plain YAML', () {
+      const yaml = '''
+vocabulary:
+  nouns:
+    - ko: 배
+      en: pear
+      examples:
+        - ko: 배를 먹었어요.
+          en: I ate a pear.
+''';
+      final plainYaml = YamlParserService.parseLessonYaml(yaml);
+      final markdownFrontmatter = YamlParserService.parseLessonYaml(
+        '---\n$yaml---\n',
+      );
+
+      expect(markdownFrontmatter.lesson.title, plainYaml.lesson.title);
+      expect(
+        markdownFrontmatter.lesson.vocabularies.map(
+          (vocab) => (vocab.targetWord, vocab.translation, vocab.pos),
+        ),
+        plainYaml.lesson.vocabularies.map(
+          (vocab) => (vocab.targetWord, vocab.translation, vocab.pos),
+        ),
+      );
+      expect(markdownFrontmatter.sentences.length, plainYaml.sentences.length);
+      expect(markdownFrontmatter.lesson.markdownContent, isEmpty);
     });
 
     test('Parses nested sections and creates sense-aware vocabulary IDs', () {

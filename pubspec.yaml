@@ -48,6 +48,8 @@ dependencies:
   webview_flutter: ^4.14.1
   webview_all: ^1.4.4 # for broader platform support, or webview_win_floating: ^1.0.0 for windows
   markdown: ^7.3.1
+  archive: ^4.5.2
+  desktop_drop: ^0.8.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
