@@ -6,6 +6,7 @@ import '../models/lesson.dart';
 import '../models/sentence.dart';
 import '../models/vocab_item.dart';
 import '../providers/app_provider.dart';
+import '../widgets/markdown_content.dart';
 import 'ai_discussion_dialog.dart';
 
 class RecentAiDiscussionsView extends StatelessWidget {
@@ -86,11 +87,12 @@ class RecentAiDiscussionsView extends StatelessWidget {
                           ),
                         if (discussion.sentence?.targetText.trim() case final s?
                             when s.isNotEmpty)
-                          Text(
-                            s,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontStyle: FontStyle.italic),
+                          Padding(
+                            padding: const EdgeInsetsGeometry.only(top: 2, bottom: 2),
+                            child: MarkdownContent(
+                              content: s,
+                              style: const TextStyle(fontStyle: FontStyle.italic),
+                            ),
                           ),
                         Text(
                           discussion.preview,

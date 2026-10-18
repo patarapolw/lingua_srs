@@ -103,21 +103,20 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
   }
 
   List<String> _suggestedQuestions(bool hasMessages) {
-    if (!hasMessages) {
-      return [
+    final questions = !hasMessages ? [
         'Explain the etymology and Hanja of "${widget.targetWord}".',
         if (widget.sentenceTarget?.isNotEmpty == true)
           'What are the key vocabulary words in this sentence?',
         'How is "${widget.targetWord}" used in everyday speech?',
         'Give me another example sentence with "${widget.targetWord}".',
-      ];
-    }
-    return [
+      ] : [
       'Can you give another example with "${widget.targetWord}"?',
       'How would a native speaker say this more naturally?',
       if (widget.sentenceTarget?.isNotEmpty == true)
         'What other useful expressions are in this sentence?',
     ];
+
+    return questions;
   }
 
   void _insertNewline() {
@@ -214,12 +213,14 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
     final theme = Theme.of(context);
     final width = MediaQuery.sizeOf(context).width;
     final height = MediaQuery.sizeOf(context).height;
+    final double maxWidth = 640;
 
     return Dialog(
+      insetPadding: EdgeInsets.zero,
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: 640, maxHeight: height * 0.85),
+        constraints: BoxConstraints(maxWidth: maxWidth, maxHeight: height * 0.85),
         child: SizedBox(
-          width: width < 700 ? width - 56 : 640,
+          width: width < maxWidth ? width : maxWidth,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
             child: Column(
@@ -379,19 +380,15 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                           },
                         ),
                 ),
-                if (messages.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
+                if (messages.isNotEmpty)
+                  ExpansionTile(
+                    title: Text(
                       'Suggested next questions',
                       style: theme.textTheme.labelMedium,
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 4,
+                    tilePadding: EdgeInsets.zero,
+                    visualDensity: VisualDensity.compact,
+                    initiallyExpanded: false,
                     children: _suggestedQuestions(true)
                         .map(
                           (question) => ActionChip(
@@ -403,7 +400,6 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                         )
                         .toList(),
                   ),
-                ],
                 if (_sending) const LinearProgressIndicator(minHeight: 2),
                 if (_error != null)
                   Padding(
