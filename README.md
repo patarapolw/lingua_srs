@@ -43,8 +43,8 @@ A Flutter application targeting **Desktop (Windows, macOS, Linux)** and **Mobile
 
 6. **Instant Audio Streaming with Offline Caching**:
    - **Stream-on-First-Play**: Audio starts streaming immediately on the very first play with zero wait time.
-   - **Background Caching**: Simultaneously downloads and stores the `.mp3` bytes in the app's sandbox cache directory (`audio_cache/`), not in My Documents.
-   - On Windows, the cache parent directory uses the app's company and product metadata (`%LOCALAPPDATA%\\cc.polv\\lingua.srs\\audio_cache`).
+   - **Background Caching**: Simultaneously downloads and stores the `.mp3` bytes in the app's sandbox cache directory (`audio_cache/`).
+   - On Windows, the cache parent directory uses the app's company and product metadata (`%LOCALAPPDATA%\cc.polv\lingua.srs\audio_cache`).
    - **Instant Offline Playback**: Subsequent plays of that vocabulary or sentence play directly from the local disk file with **zero network latency** and 100% offline availability.
    - **Pre-buffering**: Automatically pre-buffers upcoming cards in the background so cards play instantaneously without delays.
 

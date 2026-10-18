@@ -125,7 +125,7 @@ img { max-width: 100%; }
 .spoiler { filter: blur(5px); cursor: pointer; transition: filter .15s; }
 .spoiler:hover, .spoiler.show { filter: none; }
 .tts, .audio { cursor: pointer; }
-.audio { font-size: 0.8em; padding: 2px 8px; }
+.audio { font-size: 0.8em; padding: 2px 5px; border: none; border-radius: 50%; }
 ''';
   }
 
