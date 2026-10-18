@@ -689,22 +689,34 @@ class LessonListView extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            'Your Lessons',
+                            'Lessons',
                             style: theme.textTheme.titleLarge?.copyWith(
                               fontWeight: FontWeight.bold,
                             ),
                           ),
                         ),
-                        FilledButton.tonalIcon(
-                          icon: const Icon(Icons.post_add_outlined),
-                          label: const Text('Add Lessons'),
-                          onPressed: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const YamlImportView(),
+                        if (MediaQuery.sizeOf(context).width < 700)
+                          IconButton.filledTonal(
+                            icon: const Icon(Icons.post_add_outlined),
+                            tooltip: 'Add Lessons',
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const YamlImportView(),
+                              ),
+                            ),
+                          )
+                        else
+                          FilledButton.tonalIcon(
+                            icon: const Icon(Icons.post_add_outlined),
+                            label: const Text('Add Lessons'),
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const YamlImportView(),
+                              ),
                             ),
                           ),
-                        ),
                       ],
                     ),
                   ),

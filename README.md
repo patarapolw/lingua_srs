@@ -7,7 +7,7 @@ A Flutter application targeting **Desktop (Windows, macOS, Linux)** and **Mobile
 ## 🌟 Key Features
 
 1. **YAML/Markdown Lesson Architecture**:
-   - Create lessons from the **Import Lessons** screen (**Add Lessons** in the desktop sidebar, **Import** in the mobile navigation) with a lesson-name field and a Markdown editor. Both start empty; the editor shows a placeholder example of Markdown with YAML frontmatter and an optional Markdown body.
+   - Create lessons from the **Import Lessons** screen (**Add Lessons** in the section header) with a lesson-name field and a Markdown editor. Both start empty; the editor shows a placeholder example of Markdown with YAML frontmatter and an optional Markdown body.
    - Use `::` in the lesson name to separate hierarchy levels. For example, `Unit 2::Lesson 26` groups the lesson under `Unit 2`; `Topic::Subtopic::Lesson A` creates a deeper hierarchy.
    - Import Markdown/YAML files or ZIP archives with one picker, or drag `.md`, `.yaml`/`.yml`, and `.zip` files onto the desktop import screen. Markdown containing only YAML frontmatter imports the same as equivalent plain YAML. Import folder(s) with a separate action. Multiple folders can be selected together on macOS; other platforms select one folder at a time. Nested folder and archive paths preserve lesson hierarchy.
    - Importing ZIP archives provides a batch-import option on Android, where directory import is restricted. Choose which Markdown lessons to import (all unchecked initially, with **Check all** and **Uncheck all** controls).

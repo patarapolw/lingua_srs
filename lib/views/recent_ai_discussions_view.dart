@@ -27,7 +27,7 @@ class RecentAiDiscussionsView extends StatelessWidget {
           });
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Recent AI Discussions')),
+      appBar: AppBar(title: const Text('Recent Discussions')),
       body: provider.isLoading
           ? const Center(child: CircularProgressIndicator())
           : discussions.isEmpty
@@ -44,7 +44,7 @@ class RecentAiDiscussionsView extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'No AI discussions yet',
+                      'No discussions yet',
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 4),

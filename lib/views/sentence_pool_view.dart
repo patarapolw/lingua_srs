@@ -163,7 +163,7 @@ class _SentencePoolViewState extends State<SentencePoolView> {
                     controller: _searchCtrl,
                     decoration: InputDecoration(
                       prefixIcon: const Icon(Icons.search),
-                      hintText: 'Search sentences',
+                      hintText: 'Search...',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -187,7 +187,7 @@ class _SentencePoolViewState extends State<SentencePoolView> {
                 const SizedBox(width: 16),
                 Chip(
                   avatar: const Icon(Icons.format_quote_rounded, size: 18),
-                  label: Text('${provider.sentences.length} Total Sentences'),
+                  label: Text('${provider.sentences.length} sentences'),
                 ),
               ],
             ),
