@@ -204,6 +204,7 @@ Under `vocabulary:`, use part-of-speech keys only, with entries directly in each
 
 ### Features
 
+- Export lessons/units as ZIP.
 - Sync between mobile and desktop, and between devices. Quick connect via QR code. I am probably using Cloudflare D1 worker for this.
 
 ### Bugs

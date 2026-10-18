@@ -528,6 +528,12 @@ class LessonListView extends StatelessWidget {
     final isDailyLimitReached =
         totalDue > 0 && provider.remainingReviews24h == 0;
 
+    final dueNoticeParts = <String>[];
+    if (provider.reviewsInLast24Hours > 0) dueNoticeParts.add('${provider.reviewsInLast24Hours} studied today');
+    if (totalRecentMistakes > 1) dueNoticeParts.add('$totalRecentMistakes forgotten');
+    if (availableDue == 0) dueNoticeParts.add('$dueTomorrow due tomorrow');
+    if (totalDue > availableDue && totalDue > 0) dueNoticeParts.add('$totalDue remaining');
+
     return Scaffold(
       appBar: AppBar(
         title: MediaQuery.sizeOf(context).width < 700
@@ -586,17 +592,18 @@ class LessonListView extends StatelessWidget {
                                         ),
                                   ),
                                   const SizedBox(height: 6),
-                                  Text(
-                                    '$totalDue cards due today'
-                                    '${totalDue == 0 ? ' • $dueTomorrow due tomorrow' : ''}'
-                                    '${provider.reviewsInLast24Hours > 0 ? ' • ${provider.reviewsInLast24Hours} in 24h' : ''}'
-                                    '${totalRecentMistakes > 0 ? ' • $totalRecentMistakes mistakes' : ''}',
-                                    style: theme.textTheme.bodyMedium?.copyWith(
-                                      color: theme
-                                          .colorScheme
-                                          .onPrimaryContainer
-                                          .withValues(alpha: 0.8),
-                                    ),
+                                  Wrap(
+                                    children: [
+                                      for (int i = 0; i < dueNoticeParts.length; i++)
+                                        Text(i < dueNoticeParts.length - 1 ? '${dueNoticeParts[i]} • ' : dueNoticeParts[i],
+                                          style: theme.textTheme.bodyMedium?.copyWith(
+                                            color: theme
+                                                .colorScheme
+                                                .onPrimaryContainer
+                                                .withValues(alpha: 0.8),
+                                          )
+                                        )
+                                    ],
                                   ),
                                 ],
                               ),

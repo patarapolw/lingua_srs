@@ -106,10 +106,11 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
     final questions = !hasMessages ? [
         'Explain the etymology and Hanja of "${widget.targetWord}".',
         if (widget.sentenceTarget?.isNotEmpty == true)
-          'What are the key vocabulary words in this sentence?',
+          'How does this sentence work and what are key vocabularies?',
         'How is "${widget.targetWord}" used in everyday speech?',
         'Give me another example sentence with "${widget.targetWord}".',
       ] : [
+      'Explain the etymology and Hanja of "${widget.targetWord}".',
       'Can you give another example with "${widget.targetWord}"?',
       'How would a native speaker say this more naturally?',
       if (widget.sentenceTarget?.isNotEmpty == true)
@@ -217,8 +218,12 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
 
     return Dialog(
       insetPadding: EdgeInsets.zero,
+      alignment: Alignment.bottomCenter,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: maxWidth, maxHeight: height * 0.85),
+        constraints: BoxConstraints(maxWidth: maxWidth, maxHeight: height * 0.9),
         child: SizedBox(
           width: width < maxWidth ? width : maxWidth,
           child: Padding(
@@ -388,7 +393,7 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                     ),
                     tilePadding: EdgeInsets.zero,
                     visualDensity: VisualDensity.compact,
-                    initiallyExpanded: false,
+                    initiallyExpanded: height > 1000,
                     children: _suggestedQuestions(true)
                         .map(
                           (question) => ActionChip(
