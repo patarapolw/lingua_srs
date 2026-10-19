@@ -1,5 +1,6 @@
 import 'package:uuid/uuid.dart';
 
+import 'shared_vocab.dart';
 import 'srs_card.dart';
 
 class VocabItem {
@@ -9,12 +10,9 @@ class VocabItem {
   String translation;
   String pos; // Part of speech or category (e.g. nouns, verbs, adjectives)
   List<String> sectionPath;
-  String? audioUrl;
-  String notes; // Markdown formatted notes
-  String disambiguation;
   List<String> sentenceIds; // Reference to sentences in the pool
-  SrsCard cardTargetToNative; // e.g. KO -> EN
-  SrsCard cardNativeToTarget; // e.g. EN -> KO
+  /// Details and SRS cards shared by every VocabItem with the same [id].
+  SharedVocab shared;
 
   VocabItem({
     String? id,
@@ -23,27 +21,50 @@ class VocabItem {
     required this.translation,
     required this.pos,
     List<String>? sectionPath,
-    this.audioUrl,
-    this.notes = '',
-    this.disambiguation = '',
+    String? audioUrl,
+    String notes = '',
+    String disambiguation = '',
     List<String>? sentenceIds,
     SrsCard? cardTargetToNative,
     SrsCard? cardNativeToTarget,
   }) : id = id ?? const Uuid().v4(),
-       sectionPath = sectionPath ?? (pos.isEmpty ? [] : [pos]),
-       sentenceIds = sentenceIds ?? [],
-       cardTargetToNative =
-           cardTargetToNative ??
-           SrsCard(
-             direction: CardDirection.targetToNative,
-             isEnabled: !isVerbOrAdjective(pos),
-           ),
-       cardNativeToTarget =
-           cardNativeToTarget ??
-           SrsCard(
-             direction: CardDirection.nativeToTarget,
-             isEnabled: isVerbOrAdjective(pos),
-           );
+      sectionPath = sectionPath ?? (pos.isEmpty ? [] : [pos]),
+      sentenceIds = sentenceIds ?? [],
+      shared = SharedVocab(
+      audioUrl: audioUrl,
+        notes: notes,
+        disambiguation: disambiguation,
+        cardTargetToNative: cardTargetToNative ??
+            SrsCard(
+              direction: CardDirection.targetToNative,
+              isEnabled: !isVerbOrAdjective(pos),
+            ),
+        cardNativeToTarget: cardNativeToTarget ??
+            SrsCard(
+              direction: CardDirection.nativeToTarget,
+              isEnabled: isVerbOrAdjective(pos),
+            ),
+      );
+
+    String? get audioUrl => shared.audioUrl;
+    set audioUrl(String? v) {
+      shared.setManual(SharedVocab.audioField, v);
+    }
+
+    String get notes => shared.notes;
+    set notes(String v) {
+      shared.setManual(SharedVocab.notesField, v);
+    }
+
+    String get disambiguation => shared.disambiguation;
+    set disambiguation(String v) {
+      shared.setManual(SharedVocab.disambiguationField, v);
+    }
+
+    SrsCard get cardTargetToNative => shared.cardTargetToNative;
+    set cardTargetToNative(SrsCard v) => shared.cardTargetToNative = v;
+    SrsCard get cardNativeToTarget => shared.cardNativeToTarget;
+    set cardNativeToTarget(SrsCard v) => shared.cardNativeToTarget = v;
 
   static bool isVerbOrAdjective(String category) {
     final lower = category.toLowerCase().trim();

@@ -8,6 +8,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/ai_discussion_message.dart';
 import '../models/lesson.dart';
 import '../models/sentence.dart';
+import '../models/shared_vocab.dart';
+import '../models/vocab_item.dart';
 
 class StorageService {
   static const String _keyLessons = 'lingua_srs_lessons';
@@ -15,6 +17,7 @@ class StorageService {
   static const String _keyImportedMarkdownSources =
       'lingua_srs_imported_markdown_sources';
   static const String _keySentences = 'lingua_srs_sentences';
+  static const String _keySharedVocab = 'lingua_srs_shared_vocab';
   static const String _keyDeepSeekApiKey = 'lingua_srs_deepseek_api_key';
   static const String _keyAiDiscussions = 'lingua_srs_ai_discussions';
   static const String _keyAutoplay = 'lingua_srs_autoplay';
@@ -241,6 +244,7 @@ class StorageService {
       }
       if (lessons != null) {
         await _loadLessonMarkdown(prefs, lessons);
+        _bindSharedVocab(prefs, lessons);
         return lessons;
       }
     }
@@ -284,8 +288,90 @@ class StorageService {
       await prefs.setStringList(_keyLessonMarkdownIds, markdownIds);
     }
 
+    final sharedJson = <String, dynamic>{};
+    for (final vocab in lessons.expand((l) => l.vocabularies)) {
+      sharedJson.putIfAbsent(vocab.id, () => vocab.shared.toJson());
+    }
+    await prefs.setString(_keySharedVocab, jsonEncode(sharedJson));
+
     final jsonStr = jsonEncode(lessons.map((l) => l.toJson()).toList());
     await prefs.setString(_keyLessons, jsonStr);
+  }
+
+  static void _bindSharedVocab(SharedPreferences prefs, List<Lesson> lessons) {
+    var stored = <String, dynamic>{};
+    try {
+      final raw = prefs.getString(_keySharedVocab);
+      if (raw != null && raw.isNotEmpty) {
+        stored = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+      }
+    } catch (_) {}
+
+    final bound = <String, SharedVocab>{};
+    final legacy = <String, List<MapEntry<Lesson, VocabItem>>>{};
+    for (final lesson in lessons) {
+      for (final vocab in lesson.vocabularies) {
+        final existing = bound[vocab.id];
+        if (existing != null) {
+          vocab.shared = existing;
+          continue;
+        }
+        final json = stored[vocab.id];
+        if (json != null) {
+          try {
+            final shared = SharedVocab.fromJson(
+              Map<String, dynamic>.from(json as Map),
+            );
+            bound[vocab.id] = shared;
+            vocab.shared = shared;
+            continue;
+          } catch (_) {}
+        }
+        legacy
+            .putIfAbsent(vocab.id, () => [])
+            .add(MapEntry(lesson, vocab));
+      }
+    }
+
+    // No stored record: merge the per-lesson copies (old format).
+    for (final group in legacy.values) {
+      final base = group.reduce(
+        (a, b) => _isMoreProgressed(b.value, a.value) ? b : a,
+      );
+      final shared = SharedVocab(
+        cardTargetToNative: base.value.cardTargetToNative,
+        cardNativeToTarget: base.value.cardNativeToTarget,
+      );
+      for (final entry in group) {
+        for (final field in SharedVocab.detailFields) {
+          shared.mergeImport(
+            field,
+            entry.value.shared.valueOf(field),
+            lessonId: entry.key.id,
+          );
+        }
+      }
+      for (final entry in group) {
+        entry.value.shared = shared;
+      }
+    }
+  }
+
+  static DateTime _lastReviewed(VocabItem v) {
+    final a = v.cardTargetToNative.lastReviewed;
+    final b = v.cardNativeToTarget.lastReviewed;
+    final epoch = DateTime.fromMillisecondsSinceEpoch(0);
+    if (a == null) return b ?? epoch;
+    if (b == null) return a;
+    return a.isAfter(b) ? a : b;
+  }
+
+  static bool _isMoreProgressed(VocabItem a, VocabItem b) {
+    final byDate = _lastReviewed(a).compareTo(_lastReviewed(b));
+    if (byDate != 0) return byDate > 0;
+    int reps(VocabItem v) =>
+        v.cardTargetToNative.repetitions + v.cardNativeToTarget.repetitions;
+    return reps(a) > reps(b);
   }
 
   static Future<void> _loadLessonMarkdown(

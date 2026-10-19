@@ -7,6 +7,7 @@ import '../models/ai_discussion_message.dart';
 import '../models/lesson.dart';
 import '../models/vocab_item.dart';
 import '../models/sentence.dart';
+import '../models/shared_vocab.dart';
 import '../models/srs_card.dart';
 import '../services/storage_service.dart';
 import '../services/srs_service.dart';
@@ -143,7 +144,6 @@ class AppProvider extends ChangeNotifier {
       await StorageService.saveLessons(_lessons);
     }
     _linkSharedVocabProgress();
-    _syncSharedVocabDetails();
 
     if (_lessons.isNotEmpty) {
       _selectedLessonId = _lessons.first.id;
@@ -377,7 +377,6 @@ class AppProvider extends ChangeNotifier {
     );
     final lesson = _applyParsedLesson(parsed);
     _linkSharedVocabProgress();
-    _syncSharedVocabDetails();
     await _saveImportedLessons();
     notifyListeners();
     return lesson;
@@ -413,7 +412,6 @@ class AppProvider extends ChangeNotifier {
     }
     if (parsedLessons.isNotEmpty) {
       _linkSharedVocabProgress();
-      _syncSharedVocabDetails();
       await _saveImportedLessons();
       notifyListeners();
     }
@@ -443,9 +441,9 @@ class AppProvider extends ChangeNotifier {
       _mergeImportedLesson(existingLesson, parsed, sentenceIndex);
     } else {
       if (vocabIndex == null) {
-        _reuseExistingVocabProgress(parsed.lesson.vocabularies);
+        _reuseExistingVocabProgress(parsed.lesson.vocabularies, parsed.lesson.id);
       } else {
-        _reuseVocabProgressFromIndex(parsed.lesson.vocabularies, vocabIndex);
+        _reuseVocabProgressFromIndex(parsed.lesson.vocabularies, vocabIndex, parsed.lesson.id);
       }
       final sentenceIds = <String, String>{};
       for (final sentence in parsed.sentences) {
@@ -458,6 +456,7 @@ class AppProvider extends ChangeNotifier {
         vocab.sentenceIds = _unique(
           vocab.sentenceIds.map((id) => sentenceIds[id] ?? id),
         );
+        vocab.shared.stampUnowned(parsed.lesson.id);
       }
       _lessons.add(parsed.lesson);
       _selectedLessonId = parsed.lesson.id;
@@ -569,7 +568,7 @@ class AppProvider extends ChangeNotifier {
           : null;
       if (lessonMatch == null) {
         if (previousVocab != null) {
-          _reuseProgress(importedVocab, previousVocab);
+          _reuseProgress(importedVocab, previousVocab, lessonId: lesson.id);
         }
         newVocabularies.add(importedVocab);
         _addVocabToIndexes(importedVocab, vocabById, vocabByMeaning);
@@ -585,19 +584,17 @@ class AppProvider extends ChangeNotifier {
         ..translation = importedVocab.translation
         ..pos = importedVocab.pos
         ..sectionPath = importedVocab.sectionPath
-        ..audioUrl = _isBlank(importedVocab.audioUrl)
-            ? lessonMatch.audioUrl
-            : importedVocab.audioUrl
-        ..notes = _isBlank(importedVocab.notes)
-            ? lessonMatch.notes
-            : importedVocab.notes
-        ..disambiguation = _isBlank(importedVocab.disambiguation)
-            ? lessonMatch.disambiguation
-            : importedVocab.disambiguation
         ..sentenceIds = importedVocab.sentenceIds;
+      lessonMatch.shared
+        ..mergeImport(SharedVocab.audioField, importedVocab.audioUrl,
+            lessonId: lesson.id)
+        ..mergeImport(SharedVocab.notesField, importedVocab.notes,
+            lessonId: lesson.id)
+        ..mergeImport(SharedVocab.disambiguationField,
+            importedVocab.disambiguation, lessonId: lesson.id);
       _addVocabToIndexes(lessonMatch, vocabById, vocabByMeaning);
       if (previousVocab != null && !identical(previousVocab, lessonMatch)) {
-        _reuseProgress(lessonMatch, previousVocab);
+        _reuseProgress(lessonMatch, previousVocab, lessonId: lesson.id);
       }
     }
     lesson.vocabularies = [...lesson.vocabularies, ...newVocabularies];
@@ -700,8 +697,8 @@ class AppProvider extends ChangeNotifier {
   static String _normalizeVocabWord(String word) =>
       word.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
 
-  void _reuseExistingVocabProgress(List<VocabItem> imported) {
-    _reuseVocabProgressFromIndex(imported, _newVocabProgressIndex());
+  void _reuseExistingVocabProgress(List<VocabItem> imported, String lessonId) {
+    _reuseVocabProgressFromIndex(imported, _newVocabProgressIndex(), lessonId);
   }
 
   Map<String, VocabItem> _newVocabProgressIndex() {
@@ -715,10 +712,11 @@ class AppProvider extends ChangeNotifier {
   void _reuseVocabProgressFromIndex(
     List<VocabItem> imported,
     Map<String, VocabItem> index,
+    String lessonId,
   ) {
     for (final vocab in imported) {
       final previous = index[_progressIdentity(vocab)];
-      if (previous != null) _reuseProgress(vocab, previous);
+      if (previous != null) _reuseProgress(vocab, previous, lessonId: lessonId);
       index.putIfAbsent(_progressIdentity(vocab), () => vocab);
     }
   }
@@ -740,7 +738,20 @@ class AppProvider extends ChangeNotifier {
       : '${_normalizeVocabWord(vocab.targetWord)}\u0000'
             '${_normalizeVocabWord(vocab.translation)}';
 
-  static void _reuseProgress(VocabItem target, VocabItem source) {
+  static void _reuseProgress(
+    VocabItem target,
+    VocabItem source, {
+    String? lessonId,
+  }) {
+    if (!identical(target.shared, source.shared)) {
+      for (final field in SharedVocab.detailFields) {
+        source.shared.mergeImport(
+          field,
+          target.shared.valueOf(field),
+          lessonId: lessonId,
+        );
+      }
+    }
     target
       ..id =
           target.idIsExplicit ||
@@ -748,38 +759,7 @@ class AppProvider extends ChangeNotifier {
           ? target.id
           : source.id
       ..idIsExplicit = target.idIsExplicit || source.idIsExplicit
-      ..cardTargetToNative = source.cardTargetToNative
-      ..cardNativeToTarget = source.cardNativeToTarget;
-  }
-
-  static bool _isBlank(String? value) => value == null || value.trim().isEmpty;
-
-  /// Copies [source] details into [target] fields that are blank.
-  static void _fillEmptyDetails(VocabItem target, VocabItem source) {
-    if (_isBlank(target.audioUrl) && !_isBlank(source.audioUrl)) {
-      target.audioUrl = source.audioUrl;
-    }
-    if (_isBlank(target.notes) && !_isBlank(source.notes)) {
-      target.notes = source.notes;
-    }
-    if (_isBlank(target.disambiguation) && !_isBlank(source.disambiguation)) {
-      target.disambiguation = source.disambiguation;
-    }
-  }
-
-  void _syncSharedVocabDetails() {
-    final groups = <String, List<VocabItem>>{};
-    for (final vocab in _lessons.expand((lesson) => lesson.vocabularies)) {
-      groups.putIfAbsent(vocab.id, () => []).add(vocab);
-    }
-    for (final group in groups.values) {
-      if (group.length < 2) continue;
-      for (final target in group) {
-        for (final source in group) {
-          if (!identical(target, source)) _fillEmptyDetails(target, source);
-        }
-      }
-    }
+      ..shared = source.shared;
   }
 
   static String _sentenceSignature(Sentence sentence) {
@@ -832,27 +812,22 @@ class AppProvider extends ChangeNotifier {
     await saveState();
   }
 
+  /// Re-points [vocab] after its id was edited. Call BEFORE writing detail or
+  /// card edits, so they land on the right SharedVocab.
+  void rebindVocabId(VocabItem vocab, String? previousId) {
+    if (previousId == null || previousId == vocab.id) return;
+    VocabItem? sibling;
+    for (final c in _lessons.expand((l) => l.vocabularies)) {
+      if (c.id == vocab.id && !identical(c, vocab)) {
+        sibling = c;
+        break;
+      }
+    }
+    vocab.shared = sibling?.shared ?? vocab.shared.detachedCopy();
+  }
+
   // Update vocabulary fields
   Future<void> updateVocab(VocabItem vocab, {String? previousId}) async {
-    final sameIdCandidates = _lessons
-        .expand((lesson) => lesson.vocabularies)
-        .where(
-          (candidate) =>
-              candidate.id == vocab.id && !identical(candidate, vocab),
-        )
-        .toList();
-    final hasSameId = sameIdCandidates.isNotEmpty;
-    if (previousId != null && previousId != vocab.id && !hasSameId) {
-      vocab
-        ..cardTargetToNative = SrsCard(
-          direction: CardDirection.targetToNative,
-          isEnabled: vocab.cardTargetToNative.isEnabled,
-        )
-        ..cardNativeToTarget = SrsCard(
-          direction: CardDirection.nativeToTarget,
-          isEnabled: vocab.cardNativeToTarget.isEnabled,
-        );
-    }
     final existing = _findExistingVocab(
       vocab,
       _lessons
@@ -860,14 +835,16 @@ class AppProvider extends ChangeNotifier {
           .where((candidate) => !identical(candidate, vocab)),
     );
     if (existing != null) {
-      _reuseProgress(vocab, existing);
+      String? lessonId;
+      for (final l in _lessons) {
+        if (l.vocabularies.contains(vocab)) {
+          lessonId = l.id;
+          break;
+        }
+      }
+      _reuseProgress(vocab, existing, lessonId: lessonId);
     } else {
       _linkSharedVocabProgress();
-    }
-    for (final sibling in _lessons
-        .expand((lesson) => lesson.vocabularies)
-        .where((c) => c.id == vocab.id && !identical(c, vocab))) {
-      _fillEmptyDetails(sibling, vocab);
     }
     await saveState();
   }
@@ -879,9 +856,8 @@ class AppProvider extends ChangeNotifier {
       vocab,
       _lessons.expand((candidate) => candidate.vocabularies),
     );
-    if (existing != null) _reuseProgress(vocab, existing);
+    if (existing != null) _reuseProgress(vocab, existing, lessonId: lessonId);
     lesson.vocabularies.add(vocab);
-    _syncSharedVocabDetails();
     await saveState();
   }
 

@@ -94,14 +94,6 @@ class _VocabEditDialogState extends State<VocabEditDialog>
 
   void _save() {
     final provider = context.read<AppProvider>();
-    widget.vocab.targetWord = _targetWordCtrl.text.trim();
-    widget.vocab.translation = _translationCtrl.text.trim();
-    widget.vocab.pos = _posCtrl.text.trim();
-    widget.vocab.audioUrl = _audioCtrl.text.trim().isEmpty
-        ? null
-        : _audioCtrl.text.trim();
-    widget.vocab.notes = _notesCtrl.text.trim();
-    widget.vocab.disambiguation = _disambiguationCtrl.text.trim();
     final explicitId = _idCtrl.text.trim();
     if (explicitId.isNotEmpty) {
       widget.vocab
@@ -112,6 +104,15 @@ class _VocabEditDialogState extends State<VocabEditDialog>
         ..id = const Uuid().v4()
         ..idIsExplicit = false;
     }
+    provider.rebindVocabId(widget.vocab, _originalId);
+    widget.vocab.targetWord = _targetWordCtrl.text.trim();
+    widget.vocab.translation = _translationCtrl.text.trim();
+    widget.vocab.pos = _posCtrl.text.trim();
+    widget.vocab.audioUrl = _audioCtrl.text.trim().isEmpty
+        ? null
+        : _audioCtrl.text.trim();
+    widget.vocab.notes = _notesCtrl.text.trim();
+    widget.vocab.disambiguation = _disambiguationCtrl.text.trim();
     widget.vocab.sentenceIds = _sentenceIds;
 
     widget.vocab.cardTargetToNative.isEnabled = _enableTargetToNative;
