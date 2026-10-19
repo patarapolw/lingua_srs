@@ -143,6 +143,7 @@ class AppProvider extends ChangeNotifier {
       await StorageService.saveLessons(_lessons);
     }
     _linkSharedVocabProgress();
+    _syncSharedVocabDetails();
 
     if (_lessons.isNotEmpty) {
       _selectedLessonId = _lessons.first.id;
@@ -376,6 +377,7 @@ class AppProvider extends ChangeNotifier {
     );
     final lesson = _applyParsedLesson(parsed);
     _linkSharedVocabProgress();
+    _syncSharedVocabDetails();
     await _saveImportedLessons();
     notifyListeners();
     return lesson;
@@ -411,6 +413,7 @@ class AppProvider extends ChangeNotifier {
     }
     if (parsedLessons.isNotEmpty) {
       _linkSharedVocabProgress();
+      _syncSharedVocabDetails();
       await _saveImportedLessons();
       notifyListeners();
     }
@@ -582,9 +585,15 @@ class AppProvider extends ChangeNotifier {
         ..translation = importedVocab.translation
         ..pos = importedVocab.pos
         ..sectionPath = importedVocab.sectionPath
-        ..audioUrl = importedVocab.audioUrl
-        ..notes = importedVocab.notes
-        ..disambiguation = importedVocab.disambiguation
+        ..audioUrl = _isBlank(importedVocab.audioUrl)
+            ? lessonMatch.audioUrl
+            : importedVocab.audioUrl
+        ..notes = _isBlank(importedVocab.notes)
+            ? lessonMatch.notes
+            : importedVocab.notes
+        ..disambiguation = _isBlank(importedVocab.disambiguation)
+            ? lessonMatch.disambiguation
+            : importedVocab.disambiguation
         ..sentenceIds = importedVocab.sentenceIds;
       _addVocabToIndexes(lessonMatch, vocabById, vocabByMeaning);
       if (previousVocab != null && !identical(previousVocab, lessonMatch)) {
@@ -743,6 +752,36 @@ class AppProvider extends ChangeNotifier {
       ..cardNativeToTarget = source.cardNativeToTarget;
   }
 
+  static bool _isBlank(String? value) => value == null || value.trim().isEmpty;
+
+  /// Copies [source] details into [target] fields that are blank.
+  static void _fillEmptyDetails(VocabItem target, VocabItem source) {
+    if (_isBlank(target.audioUrl) && !_isBlank(source.audioUrl)) {
+      target.audioUrl = source.audioUrl;
+    }
+    if (_isBlank(target.notes) && !_isBlank(source.notes)) {
+      target.notes = source.notes;
+    }
+    if (_isBlank(target.disambiguation) && !_isBlank(source.disambiguation)) {
+      target.disambiguation = source.disambiguation;
+    }
+  }
+
+  void _syncSharedVocabDetails() {
+    final groups = <String, List<VocabItem>>{};
+    for (final vocab in _lessons.expand((lesson) => lesson.vocabularies)) {
+      groups.putIfAbsent(vocab.id, () => []).add(vocab);
+    }
+    for (final group in groups.values) {
+      if (group.length < 2) continue;
+      for (final target in group) {
+        for (final source in group) {
+          if (!identical(target, source)) _fillEmptyDetails(target, source);
+        }
+      }
+    }
+  }
+
   static String _sentenceSignature(Sentence sentence) {
     String normalize(String text) =>
         Sentence.withoutEmphasis(text)
@@ -825,6 +864,11 @@ class AppProvider extends ChangeNotifier {
     } else {
       _linkSharedVocabProgress();
     }
+    for (final sibling in _lessons
+        .expand((lesson) => lesson.vocabularies)
+        .where((c) => c.id == vocab.id && !identical(c, vocab))) {
+      _fillEmptyDetails(sibling, vocab);
+    }
     await saveState();
   }
 
@@ -837,6 +881,7 @@ class AppProvider extends ChangeNotifier {
     );
     if (existing != null) _reuseProgress(vocab, existing);
     lesson.vocabularies.add(vocab);
+    _syncSharedVocabDetails();
     await saveState();
   }
 

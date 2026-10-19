@@ -1111,7 +1111,7 @@ class _StudyViewState extends State<StudyView> {
                                     ),
                                     Chip(
                                       visualDensity: VisualDensity.compact,
-                                      label: Text(item.vocab.pos.toUpperCase()),
+                                      label: Text(item.vocab.pos.replaceAll('_', ' ').toUpperCase()),
                                       backgroundColor: theme
                                           .colorScheme
                                           .surfaceContainerHighest,

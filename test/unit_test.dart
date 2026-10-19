@@ -370,6 +370,173 @@ vocabulary:
       },
     );
 
+  group('Shared vocabulary details across lessons', () {
+    Future<AppProvider> newProvider() async {
+      SharedPreferences.setMockInitialValues({
+        'lingua_srs_windows_legacy_migration_complete': true,
+        'lingua_srs_lessons': '[]',
+        'lingua_srs_sentences': '[]',
+      });
+      final provider = AppProvider();
+      while (provider.isLoading) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      return provider;
+    }
+
+    String lessonYaml(String title, {String? audio, String? notes,
+        String? disambiguation}) => '''
+---
+vocabulary:
+  nouns:
+    - ko: 배
+      en: pear
+${audio != null ? '      audio: $audio\n' : ''}${notes != null ? '      notes: $notes\n' : ''}${disambiguation != null ? '      disambiguation: $disambiguation\n' : ''}---
+# $title
+''';
+
+    VocabItem pear(Lesson lesson) =>
+        lesson.vocabularies.firstWhere((v) => v.translation == 'pear');
+
+    test('Later duplicate inherits audio from the earlier lesson', () async {
+      final provider = await newProvider();
+      await provider.importYaml(lessonYaml('Lesson 1', audio: 'https://a/1.mp3'));
+      final second = await provider.importYaml(lessonYaml('Lesson 2'));
+
+      expect(pear(second).audioUrl, 'https://a/1.mp3');
+      provider.dispose();
+    });
+
+    test('Earlier duplicate receives audio supplied by a later lesson', () async {
+      final provider = await newProvider();
+      final first = await provider.importYaml(lessonYaml('Lesson 1'));
+      await provider.importYaml(lessonYaml('Lesson 2', audio: 'https://a/2.mp3'));
+
+      expect(pear(first).audioUrl, 'https://a/2.mp3');
+      provider.dispose();
+    });
+
+    test('Filled details survive a reload', () async {
+      final provider = await newProvider();
+      await provider.importYaml(lessonYaml('Lesson 1', audio: 'https://a/1.mp3'));
+      await provider.importYaml(lessonYaml('Lesson 2'));
+
+      final reloaded = AppProvider();
+      while (reloaded.isLoading) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(reloaded.lessons.map((l) => pear(l).audioUrl),
+          everyElement('https://a/1.mp3'));
+      provider.dispose();
+      reloaded.dispose();
+    });
+
+    test('Conflicting non-empty audio stays per lesson (Phase 1)', () async {
+      final provider = await newProvider();
+      final first = await provider.importYaml(
+          lessonYaml('Lesson 1', audio: 'https://a/1.mp3'));
+      final second = await provider.importYaml(
+          lessonYaml('Lesson 2', audio: 'https://a/2.mp3'));
+
+      expect(pear(first).audioUrl, 'https://a/1.mp3');
+      expect(pear(second).audioUrl, 'https://a/2.mp3');
+      provider.dispose();
+    });
+
+    test('Re-import without audio does not erase existing audio', () async {
+      final provider = await newProvider();
+      await provider.importYaml(lessonYaml('Lesson 1', audio: 'https://a/1.mp3'));
+      final again = await provider.importYaml(lessonYaml('Lesson 1'));
+
+      expect(pear(again).audioUrl, 'https://a/1.mp3');
+      provider.dispose();
+    });
+
+    test('Re-import with new audio replaces only that lesson', () async {
+      final provider = await newProvider();
+      final first = await provider.importYaml(
+          lessonYaml('Lesson 1', audio: 'https://a/1.mp3'));
+      final second = await provider.importYaml(
+          lessonYaml('Lesson 2', audio: 'https://a/2.mp3'));
+      await provider.importYaml(lessonYaml('Lesson 1', audio: 'https://a/1b.mp3'));
+
+      expect(pear(first).audioUrl, 'https://a/1b.mp3');
+      expect(pear(second).audioUrl, 'https://a/2.mp3');
+      provider.dispose();
+    });
+
+    test('Notes and disambiguation fill only when empty', () async {
+      final provider = await newProvider();
+      final first = await provider.importYaml(
+          lessonYaml('Lesson 1', notes: 'first note', disambiguation: 'fruit'));
+      final second = await provider.importYaml(
+          lessonYaml('Lesson 2', notes: 'second note'));
+
+      expect(pear(second).notes, 'second note');       // not overwritten
+      expect(pear(second).disambiguation, 'fruit');    // filled
+      expect(pear(first).notes, 'first note');         // untouched
+      provider.dispose();
+    });
+
+    test('Progress stays shared while details sync', () async {
+      final provider = await newProvider();
+      final first = await provider.importYaml(lessonYaml('Lesson 1'));
+      final second = await provider.importYaml(
+          lessonYaml('Lesson 2', audio: 'https://a/2.mp3'));
+
+      expect(identical(pear(first).cardTargetToNative,
+          pear(second).cardTargetToNative), isTrue);
+      provider.dispose();
+    });
+
+    test('Manual edit propagates to blank siblings but clearing does not erase',
+        () async {
+      final provider = await newProvider();
+      final first = await provider.importYaml(lessonYaml('Lesson 1'));
+      final second = await provider.importYaml(lessonYaml('Lesson 2'));
+
+      pear(first).audioUrl = 'https://a/manual.mp3';
+      await provider.updateVocab(pear(first));
+      expect(pear(second).audioUrl, 'https://a/manual.mp3');
+
+      pear(first).audioUrl = null;
+      await provider.updateVocab(pear(first));
+      expect(pear(second).audioUrl, 'https://a/manual.mp3');
+      provider.dispose();
+    });
+
+    test('addVocabToLesson fills details from an existing duplicate', () async {
+      final provider = await newProvider();
+      await provider.importYaml(lessonYaml('Lesson 1', audio: 'https://a/1.mp3'));
+      final other = await provider.importYaml('''
+---
+vocabulary:
+  nouns:
+    - ko: 사과
+      en: apple
+---
+# Lesson 2
+''');
+      final added = VocabItem(targetWord: '배', translation: 'pear', pos: 'nouns');
+      await provider.addVocabToLesson(other.id, added);
+
+      expect(added.audioUrl, 'https://a/1.mp3');
+      provider.dispose();
+    });
+
+    test('Batch import fills details through importParsedLessons', () async {
+      final provider = await newProvider();
+      final results = await provider.importParsedLessons([
+        YamlParserService.parseLessonYaml(
+            lessonYaml('Lesson 1', audio: 'https://a/1.mp3')),
+        YamlParserService.parseLessonYaml(lessonYaml('Lesson 2')),
+      ]);
+
+      expect(pear(results[1]).audioUrl, 'https://a/1.mp3');
+      provider.dispose();
+    });
+  });
+
     test('Parses Markdown vocabulary frontmatter and lesson hierarchy', () {
       const markdown = r'''
 ---
