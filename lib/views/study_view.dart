@@ -91,6 +91,21 @@ class ReviewHistoryRecord {
   }
 }
 
+/// Cards marked something other than Again on their FIRST pass.
+int firstPassRightCount(Iterable<ReviewHistoryRecord> history) => history
+    .where((r) => r.wasFirstSessionRating && r.ratingGiven != SrsRating.again)
+    .length;
+
+/// Cards marked Again on their FIRST pass. Second-pass answers don't count.
+int firstPassWrongCount(Iterable<ReviewHistoryRecord> history) => history
+    .where((r) => r.wasFirstSessionRating && r.ratingGiven == SrsRating.again)
+    .length;
+
+/// Number of different cards in the queue. A card that was re-queued after
+/// Again appears twice in the queue but is still one card.
+int distinctCardCount(List<StudyCardItem> queue) =>
+    queue.map((i) => i.card.id).toSet().length;
+
 /// Changes the rating of an already-answered card.
 /// Mutates the card, [queue], [againCardIds] and [record].
 void reRateRecord({
@@ -113,26 +128,12 @@ void reRateRecord({
     card.mistakesClearedAt =
         nowAgain ? record.oldMistakesClearedAt : DateTime.now();
   } else if (record.wasFirstSessionRating) {
-    // Later repeat reviews of this card only set lastRating/lastMistakeDate;
-    // keep those values across the roll-back.
-    final later = history
-        .skip(history.indexOf(record) + 1)
-        .where((r) => r.card.id == card.id);
-    final keepRating = card.lastRating;
-    final keepMistakeDate = card.lastMistakeDate;
     record.restore();
     // processReview directly, not recordCardReview: a re-mark must not add
     // another entry to the 24h review counter.
     SrsService.processReview(card, rating);
-    if (later.isNotEmpty) {
-      card.lastRating = keepRating;
-      card.lastMistakeDate = keepMistakeDate;
-    }
   } else {
-    // A repeat review only changes lastRating / lastMistakeDate.
-    card.lastRating = rating;
-    card.lastMistakeDate =
-        nowAgain ? DateTime.now() : record.oldLastMistakeDate;
+    // A repeat review no longer changes the card
   }
 
   // 2. Queue and Again set. Positions before answeredCount are never shifted,
@@ -199,8 +200,8 @@ class _StudyViewState extends State<StudyView> {
     TargetPlatform.fuchsia => false,
     _ => true,
   };
-  int get rightCount =>
-      _history.where((r) => r.ratingGiven != SrsRating.again).length;
+  int get rightCount => firstPassRightCount(_history);
+  int get wrongCount => firstPassWrongCount(_history);
 
   bool get _isReviewingPast => _currentIndex < _answeredCount;
 
@@ -238,8 +239,6 @@ class _StudyViewState extends State<StudyView> {
     }
     return _sessionRatedCardIds.contains(_queue[_currentIndex].card.id);
   }
-  int get wrongCount =>
-      _history.where((r) => r.ratingGiven == SrsRating.again).length;
 
   @override
   void initState() {
@@ -422,10 +421,6 @@ class _StudyViewState extends State<StudyView> {
         // Mistakes practice never touches SRS state.
       } else if (isFirstSessionRating) {
         provider.recordCardReview(card, SrsRating.again);
-      } else {
-        card.lastMistakeDate = DateTime.now();
-        card.lastRating = SrsRating.again;
-        provider.saveState();
       }
 
       // Interleaved re-queuing:
@@ -462,9 +457,6 @@ class _StudyViewState extends State<StudyView> {
         provider.saveState();
       } else if (isFirstSessionRating) {
         provider.recordCardReview(card, rating);
-      } else {
-        card.lastRating = rating;
-        provider.saveState();
       }
     }
 
@@ -1012,7 +1004,7 @@ class _StudyViewState extends State<StudyView> {
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final totalWidth = constraints.maxWidth;
-                final totalCards = _queue.isEmpty ? 1 : _queue.length;
+                final totalCards = _queue.isEmpty ? 1 : distinctCardCount(_queue);
                 final rightWidth =
                     (rightCount / totalCards).clamp(0.0, 1.0) * totalWidth;
                 final wrongWidth =
@@ -1466,9 +1458,9 @@ class _StudyViewState extends State<StudyView> {
                 ),
               ),
 
-              // if (_isReviewingPast)
-              //   Text('Currently ${_recordAt(_currentIndex)?.ratingGiven.name.toUpperCase()}',
-              //       style: Theme.of(context).textTheme.labelSmall),
+              if (_isReviewingPast)
+                Text('Currently ${_recordAt(_currentIndex)?.ratingGiven.name.toUpperCase()}',
+                    style: Theme.of(context).textTheme.labelSmall),
 
               // Bottom SRS Rating Bar (Accessible when answer revealed)
               if (_isAnswerRevealed)

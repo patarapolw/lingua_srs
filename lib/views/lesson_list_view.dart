@@ -608,7 +608,7 @@ class LessonListView extends StatelessWidget {
                                 ],
                               ),
                             ),
-                            Flexible(
+                            Expanded(
                               flex: 1,
                               child: Wrap(
                                 spacing: 10,

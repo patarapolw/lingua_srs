@@ -28,12 +28,8 @@ ReviewHistoryRecord answer(
     rating: rating,
     wasFirstSessionRating: firstSession,
   );
-  if (firstSession) {
-    SrsService.processReview(card, rating);
-  } else {
-    card.lastRating = rating;
-    if (rating == SrsRating.again) card.lastMistakeDate = DateTime.now();
-  }
+  if (firstSession) SrsService.processReview(card, rating);
+  // A repeat (second-pass) review no longer changes the card.
   return record;
 }
 
@@ -141,42 +137,109 @@ void main() {
       expect(a.card.easeFactor, closeTo(2.35, 1e-9));
     });
 
-    test('a later repeat review keeps lastRating/lastMistakeDate', () {
+    test('re-marking the first review leaves a later repeat record alone', () {
       final a = itemFor('a');
-      final first = answer(a.card, SrsRating.good, index: 0);
-      final repeat =
-          answer(a.card, SrsRating.again, index: 3, firstSession: false);
-      final mistakeDate = a.card.lastMistakeDate;
-      expect(mistakeDate, isNotNull);
+      final dup = dupOf(a);
+      // Queue positions: 0 = first pass, 3 = the re-queued repeat (answered).
+      final queue = [a, itemFor('b'), itemFor('c'), dup];
+      final againIds = {a.card.id};
 
-      reRate(first, SrsRating.easy,
-          queue: [a, itemFor('b'), itemFor('c'), dupOf(a)],
-          answered: 4,
-          againIds: {a.card.id},
-          history: [first, repeat]);
+      final first = answer(a.card, SrsRating.again, index: 0)
+        ..requeuedItem = dup;
+      final repeat = answer(
+        a.card,
+        SrsRating.good,
+        index: 3,
+        firstSession: false,
+      );
 
-      expect(a.card.interval, 4);
-      expect(a.card.lastRating, SrsRating.again);
-      expect(a.card.lastMistakeDate, mistakeDate);
+      reRate(
+        first,
+        SrsRating.good,
+        queue: queue,
+        answered: 4,
+        againIds: againIds,
+        history: [first, repeat],
+      );
+
+      // First pass is now a normal Good review.
+      expect(a.card.interval, 1);
+      expect(a.card.lapses, 0);
+      expect(a.card.status, SrsStatus.review);
+      expect(first.ratingGiven, SrsRating.good);
+      // The already-answered repeat is left exactly as it was.
+      expect(repeat.ratingGiven, SrsRating.good);
+      expect(queue.length, 4);
+      expect(queue[3], same(dup));
+      expect(first.requeuedItem, isNull);
+      expect(againIds, isEmpty);
     });
 
-    test('repeat review: only lastRating / lastMistakeDate change', () {
+    test('re-rating a repeat record leaves the card untouched', () {
       final a = itemFor('a');
-      SrsService.processReview(a.card, SrsRating.good);
+      final queue = [
+        a,
+        itemFor('b'),
+        itemFor('c'),
+        dupOf(a), // index 3: the repeat being re-rated
+        itemFor('e'),
+        itemFor('f'),
+        itemFor('g'),
+      ];
+      answer(a.card, SrsRating.again, index: 0); // first pass: Again
+      final repeat = answer(
+        a.card,
+        SrsRating.good,
+        index: 3,
+        firstSession: false,
+      );
+
+      // Everything the first-pass Again left on the card.
       final interval = a.card.interval;
-      final record =
-          answer(a.card, SrsRating.good, index: 0, firstSession: false);
-      final queue = [a, itemFor('b'), itemFor('c'), itemFor('d')];
+      final lapses = a.card.lapses;
+      final status = a.card.status;
+      final dueDate = a.card.dueDate;
+      final lastRating = a.card.lastRating;
+      final mistakeDate = a.card.lastMistakeDate;
+      expect(lastRating, SrsRating.again);
+      expect(mistakeDate, isNotNull);
 
-      reRate(record, SrsRating.again, queue: queue, answered: 1);
-      expect(a.card.lastRating, SrsRating.again);
-      expect(a.card.lastMistakeDate, isNotNull);
-      expect(a.card.interval, interval);
+      void expectCardUnchanged() {
+        expect(a.card.interval, interval);
+        expect(a.card.lapses, lapses);
+        expect(a.card.status, status);
+        expect(a.card.dueDate, dueDate);
+        expect(a.card.lastRating, lastRating);
+        expect(a.card.lastMistakeDate, mistakeDate);
+      }
 
-      reRate(record, SrsRating.good, queue: queue, answered: 1);
-      expect(a.card.lastRating, SrsRating.good);
-      expect(a.card.lastMistakeDate, isNull);
-      expect(a.card.interval, interval);
+      final againIds = <String>{};
+
+      // Good -> Again: record and queue change, card does not.
+      reRate(
+        repeat,
+        SrsRating.again,
+        queue: queue,
+        answered: 4,
+        againIds: againIds,
+      );
+      expect(repeat.ratingGiven, SrsRating.again);
+      expect(againIds, {a.card.id});
+      expect(queue.length, 8); // re-queued after the 3 unanswered cards
+      expectCardUnchanged();
+
+      // Again -> Good: duplicate removed, card still untouched.
+      reRate(
+        repeat,
+        SrsRating.good,
+        queue: queue,
+        answered: 4,
+        againIds: againIds,
+      );
+      expect(repeat.ratingGiven, SrsRating.good);
+      expect(againIds, isEmpty);
+      expect(queue.length, 7);
+      expectCardUnchanged();
     });
 
     test('mistakes practice toggles mistakesClearedAt, not SRS state', () {
