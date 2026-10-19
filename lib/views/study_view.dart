@@ -25,8 +25,11 @@ class ReviewHistoryRecord {
   final DateTime oldDueDate;
   final DateTime? oldLastReviewed;
   final SrsStatus oldStatus;
+  final int oldLapses;
+  final DateTime? oldLastMistakeDate;
+  final SrsRating? oldLastRating;
   final SrsRating ratingGiven;
-  final int? requeuedIndex;
+  int? requeuedIndex;
   final bool wasInAgainSet;
   final bool wasFirstSessionRating;
   final DateTime? oldMistakesClearedAt;
@@ -40,12 +43,55 @@ class ReviewHistoryRecord {
     required this.oldDueDate,
     required this.oldLastReviewed,
     required this.oldStatus,
+    required this.oldLapses,
+    required this.oldLastMistakeDate,
+    required this.oldLastRating,
     required this.ratingGiven,
     this.requeuedIndex,
     this.wasInAgainSet = false,
     this.wasFirstSessionRating = true,
     this.oldMistakesClearedAt,
   });
+
+  /// Must be called BEFORE the review mutates [card].
+  factory ReviewHistoryRecord.capture({
+    required int queueIndex,
+    required SrsCard card,
+    required SrsRating rating,
+    int? requeuedIndex,
+    bool wasInAgainSet = false,
+    bool wasFirstSessionRating = true,
+  }) => ReviewHistoryRecord(
+    queueIndex: queueIndex,
+    card: card,
+    oldInterval: card.interval,
+    oldRepetitions: card.repetitions,
+    oldEaseFactor: card.easeFactor,
+    oldDueDate: card.dueDate,
+    oldLastReviewed: card.lastReviewed,
+    oldStatus: card.status,
+    oldLapses: card.lapses,
+    oldLastMistakeDate: card.lastMistakeDate,
+    oldLastRating: card.lastRating,
+    ratingGiven: rating,
+    requeuedIndex: requeuedIndex,
+    wasInAgainSet: wasInAgainSet,
+    wasFirstSessionRating: wasFirstSessionRating,
+    oldMistakesClearedAt: card.mistakesClearedAt,
+  );
+
+  void restore() {
+    card.interval = oldInterval;
+    card.repetitions = oldRepetitions;
+    card.easeFactor = oldEaseFactor;
+    card.dueDate = oldDueDate;
+    card.lastReviewed = oldLastReviewed;
+    card.status = oldStatus;
+    card.lapses = oldLapses;
+    card.lastMistakeDate = oldLastMistakeDate;
+    card.lastRating = oldLastRating;
+    card.mistakesClearedAt = oldMistakesClearedAt;
+  }
 }
 
 class StudyView extends StatefulWidget {
@@ -260,11 +306,19 @@ class _StudyViewState extends State<StudyView> {
     final provider = context.read<AppProvider>();
     final wasInAgainSet = _againCardIds.contains(cardId);
 
-    final oldMistakesClearedAt = card.mistakesClearedAt;
     int? requeuedIndex;
 
     final isFirstSessionRating = !_sessionRatedCardIds.contains(cardId);
     _sessionRatedCardIds.add(cardId);
+
+    // Snapshot BEFORE the review mutates the card.
+    final record = ReviewHistoryRecord.capture(
+      queueIndex: _currentIndex,
+      card: card,
+      rating: rating,
+      wasInAgainSet: wasInAgainSet,
+      wasFirstSessionRating: isFirstSessionRating,
+    );
 
     if (rating == SrsRating.again) {
       _againCardIds.add(cardId);
@@ -318,24 +372,10 @@ class _StudyViewState extends State<StudyView> {
       }
     }
 
-    // Save snapshot in history for Undo
-    _history.add(
-      ReviewHistoryRecord(
-        queueIndex: _currentIndex,
-        card: card,
-        oldInterval: card.interval,
-        oldRepetitions: card.repetitions,
-        oldEaseFactor: card.easeFactor,
-        oldDueDate: card.dueDate,
-        oldLastReviewed: card.lastReviewed,
-        oldStatus: card.status,
-        ratingGiven: rating,
-        requeuedIndex: requeuedIndex,
-        wasInAgainSet: wasInAgainSet,
-        wasFirstSessionRating: isFirstSessionRating,
-        oldMistakesClearedAt: oldMistakesClearedAt,
-      ),
-    );
+    record.requeuedIndex = requeuedIndex;
+
+    // Save snapshot in history for Undo (values captured before the review)
+    _history.add(record);
 
     setState(() {
       if (_currentIndex == _answeredCount) {
@@ -370,13 +410,7 @@ class _StudyViewState extends State<StudyView> {
     }
 
     // Restore previous SRS state
-    record.card.interval = record.oldInterval;
-    record.card.repetitions = record.oldRepetitions;
-    record.card.easeFactor = record.oldEaseFactor;
-    record.card.dueDate = record.oldDueDate;
-    record.card.lastReviewed = record.oldLastReviewed;
-    record.card.status = record.oldStatus;
-    record.card.mistakesClearedAt = record.oldMistakesClearedAt;
+    record.restore();
     provider.saveState();
 
     setState(() {
@@ -584,6 +618,7 @@ class _StudyViewState extends State<StudyView> {
                     : (_queue.isEmpty
                           ? 'No cards found matching this queue.'
                           : 'You have completed all cards in this review queue.'),
+                textAlign: TextAlign.center,
                 style: theme.textTheme.bodyLarge?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),

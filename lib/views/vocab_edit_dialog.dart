@@ -821,9 +821,11 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                             child: ListTile(
                               title: MarkdownContent(
                                 content: sentence.targetText,
+                                selectable: true,
                               ),
                               subtitle: MarkdownContent(
                                 content: sentence.translationText,
+                                selectable: true,
                               ),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
