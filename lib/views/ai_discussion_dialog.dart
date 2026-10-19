@@ -106,7 +106,7 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
     final questions = !hasMessages ? [
         'Explain the etymology and Hanja of "${widget.targetWord}".',
         if (widget.sentenceTarget?.isNotEmpty == true)
-          'How does this sentence work and what are key vocabularies?',
+          'How does this sentence work?',
         'How is "${widget.targetWord}" used in everyday speech?',
         'Give me another example sentence with "${widget.targetWord}".',
       ] : [

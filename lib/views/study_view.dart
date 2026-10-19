@@ -589,8 +589,8 @@ class _StudyViewState extends State<StudyView> {
                 ),
               ),
               const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+              Wrap(
+                alignment: WrapAlignment.center,
                 children: [
                   OutlinedButton.icon(
                     icon: const Icon(Icons.arrow_back),

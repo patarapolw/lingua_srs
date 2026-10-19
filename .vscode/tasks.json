@@ -1,0 +1,23 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Flutter: build debug apk",
+            "type": "shell",
+            "command": "flutter build apk --debug",
+            "problemMatcher": []
+        },
+        {
+            "label": "Flutter: adb reinstall (keep data)",
+            "type": "shell",
+            "command": "adb install -r -t build/app/outputs/flutter-apk/app-debug.apk",
+            "problemMatcher": []
+        },
+        {
+            "label": "Flutter: debug update (keep data)",
+            "dependsOn": ["Flutter: build debug apk", "Flutter: adb reinstall (keep data)"],
+            "dependsOrder": "sequence",
+            "problemMatcher": []
+        }
+    ]
+}

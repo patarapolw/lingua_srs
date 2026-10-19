@@ -608,78 +608,80 @@ class LessonListView extends StatelessWidget {
                                 ],
                               ),
                             ),
-                            Wrap(
-                              spacing: 10,
-                              runSpacing: 8,
-                              alignment: WrapAlignment.end,
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              children: [
-                                if (totalRecentMistakes > 0)
-                                  FilledButton.tonalIcon(
+                            Flexible(
+                              flex: 1,
+                              child: Wrap(
+                                spacing: 10,
+                                runSpacing: 8,
+                                alignment: WrapAlignment.end,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  if (totalRecentMistakes > 0)
+                                    FilledButton.tonal(
+                                      style: FilledButton.styleFrom(
+                                        backgroundColor:
+                                            theme.colorScheme.errorContainer,
+                                        foregroundColor:
+                                            theme.colorScheme.onErrorContainer,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                          vertical: 14,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        'Recent Mistakes ($totalRecentMistakes)',
+                                      ),
+                                      onPressed: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => const StudyView(
+                                              recentMistakesOnly: true,
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  FilledButton.icon(
                                     style: FilledButton.styleFrom(
-                                      backgroundColor:
-                                          theme.colorScheme.errorContainer,
+                                      backgroundColor: isDailyLimitReached
+                                          ? Colors.grey.shade700
+                                          : theme.colorScheme.primary,
                                       foregroundColor:
-                                          theme.colorScheme.onErrorContainer,
+                                          theme.colorScheme.onPrimary,
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 16,
                                         vertical: 14,
                                       ),
                                     ),
-                                    icon: const Icon(Icons.history_edu_rounded),
+                                    icon: Icon(
+                                      isDailyLimitReached
+                                          ? Icons.check_circle_outline
+                                          : Icons.bolt_rounded,
+                                    ),
                                     label: Text(
-                                      'Recent Mistakes ($totalRecentMistakes)',
+                                      isDailyLimitReached
+                                          ? 'Daily Limit (${provider.reviewsInLast24Hours}/${provider.maxReviews24h})'
+                                          : 'Study Due ($availableDue)',
                                     ),
-                                    onPressed: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) => const StudyView(
-                                            recentMistakesOnly: true,
-                                          ),
-                                        ),
-                                      );
-                                    },
+                                    onPressed: availableDue == 0
+                                        ? (isDailyLimitReached
+                                              ? () => _showLimitReachedDialog(
+                                                  context,
+                                                  provider,
+                                                )
+                                              : null)
+                                        : () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) => const StudyView(),
+                                              ),
+                                            );
+                                          },
                                   ),
-                                FilledButton.icon(
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor: isDailyLimitReached
-                                        ? Colors.grey.shade700
-                                        : theme.colorScheme.primary,
-                                    foregroundColor:
-                                        theme.colorScheme.onPrimary,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 20,
-                                      vertical: 14,
-                                    ),
-                                  ),
-                                  icon: Icon(
-                                    isDailyLimitReached
-                                        ? Icons.check_circle_outline
-                                        : Icons.bolt_rounded,
-                                  ),
-                                  label: Text(
-                                    isDailyLimitReached
-                                        ? 'Daily Limit Reached (${provider.reviewsInLast24Hours}/${provider.maxReviews24h})'
-                                        : 'Study Due ($availableDue)',
-                                  ),
-                                  onPressed: availableDue == 0
-                                      ? (isDailyLimitReached
-                                            ? () => _showLimitReachedDialog(
-                                                context,
-                                                provider,
-                                              )
-                                            : null)
-                                      : () {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (_) => const StudyView(),
-                                            ),
-                                          );
-                                        },
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ],
                         ),
