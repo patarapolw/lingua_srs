@@ -106,6 +106,16 @@ int firstPassWrongCount(Iterable<ReviewHistoryRecord> history) => history
 int distinctCardCount(List<StudyCardItem> queue) =>
     queue.map((i) => i.card.id).toSet().length;
 
+/// 1-based progress through the DISTINCT cards in [queue], up to and
+/// including [index]. A re-queued repeat doesn't advance it.
+int distinctProgress(List<StudyCardItem> queue, int index) {
+  final seen = <String>{};
+  for (var i = 0; i <= index && i < queue.length; i++) {
+    seen.add(queue[i].card.id);
+  }
+  return seen.length;
+}
+
 /// Changes the rating of an already-answered card.
 /// Mutates the card, [queue], [againCardIds] and [record].
 void reRateRecord({
@@ -819,8 +829,8 @@ class _StudyViewState extends State<StudyView> {
 
     final item = _queue[_currentIndex];
     final isTargetToNative = item.isTargetToNative;
-    final total = _queue.length;
-    final currentNumber = _currentIndex + 1;
+    final total = distinctCardCount(_queue);
+    final currentNumber = distinctProgress(_queue, _currentIndex);
     final canGoBack = _currentIndex > 0;
     final canGoForward = _currentIndex < _answeredCount;
     final canUndo = _history.isNotEmpty;

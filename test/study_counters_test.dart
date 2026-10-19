@@ -96,4 +96,36 @@ void main() {
       expect(distinctCardCount([]), 0);
     });
   });
+
+  group('distinctProgress', () {
+    StudyCardItem dupOf(StudyCardItem s) =>
+        StudyCardItem(vocab: s.vocab, card: s.card, lesson: s.lesson);
+
+    test('advances once per card, not per queue position', () {
+      final a = itemFor('a');
+      final b = itemFor('b');
+      final c = itemFor('c');
+      final queue = [a, b, dupOf(a), c];
+
+      expect(distinctProgress(queue, 0), 1);
+      expect(distinctProgress(queue, 1), 2);
+      expect(distinctProgress(queue, 2), 2); // repeat of a: no inflation
+      expect(distinctProgress(queue, 3), 3);
+      expect(distinctCardCount(queue), 3);
+    });
+
+    test('a card repeated several times is still one card', () {
+      final a = itemFor('a');
+      final b = itemFor('b');
+      final queue = [a, b, dupOf(a), dupOf(a)];
+
+      expect(distinctProgress(queue, 3), 2);
+      expect(distinctCardCount(queue), 2);
+    });
+
+    test('an index past the end is clamped', () {
+      final queue = [itemFor('a'), itemFor('b')];
+      expect(distinctProgress(queue, 99), 2);
+    });
+  });
 }
