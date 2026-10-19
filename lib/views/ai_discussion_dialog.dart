@@ -38,6 +38,16 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
   bool _sending = false;
   String? _error;
   String _streamingAnswer = '';
+  bool _wasAtBottom = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _messagesController.addListener(() {
+      final position = _messagesController.position;
+      _wasAtBottom = position.maxScrollExtent - position.pixels < 80;
+    });
+  }
 
   @override
   void dispose() {
@@ -181,12 +191,8 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
         if (mounted) {
           setState(() => _streamingAnswer = answer.toString());
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (_messagesController.hasClients) {
-              _messagesController.animateTo(
-                _messagesController.position.maxScrollExtent,
-                duration: const Duration(milliseconds: 100),
-                curve: Curves.easeOut,
-              );
+            if (_messagesController.hasClients && _wasAtBottom) {
+              _messagesController.jumpTo(_messagesController.position.maxScrollExtent);
             }
           });
         }
@@ -203,6 +209,12 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
           _sending = false;
           _streamingAnswer = '';
         });
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_messagesController.hasClients && _wasAtBottom) {
+            _messagesController.jumpTo(_messagesController.position.maxScrollExtent);
+          }
+        });
       }
     }
   }
@@ -215,6 +227,12 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
     final width = MediaQuery.sizeOf(context).width;
     final height = MediaQuery.sizeOf(context).height;
     final double maxWidth = 640;
+
+    final lastSaved = messages.isNotEmpty ? messages.last : null;
+    final showStreaming = _sending &&
+        _streamingAnswer.isNotEmpty &&
+        !(lastSaved?.role == 'assistant' &&
+            lastSaved?.content == _streamingAnswer);
 
     return Dialog(
       insetPadding: EdgeInsets.zero,
@@ -324,9 +342,9 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           itemCount:
                               messages.length +
-                              (_sending && _streamingAnswer.isNotEmpty ? 1 : 0),
+                              (showStreaming ? 1 : 0),
                           itemBuilder: (context, index) {
-                            if (index == messages.length) {
+                            if (showStreaming && index == messages.length) {
                               return Align(
                                 alignment: Alignment.centerLeft,
                                 child: Container(
@@ -405,7 +423,10 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                         )
                         .toList(),
                   ),
-                if (_sending) const LinearProgressIndicator(minHeight: 2),
+                SizedBox(
+                  height: 2,
+                  child: _sending ? const LinearProgressIndicator(minHeight: 2) : null,
+                ),
                 if (_error != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),

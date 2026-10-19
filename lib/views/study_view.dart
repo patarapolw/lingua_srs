@@ -903,7 +903,7 @@ class _StudyViewState extends State<StudyView> {
                     child: Container(
                       constraints: const BoxConstraints(maxWidth: 720),
                       child: InkWell(
-                        onTap: _toggleFlip,
+                        onTap: _isAnswerRevealed ? null :  _toggleFlip,
                         borderRadius: BorderRadius.circular(20),
                         child: Card(
                           elevation: 4,
@@ -1286,8 +1286,8 @@ class _StudyViewState extends State<StudyView> {
                                       icon: const Icon(Icons.flip_to_front),
                                       label: Text(
                                         _showKeyHints
-                                            ? 'Flip Back to Front (Space)'
-                                            : 'Flip Back to Front',
+                                            ? 'Flip back to Front (Space)'
+                                            : 'Flip back to Front',
                                       ),
                                       onPressed: _toggleFlip,
                                     ),
