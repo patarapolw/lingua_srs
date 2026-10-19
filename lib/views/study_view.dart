@@ -28,8 +28,8 @@ class ReviewHistoryRecord {
   final int oldLapses;
   final DateTime? oldLastMistakeDate;
   final SrsRating? oldLastRating;
-  final SrsRating ratingGiven;
-  int? requeuedIndex;
+  SrsRating ratingGiven;
+  StudyCardItem? requeuedItem;
   final bool wasInAgainSet;
   final bool wasFirstSessionRating;
   final DateTime? oldMistakesClearedAt;
@@ -47,7 +47,6 @@ class ReviewHistoryRecord {
     required this.oldLastMistakeDate,
     required this.oldLastRating,
     required this.ratingGiven,
-    this.requeuedIndex,
     this.wasInAgainSet = false,
     this.wasFirstSessionRating = true,
     this.oldMistakesClearedAt,
@@ -58,7 +57,6 @@ class ReviewHistoryRecord {
     required int queueIndex,
     required SrsCard card,
     required SrsRating rating,
-    int? requeuedIndex,
     bool wasInAgainSet = false,
     bool wasFirstSessionRating = true,
   }) => ReviewHistoryRecord(
@@ -74,7 +72,6 @@ class ReviewHistoryRecord {
     oldLastMistakeDate: card.lastMistakeDate,
     oldLastRating: card.lastRating,
     ratingGiven: rating,
-    requeuedIndex: requeuedIndex,
     wasInAgainSet: wasInAgainSet,
     wasFirstSessionRating: wasFirstSessionRating,
     oldMistakesClearedAt: card.mistakesClearedAt,
@@ -92,6 +89,80 @@ class ReviewHistoryRecord {
     card.lastRating = oldLastRating;
     card.mistakesClearedAt = oldMistakesClearedAt;
   }
+}
+
+/// Changes the rating of an already-answered card.
+/// Mutates the card, [queue], [againCardIds] and [record].
+void reRateRecord({
+  required ReviewHistoryRecord record,
+  required SrsRating rating,
+  required bool practiceOnly,
+  required List<ReviewHistoryRecord> history,
+  required List<StudyCardItem> queue,
+  required int answeredCount,
+  required Set<String> againCardIds,
+  required StudyCardItem Function(StudyCardItem source) makeDuplicate,
+}) {
+  final card = record.card;
+  final wasAgain = record.ratingGiven == SrsRating.again;
+  final nowAgain = rating == SrsRating.again;
+
+  // 1. Card state.
+  if (practiceOnly) {
+    // Mistakes practice never touches SRS; it only clears/restores the mistake.
+    card.mistakesClearedAt =
+        nowAgain ? record.oldMistakesClearedAt : DateTime.now();
+  } else if (record.wasFirstSessionRating) {
+    // Later repeat reviews of this card only set lastRating/lastMistakeDate;
+    // keep those values across the roll-back.
+    final later = history
+        .skip(history.indexOf(record) + 1)
+        .where((r) => r.card.id == card.id);
+    final keepRating = card.lastRating;
+    final keepMistakeDate = card.lastMistakeDate;
+    record.restore();
+    // processReview directly, not recordCardReview: a re-mark must not add
+    // another entry to the 24h review counter.
+    SrsService.processReview(card, rating);
+    if (later.isNotEmpty) {
+      card.lastRating = keepRating;
+      card.lastMistakeDate = keepMistakeDate;
+    }
+  } else {
+    // A repeat review only changes lastRating / lastMistakeDate.
+    card.lastRating = rating;
+    card.lastMistakeDate =
+        nowAgain ? DateTime.now() : record.oldLastMistakeDate;
+  }
+
+  // 2. Queue and Again set. Positions before answeredCount are never shifted,
+  //    so queue[record.queueIndex] is still this card.
+  if (!wasAgain && nowAgain) {
+    againCardIds.add(card.id);
+    final remainingAhead = queue.length - answeredCount;
+    StudyCardItem? dup;
+    if (remainingAhead >= 3) {
+      dup = makeDuplicate(queue[record.queueIndex]);
+      queue.insert(min(queue.length, answeredCount + 3), dup);
+    } else if (remainingAhead > 0 || againCardIds.length > 1) {
+      // Same end-of-queue rule as _rateCard: only re-queue at the very end
+      // if more than one Again'd card remains.
+      dup = makeDuplicate(queue[record.queueIndex]);
+      queue.add(dup);
+    }
+    record.requeuedItem = dup;
+  } else if (wasAgain && !nowAgain) {
+    againCardIds.remove(card.id);
+    final dup = record.requeuedItem;
+    if (dup != null) {
+      final at = queue.indexOf(dup);
+      // Keep the duplicate if it was already shown and answered.
+      if (at >= answeredCount) queue.removeAt(at);
+      record.requeuedItem = null;
+    }
+  }
+
+  record.ratingGiven = rating;
 }
 
 class StudyView extends StatefulWidget {
@@ -133,8 +204,24 @@ class _StudyViewState extends State<StudyView> {
 
   bool get _isReviewingPast => _currentIndex < _answeredCount;
 
+  ReviewHistoryRecord? _recordAt(int index) {
+    final i = _history.lastIndexWhere((r) => r.queueIndex == index);
+    return i == -1 ? null : _history[i];
+  }
+
   String _nextIn(SrsRating rating) {
-    final card = _queue[_currentIndex].card;
+    var card = _queue[_currentIndex].card;
+    final record = _isReviewingPast ? _recordAt(_currentIndex) : null;
+    if (record != null) {
+      card = SrsCard(
+        direction: card.direction,
+        interval: record.oldInterval,
+        repetitions: record.oldRepetitions,
+        easeFactor: record.oldEaseFactor,
+        dueDate: record.oldDueDate,
+        status: record.oldStatus,
+      );
+    }
     return SrsService.formatDuration(SrsService.previewInterval(card, rating));
   }
 
@@ -142,10 +229,15 @@ class _StudyViewState extends State<StudyView> {
 
   // Cards already rated this session (Again interleaving), and all cards in
   // mistakes practice, only offer Again/Good.
-  bool get _isRepeatCard =>
-      _isPracticeOnly ||
-      (_currentIndex < _queue.length &&
-          _sessionRatedCardIds.contains(_queue[_currentIndex].card.id));
+  bool get _isRepeatCard {
+    if (_isPracticeOnly) return true;
+    if (_currentIndex >= _queue.length) return false;
+    if (_isReviewingPast) {
+      final r = _recordAt(_currentIndex);
+      return r != null && !r.wasFirstSessionRating;
+    }
+    return _sessionRatedCardIds.contains(_queue[_currentIndex].card.id);
+  }
   int get wrongCount =>
       _history.where((r) => r.ratingGiven == SrsRating.again).length;
 
@@ -294,7 +386,11 @@ class _StudyViewState extends State<StudyView> {
   }
 
   void _rateCard(SrsRating rating) {
-    if (_currentIndex >= _queue.length || _isReviewingPast) return;
+    if (_currentIndex >= _queue.length) return;
+    if (_isReviewingPast) {
+      _reRatePast(rating);
+      return;
+    }
     final isRepeat = _isRepeatCard;
     if (isRepeat && (rating == SrsRating.hard || rating == SrsRating.easy)) {
       return;
@@ -306,7 +402,7 @@ class _StudyViewState extends State<StudyView> {
     final provider = context.read<AppProvider>();
     final wasInAgainSet = _againCardIds.contains(cardId);
 
-    int? requeuedIndex;
+    StudyCardItem? requeuedItem;
 
     final isFirstSessionRating = !_sessionRatedCardIds.contains(cardId);
     _sessionRatedCardIds.add(cardId);
@@ -345,17 +441,17 @@ class _StudyViewState extends State<StudyView> {
       if (remainingAhead >= 3) {
         final targetIndex = min(_queue.length, _currentIndex + 4);
         _queue.insert(targetIndex, newItem);
-        requeuedIndex = targetIndex;
+        requeuedItem = newItem;
       } else if (remainingAhead > 0) {
         _queue.add(newItem);
-        requeuedIndex = _queue.length - 1;
+        requeuedItem = newItem;
       } else {
         // At the very end of the queue:
         // If more than 1 Again'd card remains, keep re-queuing interleaved!
         // If only 1 Again'd card remains, do not re-queue so the session can conclude.
         if (_againCardIds.length > 1) {
           _queue.add(newItem);
-          requeuedIndex = _queue.length - 1;
+          requeuedItem = newItem;
         }
       }
     } else {
@@ -372,7 +468,7 @@ class _StudyViewState extends State<StudyView> {
       }
     }
 
-    record.requeuedIndex = requeuedIndex;
+    record.requeuedItem = requeuedItem;
 
     // Save snapshot in history for Undo (values captured before the review)
     _history.add(record);
@@ -388,6 +484,38 @@ class _StudyViewState extends State<StudyView> {
     _triggerPreload(_currentIndex);
   }
 
+  void _reRatePast(SrsRating rating) {
+    final record = _recordAt(_currentIndex);
+    if (record == null) return;
+    if (record.ratingGiven == rating) {
+      _navigateForward();
+      return;
+    }
+    if (_isRepeatCard &&
+        (rating == SrsRating.hard || rating == SrsRating.easy)) {
+      return;
+    }
+    context.read<AudioService>().stop();
+    final provider = context.read<AppProvider>();
+    reRateRecord(
+      record: record,
+      rating: rating,
+      practiceOnly: _isPracticeOnly,
+      history: _history,
+      queue: _queue,
+      answeredCount: _answeredCount,
+      againCardIds: _againCardIds,
+      makeDuplicate: (source) => StudyCardItem(
+        vocab: source.vocab,
+        card: source.card,
+        lesson: source.lesson,
+        sentence: provider.getRandomSentenceForVocab(source.vocab),
+      ),
+    );
+    provider.saveState();
+    _navigateForward();
+  }
+
   void _undo() {
     if (_history.isEmpty) return;
     context.read<AudioService>().stop();
@@ -395,9 +523,8 @@ class _StudyViewState extends State<StudyView> {
     final record = _history.removeLast();
 
     // Remove the re-queued duplicate if one was inserted
-    if (record.requeuedIndex != null && record.requeuedIndex! < _queue.length) {
-      _queue.removeAt(record.requeuedIndex!);
-    }
+    final dup = record.requeuedItem;
+    if (dup != null) _queue.remove(dup); // StudyCardItem has no ==, so identity
 
     if (record.wasFirstSessionRating) {
       _sessionRatedCardIds.remove(record.card.id);
@@ -1308,6 +1435,7 @@ class _StudyViewState extends State<StudyView> {
                                           const SizedBox(height: 6),
                                           MarkdownContent(
                                             content: item.vocab.notes,
+                                            selectable: true,
                                           ),
                                         ],
                                       ),
@@ -1338,8 +1466,12 @@ class _StudyViewState extends State<StudyView> {
                 ),
               ),
 
+              // if (_isReviewingPast)
+              //   Text('Currently ${_recordAt(_currentIndex)?.ratingGiven.name.toUpperCase()}',
+              //       style: Theme.of(context).textTheme.labelSmall),
+
               // Bottom SRS Rating Bar (Accessible when answer revealed)
-              if (_isAnswerRevealed && !_isReviewingPast)
+              if (_isAnswerRevealed)
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 24,
