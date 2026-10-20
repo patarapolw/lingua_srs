@@ -13,6 +13,8 @@ VocabGroup vocabGroup(String id, String ko, String en, {int reviews = 0}) =>
 void main() {
   group('VocabSimilarity', () {
     test('normalizes "to be" and articles', () {
+      expect(VocabSimilarity.normalizeTranslation('be'), 'be');
+      expect(VocabSimilarity.normalizeTranslation('to be a teacher'), 'teacher');
       expect(VocabSimilarity.normalizeTranslation('To be beautiful'), 'beautiful');
       expect(VocabSimilarity.normalizeTranslation('to eat'), 'eat');
       expect(VocabSimilarity.normalizeTranslation('a pear (fruit)'), 'pear');
@@ -137,7 +139,7 @@ void main() {
       expect(none.similar, isEmpty);
     });
 
-  test('same-form pool: same Korean spelling, any POS, other id', () {
+    test('same-form pool: same Korean spelling, any POS, other id', () {
       final noun = VocabItem(id: 'n', targetWord: '배', translation: 'pear', pos: 'nouns');
       final pool = VocabSimilarity.sameFormPool(noun, [
         VocabGroup(

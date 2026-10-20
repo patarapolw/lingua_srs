@@ -152,8 +152,6 @@ class _ConfirmMergeDialogState extends State<_ConfirmMergeDialog> {
     final theme = Theme.of(context);
     Widget option(VocabGroup g) => RadioListTile<String>(
       value: g.id,
-      groupValue: _survivorId,
-      onChanged: (v) => setState(() => _survivorId = v!),
       title: Text('Keep progress of ${g.label}'),
       subtitle: Text('${g.reviews} reviews • ${g.lessonTitles.join(', ')}'),
     );
@@ -170,8 +168,11 @@ class _ConfirmMergeDialogState extends State<_ConfirmMergeDialog> {
               'audio, notes and front hint. Each lesson keeps its own wording.',
             ),
             const SizedBox(height: 8),
-            option(widget.a),
-            option(widget.b),
+            RadioGroup<String>(
+              groupValue: _survivorId,
+              onChanged: (v) => setState(() => _survivorId = v ?? _survivorId),
+              child: Column(children: [option(widget.a), option(widget.b)]),
+            ),
             CheckboxListTile(
               contentPadding: EdgeInsets.zero,
               controlAffinity: ListTileControlAffinity.leading,

@@ -9,45 +9,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  final markdownStorageDirectory = Directory.systemTemp.createTempSync(
-    'lingua_srs_markdown_test_',
-  );
   const pathProviderChannel = MethodChannel('plugins.flutter.io/path_provider');
-  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-      .setMockMethodCallHandler(pathProviderChannel, (call) async {
-        if (call.method == 'getApplicationSupportDirectory') {
-          return markdownStorageDirectory.path;
-        }
-        throw MissingPluginException('Unexpected method: ${call.method}');
-      });
-  tearDownAll(() async {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(pathProviderChannel, null);
-    await markdownStorageDirectory.delete(recursive: true);
-  });
+  late Directory storageDirectory;
 
-  Future<void> pumpApp(
-    WidgetTester tester,
-    Map<String, Object> prefs,
-  ) async {
-    SharedPreferences.setMockInitialValues(prefs);
-
-    await tester.pumpWidget(
-      ChangeNotifierProvider(
-        create: (_) => AppProvider(),
-        child: const LinguaSrsApp(),
-      ),
-    );
-    await tester.pumpAndSettle();
-  }
-
-  testWidgets('App renders LinguaSRS scaffold', (WidgetTester tester) async {
-    final storageDirectory = Directory.systemTemp.createTempSync(
-      'lingua_srs_widget_test_',
-    );
-    const pathProviderChannel = MethodChannel(
-      'plugins.flutter.io/path_provider',
-    );
+  setUp(() {
+    storageDirectory = Directory.systemTemp.createTempSync('lingua_srs_widget_test_');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(pathProviderChannel, (call) async {
           if (call.method == 'getApplicationSupportDirectory') {
@@ -55,30 +21,44 @@ void main() {
           }
           throw MissingPluginException('Unexpected method: ${call.method}');
         });
-    addTearDown(() async {
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(pathProviderChannel, null);
-      await storageDirectory.delete(recursive: true);
-    });
+  });
 
+  tearDown(() async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(pathProviderChannel, null);
+    if (storageDirectory.existsSync()) {
+      await storageDirectory.delete(recursive: true);
+    }
+  });
+
+  /// Pumps the app and waits until the provider has really finished loading.
+  Future<AppProvider> pumpApp(
+    WidgetTester tester, [
+    Map<String, Object> prefs = const {},
+  ]) async {
     SharedPreferences.setMockInitialValues({
       'lingua_srs_windows_legacy_migration_complete': true,
+      ...prefs,
     });
-
+    final provider = AppProvider();
     await tester.pumpWidget(
-      ChangeNotifierProvider(
-        create: (_) => AppProvider(),
-        child: const LinguaSrsApp(),
-      ),
+      ChangeNotifierProvider(create: (_) => provider, child: const LinguaSrsApp()),
     );
-    // File I/O completes on the real event loop, not in fake async.
-    for (var i = 0; i < 20; i++) {
+    // File I/O completes on the real event loop; init() also waits on a fake
+    // Future.delayed(Duration.zero), so both clocks have to advance.
+    for (var i = 0; i < 100 && provider.isLoading; i++) {
       await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 100)),
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
       );
-      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 20));
     }
+    expect(provider.isLoading, isFalse, reason: 'provider never finished loading');
     await tester.pumpAndSettle();
+    return provider;
+  }
+
+  testWidgets('App renders LinguaSRS scaffold', (tester) async {
+    await pumpApp(tester);
     expect(find.text('LinguaSRS'), findsWidgets);
     expect(find.textContaining('24h Limit'), findsNothing);
 
@@ -89,13 +69,12 @@ void main() {
   });
 
   testWidgets('Merge menu is hidden without a DeepSeek key or history', (tester) async {
-    await pumpApp(tester, {'lingua_srs_windows_legacy_migration_complete': true});
+    await pumpApp(tester);
     expect(find.byTooltip('Vocabulary merging'), findsNothing);
   });
 
   testWidgets('Merge menu offers AI only with a DeepSeek key', (tester) async {
     await pumpApp(tester, {
-      'lingua_srs_windows_legacy_migration_complete': true,
       'lingua_srs_deepseek_api_key': 'test-key',
     });
     await tester.tap(find.byTooltip('Vocabulary merging'));

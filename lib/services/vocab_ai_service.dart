@@ -108,6 +108,8 @@ class VocabSimilarity {
   /// "To be beautiful" / "a beautiful (thing)" -> "beautiful"
   static String normalizeTranslation(String value) {
     final base = normalizeTarget(value).replaceAll(RegExp(r'\s*\([^)]*\)'), '').trim();
+    // The verb "to be" itself has nothing left to strip.
+    if (base == 'to be' || base == 'be' || base == 'to') return base;
     final stripped = base
         .replaceFirst(RegExp(r'^(to be|to|be)\s+'), '')
         .replaceFirst(RegExp(r'^(a|an|the)\s+'), '')
