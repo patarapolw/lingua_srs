@@ -135,8 +135,9 @@ void reRateRecord({
   // 1. Card state.
   if (practiceOnly) {
     // Mistakes practice never touches SRS; it only clears/restores the mistake.
-    card.mistakesClearedAt =
-        nowAgain ? record.oldMistakesClearedAt : DateTime.now();
+    card.mistakesClearedAt = nowAgain
+        ? record.oldMistakesClearedAt
+        : DateTime.now();
   } else if (record.wasFirstSessionRating) {
     record.restore();
     // processReview directly, not recordCardReview: a re-mark must not add
@@ -1014,7 +1015,9 @@ class _StudyViewState extends State<StudyView> {
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final totalWidth = constraints.maxWidth;
-                final totalCards = _queue.isEmpty ? 1 : distinctCardCount(_queue);
+                final totalCards = _queue.isEmpty
+                    ? 1
+                    : distinctCardCount(_queue);
                 final rightWidth =
                     (rightCount / totalCards).clamp(0.0, 1.0) * totalWidth;
                 final wrongWidth =
@@ -1067,7 +1070,7 @@ class _StudyViewState extends State<StudyView> {
                     child: Container(
                       constraints: const BoxConstraints(maxWidth: 720),
                       child: InkWell(
-                        onTap: _isAnswerRevealed ? null :  _toggleFlip,
+                        onTap: _isAnswerRevealed ? null : _toggleFlip,
                         borderRadius: BorderRadius.circular(20),
                         child: Card(
                           elevation: 4,
@@ -1111,7 +1114,11 @@ class _StudyViewState extends State<StudyView> {
                                     ),
                                     Chip(
                                       visualDensity: VisualDensity.compact,
-                                      label: Text(item.vocab.pos.replaceAll('_', ' ').toUpperCase()),
+                                      label: Text(
+                                        item.vocab.pos
+                                            .replaceAll('_', ' ')
+                                            .toUpperCase(),
+                                      ),
                                       backgroundColor: theme
                                           .colorScheme
                                           .surfaceContainerHighest,
@@ -1162,7 +1169,9 @@ class _StudyViewState extends State<StudyView> {
                                     ),
                                     _disambiguationCue(
                                       context,
-                                      item.vocab.frontHintFor(CardDirection.targetToNative),
+                                      item.vocab.frontHintFor(
+                                        CardDirection.targetToNative,
+                                      ),
                                     ),
                                     const SizedBox(height: 20),
                                     // One Random Sentence always on front
@@ -1211,7 +1220,9 @@ class _StudyViewState extends State<StudyView> {
                                     ),
                                     _disambiguationCue(
                                       context,
-                                      item.vocab.frontHintFor(CardDirection.nativeToTarget),
+                                      item.vocab.frontHintFor(
+                                        CardDirection.nativeToTarget,
+                                      ),
                                     ),
                                     const SizedBox(height: 20),
                                     // One Random Sentence with Cloze Deletion
@@ -1469,8 +1480,10 @@ class _StudyViewState extends State<StudyView> {
               ),
 
               if (_isReviewingPast)
-                Text('Currently ${_recordAt(_currentIndex)?.ratingGiven.name.toUpperCase()}',
-                    style: Theme.of(context).textTheme.labelSmall),
+                Text(
+                  'Currently ${_recordAt(_currentIndex)?.ratingGiven.name.toUpperCase()}',
+                  style: Theme.of(context).textTheme.labelSmall,
+                ),
 
               // Bottom SRS Rating Bar (Accessible when answer revealed)
               if (_isAnswerRevealed)

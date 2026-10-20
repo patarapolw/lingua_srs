@@ -113,19 +113,21 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
   }
 
   List<String> _suggestedQuestions(bool hasMessages) {
-    final questions = !hasMessages ? [
-        'Explain the etymology and Hanja of "${widget.targetWord}".',
-        if (widget.sentenceTarget?.isNotEmpty == true)
-          'How does this sentence work?',
-        'How is "${widget.targetWord}" used in everyday speech?',
-        'Give me another example sentence with "${widget.targetWord}".',
-      ] : [
-      'Explain the etymology and Hanja of "${widget.targetWord}".',
-      'Can you give another example with "${widget.targetWord}"?',
-      'How would a native speaker say this more naturally?',
-      if (widget.sentenceTarget?.isNotEmpty == true)
-        'What other useful expressions are in this sentence?',
-    ];
+    final questions = !hasMessages
+        ? [
+            'Explain the etymology and Hanja of "${widget.targetWord}".',
+            if (widget.sentenceTarget?.isNotEmpty == true)
+              'How does this sentence work?',
+            'How is "${widget.targetWord}" used in everyday speech?',
+            'Give me another example sentence with "${widget.targetWord}".',
+          ]
+        : [
+            'Explain the etymology and Hanja of "${widget.targetWord}".',
+            'Can you give another example with "${widget.targetWord}"?',
+            'How would a native speaker say this more naturally?',
+            if (widget.sentenceTarget?.isNotEmpty == true)
+              'What other useful expressions are in this sentence?',
+          ];
 
     return questions;
   }
@@ -192,7 +194,9 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
           setState(() => _streamingAnswer = answer.toString());
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (_messagesController.hasClients && _wasAtBottom) {
-              _messagesController.jumpTo(_messagesController.position.maxScrollExtent);
+              _messagesController.jumpTo(
+                _messagesController.position.maxScrollExtent,
+              );
             }
           });
         }
@@ -212,7 +216,9 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
 
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (_messagesController.hasClients && _wasAtBottom) {
-            _messagesController.jumpTo(_messagesController.position.maxScrollExtent);
+            _messagesController.jumpTo(
+              _messagesController.position.maxScrollExtent,
+            );
           }
         });
       }
@@ -229,7 +235,8 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
     final double maxWidth = 640;
 
     final lastSaved = messages.isNotEmpty ? messages.last : null;
-    final showStreaming = _sending &&
+    final showStreaming =
+        _sending &&
         _streamingAnswer.isNotEmpty &&
         !(lastSaved?.role == 'assistant' &&
             lastSaved?.content == _streamingAnswer);
@@ -241,7 +248,10 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: maxWidth, maxHeight: height * 0.9),
+        constraints: BoxConstraints(
+          maxWidth: maxWidth,
+          maxHeight: height * 0.9,
+        ),
         child: SizedBox(
           width: width < maxWidth ? width : maxWidth,
           child: Padding(
@@ -340,9 +350,7 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                       : ListView.builder(
                           controller: _messagesController,
                           padding: const EdgeInsets.symmetric(vertical: 8),
-                          itemCount:
-                              messages.length +
-                              (showStreaming ? 1 : 0),
+                          itemCount: messages.length + (showStreaming ? 1 : 0),
                           itemBuilder: (context, index) {
                             if (showStreaming && index == messages.length) {
                               return Align(
@@ -425,7 +433,9 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                   ),
                 SizedBox(
                   height: 2,
-                  child: _sending ? const LinearProgressIndicator(minHeight: 2) : null,
+                  child: _sending
+                      ? const LinearProgressIndicator(minHeight: 2)
+                      : null,
                 ),
                 if (_error != null)
                   Padding(

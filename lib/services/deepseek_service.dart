@@ -127,7 +127,9 @@ class DeepSeekService {
       }
       final decoded = jsonDecode(utf8.decode(response.bodyBytes));
       final choices = decoded is Map ? decoded['choices'] : null;
-      final first = choices is List && choices.isNotEmpty ? choices.first : null;
+      final first = choices is List && choices.isNotEmpty
+          ? choices.first
+          : null;
       final message = first is Map ? first['message'] : null;
       final content = message is Map ? message['content'] : null;
       if (content is! String || content.trim().isEmpty) {

@@ -28,43 +28,45 @@ class VocabItem {
     SrsCard? cardTargetToNative,
     SrsCard? cardNativeToTarget,
   }) : id = id ?? const Uuid().v4(),
-      sectionPath = sectionPath ?? (pos.isEmpty ? [] : [pos]),
-      sentenceIds = sentenceIds ?? [],
-      shared = SharedVocab(
-      audioUrl: audioUrl,
-        notes: notes,
-        disambiguation: disambiguation,
-        cardTargetToNative: cardTargetToNative ??
-            SrsCard(
-              direction: CardDirection.targetToNative,
-              isEnabled: !isVerbOrAdjective(pos),
-            ),
-        cardNativeToTarget: cardNativeToTarget ??
-            SrsCard(
-              direction: CardDirection.nativeToTarget,
-              isEnabled: isVerbOrAdjective(pos),
-            ),
-      );
+       sectionPath = sectionPath ?? (pos.isEmpty ? [] : [pos]),
+       sentenceIds = sentenceIds ?? [],
+       shared = SharedVocab(
+         audioUrl: audioUrl,
+         notes: notes,
+         disambiguation: disambiguation,
+         cardTargetToNative:
+             cardTargetToNative ??
+             SrsCard(
+               direction: CardDirection.targetToNative,
+               isEnabled: !isVerbOrAdjective(pos),
+             ),
+         cardNativeToTarget:
+             cardNativeToTarget ??
+             SrsCard(
+               direction: CardDirection.nativeToTarget,
+               isEnabled: isVerbOrAdjective(pos),
+             ),
+       );
 
-    String? get audioUrl => shared.audioUrl;
-    set audioUrl(String? v) {
-      shared.setManual(SharedVocab.audioField, v);
-    }
+  String? get audioUrl => shared.audioUrl;
+  set audioUrl(String? v) {
+    shared.setManual(SharedVocab.audioField, v);
+  }
 
-    String get notes => shared.notes;
-    set notes(String v) {
-      shared.setManual(SharedVocab.notesField, v);
-    }
+  String get notes => shared.notes;
+  set notes(String v) {
+    shared.setManual(SharedVocab.notesField, v);
+  }
 
-    String get disambiguation => shared.disambiguation;
-    set disambiguation(String v) {
-      shared.setManual(SharedVocab.disambiguationField, v);
-    }
+  String get disambiguation => shared.disambiguation;
+  set disambiguation(String v) {
+    shared.setManual(SharedVocab.disambiguationField, v);
+  }
 
-    SrsCard get cardTargetToNative => shared.cardTargetToNative;
-    set cardTargetToNative(SrsCard v) => shared.cardTargetToNative = v;
-    SrsCard get cardNativeToTarget => shared.cardNativeToTarget;
-    set cardNativeToTarget(SrsCard v) => shared.cardNativeToTarget = v;
+  SrsCard get cardTargetToNative => shared.cardTargetToNative;
+  set cardTargetToNative(SrsCard v) => shared.cardTargetToNative = v;
+  SrsCard get cardNativeToTarget => shared.cardNativeToTarget;
+  set cardNativeToTarget(SrsCard v) => shared.cardNativeToTarget = v;
 
   /// Hint for the front of [direction]'s card: its own hint, else the general one.
   String frontHintFor(CardDirection direction) {

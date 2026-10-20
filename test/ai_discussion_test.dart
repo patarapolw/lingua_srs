@@ -124,7 +124,13 @@ void main() {
         expect(body['response_format'], {'type': 'json_object'});
         expect(request.headers['Authorization'], 'Bearer test-key');
         return http.Response(
-          jsonEncode({'choices': [{'message': {'content': '{"hint":"fruit"}'}}]}),
+          jsonEncode({
+            'choices': [
+              {
+                'message': {'content': '{"hint":"fruit"}'},
+              },
+            ],
+          }),
           200,
         );
       });
@@ -144,7 +150,13 @@ void main() {
           messages: const [AiDiscussionMessage(role: 'user', content: 'json')],
           client: client,
         ),
-        throwsA(isA<DeepSeekException>().having((e) => e.isAuthError, 'isAuthError', isTrue)),
+        throwsA(
+          isA<DeepSeekException>().having(
+            (e) => e.isAuthError,
+            'isAuthError',
+            isTrue,
+          ),
+        ),
       );
     });
   });

@@ -88,10 +88,15 @@ class RecentAiDiscussionsView extends StatelessWidget {
                         if (discussion.sentence?.targetText.trim() case final s?
                             when s.isNotEmpty)
                           Padding(
-                            padding: const EdgeInsetsGeometry.only(top: 2, bottom: 2),
+                            padding: const EdgeInsetsGeometry.only(
+                              top: 2,
+                              bottom: 2,
+                            ),
                             child: MarkdownContent(
                               content: s,
-                              style: const TextStyle(fontStyle: FontStyle.italic),
+                              style: const TextStyle(
+                                fontStyle: FontStyle.italic,
+                              ),
                             ),
                           ),
                         Text(

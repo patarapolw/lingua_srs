@@ -56,7 +56,10 @@ class StorageService {
     if (raw == null || raw.isEmpty) return [];
     try {
       return (jsonDecode(raw) as List)
-          .map((e) => VocabMergeRecord.fromJson(Map<String, dynamic>.from(e as Map)))
+          .map(
+            (e) =>
+                VocabMergeRecord.fromJson(Map<String, dynamic>.from(e as Map)),
+          )
           .toList();
     } catch (_) {
       return [];
@@ -350,9 +353,7 @@ class StorageService {
             continue;
           } catch (_) {}
         }
-        legacy
-            .putIfAbsent(vocab.id, () => [])
-            .add(MapEntry(lesson, vocab));
+        legacy.putIfAbsent(vocab.id, () => []).add(MapEntry(lesson, vocab));
       }
     }
 

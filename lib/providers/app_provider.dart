@@ -68,6 +68,10 @@ class AppProvider extends ChangeNotifier {
   Map<String, int> _lessonHierarchyOrder = {};
   Map<String, bool> _lessonFolderExpansion = {};
 
+  /// Test hook: HTTP client used by the AI helpers when none is passed in.
+  @visibleForTesting
+  http.Client? aiClient;
+
   int _maxReviews24h = 100;
   List<DateTime> _reviewTimestamps24h = [];
 
@@ -75,21 +79,20 @@ class AppProvider extends ChangeNotifier {
   List<Sentence> get sentences => _sentences;
   bool get autoplayAudio => _autoplayAudio;
   String get deepSeekApiKey => _deepSeekApiKey;
+
   /// False without a key, and after DeepSeek rejected it (until it changes).
-  bool get canUseAi => _deepSeekApiKey.trim().isNotEmpty && !_deepSeekKeyRejected;
+  bool get canUseAi =>
+      _deepSeekApiKey.trim().isNotEmpty && !_deepSeekKeyRejected;
   List<VocabMergeRecord> get mergeHistory => List.unmodifiable(_mergeHistory);
   bool get isLoading => _isLoading;
   String? get selectedLessonId => _selectedLessonId;
   int get maxReviews24h => _maxReviews24h;
-  Map<String, List<AiDiscussionMessage>> get aiDiscussions =>
-      Map.unmodifiable(
-        _aiDiscussions.map<String, List<AiDiscussionMessage>>(
-          (id, messages) => MapEntry(
-            id,
-            List<AiDiscussionMessage>.unmodifiable(messages),
-          ),
-        ),
-      );
+  Map<String, List<AiDiscussionMessage>> get aiDiscussions => Map.unmodifiable(
+    _aiDiscussions.map<String, List<AiDiscussionMessage>>(
+      (id, messages) =>
+          MapEntry(id, List<AiDiscussionMessage>.unmodifiable(messages)),
+    ),
+  );
   Map<String, int> get lessonHierarchyOrder =>
       Map.unmodifiable(_lessonHierarchyOrder);
   Map<String, bool> get lessonFolderExpansion =>
@@ -940,7 +943,11 @@ class AppProvider extends ChangeNotifier {
         .where((v) => v.id == survivorId)
         .firstOrNull;
     if (survivor == null) {
-      throw ArgumentError.value(survivorId, 'survivorId', 'Unknown vocabulary.');
+      throw ArgumentError.value(
+        survivorId,
+        'survivorId',
+        'Unknown vocabulary.',
+      );
     }
 
     final snapshots = [
@@ -981,7 +988,8 @@ class AppProvider extends ChangeNotifier {
       id: const Uuid().v4(),
       createdAt: DateTime.now(),
       survivorId: survivor.id,
-      label: '${labels.join('; ')} → ${survivor.targetWord} — ${survivor.translation}',
+      label:
+          '${labels.join('; ')} → ${survivor.targetWord} — ${survivor.translation}',
       source: source,
       reason: reason,
       survivorBefore: survivorBefore,
@@ -1045,7 +1053,9 @@ class AppProvider extends ChangeNotifier {
   // ------------------------------------------------------------- AI helpers
 
   Future<T> _withAi<T>(Future<T> Function() call) async {
-    if (!canUseAi) throw StateError('Add a DeepSeek API key in settings first.');
+    if (!canUseAi) {
+      throw StateError('Add a DeepSeek API key in settings first.');
+    }
     try {
       return await call();
     } on DeepSeekException catch (error) {
@@ -1071,7 +1081,7 @@ class AppProvider extends ChangeNotifier {
         final reply = await DeepSeekService.completeJson(
           apiKey: _deepSeekApiKey,
           messages: VocabAiPrompts.mergeMessages(batch),
-          client: client,
+          client: client ?? aiClient,
         );
         suggestions.addAll(VocabAiPrompts.parseMergeSuggestions(reply, batch));
       }
@@ -1094,7 +1104,7 @@ class AppProvider extends ChangeNotifier {
       final reply = await DeepSeekService.completeJson(
         apiKey: _deepSeekApiKey,
         messages: prompt.messages,
-        client: client,
+        client: client ?? aiClient,
       );
       return VocabAiPrompts.parseSimilarResult(reply, prompt.ids);
     });
@@ -1118,7 +1128,7 @@ class AppProvider extends ChangeNotifier {
       final reply = await DeepSeekService.completeJson(
         apiKey: _deepSeekApiKey,
         messages: prompt.messages,
-        client: client,
+        client: client ?? aiClient,
       );
       return VocabAiPrompts.parseSimilarResult(reply, prompt.ids);
     });

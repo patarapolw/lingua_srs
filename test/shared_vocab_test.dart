@@ -45,14 +45,17 @@ void main() {
       expect(s.meta['audioUrl']!.origin, DetailOrigin.imported);
     });
 
-    test('the writing lesson may replace; another lesson only adds an alternate', () {
-      final s = sv()..mergeImport('audioUrl', 'a', lessonId: 'L1');
-      expect(s.mergeImport('audioUrl', 'b', lessonId: 'L2'), isFalse);
-      expect(s.audioUrl, 'a');
-      expect(s.alternates['audioUrl'], ['b']);
-      expect(s.mergeImport('audioUrl', 'c', lessonId: 'L1'), isTrue);
-      expect(s.audioUrl, 'c');
-    });
+    test(
+      'the writing lesson may replace; another lesson only adds an alternate',
+      () {
+        final s = sv()..mergeImport('audioUrl', 'a', lessonId: 'L1');
+        expect(s.mergeImport('audioUrl', 'b', lessonId: 'L2'), isFalse);
+        expect(s.audioUrl, 'a');
+        expect(s.alternates['audioUrl'], ['b']);
+        expect(s.mergeImport('audioUrl', 'c', lessonId: 'L1'), isTrue);
+        expect(s.audioUrl, 'c');
+      },
+    );
 
     test('never replaces a manual value, and a null lesson never replaces', () {
       final s = sv(audio: 'a')..setManual('audioUrl', 'm');
@@ -74,7 +77,8 @@ void main() {
   });
 
   test('stampUnowned only stamps non-blank values without a writer', () {
-    final s = sv(audio: 'a', notes: 'n')..meta['notes'] = const DetailMeta(DetailOrigin.manual);
+    final s = sv(audio: 'a', notes: 'n')
+      ..meta['notes'] = const DetailMeta(DetailOrigin.manual);
     s.stampUnowned('L1');
     expect(s.meta['audioUrl']!.lessonId, 'L1');
     expect(s.meta['notes']!.origin, DetailOrigin.manual);
@@ -82,7 +86,8 @@ void main() {
   });
 
   test('restoreField copies value, provenance and alternates back', () {
-    final before = sv(audio: 'a')..meta['audioUrl'] = const DetailMeta(DetailOrigin.imported, 'L1');
+    final before = sv(audio: 'a')
+      ..meta['audioUrl'] = const DetailMeta(DetailOrigin.imported, 'L1');
     final now = sv(audio: 'b')
       ..meta['audioUrl'] = const DetailMeta(DetailOrigin.manual)
       ..alternates['audioUrl'] = ['x'];
@@ -124,12 +129,19 @@ void main() {
   test('MergedEntrySnapshot matches by lesson, wording and section path', () {
     final entry = VocabItem(targetWord: '배', translation: 'pear', pos: 'nouns');
     final snap = MergedEntrySnapshot(
-      lessonId: 'L1', targetWord: '배', translation: 'pear',
+      lessonId: 'L1',
+      targetWord: '배',
+      translation: 'pear',
       sectionPath: List.of(entry.effectiveSectionPath),
-      previousId: 'p', previousIdIsExplicit: false, previousShared: sv().toJson(),
+      previousId: 'p',
+      previousIdIsExplicit: false,
+      previousShared: sv().toJson(),
     );
     expect(snap.matches('L1', entry), isTrue);
     expect(snap.matches('L2', entry), isFalse);
-    expect(MergedEntrySnapshot.fromJson(snap.toJson()).matches('L1', entry), isTrue);
+    expect(
+      MergedEntrySnapshot.fromJson(snap.toJson()).matches('L1', entry),
+      isTrue,
+    );
   });
 }

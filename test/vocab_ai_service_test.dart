@@ -3,19 +3,24 @@ import 'package:lingua_srs/models/vocab_item.dart';
 import 'package:lingua_srs/models/vocab_merge_record.dart';
 import 'package:lingua_srs/services/vocab_ai_service.dart';
 
-VocabGroup vg(String id, String ko, String en, {int reviews = 0}) =>
-    VocabGroup(
-      id: id,
-      entry: VocabItem(id: id, targetWord: ko, translation: en, pos: 'adjectives'),
-      reviews: reviews,
-    )..lessonTitles.add('Lesson');
+VocabGroup vg(String id, String ko, String en, {int reviews = 0}) => VocabGroup(
+  id: id,
+  entry: VocabItem(id: id, targetWord: ko, translation: en, pos: 'adjectives'),
+  reviews: reviews,
+)..lessonTitles.add('Lesson');
 
 void main() {
   group('VocabSimilarity', () {
     test('normalizes "to be" and articles', () {
       expect(VocabSimilarity.normalizeTranslation('be'), 'be');
-      expect(VocabSimilarity.normalizeTranslation('to be a teacher'), 'teacher');
-      expect(VocabSimilarity.normalizeTranslation('To be beautiful'), 'beautiful');
+      expect(
+        VocabSimilarity.normalizeTranslation('to be a teacher'),
+        'teacher',
+      );
+      expect(
+        VocabSimilarity.normalizeTranslation('To be beautiful'),
+        'beautiful',
+      );
       expect(VocabSimilarity.normalizeTranslation('to eat'), 'eat');
       expect(VocabSimilarity.normalizeTranslation('a pear (fruit)'), 'pear');
       expect(VocabSimilarity.normalizeTranslation('to be'), 'to be');
@@ -39,7 +44,8 @@ void main() {
     ]);
 
     test('accepts valid suggestions, also inside a code fence', () {
-      const reply = '```json\n{"merges":[{"group":1,"keep":"a","merge":["b"],"reason":"same"}]}\n```';
+      const reply =
+          '```json\n{"merges":[{"group":1,"keep":"a","merge":["b"],"reason":"same"}]}\n```';
       final result = VocabAiPrompts.parseMergeSuggestions(reply, groups);
       expect(result.single.keepId, 'a');
       expect(result.single.mergeIds, ['b']);
@@ -47,7 +53,8 @@ void main() {
     });
 
     test('drops unknown ids, self merges and unknown groups', () {
-      const reply = '{"merges":['
+      const reply =
+          '{"merges":['
           '{"group":1,"keep":"a","merge":["a","zzz"]},'
           '{"group":9,"keep":"a","merge":["b"]},'
           '{"group":1,"keep":"nope","merge":["b"]}]}';
@@ -55,15 +62,18 @@ void main() {
     });
 
     test('does not reuse an id in two suggestions', () {
-      const reply = '{"merges":['
+      const reply =
+          '{"merges":['
           '{"group":1,"keep":"a","merge":["b"]},'
           '{"group":1,"keep":"b","merge":["a"]}]}';
       expect(VocabAiPrompts.parseMergeSuggestions(reply, groups), hasLength(1));
     });
 
     test('rejects non-JSON replies', () {
-      expect(() => VocabAiPrompts.parseMergeSuggestions('nope', groups),
-          throwsFormatException);
+      expect(
+        () => VocabAiPrompts.parseMergeSuggestions('nope', groups),
+        throwsFormatException,
+      );
     });
   });
 
@@ -76,7 +86,11 @@ void main() {
   });
 
   group('similar meanings', () {
-    final target = VocabItem(targetWord: '크다', translation: 'big', pos: 'adjectives');
+    final target = VocabItem(
+      targetWord: '크다',
+      translation: 'big',
+      pos: 'adjectives',
+    );
 
     test('pool: same POS, different Korean form, other id', () {
       final pool = VocabSimilarity.similarPool(target, [
@@ -84,7 +98,12 @@ void main() {
         vg('b', '크다', 'to be big'), // same Korean form: a merge candidate
         VocabGroup(
           id: 'c',
-          entry: VocabItem(id: 'c', targetWord: '배', translation: 'pear', pos: 'nouns'),
+          entry: VocabItem(
+            id: 'c',
+            targetWord: '배',
+            translation: 'pear',
+            pos: 'nouns',
+          ),
           reviews: 0,
         ),
         vg(target.id, '크다', 'big'), // itself
@@ -132,19 +151,33 @@ void main() {
 
     test('parse caps the list and tolerates an empty answer', () {
       final ids = [for (var i = 1; i <= 12; i++) 'id-$i'];
-      final many = '{"hint":"","similar":[${[for (var i = 1; i <= 12; i++) '{"n":$i,"hint":"h"}'].join(',')}]}';
-      expect(VocabAiPrompts.parseSimilarResult(many, ids).similar, hasLength(8));
+      final many =
+          '{"hint":"","similar":[${[for (var i = 1; i <= 12; i++) '{"n":$i,"hint":"h"}'].join(',')}]}';
+      expect(
+        VocabAiPrompts.parseSimilarResult(many, ids).similar,
+        hasLength(8),
+      );
       final none = VocabAiPrompts.parseSimilarResult('{}', ids);
       expect(none.hint, '');
       expect(none.similar, isEmpty);
     });
 
     test('same-form pool: same Korean spelling, any POS, other id', () {
-      final noun = VocabItem(id: 'n', targetWord: '배', translation: 'pear', pos: 'nouns');
+      final noun = VocabItem(
+        id: 'n',
+        targetWord: '배',
+        translation: 'pear',
+        pos: 'nouns',
+      );
       final pool = VocabSimilarity.sameFormPool(noun, [
         VocabGroup(
           id: 'm',
-          entry: VocabItem(id: 'm', targetWord: ' 배 ', translation: 'ship', pos: 'verbs'),
+          entry: VocabItem(
+            id: 'm',
+            targetWord: ' 배 ',
+            translation: 'ship',
+            pos: 'verbs',
+          ),
           reviews: 0,
         ),
         vg('x', '크다', 'big'),
@@ -154,11 +187,21 @@ void main() {
     });
 
     test('KO-EN prompt is tiny: no Korean lines, no ids', () {
-      final noun = VocabItem(id: 'n', targetWord: '배', translation: 'pear', pos: 'nouns');
+      final noun = VocabItem(
+        id: 'n',
+        targetWord: '배',
+        translation: 'pear',
+        pos: 'nouns',
+      );
       final others = [
         VocabGroup(
           id: 'auto-secret-id',
-          entry: VocabItem(id: 'auto-secret-id', targetWord: '배', translation: 'stomach', pos: 'nouns'),
+          entry: VocabItem(
+            id: 'auto-secret-id',
+            targetWord: '배',
+            translation: 'stomach',
+            pos: 'nouns',
+          ),
           reviews: 0,
         ),
       ];
@@ -168,8 +211,14 @@ void main() {
       expect(user, isNot(contains('auto-')));
       expect(prompt.ids, ['auto-secret-id']);
 
-      final bigPool = [for (var i = 0; i < 300; i++) vg('id$i', '단어$i', 'word $i')];
-      final enKo = VocabAiPrompts.enKoPrompt(noun, const [], bigPool).messages[1].content;
+      final bigPool = [
+        for (var i = 0; i < 300; i++) vg('id$i', '단어$i', 'word $i'),
+      ];
+      final enKo = VocabAiPrompts.enKoPrompt(
+        noun,
+        const [],
+        bigPool,
+      ).messages[1].content;
       expect(user.length * 10, lessThan(enKo.length));
     });
   });

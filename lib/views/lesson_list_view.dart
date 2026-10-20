@@ -530,10 +530,16 @@ class LessonListView extends StatelessWidget {
         totalDue > 0 && provider.remainingReviews24h == 0;
 
     final dueNoticeParts = <String>[];
-    if (provider.reviewsInLast24Hours > 0) dueNoticeParts.add('${provider.reviewsInLast24Hours} studied today');
-    if (totalRecentMistakes > 1) dueNoticeParts.add('$totalRecentMistakes forgotten');
+    if (provider.reviewsInLast24Hours > 0) {
+      dueNoticeParts.add('${provider.reviewsInLast24Hours} studied today');
+    }
+    if (totalRecentMistakes > 1) {
+      dueNoticeParts.add('$totalRecentMistakes forgotten');
+    }
     if (availableDue == 0) dueNoticeParts.add('$dueTomorrow due tomorrow');
-    if (totalDue > availableDue && totalDue > 0) dueNoticeParts.add('$totalDue remaining');
+    if (totalDue > availableDue && totalDue > 0) {
+      dueNoticeParts.add('$totalDue remaining');
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -630,15 +636,23 @@ class LessonListView extends StatelessWidget {
                                   const SizedBox(height: 6),
                                   Wrap(
                                     children: [
-                                      for (int i = 0; i < dueNoticeParts.length; i++)
-                                        Text(i < dueNoticeParts.length - 1 ? '${dueNoticeParts[i]} • ' : dueNoticeParts[i],
-                                          style: theme.textTheme.bodyMedium?.copyWith(
-                                            color: theme
-                                                .colorScheme
-                                                .onPrimaryContainer
-                                                .withValues(alpha: 0.8),
-                                          )
-                                        )
+                                      for (
+                                        int i = 0;
+                                        i < dueNoticeParts.length;
+                                        i++
+                                      )
+                                        Text(
+                                          i < dueNoticeParts.length - 1
+                                              ? '${dueNoticeParts[i]} • '
+                                              : dueNoticeParts[i],
+                                          style: theme.textTheme.bodyMedium
+                                              ?.copyWith(
+                                                color: theme
+                                                    .colorScheme
+                                                    .onPrimaryContainer
+                                                    .withValues(alpha: 0.8),
+                                              ),
+                                        ),
                                     ],
                                   ),
                                 ],
@@ -711,7 +725,8 @@ class LessonListView extends StatelessWidget {
                                             Navigator.push(
                                               context,
                                               MaterialPageRoute(
-                                                builder: (_) => const StudyView(),
+                                                builder: (_) =>
+                                                    const StudyView(),
                                               ),
                                             );
                                           },
@@ -781,9 +796,7 @@ class LessonListView extends StatelessWidget {
                             color: theme.colorScheme.outline,
                           ),
                           const SizedBox(height: 12),
-                          const Text(
-                            'No lessons found.'
-                          ),
+                          const Text('No lessons found.'),
                           const SizedBox(height: 4),
                           const Text(
                             'Import from markdown/YAML or create one!',

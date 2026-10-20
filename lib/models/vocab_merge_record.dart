@@ -65,7 +65,9 @@ class MergedEntrySnapshot {
         sectionPath: (json['sectionPath'] as List).cast<String>(),
         previousId: json['previousId'] as String,
         previousIdIsExplicit: json['previousIdIsExplicit'] as bool,
-        previousShared: Map<String, dynamic>.from(json['previousShared'] as Map),
+        previousShared: Map<String, dynamic>.from(
+          json['previousShared'] as Map,
+        ),
       );
 }
 
@@ -104,20 +106,24 @@ class VocabMergeRecord {
     'entries': entries.map((e) => e.toJson()).toList(),
   };
 
-  factory VocabMergeRecord.fromJson(Map<String, dynamic> json) =>
-      VocabMergeRecord(
-        id: json['id'] as String,
-        createdAt: DateTime.parse(json['createdAt'] as String),
-        survivorId: json['survivorId'] as String,
-        label: json['label'] as String? ?? '',
-        source: json['source'] as String? ?? 'manual',
-        reason: json['reason'] as String? ?? '',
-        survivorBefore: Map<String, dynamic>.from(json['survivorBefore'] as Map),
-        survivorAfter: Map<String, dynamic>.from(json['survivorAfter'] as Map),
-        entries: (json['entries'] as List)
-            .map((e) => MergedEntrySnapshot.fromJson(Map<String, dynamic>.from(e as Map)))
-            .toList(),
-      );
+  factory VocabMergeRecord.fromJson(
+    Map<String, dynamic> json,
+  ) => VocabMergeRecord(
+    id: json['id'] as String,
+    createdAt: DateTime.parse(json['createdAt'] as String),
+    survivorId: json['survivorId'] as String,
+    label: json['label'] as String? ?? '',
+    source: json['source'] as String? ?? 'manual',
+    reason: json['reason'] as String? ?? '',
+    survivorBefore: Map<String, dynamic>.from(json['survivorBefore'] as Map),
+    survivorAfter: Map<String, dynamic>.from(json['survivorAfter'] as Map),
+    entries: (json['entries'] as List)
+        .map(
+          (e) =>
+              MergedEntrySnapshot.fromJson(Map<String, dynamic>.from(e as Map)),
+        )
+        .toList(),
+  );
 }
 
 class VocabMergeUndoResult {

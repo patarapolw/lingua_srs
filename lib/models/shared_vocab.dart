@@ -7,7 +7,10 @@ class DetailMeta {
   final DetailOrigin origin;
   final String? lessonId;
 
-  Map<String, dynamic> toJson() => {'origin': origin.name, 'lessonId': lessonId};
+  Map<String, dynamic> toJson() => {
+    'origin': origin.name,
+    'lessonId': lessonId,
+  };
 
   factory DetailMeta.fromJson(Map<String, dynamic> json) => DetailMeta(
     DetailOrigin.values.firstWhere(
@@ -99,7 +102,8 @@ class SharedVocab {
       return true;
     }
     if (current == incoming) return false;
-    final ownedByThisLesson = lessonId != null &&
+    final ownedByThisLesson =
+        lessonId != null &&
         m?.origin != DetailOrigin.manual &&
         m?.lessonId == lessonId;
     if (ownedByThisLesson) {
@@ -165,7 +169,9 @@ class SharedVocab {
       frontHint: cardNativeToTarget.frontHint,
     ),
     meta: {...meta},
-    alternates: {for (final e in alternates.entries) e.key: [...e.value]},
+    alternates: {
+      for (final e in alternates.entries) e.key: [...e.value],
+    },
   );
 
   Map<String, dynamic> toJson() => {

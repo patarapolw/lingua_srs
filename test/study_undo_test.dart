@@ -73,16 +73,14 @@ void main() {
       final original = cloneOf(card);
       final records = <ReviewHistoryRecord>[];
 
-      for (final rating in [
-        SrsRating.good,
-        SrsRating.again,
-        SrsRating.easy,
-      ]) {
-        records.add(ReviewHistoryRecord.capture(
-          queueIndex: records.length,
-          card: card,
-          rating: rating,
-        ));
+      for (final rating in [SrsRating.good, SrsRating.again, SrsRating.easy]) {
+        records.add(
+          ReviewHistoryRecord.capture(
+            queueIndex: records.length,
+            card: card,
+            rating: rating,
+          ),
+        );
         SrsService.processReview(card, rating);
       }
 

@@ -63,7 +63,10 @@ class VocabSimilarity {
       value.split(_wordSplit).where((w) => w.isNotEmpty).toSet();
 
   /// Every other vocabulary with the same POS but a different Korean form.
-  static List<VocabGroup> similarPool(VocabItem target, List<VocabGroup> groups) {
+  static List<VocabGroup> similarPool(
+    VocabItem target,
+    List<VocabGroup> groups,
+  ) {
     final pos = target.pos.trim().toLowerCase();
     final form = normalizeTarget(target.targetWord);
     return [
@@ -76,7 +79,10 @@ class VocabSimilarity {
   }
 
   /// Distinct vocabularies spelled exactly like [target] (any POS), other ids.
-  static List<VocabGroup> sameFormPool(VocabItem target, List<VocabGroup> groups) {
+  static List<VocabGroup> sameFormPool(
+    VocabItem target,
+    List<VocabGroup> groups,
+  ) {
     final form = normalizeTarget(target.targetWord);
     if (form.isEmpty) return const [];
     return [
@@ -95,7 +101,10 @@ class VocabSimilarity {
     final targetWords = _words(normalizeTranslation(target.translation));
     final targetChars = target.targetWord.runes.toSet();
     int score(VocabGroup g) =>
-        _words(normalizeTranslation(g.entry.translation)).intersection(targetWords).length * 4 +
+        _words(normalizeTranslation(g.entry.translation))
+                .intersection(targetWords)
+                .length *
+            4 +
         g.entry.targetWord.runes.toSet().intersection(targetChars).length;
     final scored = [for (final g in pool) MapEntry(g, score(g))]
       ..sort((a, b) => b.value.compareTo(a.value));
@@ -107,7 +116,9 @@ class VocabSimilarity {
 
   /// "To be beautiful" / "a beautiful (thing)" -> "beautiful"
   static String normalizeTranslation(String value) {
-    final base = normalizeTarget(value).replaceAll(RegExp(r'\s*\([^)]*\)'), '').trim();
+    final base = normalizeTarget(value)
+        .replaceAll(RegExp(r'\s*\([^)]*\)'), '')
+        .trim();
     // The verb "to be" itself has nothing left to strip.
     if (base == 'to be' || base == 'be' || base == 'to') return base;
     final stripped = base
@@ -137,7 +148,8 @@ class VocabSimilarity {
 class VocabAiPrompts {
   static const int maxSimilar = 8;
 
-  static String _oneLine(String s) => s.replaceAll(RegExp(r'[|\r\n]+'), ' ').trim();
+  static String _oneLine(String s) =>
+      s.replaceAll(RegExp(r'[|\r\n]+'), ' ').trim();
 
   static SimilarPrompt enKoPrompt(
     VocabItem target,
@@ -172,7 +184,9 @@ class VocabAiPrompts {
     final lines = StringBuffer();
     for (var i = 0; i < pool.length; i++) {
       final e = pool[i].entry;
-      lines.writeln('${i + 1}|${_oneLine(e.targetWord)}|${_oneLine(e.translation)}');
+      lines.writeln(
+        '${i + 1}|${_oneLine(e.targetWord)}|${_oneLine(e.translation)}',
+      );
     }
     return SimilarPrompt(
       [
@@ -226,7 +240,10 @@ class VocabAiPrompts {
     );
   }
 
-  static SimilarMeaningResult parseSimilarResult(String reply, List<String> ids) {
+  static SimilarMeaningResult parseSimilarResult(
+    String reply,
+    List<String> ids,
+  ) {
     final json = _decodeObject(reply);
     final seen = <String>{};
     final similar = <SimilarVocabHint>[];
@@ -242,7 +259,10 @@ class VocabAiPrompts {
         if (similar.length == maxSimilar) break;
       }
     }
-    return SimilarMeaningResult(hint: _cleanHint(json['hint']), similar: similar);
+    return SimilarMeaningResult(
+      hint: _cleanHint(json['hint']),
+      similar: similar,
+    );
   }
 
   static String _cleanHint(Object? raw) {
@@ -308,10 +328,15 @@ class VocabAiPrompts {
       if (group == null) continue;
       final valid = group.items.map((item) => item.id).toSet();
       final keep = raw['keep'];
-      if (keep is! String || !valid.contains(keep) || used.contains(keep)) continue;
+      if (keep is! String || !valid.contains(keep) || used.contains(keep)) {
+        continue;
+      }
       final mergeIds = <String>{
         for (final id in (raw['merge'] as List? ?? const []))
-          if (id is String && valid.contains(id) && id != keep && !used.contains(id))
+          if (id is String &&
+              valid.contains(id) &&
+              id != keep &&
+              !used.contains(id))
             id,
       }.toList();
       if (mergeIds.isEmpty) continue;

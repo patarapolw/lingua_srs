@@ -60,8 +60,13 @@ void main() {
       final againIds = <String>{};
       final record = answer(a.card, SrsRating.good, index: 0);
 
-      reRate(record, SrsRating.again,
-          queue: queue, answered: 2, againIds: againIds);
+      reRate(
+        record,
+        SrsRating.again,
+        queue: queue,
+        answered: 2,
+        againIds: againIds,
+      );
 
       expect(a.card.lapses, 1);
       expect(a.card.interval, 0);
@@ -81,8 +86,13 @@ void main() {
       final record = answer(a.card, SrsRating.again, index: 0)
         ..requeuedItem = dup;
 
-      reRate(record, SrsRating.good,
-          queue: queue, answered: 2, againIds: againIds);
+      reRate(
+        record,
+        SrsRating.good,
+        queue: queue,
+        answered: 2,
+        againIds: againIds,
+      );
 
       expect(queue.length, 4);
       expect(queue.contains(dup), isFalse);
@@ -101,8 +111,13 @@ void main() {
       final record = answer(a.card, SrsRating.again, index: 0)
         ..requeuedItem = dup;
 
-      reRate(record, SrsRating.good,
-          queue: queue, answered: 5, againIds: {a.card.id});
+      reRate(
+        record,
+        SrsRating.good,
+        queue: queue,
+        answered: 5,
+        againIds: {a.card.id},
+      );
 
       expect(queue.length, 5);
       expect(queue[4], same(dup));
@@ -246,17 +261,30 @@ void main() {
       final a = itemFor('a');
       final queue = [a, itemFor('b'), itemFor('c'), itemFor('d')];
       final record = ReviewHistoryRecord.capture(
-        queueIndex: 0, card: a.card, rating: SrsRating.good);
+        queueIndex: 0,
+        card: a.card,
+        rating: SrsRating.good,
+      );
       a.card.mistakesClearedAt = DateTime.now(); // what Good does in practice
 
-      reRate(record, SrsRating.again,
-          queue: queue, answered: 1, practice: true);
+      reRate(
+        record,
+        SrsRating.again,
+        queue: queue,
+        answered: 1,
+        practice: true,
+      );
       expect(a.card.mistakesClearedAt, isNull);
       expect(a.card.interval, 0);
 
-      reRate(record, SrsRating.good,
-          queue: queue, answered: 1, practice: true,
-          againIds: {a.card.id});
+      reRate(
+        record,
+        SrsRating.good,
+        queue: queue,
+        answered: 1,
+        practice: true,
+        againIds: {a.card.id},
+      );
       expect(a.card.mistakesClearedAt, isNotNull);
     });
 
@@ -276,8 +304,13 @@ void main() {
       final queue = [a, itemFor('b')];
       final record = answer(a.card, SrsRating.good, index: 0);
 
-      reRate(record, SrsRating.again,
-          queue: queue, answered: 2, againIds: {'other-card'});
+      reRate(
+        record,
+        SrsRating.again,
+        queue: queue,
+        answered: 2,
+        againIds: {'other-card'},
+      );
 
       expect(queue.length, 3);
       expect(queue.last, same(record.requeuedItem));
@@ -291,8 +324,12 @@ void main() {
       );
       final record = answer(a.card, SrsRating.good, index: 0);
 
-      reRate(record, SrsRating.again,
-          queue: [a, itemFor('b'), itemFor('c'), itemFor('d')], answered: 1);
+      reRate(
+        record,
+        SrsRating.again,
+        queue: [a, itemFor('b'), itemFor('c'), itemFor('d')],
+        answered: 1,
+      );
       record.restore(); // what _undo does
 
       expect(a.card.interval, original.interval);

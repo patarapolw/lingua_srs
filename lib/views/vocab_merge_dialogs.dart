@@ -85,14 +85,15 @@ class _MergePickerDialogState extends State<MergePickerDialog> {
   @override
   Widget build(BuildContext context) {
     final q = _query.toLowerCase();
-    final options = widget.groups
-        .where((g) => g.id != widget.current.id)
-        .where((g) => q.isEmpty || g.label.toLowerCase().contains(q))
-        .toList()
-      ..sort((a, b) {
-        final byRank = _rank(a).compareTo(_rank(b));
-        return byRank != 0 ? byRank : a.label.compareTo(b.label);
-      });
+    final options =
+        widget.groups
+            .where((g) => g.id != widget.current.id)
+            .where((g) => q.isEmpty || g.label.toLowerCase().contains(q))
+            .toList()
+          ..sort((a, b) {
+            final byRank = _rank(a).compareTo(_rank(b));
+            return byRank != 0 ? byRank : a.label.compareTo(b.label);
+          });
     return AlertDialog(
       title: Text('Merge "${widget.current.label}" with…'),
       content: SizedBox(
@@ -128,7 +129,10 @@ class _MergePickerDialogState extends State<MergePickerDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
       ],
     );
   }
@@ -145,8 +149,9 @@ class ConfirmMergeDialog extends StatefulWidget {
 }
 
 class _ConfirmMergeDialogState extends State<ConfirmMergeDialog> {
-  late String _survivorId =
-      widget.b.reviews > widget.a.reviews ? widget.b.id : widget.a.id;
+  late String _survivorId = widget.b.reviews > widget.a.reviews
+      ? widget.b.id
+      : widget.a.id;
   bool _understood = false;
 
   @override
@@ -182,17 +187,24 @@ class _ConfirmMergeDialogState extends State<ConfirmMergeDialog> {
               onChanged: (v) => setState(() => _understood = v ?? false),
               title: const Text(
                 'I understand the other one’s SRS progress and card hints will be discarded '
-                '(Undo brings them back).'
+                '(Undo brings them back).',
               ),
             ),
           ],
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
         FilledButton(
-          style: FilledButton.styleFrom(backgroundColor: theme.colorScheme.error),
-          onPressed: _understood ? () => Navigator.pop(context, _survivorId) : null,
+          style: FilledButton.styleFrom(
+            backgroundColor: theme.colorScheme.error,
+          ),
+          onPressed: _understood
+              ? () => Navigator.pop(context, _survivorId)
+              : null,
           child: const Text('Merge'),
         ),
       ],
@@ -240,11 +252,16 @@ class _AiMergeDialogState extends State<_AiMergeDialog> {
     final provider = context.read<AppProvider>();
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
-    final chosen = [for (final i in _selected.toList()..sort()) _suggestions![i]];
+    final chosen = [
+      for (final i in _selected.toList()..sort()) _suggestions![i],
+    ];
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        icon: Icon(Icons.warning_amber_rounded, color: Theme.of(ctx).colorScheme.error),
+        icon: Icon(
+          Icons.warning_amber_rounded,
+          color: Theme.of(ctx).colorScheme.error,
+        ),
         title: Text('Merge ${chosen.length} vocabulary group(s)?'),
         content: const Text(
           'Merged words share SRS progress, audio, notes and hint. The progress '
@@ -252,9 +269,14 @@ class _AiMergeDialogState extends State<_AiMergeDialog> {
           'history.',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Theme.of(ctx).colorScheme.error),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+            ),
             onPressed: () => Navigator.pop(ctx, true),
             child: Text('Merge ${chosen.length}'),
           ),
@@ -274,12 +296,19 @@ class _AiMergeDialogState extends State<_AiMergeDialog> {
       if (record != null) records.add(record);
     }
     navigator.pop();
-    showMergeUndoSnackBar(messenger, provider, records, text: 'Merged ${records.length} group(s).');
+    showMergeUndoSnackBar(
+      messenger,
+      provider,
+      records,
+      text: 'Merged ${records.length} group(s).',
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final byId = {for (final g in context.read<AppProvider>().vocabGroups) g.id: g};
+    final byId = {
+      for (final g in context.read<AppProvider>().vocabGroups) g.id: g,
+    };
     String label(String id) => byId[id]?.label ?? id;
     final suggestions = _suggestions;
 
@@ -288,7 +317,10 @@ class _AiMergeDialogState extends State<_AiMergeDialog> {
       body = Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          Text(
+            _error!,
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
           TextButton(onPressed: _load, child: const Text('Retry')),
         ],
       );
@@ -305,7 +337,9 @@ class _AiMergeDialogState extends State<_AiMergeDialog> {
             value: _selected.contains(i),
             onChanged: _merging
                 ? null
-                : (v) => setState(() => v == true ? _selected.add(i) : _selected.remove(i)),
+                : (v) => setState(
+                    () => v == true ? _selected.add(i) : _selected.remove(i),
+                  ),
             title: Text('Keep ${label(s.keepId)}'),
             subtitle: Text(
               'Merge: ${s.mergeIds.map(label).join('; ')}'
@@ -320,7 +354,10 @@ class _AiMergeDialogState extends State<_AiMergeDialog> {
       title: const Text('AI merge suggestions'),
       content: SizedBox(width: 520, height: 420, child: body),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
         FilledButton(
           onPressed: _selected.isEmpty || _merging ? null : _mergeSelected,
           child: Text('Merge selected (${_selected.length})'),
@@ -370,7 +407,9 @@ class _HistoryDialog extends StatelessWidget {
                           onPressed: i != 0
                               ? null
                               : () async {
-                                  final messenger = ScaffoldMessenger.of(context);
+                                  final messenger = ScaffoldMessenger.of(
+                                    context,
+                                  );
                                   final result = await provider.undoMerge(r.id);
                                   messenger.showSnackBar(
                                     SnackBar(
@@ -390,7 +429,10 @@ class _HistoryDialog extends StatelessWidget {
                   ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
           ],
         );
       },
