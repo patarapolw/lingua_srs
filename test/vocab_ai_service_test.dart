@@ -3,7 +3,7 @@ import 'package:lingua_srs/models/vocab_item.dart';
 import 'package:lingua_srs/models/vocab_merge_record.dart';
 import 'package:lingua_srs/services/vocab_ai_service.dart';
 
-VocabGroup vocabGroup(String id, String ko, String en, {int reviews = 0}) =>
+VocabGroup vg(String id, String ko, String en, {int reviews = 0}) =>
     VocabGroup(
       id: id,
       entry: VocabItem(id: id, targetWord: ko, translation: en, pos: 'adjectives'),
@@ -23,9 +23,9 @@ void main() {
 
     test('candidate groups need the same target and different ids', () {
       final groups = VocabSimilarity.findCandidateGroups([
-        vocabGroup('a', '아름답다', 'beautiful'),
-        vocabGroup('b', '아름답다', 'to be beautiful'),
-        vocabGroup('c', '배', 'pear'),
+        vg('a', '아름답다', 'beautiful'),
+        vg('b', '아름답다', 'to be beautiful'),
+        vg('c', '배', 'pear'),
       ]);
       expect(groups, hasLength(1));
       expect(groups.single.items.map((g) => g.id), ['a', 'b']);
@@ -34,8 +34,8 @@ void main() {
 
   group('VocabAiPrompts.parseMergeSuggestions', () {
     final groups = VocabSimilarity.findCandidateGroups([
-      vocabGroup('a', '아름답다', 'beautiful'),
-      vocabGroup('b', '아름답다', 'to be beautiful'),
+      vg('a', '아름답다', 'beautiful'),
+      vg('b', '아름답다', 'to be beautiful'),
     ]);
 
     test('accepts valid suggestions, also inside a code fence', () {
@@ -80,24 +80,24 @@ void main() {
 
     test('pool: same POS, different Korean form, other id', () {
       final pool = VocabSimilarity.similarPool(target, [
-        vocabGroup('a', '넓다', 'wide'),
-        vocabGroup('b', '크다', 'to be big'), // same Korean form: a merge candidate
+        vg('a', '넓다', 'wide'),
+        vg('b', '크다', 'to be big'), // same Korean form: a merge candidate
         VocabGroup(
           id: 'c',
           entry: VocabItem(id: 'c', targetWord: '배', translation: 'pear', pos: 'nouns'),
           reviews: 0,
         ),
-        vocabGroup(target.id, '크다', 'big'), // itself
+        vg(target.id, '크다', 'big'), // itself
       ]);
       expect(pool.map((g) => g.id), ['a']);
     });
 
     test('shortlist keeps everything under the limit, else the closest', () {
       final pool = [
-        vocabGroup('a', '넓다', 'wide'),
-        vocabGroup('b', '거대하다', 'big and huge'),
-        vocabGroup('c', '작다', 'small'),
-        vocabGroup('d', '크게', 'big'),
+        vg('a', '넓다', 'wide'),
+        vg('b', '거대하다', 'big and huge'),
+        vg('c', '작다', 'small'),
+        vg('d', '크게', 'big'),
       ];
       expect(VocabSimilarity.shortlist(target, pool, limit: 10), pool);
       final top = VocabSimilarity.shortlist(target, pool, limit: 2);
@@ -106,8 +106,8 @@ void main() {
 
     test('prompt numbers the pool and never sends ids', () {
       final pool = [
-        vocabGroup('auto-aaa', '넓다', 'wide'),
-        vocabGroup('auto-bbb', '작다', 'small'),
+        vg('auto-aaa', '넓다', 'wide'),
+        vg('auto-bbb', '작다', 'small'),
       ];
       final prompt = VocabAiPrompts.enKoPrompt(target, const [], pool);
       final user = prompt.messages[1].content;
@@ -147,8 +147,8 @@ void main() {
           entry: VocabItem(id: 'm', targetWord: ' 배 ', translation: 'ship', pos: 'verbs'),
           reviews: 0,
         ),
-        vocabGroup('x', '크다', 'big'),
-        vocabGroup('n', '배', 'pear'), // itself
+        vg('x', '크다', 'big'),
+        vg('n', '배', 'pear'), // itself
       ]);
       expect(pool.map((g) => g.id), ['m']);
     });
@@ -168,7 +168,7 @@ void main() {
       expect(user, isNot(contains('auto-')));
       expect(prompt.ids, ['auto-secret-id']);
 
-      final bigPool = [for (var i = 0; i < 300; i++) vocabGroup('id$i', '단어$i', 'word $i')];
+      final bigPool = [for (var i = 0; i < 300; i++) vg('id$i', '단어$i', 'word $i')];
       final enKo = VocabAiPrompts.enKoPrompt(noun, const [], bigPool).messages[1].content;
       expect(user.length * 10, lessThan(enKo.length));
     });

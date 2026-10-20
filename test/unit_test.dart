@@ -6,6 +6,7 @@ import 'package:http/testing.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lingua_srs/models/lesson.dart';
+import 'package:lingua_srs/models/shared_vocab.dart';
 import 'package:lingua_srs/models/srs_card.dart';
 import 'package:lingua_srs/models/sentence.dart';
 import 'package:lingua_srs/models/vocab_item.dart';
@@ -1539,6 +1540,84 @@ ${audio != null ? '      audio: $audio\n' : ''}${notes != null ? '      notes: $
       provider.dispose();
     });
 
+    test('Conflicting audio: first lesson wins, the other is kept as an alternate', () async {
+      final provider = await newProvider();
+      await provider.importYaml(lessonYaml('Lesson 1', audio: 'https://a/1.mp3'));
+      await provider.importYaml(lessonYaml('Lesson 2', audio: 'https://a/2.mp3'));
+      final [first, second] = provider.lessons;
+      expect(pear(first).audioUrl, 'https://a/1.mp3');
+      expect(pear(second).audioUrl, 'https://a/1.mp3');
+      expect(pear(second).shared.alternates['audioUrl'], ['https://a/2.mp3']);
+      provider.dispose();
+    });
+
+    test('Only the owning lesson replaces shared audio on re-import', () async {
+      final provider = await newProvider();
+      await provider.importYaml(lessonYaml('Lesson 1', audio: 'https://a/1.mp3'));
+      await provider.importYaml(lessonYaml('Lesson 2', audio: 'https://a/2.mp3'));
+
+      await provider.importYaml(lessonYaml('Lesson 2', audio: 'https://a/2b.mp3')); // non-owner
+      expect(pear(provider.lessons[0]).audioUrl, 'https://a/1.mp3');
+
+      await provider.importYaml(lessonYaml('Lesson 1', audio: 'https://a/1b.mp3')); // owner
+      expect(pear(provider.lessons[0]).audioUrl, 'https://a/1b.mp3');
+      expect(pear(provider.lessons[1]).audioUrl, 'https://a/1b.mp3');
+      provider.dispose();
+    });
+
+    test('Notes and disambiguation fill only when empty', () async {
+      final provider = await newProvider();
+      await provider.importYaml(
+          lessonYaml('Lesson 1', notes: 'first note', disambiguation: 'fruit'));
+      await provider.importYaml(lessonYaml('Lesson 2', notes: 'second note'));
+      final [first, second] = provider.lessons;
+      expect(pear(second).notes, 'first note');
+      expect(pear(second).shared.alternates['notes'], ['second note']);
+      expect(pear(second).disambiguation, 'fruit');
+      expect(pear(first).notes, 'first note');
+      provider.dispose();
+    });
+
+    test('A stored SharedVocab record wins over diverging legacy copies', () async {
+      Lesson lesson(String id, String? audio) => Lesson(id: id, title: 'Lesson $id', vocabularies: [
+            VocabItem(id: 'v1', targetWord: '배', translation: 'pear', pos: 'nouns', audioUrl: audio),
+          ]);
+      final stored = SharedVocab(
+        audioUrl: 'https://a/stored.mp3',
+        cardTargetToNative: SrsCard(direction: CardDirection.targetToNative)..repetitions = 7,
+        cardNativeToTarget: SrsCard(direction: CardDirection.nativeToTarget),
+      );
+      SharedPreferences.setMockInitialValues({
+        'lingua_srs_windows_legacy_migration_complete': true,
+        'lingua_srs_lessons': jsonEncode([lesson('a', 'https://a/x.mp3').toJson(), lesson('b', null).toJson()]),
+        'lingua_srs_shared_vocab': jsonEncode({'v1': stored.toJson()}),
+        'lingua_srs_sentences': '[]',
+      });
+      final provider = await reload();
+      final [a, b] = provider.lessons.map((l) => l.vocabularies.single).toList();
+      expect(identical(a.shared, b.shared), isTrue);
+      expect(a.audioUrl, 'https://a/stored.mp3');
+      expect(a.cardTargetToNative.repetitions, 7);
+      provider.dispose();
+    });
+
+    test('A corrupt shared record falls back to the legacy copies', () async {
+      Lesson lesson(String id, String? audio) => Lesson(id: id, title: 'Lesson $id', vocabularies: [
+            VocabItem(id: 'v1', targetWord: '배', translation: 'pear', pos: 'nouns', audioUrl: audio),
+          ]);
+      SharedPreferences.setMockInitialValues({
+        'lingua_srs_windows_legacy_migration_complete': true,
+        'lingua_srs_lessons': jsonEncode([lesson('a', null).toJson(), lesson('b', 'https://a/b.mp3').toJson()]),
+        'lingua_srs_shared_vocab': '{"v1": {"cardTargetToNative": 5}}',
+        'lingua_srs_sentences': '[]',
+      });
+      final provider = await reload();
+      final [a, b] = provider.lessons.map((l) => l.vocabularies.single).toList();
+      expect(identical(a.shared, b.shared), isTrue);
+      expect(a.audioUrl, 'https://a/b.mp3');
+      provider.dispose();
+    });
+
     String adjYaml(String title, String ko, String en, {String? audio}) => '''
 ---
 vocabulary:
@@ -1661,6 +1740,49 @@ ${audio != null ? '      audio: $audio\n' : ''}---
         final result = await reloaded.undoMerge(reloaded.mergeHistory.single.id);
         expect(result.restored, 1);
         reloaded.dispose();
+      });
+
+      test('conflicting audio is kept as an alternate', () async {
+        only(l1).audioUrl = 'https://a/1.mp3';
+        await provider.mergeVocab(survivorId: only(l1).id, absorbedIds: [only(l2).id]);
+        expect(only(l1).audioUrl, 'https://a/1.mp3');
+        expect(only(l1).shared.alternates['audioUrl'], ['https://a/2.mp3']);
+      });
+
+      test('merges several vocabularies at once and undoes them together', () async {
+        final l3 = await provider.importYaml(adjYaml('Lesson 3', '아름답다', 'lovely'));
+        final record = (await provider.mergeVocab(
+          survivorId: only(l1).id,
+          absorbedIds: [only(l2).id, only(l3).id],
+        ))!;
+        expect(record.entries, hasLength(2));
+        expect(only(l3).id, only(l1).id);
+        final result = await provider.undoMerge(record.id);
+        expect(result.restored, 2);
+        expect({only(l1).id, only(l2).id, only(l3).id}, hasLength(3));
+      });
+
+      test('batch import joins a merged group too', () async {
+        await provider.mergeVocab(survivorId: only(l1).id, absorbedIds: [only(l2).id]);
+        final results = await provider.importParsedLessons([
+          YamlParserService.parseLessonYaml(adjYaml('Lesson 3', '아름답다', 'to be beautiful')),
+          YamlParserService.parseLessonYaml(adjYaml('Lesson 4', '아름답다', 'to be beautiful')),
+        ]);
+        expect(only(results[0]).id, only(l1).id);
+        expect(only(results[1]).id, only(l1).id);
+      });
+
+      test('rebindVocabId adopts the shared record of an existing id', () async {
+        final big = await provider.importYaml(adjYaml('Lesson 5', '크다', 'big'));
+        final large = await provider.importYaml(adjYaml('Lesson 6', '큰', 'large'));
+        only(big).cardTargetToNative.repetitions = 4;
+        final previousId = only(large).id;
+        only(large)
+          ..id = only(big).id
+          ..idIsExplicit = true;
+        provider.rebindVocabId(only(large), previousId);
+        expect(identical(only(large).shared, only(big).shared), isTrue);
+        expect(only(large).cardTargetToNative.repetitions, 4);
       });
     });
 
@@ -1816,6 +1938,29 @@ vocabulary:
       test('AI calls are refused without a key', () async {
         final provider = await newProvider();
         await expectLater(provider.suggestVocabMerges(), throwsStateError);
+        provider.dispose();
+      });
+
+      test('suggestVocabMerges batches candidate groups (40 per request)', () async {
+        final provider = await newProvider();
+        await provider.setDeepSeekApiKey('k');
+        String lesson(String title, String prefix) => '''
+---
+vocabulary:
+  adjectives:
+${[for (var i = 0; i < 45; i++) '    - ko: 단어$i\n      en: $prefix$i'].join('\n')}
+---
+# $title
+''';
+        await provider.importYaml(lesson('A', 'word '));
+        await provider.importYaml(lesson('B', 'to be word '));
+        var requests = 0;
+        final client = MockClient((_) async {
+          requests++;
+          return ok({'merges': []});
+        });
+        expect(await provider.suggestVocabMerges(client: client), isEmpty);
+        expect(requests, 2);
         provider.dispose();
       });
     });

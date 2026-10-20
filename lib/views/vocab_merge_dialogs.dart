@@ -38,13 +38,13 @@ Future<void> startManualMerge(BuildContext context, VocabItem vocab) async {
 
   final other = await showDialog<VocabGroup>(
     context: context,
-    builder: (_) => _PickerDialog(current: current, groups: groups),
+    builder: (_) => MergePickerDialog(current: current, groups: groups),
   );
   if (other == null || !context.mounted) return;
 
   final survivorId = await showDialog<String>(
     context: context,
-    builder: (_) => _ConfirmMergeDialog(a: current, b: other),
+    builder: (_) => ConfirmMergeDialog(a: current, b: other),
   );
   if (survivorId == null) return;
 
@@ -56,16 +56,17 @@ Future<void> startManualMerge(BuildContext context, VocabItem vocab) async {
   if (record != null) showMergeUndoSnackBar(messenger, provider, [record]);
 }
 
-class _PickerDialog extends StatefulWidget {
-  const _PickerDialog({required this.current, required this.groups});
+@visibleForTesting
+class MergePickerDialog extends StatefulWidget {
+  const MergePickerDialog({required this.current, required this.groups});
   final VocabGroup current;
   final List<VocabGroup> groups;
 
   @override
-  State<_PickerDialog> createState() => _PickerDialogState();
+  State<MergePickerDialog> createState() => _MergePickerDialogState();
 }
 
-class _PickerDialogState extends State<_PickerDialog> {
+class _MergePickerDialogState extends State<MergePickerDialog> {
   String _query = '';
 
   int _rank(VocabGroup g) {
@@ -133,16 +134,17 @@ class _PickerDialogState extends State<_PickerDialog> {
   }
 }
 
-class _ConfirmMergeDialog extends StatefulWidget {
-  const _ConfirmMergeDialog({required this.a, required this.b});
+@visibleForTesting
+class ConfirmMergeDialog extends StatefulWidget {
+  const ConfirmMergeDialog({required this.a, required this.b});
   final VocabGroup a;
   final VocabGroup b;
 
   @override
-  State<_ConfirmMergeDialog> createState() => _ConfirmMergeDialogState();
+  State<ConfirmMergeDialog> createState() => _ConfirmMergeDialogState();
 }
 
-class _ConfirmMergeDialogState extends State<_ConfirmMergeDialog> {
+class _ConfirmMergeDialogState extends State<ConfirmMergeDialog> {
   late String _survivorId =
       widget.b.reviews > widget.a.reviews ? widget.b.id : widget.a.id;
   bool _understood = false;
