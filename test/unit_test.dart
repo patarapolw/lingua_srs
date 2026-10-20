@@ -1136,6 +1136,48 @@ vocabulary:
       );
     });
 
+    test('Sentence search detects Korean irregular verbs', () {
+      bool m(String q, String target) => KoreanTextSearch.matches(
+        query: q,
+        targetText: target,
+        translationText: '',
+      );
+
+      // ㄷ irregular
+      expect(m('듣다', '음악을 들었어요'), isTrue);
+      expect(m('듣다', '이 노래를 들으세요'), isTrue);
+      expect(m('걷다', '공원에서 걸었다'), isTrue);
+      // ㅂ irregular
+      expect(m('돕다', '친구가 도와요'), isTrue);
+      expect(m('춥다', '어제 날씨가 추웠어요'), isTrue);
+      // 르 irregular
+      expect(m('모르다', '저는 몰라요'), isTrue);
+      // 으 drop
+      expect(m('쓰다', '편지를 썼어요'), isTrue);
+      // ㅎ irregular
+      expect(m('그렇다', '네, 그래요'), isTrue);
+      // vowel contraction (previously in the hardcoded table)
+      expect(m('보다', '영화를 봤어요'), isTrue);
+      expect(m('가다', '학교에 갔다'), isTrue);
+      expect(m('오다', '친구가 왔어요'), isTrue);
+      expect(m('주다', '책을 줘요'), isTrue);
+      expect(m('되다', '의사가 돼요'), isTrue);
+      expect(m('마시다', '커피를 마셔요'), isTrue);
+    });
+
+    test('Irregular verb expansion does not add false positives', () {
+      bool m(String q, String target) => KoreanTextSearch.matches(
+        query: q,
+        targetText: target,
+        translationText: '',
+      );
+
+      expect(m('가다', '그 사람은 학생이에요'), isFalse);
+      expect(m('돕다', '학교에서 공부해요'), isFalse);
+      expect(m('넣다', '내 친구'), isFalse);
+      expect(m('듣다', '저는 학교에 가요'), isFalse);
+    });
+
     test('Cloze deletion with bold tags', () {
       final sentence = Sentence(
         targetText: '저는 **아줌마**를 위해 문을 열었어요',

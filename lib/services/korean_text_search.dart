@@ -57,33 +57,30 @@ class KoreanTextSearch {
     '합니까',
   ];
 
-  static const _irregularConjugations = {
-    '봤어요': '보',
-    '봤다': '보',
-    '봤습니다': '보',
-    '봐요': '보',
-    '봐서': '보',
-    '봅니다': '보',
-    '갔어요': '가',
-    '갔다': '가',
-    '갑니다': '가',
-    '가요': '가',
-    '왔어요': '오',
-    '왔습니다': '오',
-    '와요': '오',
-    '와서': '오',
-    '줬어요': '주',
-    '줘요': '주',
-    '줘서': '주',
-    '됐어요': '되',
-    '돼요': '되',
-    '되어요': '되',
-    '썼어요': '쓰',
-    '써요': '쓰',
-    '들었어요': '듣',
-    '들어요': '듣',
-    '걸어요': '걷',
-  };
+  // Suffixes are not tried bare.
+  // A bare form like 내 would otherwise yield 넣, and 넣다 would match any sentence containing 내.
+  // The bare 해체 forms (추워, 도와) are therefore not covered.
+  // Known gaps: ㅅ irregulars (낫다 → 나아요) and adjective forms like 추운 aren’t covered.
+  static const _irregularSuffixes = [
+    '았습니다',
+    '었습니다',
+    '습니다',
+    '았어요',
+    '었어요',
+    '어요',
+    '아요',
+    '으세요',
+    '세요',
+    '았다',
+    '었다',
+    '다',
+    '어서',
+    '아서',
+    '서',
+    '으면',
+    '으니',
+    '요',
+  ];
 
   static const _endings = [
     '었습니다',
@@ -190,13 +187,13 @@ class KoreanTextSearch {
   static Set<String> _tokens(String text) {
     final tokens = <String>{};
     for (final word in _words(text)) {
-      tokens.addAll(_variants(word));
+      tokens.addAll(_variants(word, expandIrregular: true));
       tokens.addAll(_bigrams(word));
     }
     return tokens;
   }
 
-  static Set<String> _variants(String word) {
+  static Set<String> _variants(String word, {bool expandIrregular = false}) {
     final variants = <String>{word};
     if (!_words(word).every((part) => part.runes.every(_isHangul))) {
       return variants;
@@ -206,14 +203,7 @@ class KoreanTextSearch {
       variants.add(word.substring(0, word.length - 1));
     }
 
-    for (final conjugation in _irregularConjugations.entries) {
-      if (word.endsWith(conjugation.key)) {
-        variants.add(
-          '${word.substring(0, word.length - conjugation.key.length)}'
-          '${conjugation.value}',
-        );
-      }
-    }
+    if (expandIrregular) variants.addAll(_irregularStems(word));
 
     for (final ending in _haConjugations) {
       if (word.endsWith(ending) && word.length >= ending.length) {
@@ -243,5 +233,82 @@ class KoreanTextSearch {
       for (var index = 0; index < runes.length - 1; index++)
         String.fromCharCodes(runes.skip(index).take(2)),
     };
+  }
+
+  // Jamo indices used by _irregularStems
+  static const _jongSsang = 20; // ㅆ final
+
+  static List<int>? _decompose(String ch) {
+    final r = ch.runes.first;
+    if (r < 0xac00 || r > 0xd7a3) return null;
+    final code = r - 0xac00;
+    return [code ~/ 588, (code % 588) ~/ 28, code % 28];
+  }
+
+  static String _compose(int initial, int medial, int tail) =>
+      String.fromCharCode(0xac00 + initial * 588 + medial * 28 + tail);
+
+  /// Restores dictionary stems of irregular verbs (ㄷ, ㅂ, 르, 으, ㅎ and
+  /// vowel contractions) from conjugated words. Over-generates on purpose;
+  /// only use for document tokens, never for the query.
+  static Set<String> _irregularStems(String word) {
+    final stems = <String>{};
+    for (final suffix in _irregularSuffixes) {
+      if (!word.endsWith(suffix) || word.length <= suffix.length) continue;
+      final head = word.substring(0, word.length - suffix.length);
+      final last = _decompose(head.substring(head.length - 1));
+      if (last == null) continue;
+      final initial = last[0], medial = last[1];
+      var tail = last[2];
+      if (suffix == '다' && tail != _jongSsang) continue;
+      final droppedSsang = tail == _jongSsang;
+      if (droppedSsang) tail = 0; // 갔→가, 추웠→추워, 봤→봐
+
+      final pre = head.substring(0, head.length - 1);
+      final prev = pre.isEmpty
+          ? null
+          : _decompose(pre.substring(pre.length - 1));
+      final preOfPre = pre.isEmpty ? '' : pre.substring(0, pre.length - 1);
+
+      if (droppedSsang) stems.add('$pre${_compose(initial, medial, tail)}');
+      // ㄷ irregular: 들→듣, 걸→걷
+      if (tail == 8) stems.add('$pre${_compose(initial, medial, 7)}');
+      // ㅂ irregular: 추워→춥, 도와→돕
+      if (initial == 11 &&
+          tail == 0 &&
+          (medial == 9 || medial == 14) &&
+          prev != null &&
+          prev[2] == 0) {
+        stems.add('$preOfPre${_compose(prev[0], prev[1], 17)}');
+      }
+      // 르 irregular: 몰라→모르
+      if (initial == 5 &&
+          tail == 0 &&
+          (medial == 0 || medial == 4) &&
+          prev != null &&
+          prev[2] == 8) {
+        stems.add(
+          '$preOfPre${_compose(prev[0], prev[1], 0)}${_compose(5, 18, 0)}',
+        );
+      }
+      // 으 drop: 써→쓰, 아파→아프
+      if (initial != 11 && tail == 0 && (medial == 0 || medial == 4)) {
+        stems.add('$pre${_compose(initial, 18, 0)}');
+      }
+      // ㅎ irregular: 그래→그렇
+      if (tail == 0 && medial == 1) {
+        stems.add('$pre${_compose(initial, 4, 27)}');
+      }
+      if (tail == 0 && medial == 3) {
+        stems.add('$pre${_compose(initial, 2, 27)}');
+      }
+      // vowel contraction: 봐→보, 줘→주, 돼→되, 마셔→마시
+      if (tail == 0) {
+        const contractions = {9: 8, 14: 13, 10: 11, 6: 20};
+        final m = contractions[medial];
+        if (m != null) stems.add('$pre${_compose(initial, m, 0)}');
+      }
+    }
+    return stems;
   }
 }
