@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../models/vocab_merge_record.dart';
+import '../models/srs_card.dart';
+import '../models/vocab_item.dart';
 import '../providers/app_provider.dart';
 import '../services/vocab_ai_service.dart';
 
@@ -14,18 +16,20 @@ Future<SimilarMeaningsChoice?> showSimilarMeanings(
   BuildContext context, {
   required AppProvider provider,
   required SimilarMeaningResult result,
+  required CardDirection direction,
 }) {
   final byId = {for (final g in provider.vocabGroups) g.id: g};
   return showDialog<SimilarMeaningsChoice>(
     context: context,
-    builder: (_) => _SimilarMeaningsDialog(result: result, byId: byId),
+    builder: (_) => _SimilarMeaningsDialog(result: result, byId: byId, direction: direction),
   );
 }
 
 class _SimilarMeaningsDialog extends StatefulWidget {
-  const _SimilarMeaningsDialog({required this.result, required this.byId});
+  const _SimilarMeaningsDialog({required this.result, required this.byId, required this.direction});
   final SimilarMeaningResult result;
   final Map<String, VocabGroup> byId;
+  final CardDirection direction;
 
   @override
   State<_SimilarMeaningsDialog> createState() => _SimilarMeaningsDialogState();
@@ -38,19 +42,33 @@ class _SimilarMeaningsDialogState extends State<_SimilarMeaningsDialog> {
       if (_canApply(s)) s.id,
   };
 
+  String _currentHint(VocabItem v) => (widget.direction == CardDirection.targetToNative
+          ? v.cardTargetToNative
+          : v.cardNativeToTarget)
+      .frontHint;
+
   bool _canApply(SimilarVocabHint s) =>
-      s.hint.isNotEmpty && (widget.byId[s.id]?.entry.disambiguation.trim().isEmpty ?? false);
+      s.hint.isNotEmpty &&
+      (widget.byId[s.id] != null && _currentHint(widget.byId[s.id]!.entry).trim().isEmpty);
 
   @override
   Widget build(BuildContext context) {
     final result = widget.result;
     final nothing = result.hint.isEmpty && result.similar.isEmpty;
     return AlertDialog(
-      title: const Text('Similar meanings'),
+      title: Text(
+          widget.direction == CardDirection.targetToNative
+            ? 'KO ➔ EN: same Korean, different meaning'
+            : 'EN ➔ KO: similar meanings'
+        ),
       content: SizedBox(
         width: 520,
         child: nothing
-            ? const Text('No confusable vocabulary found among words of the same type.')
+            ? Text(
+              widget.direction == CardDirection.targetToNative
+                ? 'No other vocabulary shares this Korean spelling.'
+                : 'No confusable vocabulary found among words of the same type.'
+              )
             : ListView(
                 shrinkWrap: true,
                 children: [
@@ -77,7 +95,7 @@ class _SimilarMeaningsDialogState extends State<_SimilarMeaningsDialog> {
                               ? 'Hint: ${s.hint}'
                               : s.hint.isEmpty
                                   ? 'No hint suggested'
-                                  : 'Already has hint: ${widget.byId[s.id]?.entry.disambiguation}',
+                                  : 'Already has hint: ${_currentHint(widget.byId[s.id]!.entry)}',
                         ),
                       ),
                   ],

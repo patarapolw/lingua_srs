@@ -178,8 +178,8 @@ class _ConfirmMergeDialogState extends State<_ConfirmMergeDialog> {
               value: _understood,
               onChanged: (v) => setState(() => _understood = v ?? false),
               title: const Text(
-                'I understand the other one’s SRS progress will be discarded '
-                '(Undo brings it back).',
+                'I understand the other one’s SRS progress and card hints will be discarded '
+                '(Undo brings them back).'
               ),
             ),
           ],

@@ -41,8 +41,13 @@ class _VocabEditDialogState extends State<VocabEditDialog>
   late TextEditingController _audioCtrl;
   late TextEditingController _notesCtrl;
   late TextEditingController _disambiguationCtrl;
-  bool _suggestingHint = false;
-  final Map<String, String> _pendingOtherHints = {};
+  late TextEditingController _targetToNativeHintCtrl;
+  late TextEditingController _nativeToTargetHintCtrl;
+  CardDirection? _suggestingDirection;
+  final Map<CardDirection, Map<String, String>> _pendingHints = {
+    CardDirection.targetToNative: {},
+    CardDirection.nativeToTarget: {},
+  };
   late TextEditingController _targetToNativeBackNotesCtrl;
   late TextEditingController _nativeToTargetBackNotesCtrl;
   late TextEditingController _idCtrl;
@@ -65,6 +70,9 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     _disambiguationCtrl = TextEditingController(
       text: widget.vocab.disambiguation,
     );
+    _targetToNativeHintCtrl = TextEditingController(text: widget.vocab.cardTargetToNative.frontHint);
+    _nativeToTargetHintCtrl = TextEditingController(text: widget.vocab.cardNativeToTarget.frontHint);
+    // dispose(): _targetToNativeHintCtrl.dispose(); _nativeToTargetHintCtrl.dispose();
     _targetToNativeBackNotesCtrl = TextEditingController(
       text: widget.vocab.cardTargetToNative.backNotes,
     );
@@ -127,10 +135,15 @@ class _VocabEditDialogState extends State<VocabEditDialog>
         .text
         .trim();
 
+    widget.vocab.cardTargetToNative.frontHint = _targetToNativeHintCtrl.text.trim();
+    widget.vocab.cardNativeToTarget.frontHint = _nativeToTargetHintCtrl.text.trim();
+
     // Because it’s deferred to Save, cancelling the dialog discards the other words’ hints.
     // Add import 'dart:async'; and wrap the call in unawaited(...) if the unawaited_futures lint is on.
-    if (_pendingOtherHints.isNotEmpty) {
-      provider.applyFrontHints(Map.of(_pendingOtherHints));
+    for (final entry in _pendingHints.entries) {
+      if (entry.value.isNotEmpty) {
+        provider.applyFrontHints(Map.of(entry.value), entry.key);
+      }
     }
 
     provider.updateVocab(widget.vocab, previousId: _originalId);
@@ -490,7 +503,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     });
   }
 
-  Future<void> _suggestHint(AppProvider provider) async {
+  Future<void> _suggestHint(AppProvider provider, CardDirection direction) async {
     final messenger = ScaffoldMessenger.of(context);
     final draft = VocabItem(
       id: widget.vocab.id,
@@ -505,15 +518,24 @@ class _VocabEditDialogState extends State<VocabEditDialog>
       );
       return;
     }
-    setState(() => _suggestingHint = true);
+    final enKo = direction == CardDirection.nativeToTarget;
+    final controller = enKo ? _nativeToTargetHintCtrl : _targetToNativeHintCtrl;
+    setState(() => _suggestingDirection = direction);
     try {
-      final result = await provider.suggestSimilarMeanings(draft);
+      final result = enKo
+          ? await provider.suggestEnKoHint(draft)
+          : await provider.suggestKoEnHint(draft);
       if (!mounted) return;
-      final choice = await showSimilarMeanings(context, provider: provider, result: result);
+      final choice = await showSimilarMeanings(
+        context,
+        provider: provider,
+        result: result,
+        direction: direction,
+      );
       if (choice == null || !mounted) return;
       setState(() {
-        if (choice.targetHint != null) _disambiguationCtrl.text = choice.targetHint!;
-        _pendingOtherHints
+        if (choice.targetHint != null) controller.text = choice.targetHint!;
+        _pendingHints[direction]!
           ..clear()
           ..addAll(choice.otherHints);
       });
@@ -522,8 +544,54 @@ class _VocabEditDialogState extends State<VocabEditDialog>
         messenger.showSnackBar(SnackBar(content: Text('Could not get a hint: $error')));
       }
     } finally {
-      if (mounted) setState(() => _suggestingHint = false);
+      if (mounted) setState(() => _suggestingDirection = null);
     }
+  }
+
+  Widget _hintField(AppProvider provider, CardDirection direction) {
+    final enKo = direction == CardDirection.nativeToTarget;
+    final pending = _pendingHints[direction]!.length;
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: enKo ? _nativeToTargetHintCtrl : _targetToNativeHintCtrl,
+            decoration: InputDecoration(
+              labelText: enKo ? 'EN ➔ KO front hint' : 'KO ➔ EN front hint',
+              hintText: enKo ? 'e.g. general size' : 'e.g. fruit',
+              border: const OutlineInputBorder(),
+              suffixIcon: provider.canUseAi
+                  ? IconButton(
+                      tooltip: enKo
+                          ? 'Suggest hint with AI (sends vocabulary of the same type to DeepSeek)'
+                          : 'Suggest hint with AI (sends words with the same spelling to DeepSeek)',
+                      icon: _suggestingDirection == direction
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.auto_awesome),
+                      onPressed: _suggestingDirection != null
+                          ? null
+                          : () => _suggestHint(provider, direction),
+                    )
+                  : null,
+            ),
+          ),
+          if (pending > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'Hints for $pending similar word(s) will be saved with this one.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
   Widget _duplicateFrontWarning(AppProvider provider, CardDirection direction) {
@@ -543,7 +611,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
       padding: const EdgeInsets.only(top: 8),
       child: Text(
         '$directionLabel has the same front prompt as another enabled card: '
-        '$meanings. Add a disambiguation cue below to tell them apart.',
+        '$meanings. Add a front hint for this card below to tell them apart.',
         style: TextStyle(
           color: Theme.of(context).colorScheme.error,
           fontSize: 12,
@@ -632,46 +700,19 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                     const SizedBox(height: 16),
                     TextField(
                       controller: _disambiguationCtrl,
-                      decoration: InputDecoration(
-                        labelText: 'Front hint (optional)',
+                      decoration: const InputDecoration(
+                        labelText: 'Front hint, both directions (optional)',
                         hintText: 'e.g. fruit, vehicle',
                         helperText:
-                            'Shown on card fronts to tell duplicates apart.',
+                            'Shown on card fronts unless a direction-specific hint below is set.',
                         helperMaxLines: 3,
-                        border: const OutlineInputBorder(),
-                        suffixIcon: provider.canUseAi
-                            ? IconButton(
-                                tooltip: 'Suggest hint with AI (sends vocabulary of the same type to DeepSeek)',
-                                icon: _suggestingHint
-                                    ? const SizedBox(
-                                        width: 18,
-                                        height: 18,
-                                        child: CircularProgressIndicator(strokeWidth: 2),
-                                      )
-                                    : const Icon(Icons.auto_awesome),
-                                onPressed: _suggestingHint
-                                    ? null
-                                    : () => _suggestHint(provider),
-                              )
-                            : null,
+                        border: OutlineInputBorder(),
                       ),
                     ),
-                    if (_pendingOtherHints.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Text(
-                          'Hints for ${_pendingOtherHints.length} similar word(s) will be saved with this one.',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ),
-                    _duplicateFrontWarning(
-                      provider,
-                      CardDirection.targetToNative,
-                    ),
-                    _duplicateFrontWarning(
-                      provider,
-                      CardDirection.nativeToTarget,
-                    ),
+                    _duplicateFrontWarning(provider, CardDirection.targetToNative),
+                    _hintField(provider, CardDirection.targetToNative),
+                    _duplicateFrontWarning(provider, CardDirection.nativeToTarget),
+                    _hintField(provider, CardDirection.nativeToTarget),
                     const SizedBox(height: 20),
 
                     // Part of speech / Category & Audio URL

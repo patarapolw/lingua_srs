@@ -107,7 +107,7 @@ void main() {
         vocabGroup('auto-aaa', '넓다', 'wide'),
         vocabGroup('auto-bbb', '작다', 'small'),
       ];
-      final prompt = VocabAiPrompts.similarPrompt(target, const [], pool);
+      final prompt = VocabAiPrompts.enKoPrompt(target, const [], pool);
       final user = prompt.messages[1].content;
       expect(user, contains('1|넓다|wide'));
       expect(user, contains('2|작다|small'));
@@ -135,6 +135,40 @@ void main() {
       final none = VocabAiPrompts.parseSimilarResult('{}', ids);
       expect(none.hint, '');
       expect(none.similar, isEmpty);
+    });
+
+  test('same-form pool: same Korean spelling, any POS, other id', () {
+      final noun = VocabItem(id: 'n', targetWord: '배', translation: 'pear', pos: 'nouns');
+      final pool = VocabSimilarity.sameFormPool(noun, [
+        VocabGroup(
+          id: 'm',
+          entry: VocabItem(id: 'm', targetWord: ' 배 ', translation: 'ship', pos: 'verbs'),
+          reviews: 0,
+        ),
+        vocabGroup('x', '크다', 'big'),
+        vocabGroup('n', '배', 'pear'), // itself
+      ]);
+      expect(pool.map((g) => g.id), ['m']);
+    });
+
+    test('KO-EN prompt is tiny: no Korean lines, no ids', () {
+      final noun = VocabItem(id: 'n', targetWord: '배', translation: 'pear', pos: 'nouns');
+      final others = [
+        VocabGroup(
+          id: 'auto-secret-id',
+          entry: VocabItem(id: 'auto-secret-id', targetWord: '배', translation: 'stomach', pos: 'nouns'),
+          reviews: 0,
+        ),
+      ];
+      final prompt = VocabAiPrompts.koEnPrompt(noun, others);
+      final user = prompt.messages[1].content;
+      expect(user, contains('1|nouns|stomach'));
+      expect(user, isNot(contains('auto-')));
+      expect(prompt.ids, ['auto-secret-id']);
+
+      final bigPool = [for (var i = 0; i < 300; i++) vocabGroup('id$i', '단어$i', 'word $i')];
+      final enKo = VocabAiPrompts.enKoPrompt(noun, const [], bigPool).messages[1].content;
+      expect(user.length * 10, lessThan(enKo.length));
     });
   });
 }

@@ -75,6 +75,16 @@ class VocabSimilarity {
     ];
   }
 
+  /// Distinct vocabularies spelled exactly like [target] (any POS), other ids.
+  static List<VocabGroup> sameFormPool(VocabItem target, List<VocabGroup> groups) {
+    final form = normalizeTarget(target.targetWord);
+    if (form.isEmpty) return const [];
+    return [
+      for (final g in groups)
+        if (g.id != target.id && normalizeTarget(g.entry.targetWord) == form) g,
+    ];
+  }
+
   /// Keeps the [limit] most lexically similar entries when the pool is huge.
   static List<VocabGroup> shortlist(
     VocabItem target,
@@ -127,30 +137,30 @@ class VocabAiPrompts {
 
   static String _oneLine(String s) => s.replaceAll(RegExp(r'[|\r\n]+'), ' ').trim();
 
-  static SimilarPrompt similarPrompt(
+  static SimilarPrompt enKoPrompt(
     VocabItem target,
     List<VocabItem> sameFront,
     List<VocabGroup> pool,
   ) {
     const system =
-        'You help a Korean learner avoid confusing flashcards. You get a TARGET '
-        'vocabulary entry, optionally SAMEFRONT entries (cards with the same '
-        'front text), and a numbered POOL of other entries with the same part '
-        'of speech, one per line as number|Korean|English. Pick the pool '
-        'entries whose meaning is so close to the target that a learner shown '
-        'the English could answer with either Korean word, or shown the Korean '
-        'could mistake its meaning: near-synonyms with different Korean forms '
-        '(for example 크다 "big" versus 넓다 "wide"), including entries that share '
-        'the English gloss. Ignore a leading "to"/"to be", articles and '
-        'punctuation. Do not list entries that are only related by topic. List '
-        'at most $maxSimilar, most confusable first. For the target and for each '
-        'listed entry write a front hint: 1 to 3 lowercase English words naming '
-        'the specific nuance that separates it from the others (for example '
-        '"general size", "area or width"). Never repeat the English gloss and '
-        'never reveal the Korean. If nothing is confusable, return an empty '
-        '"similar" list, and give the target a hint only when SAMEFRONT is not '
-        'empty, otherwise an empty hint. Reply with JSON only: '
-        '{"hint":"...","similar":[{"n":<number>,"hint":"..."}]}';
+        'You help a Korean learner avoid confusing flashcards. The card shows an '
+        'English prompt and the learner recalls the Korean word. You get a '
+        'TARGET entry, optionally SAMEFRONT entries (cards with the same front '
+        'text), and a numbered POOL of other entries with the same part of '
+        'speech, one per line as number|Korean|English. Pick the pool entries '
+        'whose meaning is so close to the target that the learner could answer '
+        'with either Korean word: near-synonyms with different Korean forms (for '
+        'example 크다 "big" versus 넓다 "wide"), including entries that share the '
+        'English gloss. Ignore a leading "to"/"to be", articles and punctuation. '
+        'Do not list entries that are only related by topic. List at most '
+        '$maxSimilar, most confusable first. For the target and for each listed '
+        'entry write a front hint shown with the English prompt: 1 to 3 '
+        'lowercase English words naming the specific nuance that separates it '
+        'from the others (for example "general size", "area or width"). Never '
+        'repeat the English gloss and never reveal the Korean. If nothing is '
+        'confusable, return an empty "similar" list, and give the target a hint '
+        'only when SAMEFRONT is not empty, otherwise an empty hint. Reply with '
+        'JSON only: {"hint":"...","similar":[{"n":<number>,"hint":"..."}]}';
     Map<String, String> describe(VocabItem v) => {
       'word': v.targetWord,
       'translation': v.translation,
@@ -175,6 +185,42 @@ class VocabAiPrompts {
         ),
       ],
       [for (final g in pool) g.id],
+    );
+  }
+
+  static SimilarPrompt koEnPrompt(VocabItem target, List<VocabGroup> sameForm) {
+    const system =
+        'You help a Korean learner avoid confusing flashcards. The card shows a '
+        'Korean word and the learner recalls its English meaning. You get a '
+        'TARGET entry and OTHERS: entries with exactly the same Korean spelling '
+        'but a different meaning, one per line as number|part of speech|English. '
+        'Write a front hint for the target and for every other entry: 1 to 3 '
+        'lowercase English words naming the specific sense (for example "fruit" '
+        'versus "body part"), so the learner knows which meaning is asked. Never '
+        'repeat the English gloss. Reply with JSON only: '
+        '{"hint":"...","similar":[{"n":<number>,"hint":"..."}]}';
+    final lines = StringBuffer();
+    for (var i = 0; i < sameForm.length; i++) {
+      final e = sameForm[i].entry;
+      lines.writeln('${i + 1}|${_oneLine(e.pos)}|${_oneLine(e.translation)}');
+    }
+    return SimilarPrompt(
+      [
+        const AiDiscussionMessage(role: 'system', content: system),
+        AiDiscussionMessage(
+          role: 'user',
+          content: jsonEncode({
+            'target': {
+              'word': target.targetWord,
+              'translation': target.translation,
+              'pos': target.pos,
+              'notes': target.notes,
+            },
+            'others': lines.toString().trimRight(),
+          }),
+        ),
+      ],
+      [for (final g in sameForm) g.id],
     );
   }
 

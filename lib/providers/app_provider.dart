@@ -1079,23 +1079,18 @@ class AppProvider extends ChangeNotifier {
     });
   }
 
-  /// Finds near-synonyms (same POS, different Korean form) and proposes hints.
-  Future<SimilarMeaningResult> suggestSimilarMeanings(
+  /// KO ➔ EN: only words with the same Korean spelling matter. No request is
+  /// made when there are none.
+  Future<SimilarMeaningResult> suggestKoEnHint(
     VocabItem vocab, {
     http.Client? client,
   }) {
     return _withAi(() async {
-      final sameFront = <VocabItem>[];
-      for (final direction in CardDirection.values) {
-        for (final other in getDuplicateFrontVocabularies(vocab, direction)) {
-          if (!sameFront.any((c) => identical(c, other))) sameFront.add(other);
-        }
+      final sameForm = VocabSimilarity.sameFormPool(vocab, vocabGroups);
+      if (sameForm.isEmpty) {
+        return const SimilarMeaningResult(hint: '', similar: []);
       }
-      final pool = VocabSimilarity.shortlist(
-        vocab,
-        VocabSimilarity.similarPool(vocab, vocabGroups),
-      );
-      final prompt = VocabAiPrompts.similarPrompt(vocab, sameFront, pool);
+      final prompt = VocabAiPrompts.koEnPrompt(vocab, sameForm);
       final reply = await DeepSeekService.completeJson(
         apiKey: _deepSeekApiKey,
         messages: prompt.messages,
@@ -1105,15 +1100,45 @@ class AppProvider extends ChangeNotifier {
     });
   }
 
-  /// Sets the front hint on vocabularies that have none. Returns how many changed.
-  Future<int> applyFrontHints(Map<String, String> hintsByVocabId) async {
+  /// EN ➔ KO: near-synonyms with different Korean forms, from all same-POS vocab.
+  Future<SimilarMeaningResult> suggestEnKoHint(
+    VocabItem vocab, {
+    http.Client? client,
+  }) {
+    return _withAi(() async {
+      final sameFront = getDuplicateFrontVocabularies(
+        vocab,
+        CardDirection.nativeToTarget,
+      );
+      final pool = VocabSimilarity.shortlist(
+        vocab,
+        VocabSimilarity.similarPool(vocab, vocabGroups),
+      );
+      final prompt = VocabAiPrompts.enKoPrompt(vocab, sameFront, pool);
+      final reply = await DeepSeekService.completeJson(
+        apiKey: _deepSeekApiKey,
+        messages: prompt.messages,
+        client: client,
+      );
+      return VocabAiPrompts.parseSimilarResult(reply, prompt.ids);
+    });
+  }
+
+  /// Sets [direction]'s front hint on vocab that have none. Returns the count.
+  Future<int> applyFrontHints(
+    Map<String, String> hintsByVocabId,
+    CardDirection direction,
+  ) async {
     var changed = 0;
     final seen = <String>{};
     for (final vocab in _lessons.expand((l) => l.vocabularies)) {
       final hint = hintsByVocabId[vocab.id];
       if (hint == null || !seen.add(vocab.id)) continue;
-      if (!SharedVocab.isBlank(vocab.disambiguation)) continue;
-      vocab.disambiguation = hint; // shared, so every lesson sees it
+      final card = direction == CardDirection.targetToNative
+          ? vocab.cardTargetToNative
+          : vocab.cardNativeToTarget;
+      if (!SharedVocab.isBlank(card.frontHint)) continue;
+      card.frontHint = hint; // cards are shared, so every lesson sees it
       changed++;
     }
     if (changed > 0) await saveState();

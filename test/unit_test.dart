@@ -698,43 +698,7 @@ ${audio != null ? '      audio: $audio\n' : ''}---
         provider.dispose();
       });
 
-      test('suggestVocabMerges sends only same-target groups, prefers progress',
-          () async {
-        final provider = await newProvider();
-        await provider.setDeepSeekApiKey('k');
-        final a = await provider.importYaml(adjYaml('L1', '아름답다', 'beautiful'));
-        final b = await provider.importYaml(adjYaml('L2', '아름답다', 'to be beautiful'));
-        await provider.importYaml('''
----
-vocabulary:
-  nouns:
-    - ko: 배
-      en: pear
----
-# L3
-''');
-        only(b).cardTargetToNative.repetitions = 5;
-
-        final client = MockClient((request) async {
-          final body = jsonDecode(request.body) as Map<String, dynamic>;
-          final user = (body['messages'] as List)[1]['content'] as String;
-          expect(user, contains('아름답다'));
-          expect(user, isNot(contains('pear')));
-          return ok({
-            'merges': [
-              {'group': 1, 'keep': only(a).id, 'merge': [only(b).id], 'reason': 'same'},
-            ],
-          });
-        });
-
-        final suggestions = await provider.suggestVocabMerges(client: client);
-        expect(suggestions.single.keepId, only(b).id);
-        expect(suggestions.single.mergeIds, [only(a).id]);
-        provider.dispose();
-      });
-
-      test('suggestSimilarMeanings feeds all same-POS vocab and maps numbers back',
-          () async {
+      test('suggestEnKoHint feeds all same-POS vocab and maps numbers back', () async {
         final provider = await newProvider();
         await provider.setDeepSeekApiKey('k');
         final big = await provider.importYaml(adjYaml('L1', '크다', 'big'));
@@ -761,50 +725,96 @@ vocabulary:
           expect(pool, isNot(contains('pear')));
           expect(pool, isNot(contains('to be big')));
           expect(pool, isNot(contains('auto-')));
-          return ok({
-            'hint': 'general size',
-            'similar': [{'n': 1, 'hint': 'area or width'}],
-          });
+          return ok({'hint': 'general size', 'similar': [{'n': 1, 'hint': 'area or width'}]});
         });
 
-        final result = await provider.suggestSimilarMeanings(only(big), client: client);
+        final result = await provider.suggestEnKoHint(only(big), client: client);
         expect(result.hint, 'general size');
         expect(result.similar.single.id, only(wide).id);
-        expect(result.similar.single.hint, 'area or width');
         provider.dispose();
       });
 
-      test('suggestSimilarMeanings still reports an auth failure', () async {
+      test('suggestKoEnHint sends only same-spelling entries', () async {
+        final provider = await newProvider();
+        await provider.setDeepSeekApiKey('k');
+        final pear = await provider.importYaml(lessonYaml('L1')); // 배 / pear
+        await provider.importYaml('''
+---
+vocabulary:
+  nouns:
+    - ko: 배
+      en: stomach
+---
+# L2
+''');
+        await provider.importYaml(adjYaml('L3', '크다', 'big'));
+
+        final client = MockClient((request) async {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          final user = jsonDecode((body['messages'] as List)[1]['content'] as String)
+              as Map<String, dynamic>;
+          expect(user['others'], '1|nouns|stomach');
+          expect(request.body, isNot(contains('크다')));
+          return ok({'hint': 'fruit', 'similar': [{'n': 1, 'hint': 'body part'}]});
+        });
+
+        final result = await provider.suggestKoEnHint(only(pear), client: client);
+        expect(result.hint, 'fruit');
+        expect(result.similar.single.hint, 'body part');
+        provider.dispose();
+      });
+
+      test('suggestKoEnHint makes no request when nothing shares the spelling',
+          () async {
         final provider = await newProvider();
         await provider.setDeepSeekApiKey('k');
         final big = await provider.importYaml(adjYaml('L1', '크다', 'big'));
+        final client = MockClient((_) async {
+          fail('no request expected');
+        });
+        final result = await provider.suggestKoEnHint(only(big), client: client);
+        expect(result.hint, '');
+        expect(result.similar, isEmpty);
+        provider.dispose();
+      });
+
+      test('both hint suggestions report an auth failure', () async {
+        final provider = await newProvider();
+        await provider.setDeepSeekApiKey('k');
+        final big = await provider.importYaml(adjYaml('L1', '크다', 'big'));
+        await provider.importYaml(adjYaml('L2', '넓다', 'wide'));
         final client = MockClient((_) async => http.Response('bad', 401));
         await expectLater(
-          provider.suggestSimilarMeanings(only(big), client: client),
+          provider.suggestEnKoHint(only(big), client: client),
           throwsA(isA<DeepSeekException>()),
         );
         expect(provider.canUseAi, isFalse);
         provider.dispose();
       });
 
-      test('applyFrontHints fills only blank hints and is shared across lessons',
+      test('applyFrontHints is per direction, fills only blanks, and persists',
           () async {
         final provider = await newProvider();
         final a = await provider.importYaml(adjYaml('L1', '크다', 'big'));
         final b = await provider.importYaml(adjYaml('L2', '넓다', 'wide'));
         final aAgain = await provider.importYaml(adjYaml('L3', '크다', 'big'));
-        only(b).disambiguation = 'existing';
+        only(b).cardNativeToTarget.frontHint = 'existing';
 
-        final changed = await provider.applyFrontHints({
-          only(a).id: 'general size',
-          only(b).id: 'should not apply',
-        });
+        final changed = await provider.applyFrontHints(
+          {only(a).id: 'general size', only(b).id: 'ignored'},
+          CardDirection.nativeToTarget,
+        );
 
         expect(changed, 1);
-        expect(only(a).disambiguation, 'general size');
-        expect(only(aAgain).disambiguation, 'general size'); // same vocab id
-        expect(only(b).disambiguation, 'existing');
+        expect(only(a).cardNativeToTarget.frontHint, 'general size');
+        expect(only(aAgain).cardNativeToTarget.frontHint, 'general size'); // same id
+        expect(only(a).cardTargetToNative.frontHint, '');                  // other direction
+        expect(only(b).cardNativeToTarget.frontHint, 'existing');
+
+        final reloaded = await reload();
+        expect(only(reloaded.lessons[0]).cardNativeToTarget.frontHint, 'general size');
         provider.dispose();
+        reloaded.dispose();
       });
 
       test('AI calls are refused without a key', () async {
@@ -1030,6 +1040,32 @@ vocabulary:
 
       expect(pear(results[1]).audioUrl, 'https://a/1.mp3');
       provider.dispose();
+    });
+  });
+
+  group('Per-direction front hints', () {
+    test('SrsCard frontHint round-trips and defaults to empty', () {
+      final card = SrsCard(direction: CardDirection.nativeToTarget, frontHint: 'area or width');
+      expect(SrsCard.fromJson(card.toJson()).frontHint, 'area or width');
+      final legacy = card.toJson()..remove('frontHint');
+      expect(SrsCard.fromJson(legacy).frontHint, '');
+    });
+
+    test('resetProgress keeps the hint', () {
+      final card = SrsCard(direction: CardDirection.targetToNative, frontHint: 'fruit')
+        ..repetitions = 4;
+      card.resetProgress();
+      expect(card.repetitions, 0);
+      expect(card.frontHint, 'fruit');
+    });
+
+    test('frontHintFor prefers the direction hint, else the general one', () {
+      final vocab = VocabItem(
+        targetWord: '배', translation: 'pear', pos: 'nouns', disambiguation: 'general');
+      expect(vocab.frontHintFor(CardDirection.targetToNative), 'general');
+      vocab.cardTargetToNative.frontHint = 'fruit';
+      expect(vocab.frontHintFor(CardDirection.targetToNative), 'fruit');
+      expect(vocab.frontHintFor(CardDirection.nativeToTarget), 'general');
     });
   });
 
