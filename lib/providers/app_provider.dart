@@ -1079,7 +1079,11 @@ class AppProvider extends ChangeNotifier {
     });
   }
 
-  Future<String> suggestFrontHint(VocabItem vocab, {http.Client? client}) {
+  /// Finds near-synonyms (same POS, different Korean form) and proposes hints.
+  Future<SimilarMeaningResult> suggestSimilarMeanings(
+    VocabItem vocab, {
+    http.Client? client,
+  }) {
     return _withAi(() async {
       final sameFront = <VocabItem>[];
       for (final direction in CardDirection.values) {
@@ -1087,13 +1091,33 @@ class AppProvider extends ChangeNotifier {
           if (!sameFront.any((c) => identical(c, other))) sameFront.add(other);
         }
       }
+      final pool = VocabSimilarity.shortlist(
+        vocab,
+        VocabSimilarity.similarPool(vocab, vocabGroups),
+      );
+      final prompt = VocabAiPrompts.similarPrompt(vocab, sameFront, pool);
       final reply = await DeepSeekService.completeJson(
         apiKey: _deepSeekApiKey,
-        messages: VocabAiPrompts.hintMessages(vocab, sameFront),
+        messages: prompt.messages,
         client: client,
       );
-      return VocabAiPrompts.parseHint(reply);
+      return VocabAiPrompts.parseSimilarResult(reply, prompt.ids);
     });
+  }
+
+  /// Sets the front hint on vocabularies that have none. Returns how many changed.
+  Future<int> applyFrontHints(Map<String, String> hintsByVocabId) async {
+    var changed = 0;
+    final seen = <String>{};
+    for (final vocab in _lessons.expand((l) => l.vocabularies)) {
+      final hint = hintsByVocabId[vocab.id];
+      if (hint == null || !seen.add(vocab.id)) continue;
+      if (!SharedVocab.isBlank(vocab.disambiguation)) continue;
+      vocab.disambiguation = hint; // shared, so every lesson sees it
+      changed++;
+    }
+    if (changed > 0) await saveState();
+    return changed;
   }
 
   // Delete vocabulary

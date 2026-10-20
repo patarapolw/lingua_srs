@@ -9,6 +9,7 @@ import '../providers/app_provider.dart';
 import '../services/korean_text_search.dart';
 import '../widgets/audio_button.dart';
 import '../widgets/markdown_content.dart';
+import 'similar_meanings_dialog.dart';
 
 class VocabEditDialog extends StatefulWidget {
   final VocabItem vocab;
@@ -41,6 +42,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
   late TextEditingController _notesCtrl;
   late TextEditingController _disambiguationCtrl;
   bool _suggestingHint = false;
+  final Map<String, String> _pendingOtherHints = {};
   late TextEditingController _targetToNativeBackNotesCtrl;
   late TextEditingController _nativeToTargetBackNotesCtrl;
   late TextEditingController _idCtrl;
@@ -124,6 +126,12 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     widget.vocab.cardNativeToTarget.backNotes = _nativeToTargetBackNotesCtrl
         .text
         .trim();
+
+    // Because it’s deferred to Save, cancelling the dialog discards the other words’ hints.
+    // Add import 'dart:async'; and wrap the call in unawaited(...) if the unawaited_futures lint is on.
+    if (_pendingOtherHints.isNotEmpty) {
+      provider.applyFrontHints(Map.of(_pendingOtherHints));
+    }
 
     provider.updateVocab(widget.vocab, previousId: _originalId);
     Navigator.of(context).pop();
@@ -484,11 +492,31 @@ class _VocabEditDialogState extends State<VocabEditDialog>
 
   Future<void> _suggestHint(AppProvider provider) async {
     final messenger = ScaffoldMessenger.of(context);
+    final draft = VocabItem(
+      id: widget.vocab.id,
+      targetWord: _targetWordCtrl.text.trim(),
+      translation: _translationCtrl.text.trim(),
+      pos: _posCtrl.text.trim(),
+      notes: _notesCtrl.text,
+    );
+    if (draft.targetWord.isEmpty || draft.translation.isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Enter the word and its meaning first.')),
+      );
+      return;
+    }
     setState(() => _suggestingHint = true);
     try {
-      final hint = await provider.suggestFrontHint(widget.vocab);
+      final result = await provider.suggestSimilarMeanings(draft);
       if (!mounted) return;
-      setState(() => _disambiguationCtrl.text = hint); // applied only on Save
+      final choice = await showSimilarMeanings(context, provider: provider, result: result);
+      if (choice == null || !mounted) return;
+      setState(() {
+        if (choice.targetHint != null) _disambiguationCtrl.text = choice.targetHint!;
+        _pendingOtherHints
+          ..clear()
+          ..addAll(choice.otherHints);
+      });
     } catch (error) {
       if (mounted) {
         messenger.showSnackBar(SnackBar(content: Text('Could not get a hint: $error')));
@@ -613,7 +641,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                         border: const OutlineInputBorder(),
                         suffixIcon: provider.canUseAi
                             ? IconButton(
-                                tooltip: 'Suggest hint with AI',
+                                tooltip: 'Suggest hint with AI (sends vocabulary of the same type to DeepSeek)',
                                 icon: _suggestingHint
                                     ? const SizedBox(
                                         width: 18,
@@ -628,6 +656,14 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                             : null,
                       ),
                     ),
+                    if (_pendingOtherHints.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          'Hints for ${_pendingOtherHints.length} similar word(s) will be saved with this one.',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
                     _duplicateFrontWarning(
                       provider,
                       CardDirection.targetToNative,

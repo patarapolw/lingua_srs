@@ -73,12 +73,68 @@ void main() {
     expect(s.withSurvivor({'a': 5, 'b': 5}).keepId, 'a');
   });
 
-  group('VocabAiPrompts.parseHint', () {
-    test('cleans quotes and spaces', () {
-      expect(VocabAiPrompts.parseHint('{"hint":"  \\"body  part\\" "}'), 'body part');
+  group('similar meanings', () {
+    final target = VocabItem(targetWord: '크다', translation: 'big', pos: 'adjectives');
+
+    test('pool: same POS, different Korean form, other id', () {
+      final pool = VocabSimilarity.similarPool(target, [
+        vocabGroup('a', '넓다', 'wide'),
+        vocabGroup('b', '크다', 'to be big'), // same Korean form: a merge candidate
+        VocabGroup(
+          id: 'c',
+          entry: VocabItem(id: 'c', targetWord: '배', translation: 'pear', pos: 'nouns'),
+          reviews: 0,
+        ),
+        vocabGroup(target.id, '크다', 'big'), // itself
+      ]);
+      expect(pool.map((g) => g.id), ['a']);
     });
-    test('rejects an empty hint', () {
-      expect(() => VocabAiPrompts.parseHint('{"hint":"  "}'), throwsFormatException);
+
+    test('shortlist keeps everything under the limit, else the closest', () {
+      final pool = [
+        vocabGroup('a', '넓다', 'wide'),
+        vocabGroup('b', '거대하다', 'big and huge'),
+        vocabGroup('c', '작다', 'small'),
+        vocabGroup('d', '크게', 'big'),
+      ];
+      expect(VocabSimilarity.shortlist(target, pool, limit: 10), pool);
+      final top = VocabSimilarity.shortlist(target, pool, limit: 2);
+      expect(top.map((g) => g.id).toSet(), {'b', 'd'});
+    });
+
+    test('prompt numbers the pool and never sends ids', () {
+      final pool = [
+        vocabGroup('auto-aaa', '넓다', 'wide'),
+        vocabGroup('auto-bbb', '작다', 'small'),
+      ];
+      final prompt = VocabAiPrompts.similarPrompt(target, const [], pool);
+      final user = prompt.messages[1].content;
+      expect(user, contains('1|넓다|wide'));
+      expect(user, contains('2|작다|small'));
+      expect(user, isNot(contains('auto-')));
+      expect(prompt.ids, ['auto-aaa', 'auto-bbb']);
+    });
+
+    test('parse maps numbers back to ids and cleans hints', () {
+      final result = VocabAiPrompts.parseSimilarResult(
+        '{"hint":" \\"General size\\" ","similar":['
+        '{"n":2,"hint":"area or width"},{"n":2,"hint":"dup"},'
+        '{"n":9,"hint":"out of range"},{"n":1}]}',
+        ['id-1', 'id-2'],
+      );
+      expect(result.hint, 'General size');
+      expect(result.similar.map((s) => s.id), ['id-2', 'id-1']);
+      expect(result.similar.first.hint, 'area or width');
+      expect(result.similar.last.hint, '');
+    });
+
+    test('parse caps the list and tolerates an empty answer', () {
+      final ids = [for (var i = 1; i <= 12; i++) 'id-$i'];
+      final many = '{"hint":"","similar":[${[for (var i = 1; i <= 12; i++) '{"n":$i,"hint":"h"}'].join(',')}]}';
+      expect(VocabAiPrompts.parseSimilarResult(many, ids).similar, hasLength(8));
+      final none = VocabAiPrompts.parseSimilarResult('{}', ids);
+      expect(none.hint, '');
+      expect(none.similar, isEmpty);
     });
   });
 }

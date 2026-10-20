@@ -733,30 +733,77 @@ vocabulary:
         provider.dispose();
       });
 
-      test('suggestFrontHint uses colliding vocab and returns a clean hint',
+      test('suggestSimilarMeanings feeds all same-POS vocab and maps numbers back',
           () async {
         final provider = await newProvider();
         await provider.setDeepSeekApiKey('k');
-        final l1 = await provider.importYaml(lessonYaml('L1'));       // 배 / pear
+        final big = await provider.importYaml(adjYaml('L1', '크다', 'big'));
+        final wide = await provider.importYaml(adjYaml('L2', '넓다', 'wide'));
+        await provider.importYaml(adjYaml('L3', '작다', 'small'));
+        await provider.importYaml(adjYaml('L4', '크다', 'to be big')); // same form
         await provider.importYaml('''
 ---
 vocabulary:
   nouns:
     - ko: 배
-      en: stomach
+      en: pear
 ---
-# L2
+# L5
 ''');
 
         final client = MockClient((request) async {
           final body = jsonDecode(request.body) as Map<String, dynamic>;
-          final user = jsonDecode((body['messages'] as List)[1]['content'] as String);
-          expect(user['target']['translation'], 'pear');
-          expect((user['sameFront'] as List).single['translation'], 'stomach');
-          return ok({'hint': ' "Fruit" '});
+          final user = jsonDecode((body['messages'] as List)[1]['content'] as String)
+              as Map<String, dynamic>;
+          final pool = user['pool'] as String;
+          expect(pool, contains('1|넓다|wide'));
+          expect(pool, contains('2|작다|small'));
+          expect(pool, isNot(contains('pear')));
+          expect(pool, isNot(contains('to be big')));
+          expect(pool, isNot(contains('auto-')));
+          return ok({
+            'hint': 'general size',
+            'similar': [{'n': 1, 'hint': 'area or width'}],
+          });
         });
 
-        expect(await provider.suggestFrontHint(only(l1), client: client), 'Fruit');
+        final result = await provider.suggestSimilarMeanings(only(big), client: client);
+        expect(result.hint, 'general size');
+        expect(result.similar.single.id, only(wide).id);
+        expect(result.similar.single.hint, 'area or width');
+        provider.dispose();
+      });
+
+      test('suggestSimilarMeanings still reports an auth failure', () async {
+        final provider = await newProvider();
+        await provider.setDeepSeekApiKey('k');
+        final big = await provider.importYaml(adjYaml('L1', '크다', 'big'));
+        final client = MockClient((_) async => http.Response('bad', 401));
+        await expectLater(
+          provider.suggestSimilarMeanings(only(big), client: client),
+          throwsA(isA<DeepSeekException>()),
+        );
+        expect(provider.canUseAi, isFalse);
+        provider.dispose();
+      });
+
+      test('applyFrontHints fills only blank hints and is shared across lessons',
+          () async {
+        final provider = await newProvider();
+        final a = await provider.importYaml(adjYaml('L1', '크다', 'big'));
+        final b = await provider.importYaml(adjYaml('L2', '넓다', 'wide'));
+        final aAgain = await provider.importYaml(adjYaml('L3', '크다', 'big'));
+        only(b).disambiguation = 'existing';
+
+        final changed = await provider.applyFrontHints({
+          only(a).id: 'general size',
+          only(b).id: 'should not apply',
+        });
+
+        expect(changed, 1);
+        expect(only(a).disambiguation, 'general size');
+        expect(only(aAgain).disambiguation, 'general size'); // same vocab id
+        expect(only(b).disambiguation, 'existing');
         provider.dispose();
       });
 

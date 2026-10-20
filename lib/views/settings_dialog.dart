@@ -184,7 +184,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
               ),
               const SizedBox(height: 10),
               Text(
-                'The key is stored in this device’s app preferences and sent to DeepSeek when you ask a question.',
+                'The key is stored in this device’s app preferences. DeepSeek receives your questions, and for the merge and hint buttons the Korean and English of your vocabulary (for hints, every word of the same type).',
                 style: theme.textTheme.bodySmall,
               ),
             ],
