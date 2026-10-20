@@ -2,15 +2,20 @@ import 'dart:collection';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
+import 'package:uuid/uuid.dart';
 
 import '../models/ai_discussion_message.dart';
 import '../models/lesson.dart';
-import '../models/vocab_item.dart';
 import '../models/sentence.dart';
 import '../models/shared_vocab.dart';
 import '../models/srs_card.dart';
-import '../services/storage_service.dart';
+import '../models/vocab_item.dart';
+import '../models/vocab_merge_record.dart';
+import '../services/deepseek_service.dart';
 import '../services/srs_service.dart';
+import '../services/storage_service.dart';
+import '../services/vocab_ai_service.dart';
 import '../services/yaml_parser_service.dart';
 
 class StudyCardItem {
@@ -53,6 +58,10 @@ class AppProvider extends ChangeNotifier {
   List<Sentence> _sentences = [];
   bool _autoplayAudio = true;
   String _deepSeekApiKey = '';
+  bool _deepSeekKeyRejected = false;
+  List<VocabMergeRecord> _mergeHistory = [];
+  static const int _maxMergeHistory = 20;
+  static const int _aiBatchSize = 40;
   Map<String, List<AiDiscussionMessage>> _aiDiscussions = {};
   bool _isLoading = true;
   String? _selectedLessonId;
@@ -66,6 +75,9 @@ class AppProvider extends ChangeNotifier {
   List<Sentence> get sentences => _sentences;
   bool get autoplayAudio => _autoplayAudio;
   String get deepSeekApiKey => _deepSeekApiKey;
+  /// False without a key, and after DeepSeek rejected it (until it changes).
+  bool get canUseAi => _deepSeekApiKey.trim().isNotEmpty && !_deepSeekKeyRejected;
+  List<VocabMergeRecord> get mergeHistory => List.unmodifiable(_mergeHistory);
   bool get isLoading => _isLoading;
   String? get selectedLessonId => _selectedLessonId;
   int get maxReviews24h => _maxReviews24h;
@@ -131,6 +143,7 @@ class AppProvider extends ChangeNotifier {
     ).wait;
     _autoplayAudio = results.$1;
     _deepSeekApiKey = results.$2;
+    _mergeHistory = await StorageService.loadMergeHistory();
     _aiDiscussions = results.$3;
     _maxReviews24h = results.$4;
     _reviewTimestamps24h = results.$5;
@@ -213,6 +226,7 @@ class AppProvider extends ChangeNotifier {
     final trimmedApiKey = apiKey.trim();
     await StorageService.saveDeepSeekApiKey(trimmedApiKey);
     _deepSeekApiKey = trimmedApiKey;
+    _deepSeekKeyRejected = false;
     notifyListeners();
   }
 
@@ -441,9 +455,16 @@ class AppProvider extends ChangeNotifier {
       _mergeImportedLesson(existingLesson, parsed, sentenceIndex);
     } else {
       if (vocabIndex == null) {
-        _reuseExistingVocabProgress(parsed.lesson.vocabularies, parsed.lesson.id);
+        _reuseExistingVocabProgress(
+          parsed.lesson.vocabularies,
+          parsed.lesson.id,
+        );
       } else {
-        _reuseVocabProgressFromIndex(parsed.lesson.vocabularies, vocabIndex, parsed.lesson.id);
+        _reuseVocabProgressFromIndex(
+          parsed.lesson.vocabularies,
+          vocabIndex,
+          parsed.lesson.id,
+        );
       }
       final sentenceIds = <String, String>{};
       for (final sentence in parsed.sentences) {
@@ -586,12 +607,21 @@ class AppProvider extends ChangeNotifier {
         ..sectionPath = importedVocab.sectionPath
         ..sentenceIds = importedVocab.sentenceIds;
       lessonMatch.shared
-        ..mergeImport(SharedVocab.audioField, importedVocab.audioUrl,
-            lessonId: lesson.id)
-        ..mergeImport(SharedVocab.notesField, importedVocab.notes,
-            lessonId: lesson.id)
-        ..mergeImport(SharedVocab.disambiguationField,
-            importedVocab.disambiguation, lessonId: lesson.id);
+        ..mergeImport(
+          SharedVocab.audioField,
+          importedVocab.audioUrl,
+          lessonId: lesson.id,
+        )
+        ..mergeImport(
+          SharedVocab.notesField,
+          importedVocab.notes,
+          lessonId: lesson.id,
+        )
+        ..mergeImport(
+          SharedVocab.disambiguationField,
+          importedVocab.disambiguation,
+          lessonId: lesson.id,
+        );
       _addVocabToIndexes(lessonMatch, vocabById, vocabByMeaning);
       if (previousVocab != null && !identical(previousVocab, lessonMatch)) {
         _reuseProgress(lessonMatch, previousVocab, lessonId: lesson.id);
@@ -705,6 +735,7 @@ class AppProvider extends ChangeNotifier {
     final index = <String, VocabItem>{};
     for (final vocab in _lessons.expand((lesson) => lesson.vocabularies)) {
       index.putIfAbsent(_progressIdentity(vocab), () => vocab);
+      index.putIfAbsent('text:${_vocabMeaningIdentity(vocab)}', () => vocab);
     }
     return index;
   }
@@ -715,9 +746,14 @@ class AppProvider extends ChangeNotifier {
     String lessonId,
   ) {
     for (final vocab in imported) {
-      final previous = index[_progressIdentity(vocab)];
+      final previous =
+          index[_progressIdentity(vocab)] ??
+          (vocab.idIsExplicit
+              ? null
+              : index['text:${_vocabMeaningIdentity(vocab)}']);
       if (previous != null) _reuseProgress(vocab, previous, lessonId: lessonId);
       index.putIfAbsent(_progressIdentity(vocab), () => vocab);
+      index.putIfAbsent('text:${_vocabMeaningIdentity(vocab)}', () => vocab);
     }
   }
 
@@ -859,6 +895,205 @@ class AppProvider extends ChangeNotifier {
     if (existing != null) _reuseProgress(vocab, existing, lessonId: lessonId);
     lesson.vocabularies.add(vocab);
     await saveState();
+  }
+
+  // ---------------------------------------------------------------- merging
+
+  List<VocabGroup> get vocabGroups {
+    final byId = <String, VocabGroup>{};
+    for (final lesson in _lessons) {
+      for (final vocab in lesson.vocabularies) {
+        final group = byId.putIfAbsent(
+          vocab.id,
+          () => VocabGroup(
+            id: vocab.id,
+            entry: vocab,
+            reviews:
+                vocab.cardTargetToNative.repetitions +
+                vocab.cardNativeToTarget.repetitions,
+          ),
+        );
+        if (!group.lessonTitles.contains(lesson.displayTitle)) {
+          group.lessonTitles.add(lesson.displayTitle);
+        }
+      }
+    }
+    return byId.values.toList();
+  }
+
+  /// Makes every vocab in [absorbedIds] part of [survivorId]. Returns null when
+  /// there was nothing to merge.
+  Future<VocabMergeRecord?> mergeVocab({
+    required String survivorId,
+    required Iterable<String> absorbedIds,
+    String source = 'manual',
+    String reason = '',
+  }) async {
+    final absorbed = absorbedIds.where((id) => id != survivorId).toSet();
+    if (absorbed.isEmpty) return null;
+    final entries = [
+      for (final lesson in _lessons)
+        for (final vocab in lesson.vocabularies) MapEntry(lesson, vocab),
+    ];
+    final survivor = entries
+        .map((e) => e.value)
+        .where((v) => v.id == survivorId)
+        .firstOrNull;
+    if (survivor == null) {
+      throw ArgumentError.value(survivorId, 'survivorId', 'Unknown vocabulary.');
+    }
+
+    final snapshots = [
+      for (final e in entries)
+        if (absorbed.contains(e.value.id))
+          MergedEntrySnapshot(
+            lessonId: e.key.id,
+            targetWord: e.value.targetWord,
+            translation: e.value.translation,
+            sectionPath: List.of(e.value.effectiveSectionPath),
+            previousId: e.value.id,
+            previousIdIsExplicit: e.value.idIsExplicit,
+            previousShared: e.value.shared.toJson(),
+          ),
+    ];
+    if (snapshots.isEmpty) return null;
+
+    final shared = survivor.shared;
+    final survivorBefore = shared.toJson();
+    final folded = <SharedVocab>{};
+    final labels = <String>{};
+    for (final e in entries) {
+      final entry = e.value;
+      if (!absorbed.contains(entry.id)) continue;
+      labels.add('${entry.targetWord} — ${entry.translation}');
+      if (folded.add(entry.shared)) {
+        for (final field in SharedVocab.detailFields) {
+          shared.mergeImport(field, entry.shared.valueOf(field));
+        }
+      }
+      entry
+        ..id = survivor.id
+        ..idIsExplicit = true
+        ..shared = shared;
+    }
+
+    final record = VocabMergeRecord(
+      id: const Uuid().v4(),
+      createdAt: DateTime.now(),
+      survivorId: survivor.id,
+      label: '${labels.join('; ')} → ${survivor.targetWord} — ${survivor.translation}',
+      source: source,
+      reason: reason,
+      survivorBefore: survivorBefore,
+      survivorAfter: shared.toJson(),
+      entries: snapshots,
+    );
+    _mergeHistory = [record, ..._mergeHistory].take(_maxMergeHistory).toList();
+    await StorageService.saveMergeHistory(_mergeHistory);
+    await saveState();
+    return record;
+  }
+
+  /// Undo is last-in-first-out: only the newest record can be undone.
+  Future<VocabMergeUndoResult> undoMerge(String recordId) async {
+    final index = _mergeHistory.indexWhere((r) => r.id == recordId);
+    if (index < 0) return const VocabMergeUndoResult(restored: 0, missing: 0);
+    if (index != 0) throw StateError('Undo the newer merges first.');
+    final record = _mergeHistory[index];
+
+    final restoredShared = <String, SharedVocab>{};
+    final unmatched = [...record.entries];
+    var restored = 0;
+    for (final lesson in _lessons) {
+      for (final entry in lesson.vocabularies) {
+        if (entry.id != record.survivorId) continue;
+        final i = unmatched.indexWhere((s) => s.matches(lesson.id, entry));
+        if (i < 0) continue;
+        final snapshot = unmatched.removeAt(i);
+        entry
+          ..id = snapshot.previousId
+          ..idIsExplicit = snapshot.previousIdIsExplicit
+          ..shared = restoredShared.putIfAbsent(
+            snapshot.previousId,
+            () => SharedVocab.fromJson(snapshot.previousShared),
+          );
+        restored++;
+      }
+    }
+
+    // Put the survivor's details back, but only fields nobody edited since.
+    final survivor = _lessons
+        .expand((l) => l.vocabularies)
+        .where((v) => v.id == record.survivorId)
+        .firstOrNull;
+    if (survivor != null) {
+      final before = SharedVocab.fromJson(record.survivorBefore);
+      final after = SharedVocab.fromJson(record.survivorAfter);
+      for (final field in SharedVocab.detailFields) {
+        if (survivor.shared.valueOf(field) == after.valueOf(field)) {
+          survivor.shared.restoreField(field, before);
+        }
+      }
+    }
+
+    _mergeHistory = [..._mergeHistory]..removeAt(index);
+    await StorageService.saveMergeHistory(_mergeHistory);
+    await saveState();
+    return VocabMergeUndoResult(restored: restored, missing: unmatched.length);
+  }
+
+  // ------------------------------------------------------------- AI helpers
+
+  Future<T> _withAi<T>(Future<T> Function() call) async {
+    if (!canUseAi) throw StateError('Add a DeepSeek API key in settings first.');
+    try {
+      return await call();
+    } on DeepSeekException catch (error) {
+      if (error.isAuthError && !_deepSeekKeyRejected) {
+        _deepSeekKeyRejected = true;
+        notifyListeners();
+      }
+      rethrow;
+    }
+  }
+
+  Future<List<VocabMergeSuggestion>> suggestVocabMerges({http.Client? client}) {
+    return _withAi(() async {
+      final groups = vocabGroups;
+      final reviewsById = {for (final g in groups) g.id: g.reviews};
+      final candidates = VocabSimilarity.findCandidateGroups(groups);
+      final suggestions = <VocabMergeSuggestion>[];
+      for (var start = 0; start < candidates.length; start += _aiBatchSize) {
+        final batch = candidates.sublist(
+          start,
+          min(start + _aiBatchSize, candidates.length),
+        );
+        final reply = await DeepSeekService.completeJson(
+          apiKey: _deepSeekApiKey,
+          messages: VocabAiPrompts.mergeMessages(batch),
+          client: client,
+        );
+        suggestions.addAll(VocabAiPrompts.parseMergeSuggestions(reply, batch));
+      }
+      return [for (final s in suggestions) s.withSurvivor(reviewsById)];
+    });
+  }
+
+  Future<String> suggestFrontHint(VocabItem vocab, {http.Client? client}) {
+    return _withAi(() async {
+      final sameFront = <VocabItem>[];
+      for (final direction in CardDirection.values) {
+        for (final other in getDuplicateFrontVocabularies(vocab, direction)) {
+          if (!sameFront.any((c) => identical(c, other))) sameFront.add(other);
+        }
+      }
+      final reply = await DeepSeekService.completeJson(
+        apiKey: _deepSeekApiKey,
+        messages: VocabAiPrompts.hintMessages(vocab, sameFront),
+        client: client,
+      );
+      return VocabAiPrompts.parseHint(reply);
+    });
   }
 
   // Delete vocabulary

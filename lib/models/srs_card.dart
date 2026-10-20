@@ -19,6 +19,7 @@ class SrsCard {
   final CardDirection direction;
   bool isEnabled;
   String backNotes;
+  String frontHint;
   int interval; // in days
   int repetitions;
   double easeFactor;
@@ -35,6 +36,7 @@ class SrsCard {
     required this.direction,
     this.isEnabled = true,
     this.backNotes = '',
+    this.frontHint = '',
     this.interval = 0,
     this.repetitions = 0,
     this.easeFactor = 2.5,
@@ -90,6 +92,7 @@ class SrsCard {
     'direction': direction.name,
     'isEnabled': isEnabled,
     'backNotes': backNotes,
+    'frontHint': frontHint,
     'interval': interval,
     'repetitions': repetitions,
     'easeFactor': easeFactor,
@@ -113,6 +116,7 @@ class SrsCard {
     ),
     isEnabled: json['isEnabled'] as bool? ?? true,
     backNotes: json['backNotes'] as String? ?? '',
+    frontHint: json['frontHint'] as String? ?? '',
     interval: json['interval'] as int? ?? 0,
     repetitions: json['repetitions'] as int? ?? 0,
     easeFactor: (json['easeFactor'] as num?)?.toDouble() ?? 2.5,

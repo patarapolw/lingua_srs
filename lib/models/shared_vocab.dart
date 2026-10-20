@@ -120,6 +120,23 @@ class SharedVocab {
     }
   }
 
+  /// Copies one field, its provenance and its alternates from [from] (undo).
+  void restoreField(String field, SharedVocab from) {
+    _write(field, from.valueOf(field));
+    final m = from.meta[field];
+    if (m == null) {
+      meta.remove(field);
+    } else {
+      meta[field] = m;
+    }
+    final alt = from.alternates[field];
+    if (alt == null) {
+      alternates.remove(field);
+    } else {
+      alternates[field] = [...alt];
+    }
+  }
+
   void _addAlternate(String field, String value) {
     if (value == valueOf(field)) return;
     final list = alternates.putIfAbsent(field, () => []);
@@ -138,10 +155,14 @@ class SharedVocab {
     cardTargetToNative: SrsCard(
       direction: CardDirection.targetToNative,
       isEnabled: cardTargetToNative.isEnabled,
+      backNotes: cardTargetToNative.backNotes,
+      frontHint: cardTargetToNative.frontHint,
     ),
     cardNativeToTarget: SrsCard(
       direction: CardDirection.nativeToTarget,
       isEnabled: cardNativeToTarget.isEnabled,
+      backNotes: cardNativeToTarget.backNotes,
+      frontHint: cardNativeToTarget.frontHint,
     ),
     meta: {...meta},
     alternates: {for (final e in alternates.entries) e.key: [...e.value]},

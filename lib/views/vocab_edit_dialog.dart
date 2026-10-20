@@ -40,6 +40,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
   late TextEditingController _audioCtrl;
   late TextEditingController _notesCtrl;
   late TextEditingController _disambiguationCtrl;
+  bool _suggestingHint = false;
   late TextEditingController _targetToNativeBackNotesCtrl;
   late TextEditingController _nativeToTargetBackNotesCtrl;
   late TextEditingController _idCtrl;
@@ -481,6 +482,22 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     });
   }
 
+  Future<void> _suggestHint(AppProvider provider) async {
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _suggestingHint = true);
+    try {
+      final hint = await provider.suggestFrontHint(widget.vocab);
+      if (!mounted) return;
+      setState(() => _disambiguationCtrl.text = hint); // applied only on Save
+    } catch (error) {
+      if (mounted) {
+        messenger.showSnackBar(SnackBar(content: Text('Could not get a hint: $error')));
+      }
+    } finally {
+      if (mounted) setState(() => _suggestingHint = false);
+    }
+  }
+
   Widget _duplicateFrontWarning(AppProvider provider, CardDirection direction) {
     final duplicates = provider.getDuplicateFrontVocabularies(
       widget.vocab,
@@ -587,13 +604,28 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                     const SizedBox(height: 16),
                     TextField(
                       controller: _disambiguationCtrl,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Front hint (optional)',
                         hintText: 'e.g. fruit, vehicle',
                         helperText:
                             'Shown on card fronts to tell duplicates apart.',
                         helperMaxLines: 3,
-                        border: OutlineInputBorder(),
+                        border: const OutlineInputBorder(),
+                        suffixIcon: provider.canUseAi
+                            ? IconButton(
+                                tooltip: 'Suggest hint with AI',
+                                icon: _suggestingHint
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                      )
+                                    : const Icon(Icons.auto_awesome),
+                                onPressed: _suggestingHint
+                                    ? null
+                                    : () => _suggestHint(provider),
+                              )
+                            : null,
                       ),
                     ),
                     _duplicateFrontWarning(

@@ -1162,7 +1162,7 @@ class _StudyViewState extends State<StudyView> {
                                     ),
                                     _disambiguationCue(
                                       context,
-                                      item.vocab.disambiguation,
+                                      item.vocab.frontHintFor(CardDirection.targetToNative),
                                     ),
                                     const SizedBox(height: 20),
                                     // One Random Sentence always on front
@@ -1211,7 +1211,7 @@ class _StudyViewState extends State<StudyView> {
                                     ),
                                     _disambiguationCue(
                                       context,
-                                      item.vocab.disambiguation,
+                                      item.vocab.frontHintFor(CardDirection.nativeToTarget),
                                     ),
                                     const SizedBox(height: 20),
                                     // One Random Sentence with Cloze Deletion

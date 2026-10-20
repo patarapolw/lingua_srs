@@ -10,6 +10,7 @@ import '../models/lesson.dart';
 import '../models/sentence.dart';
 import '../models/shared_vocab.dart';
 import '../models/vocab_item.dart';
+import '../models/vocab_merge_record.dart';
 
 class StorageService {
   static const String _keyLessons = 'lingua_srs_lessons';
@@ -19,6 +20,7 @@ class StorageService {
   static const String _keySentences = 'lingua_srs_sentences';
   static const String _keySharedVocab = 'lingua_srs_shared_vocab';
   static const String _keyDeepSeekApiKey = 'lingua_srs_deepseek_api_key';
+  static const String _keyVocabMergeHistory = 'lingua_srs_vocab_merge_history';
   static const String _keyAiDiscussions = 'lingua_srs_ai_discussions';
   static const String _keyAutoplay = 'lingua_srs_autoplay';
   static const String _keyLessonHierarchyOrder =
@@ -46,6 +48,27 @@ class StorageService {
     } else {
       await prefs.setString(_keyDeepSeekApiKey, trimmedApiKey);
     }
+  }
+
+  static Future<List<VocabMergeRecord>> loadMergeHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_keyVocabMergeHistory);
+    if (raw == null || raw.isEmpty) return [];
+    try {
+      return (jsonDecode(raw) as List)
+          .map((e) => VocabMergeRecord.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static Future<void> saveMergeHistory(List<VocabMergeRecord> records) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _keyVocabMergeHistory,
+      jsonEncode(records.map((r) => r.toJson()).toList()),
+    );
   }
 
   static Future<Map<String, String>> loadImportedMarkdownSources() async {

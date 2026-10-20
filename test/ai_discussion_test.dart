@@ -116,5 +116,36 @@ void main() {
       await StorageService.saveDeepSeekApiKey('');
       expect(await StorageService.loadDeepSeekApiKey(), isEmpty);
     });
+
+    test('completeJson requests JSON mode and returns the content', () async {
+      final client = MockClient((request) async {
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        expect(body['stream'], isFalse);
+        expect(body['response_format'], {'type': 'json_object'});
+        expect(request.headers['Authorization'], 'Bearer test-key');
+        return http.Response(
+          jsonEncode({'choices': [{'message': {'content': '{"hint":"fruit"}'}}]}),
+          200,
+        );
+      });
+      final text = await DeepSeekService.completeJson(
+        apiKey: ' test-key ',
+        messages: const [AiDiscussionMessage(role: 'user', content: 'json')],
+        client: client,
+      );
+      expect(text, '{"hint":"fruit"}');
+    });
+
+    test('completeJson reports 401 as an auth error', () async {
+      final client = MockClient((_) async => http.Response('bad key', 401));
+      await expectLater(
+        DeepSeekService.completeJson(
+          apiKey: 'k',
+          messages: const [AiDiscussionMessage(role: 'user', content: 'json')],
+          client: client,
+        ),
+        throwsA(isA<DeepSeekException>().having((e) => e.isAuthError, 'isAuthError', isTrue)),
+      );
+    });
   });
 }

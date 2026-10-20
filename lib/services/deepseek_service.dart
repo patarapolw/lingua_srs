@@ -44,6 +44,7 @@ class DeepSeekService {
         );
         throw DeepSeekException(
           'DeepSeek request failed (${response.statusCode}): $body',
+          statusCode: response.statusCode,
         );
       }
 
@@ -88,12 +89,64 @@ class DeepSeekService {
       if (client == null) requestClient.close();
     }
   }
+
+  /// One non-streaming request whose reply is a JSON object, returned as text.
+  static Future<String> completeJson({
+    required String apiKey,
+    required List<AiDiscussionMessage> messages,
+    http.Client? client,
+  }) async {
+    final trimmedApiKey = apiKey.trim();
+    if (trimmedApiKey.isEmpty) {
+      throw ArgumentError.value(apiKey, 'apiKey', 'API key cannot be empty.');
+    }
+    final requestClient = client ?? http.Client();
+    try {
+      final response = await requestClient
+          .post(
+            _chatCompletionsUri,
+            headers: {
+              'Authorization': 'Bearer $trimmedApiKey',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'model': 'deepseek-chat',
+              'stream': false,
+              'temperature': 0,
+              'max_tokens': 2000,
+              'response_format': {'type': 'json_object'},
+              'messages': messages.map((m) => m.toJson()).toList(),
+            }),
+          )
+          .timeout(const Duration(seconds: 60));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw DeepSeekException(
+          'DeepSeek request failed (${response.statusCode}): ${response.body}',
+          statusCode: response.statusCode,
+        );
+      }
+      final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+      final choices = decoded is Map ? decoded['choices'] : null;
+      final first = choices is List && choices.isNotEmpty ? choices.first : null;
+      final message = first is Map ? first['message'] : null;
+      final content = message is Map ? message['content'] : null;
+      if (content is! String || content.trim().isEmpty) {
+        throw const FormatException('DeepSeek returned an empty answer.');
+      }
+      return content;
+    } finally {
+      if (client == null) requestClient.close();
+    }
+  }
 }
 
 class DeepSeekException implements Exception {
   final String message;
+  final int? statusCode;
 
-  const DeepSeekException(this.message);
+  const DeepSeekException(this.message, {this.statusCode});
+
+  bool get isAuthError => statusCode == 401;
 
   @override
   String toString() => message;

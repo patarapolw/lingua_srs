@@ -66,6 +66,15 @@ class VocabItem {
     SrsCard get cardNativeToTarget => shared.cardNativeToTarget;
     set cardNativeToTarget(SrsCard v) => shared.cardNativeToTarget = v;
 
+  /// Hint for the front of [direction]'s card: its own hint, else the general one.
+  String frontHintFor(CardDirection direction) {
+    final card = direction == CardDirection.targetToNative
+        ? cardTargetToNative
+        : cardNativeToTarget;
+    final own = card.frontHint.trim();
+    return own.isNotEmpty ? own : disambiguation;
+  }
+
   static bool isVerbOrAdjective(String category) {
     final lower = category.toLowerCase().trim();
     return lower == 'verb' ||

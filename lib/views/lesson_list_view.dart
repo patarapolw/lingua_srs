@@ -10,6 +10,7 @@ import 'lesson_detail_view.dart';
 import 'lesson_reader_view.dart';
 import 'study_view.dart';
 import 'settings_dialog.dart';
+import 'vocab_merge_dialogs.dart';
 import 'yaml_import_view.dart';
 
 class LessonListView extends StatelessWidget {
@@ -548,6 +549,41 @@ class LessonListView extends StatelessWidget {
                 ],
               ),
         actions: [
+          Consumer<AppProvider>(
+            builder: (context, provider, _) {
+              if (!provider.canUseAi && provider.mergeHistory.isEmpty) {
+                return const SizedBox.shrink();
+              }
+              return PopupMenuButton<String>(
+                tooltip: 'Vocabulary merging',
+                icon: const Icon(Icons.merge_type),
+                onSelected: (action) {
+                  if (action == 'ai') showAiMergeSuggestions(context);
+                  if (action == 'history') showMergeHistory(context);
+                },
+                itemBuilder: (_) => [
+                  if (provider.canUseAi)
+                    const PopupMenuItem(
+                      value: 'ai',
+                      child: ListTile(
+                        leading: Icon(Icons.auto_awesome),
+                        title: Text('Suggest merges with AI'),
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
+                  PopupMenuItem(
+                    value: 'history',
+                    enabled: provider.mergeHistory.isNotEmpty,
+                    child: const ListTile(
+                      leading: Icon(Icons.undo),
+                      title: Text('Merge history / undo'),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.settings_outlined),
             tooltip: 'Settings',

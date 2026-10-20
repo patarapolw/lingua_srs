@@ -8,6 +8,7 @@ import '../providers/app_provider.dart';
 import '../widgets/audio_button.dart';
 import '../widgets/markdown_content.dart';
 import 'vocab_edit_dialog.dart';
+import 'vocab_merge_dialogs.dart';
 import 'study_view.dart';
 
 class LessonDetailView extends StatefulWidget {
@@ -647,6 +648,8 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                                               vocab,
                                               lessonId: lesson.id,
                                             );
+                                          case 'merge':
+                                            startManualMerge(context, vocab);
                                           case 'reset':
                                             _confirmResetVocab(vocab);
                                           case 'delete':
@@ -659,6 +662,14 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                                           child: ListTile(
                                             leading: Icon(Icons.edit_outlined),
                                             title: Text('Edit'),
+                                            contentPadding: EdgeInsets.zero,
+                                          ),
+                                        ),
+                                        PopupMenuItem(
+                                          value: 'merge',
+                                          child: ListTile(
+                                            leading: Icon(Icons.merge_type),
+                                            title: Text('Merge with…'),
                                             contentPadding: EdgeInsets.zero,
                                           ),
                                         ),
