@@ -59,7 +59,16 @@ class PronunciationToggles extends StatelessWidget {
               children: [
                 SizedBox(
                   width: 84,
-                  child: Text(target.label, style: theme.textTheme.labelMedium),
+                  child: Opacity(
+                    opacity: enabled ? 1 : 0.5,
+                    child: IgnorePointer(
+                      ignoring: !enabled,
+                      child: Text(
+                        target.label,
+                        style: theme.textTheme.labelMedium,
+                      ),
+                    ),
+                  ),
                 ),
                 ToggleButtons(
                   isSelected: [

@@ -636,6 +636,21 @@ vocabulary:
       expect(find.text(sentenceIpa), findsOneWidget);
     });
 
+    Future<void> closeMenu(WidgetTester tester) async {
+      await tester.tapAt(Offset.zero); // tap the modal barrier
+      await tester.pumpAndSettle();
+    }
+
+    Finder menuItem(String value) => find.byWidgetPredicate(
+      (w) => w is PopupMenuItem<String> && w.value == value,
+    );
+
+    bool itemEnabled(WidgetTester tester, String value) =>
+        tester.widget<PopupMenuItem<String>>(menuItem(value)).enabled;
+
+    List<ToggleButtons> toggleGroups(WidgetTester tester) =>
+        tester.widgetList<ToggleButtons>(find.byType(ToggleButtons)).toList();
+
     Future<void> openMore(WidgetTester tester) async {
       await tester.tap(find.byTooltip('More'));
       await tester.pumpAndSettle();
@@ -666,6 +681,7 @@ vocabulary:
       expect(toggle('vocabulary', 'romanization'), findsNothing); // back
 
       await openMore(tester);
+      expect(find.text('Pronunciation cue'), findsOneWidget);
       for (final target in ['vocabulary', 'sentence']) {
         expect(toggle(target, 'romanization'), findsOneWidget);
         expect(toggle(target, 'ipa'), findsOneWidget);
@@ -711,31 +727,6 @@ vocabulary:
       );
     }
 
-    // testWidgets('app bar keeps buttons either outside or in dropdown', (
-    //   tester,
-    // ) async {
-    //   await openStudy(tester, direction: CardDirection.targetToNative);
-    //   await openMore(tester);
-
-    //   expect(
-    //     find.byIcon(Icons.chevron_left),
-    //     findsOneWidget,
-    //     reason: 'Previous card',
-    //   );
-    //   expect(
-    //     find.byIcon(Icons.chevron_right),
-    //     findsOneWidget,
-    //     reason: 'Next card',
-    //   );
-    //   expect(find.byTooltip('Autoplay audio'), findsOneWidget);
-    //   expect(find.byTooltip('More'), findsOneWidget);
-
-    //   for (final label in ['Edit card', 'Ask AI']) {
-    //     expect(find.textContaining(label), findsOneWidget, reason: label);
-    //   }
-    //   expect(toggle('vocabulary', 'romanization'), findsOneWidget);
-    // });
-
     testWidgets('no pronunciation toggles for a non-Korean lesson', (
       tester,
     ) async {
@@ -747,7 +738,122 @@ vocabulary:
       await openMore(tester);
 
       expect(toggle('vocabulary', 'romanization'), findsNothing);
-      expect(find.text('Pronunciation'), findsNothing);
+      expect(find.text('Pronunciation cue'), findsNothing);
+    });
+
+    testWidgets('toggles are disabled until the back is shown', (tester) async {
+      final provider = await openStudy(
+        tester,
+        direction: CardDirection.targetToNative,
+        yaml: withSentence,
+      );
+      await openMore(tester); // front side
+      expect(find.byType(ToggleButtons), findsNWidgets(2));
+      expect(toggleGroups(tester).every((g) => g.onPressed == null), isTrue);
+
+      await tapToggle(tester, 'vocabulary', 'romanization');
+      await tapToggle(tester, 'sentence', 'ipa');
+      expect(
+        provider.showRomanization(PronunciationTarget.vocabulary),
+        isFalse,
+      );
+      expect(provider.showIpa(PronunciationTarget.sentence), isFalse);
+    });
+
+    testWidgets(
+      'toggles enable on reveal and disable again after flipping back',
+      (tester) async {
+        await openStudy(tester, direction: CardDirection.targetToNative);
+
+        Future<bool> togglesEnabled() async {
+          await openMore(tester);
+          final enabled = toggleGroups(tester)
+              .every((g) => g.onPressed != null);
+          await closeMenu(tester);
+          return enabled;
+        }
+
+        expect(await togglesEnabled(), isFalse);
+        await reveal(tester);
+        expect(await togglesEnabled(), isTrue);
+        await tester.tap(find.textContaining('Flip back to Front'));
+        await tester.pumpAndSettle();
+        expect(await togglesEnabled(), isFalse);
+      },
+    );
+
+    testWidgets('Edit and Ask AI are disabled until the back is shown', (
+      tester,
+    ) async {
+      await openStudy(tester, direction: CardDirection.targetToNative);
+      IconButton editButton() => tester.widget<IconButton>(
+        find.widgetWithIcon(IconButton, Icons.edit_outlined),
+      );
+
+      expect(editButton().onPressed, isNull);
+      await openMore(tester);
+      expect(itemEnabled(tester, 'ai'), isFalse);
+      await closeMenu(tester);
+
+      await reveal(tester);
+      expect(editButton().onPressed, isNotNull);
+      await openMore(tester);
+      expect(itemEnabled(tester, 'ai'), isTrue);
+    });
+
+    testWidgets(
+      'wide app bar (700dp): previous/next, undo, sound, edit, More',
+      (tester) async {
+        await openStudy(tester, direction: CardDirection.targetToNative);
+        tester.view.physicalSize = const Size(700, 2400); // boundary is wide
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+
+        for (final icon in [
+          Icons.chevron_left,
+          Icons.chevron_right,
+          Icons.undo,
+          Icons.edit_outlined,
+        ]) {
+          expect(find.byIcon(icon), findsOneWidget, reason: '$icon');
+        }
+        expect(find.byTooltip('Autoplay audio'), findsOneWidget);
+        expect(
+          tester
+              .widget<IconButton>(find.widgetWithIcon(IconButton, Icons.undo))
+              .onPressed,
+          isNull,
+          reason: 'nothing to undo yet',
+        );
+
+        await openMore(tester);
+        expect(menuItem('ai'), findsOneWidget);
+        for (final value in ['undo', 'autoplay', 'edit']) {
+          expect(menuItem(value), findsNothing, reason: value);
+        }
+        expect(find.text('Pronunciation cue'), findsOneWidget);
+      },
+    );
+
+    testWidgets('narrow app bar (699dp): previous/next and More only', (
+      tester,
+    ) async {
+      await openStudy(tester, direction: CardDirection.targetToNative);
+      tester.view.physicalSize = const Size(699, 2400);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      expect(find.byIcon(Icons.chevron_left), findsOneWidget);
+      expect(find.byIcon(Icons.chevron_right), findsOneWidget);
+      expect(find.byIcon(Icons.undo), findsNothing);
+      expect(find.byIcon(Icons.edit_outlined), findsNothing);
+      expect(find.byTooltip('Autoplay audio'), findsNothing);
+
+      await openMore(tester);
+      for (final value in ['undo', 'autoplay', 'edit', 'ai']) {
+        expect(menuItem(value), findsOneWidget, reason: value);
+      }
+      expect(itemEnabled(tester, 'undo'), isFalse, reason: 'nothing to undo');
     });
 
     testWidgets('autoplay toggle button works at 1200dp', (tester) async {
@@ -763,23 +869,27 @@ vocabulary:
       expect(provider.autoplayAudio, isFalse);
     });
 
-    testWidgets('autoplay toggle button is hidden and works at 300dp', (
+    testWidgets('autoplay at 300dp lives in the More menu and toggles', (
       tester,
     ) async {
       final provider = await openStudy(
         tester,
         direction: CardDirection.targetToNative,
       );
-      tester.view.physicalSize = Size(300, 2400);
+      tester.view.physicalSize = const Size(300, 2400);
       await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.byTooltip('Autoplay audio'), findsNothing);
       expect(provider.autoplayAudio, isTrue);
 
-      await tester.tap(find.byTooltip('More'));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.textContaining('autoplay'));
+      await openMore(tester);
+      expect(find.text('Turn autoplay off'), findsOneWidget);
+      await tester.tap(menuItem('autoplay'));
       await tester.pumpAndSettle();
       expect(provider.autoplayAudio, isFalse);
+
+      await openMore(tester);
+      expect(find.text('Turn autoplay on'), findsOneWidget);
     });
 
     testWidgets('nothing for a non-Korean lesson', (tester) async {

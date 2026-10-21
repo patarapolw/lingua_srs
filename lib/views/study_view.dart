@@ -673,7 +673,8 @@ class _StudyViewState extends State<StudyView> {
         }
       }
     } else if (event.logicalKey == LogicalKeyboardKey.keyE &&
-        _currentIndex < _queue.length) {
+        _currentIndex < _queue.length &&
+        _isAnswerRevealed) {
       _openEditCurrentCard();
     }
   }
