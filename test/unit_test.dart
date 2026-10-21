@@ -170,6 +170,28 @@ The full lesson text remains available to render.
       expect(provider.sentences, isEmpty);
     });
 
+    test('Pronunciation toggles default off and persist', () async {
+      SharedPreferences.setMockInitialValues({
+        'lingua_srs_windows_legacy_migration_complete': true,
+      });
+      final provider = AppProvider();
+      while (provider.isLoading) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(provider.showRomanization, isFalse);
+      expect(provider.showIpa, isFalse);
+
+      await provider.toggleRomanization();
+      await provider.toggleIpa();
+
+      final reloaded = AppProvider();
+      while (reloaded.isLoading) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(reloaded.showRomanization, isTrue);
+      expect(reloaded.showIpa, isTrue);
+    });
+
     test('Persists full Markdown separately from lesson JSON', () async {
       SharedPreferences.setMockInitialValues({
         'lingua_srs_windows_legacy_migration_complete': true,

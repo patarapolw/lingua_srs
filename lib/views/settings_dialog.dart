@@ -126,6 +126,24 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     ),
                   ],
                 ),
+              Row(
+                children: [
+                  const Expanded(child: Text('Romanization on card back')),
+                  Switch(
+                    value: provider.showRomanization,
+                    onChanged: (_) => provider.toggleRomanization(),
+                  ),
+                ],
+              ),
+              Row(
+                children: [
+                  const Expanded(child: Text('IPA on card back')),
+                  Switch(
+                    value: provider.showIpa,
+                    onChanged: (_) => provider.toggleIpa(),
+                  ),
+                ],
+              ),
               const Divider(),
               const SizedBox(height: 8),
               Text('Reviews', style: theme.textTheme.titleSmall),

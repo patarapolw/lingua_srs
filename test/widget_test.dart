@@ -514,6 +514,140 @@ void main() {
     });
   });
 
+  testWidgets('Settings toggles romanization and IPA', (tester) async {
+    final provider = await pumpApp(tester);
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+
+    Finder switchIn(String label) => find.descendant(
+      of: find.widgetWithText(Row, label),
+      matching: find.byType(Switch),
+    );
+
+    await tester.tap(switchIn('Romanization on card back'));
+    await tester.pumpAndSettle();
+    expect(provider.showRomanization, isTrue);
+    expect(provider.showIpa, isFalse);
+
+    await tester.tap(switchIn('IPA on card back'));
+    await tester.pumpAndSettle();
+    expect(provider.showIpa, isTrue);
+  });
+
+  group('Study card pronunciation', () {
+    const withSentence = '''
+---
+vocabulary:
+  nouns:
+    - ko: 배
+      en: pear
+      examples:
+        - ko: 저는 **배**를 먹었어요
+          en: I ate a **pear**
+---
+# Pron
+''';
+
+    Future<void> openStudy(
+      WidgetTester tester, {
+      required CardDirection direction,
+      Map<String, Object> prefs = const {},
+      String targetLanguage = 'ko',
+      String? yaml,
+    }) async {
+      final provider = await loadedProvider(tester, prefs);
+      final lesson = (await tester.runAsync(
+        () => provider.importYaml(
+          yaml ?? vocabYaml('Pron', 'nouns', '배', 'pear'),
+        ),
+      ))!;
+      lesson.targetLanguage = targetLanguage;
+      final vocab = only(lesson);
+      vocab.cardTargetToNative.isEnabled =
+          direction == CardDirection.targetToNative;
+      vocab.cardNativeToTarget.isEnabled =
+          direction == CardDirection.nativeToTarget;
+      await pumpWith(tester, provider, StudyView(lessonId: lesson.id));
+    }
+
+    Future<void> reveal(WidgetTester tester) async {
+      await tester.tap(find.textContaining('Show Answer'));
+      await tester.pumpAndSettle();
+    }
+
+    const both = {
+      'lingua_srs_show_romanization': true,
+      'lingua_srs_show_ipa': true,
+    };
+
+    testWidgets('nothing is shown by default', (tester) async {
+      await openStudy(tester, direction: CardDirection.targetToNative);
+      await reveal(tester);
+      expect(find.text('bae'), findsNothing);
+      expect(find.text('[pɛ]'), findsNothing);
+    });
+
+    for (final direction in CardDirection.values) {
+      testWidgets('front never shows it ($direction)', (tester) async {
+        await openStudy(tester, direction: direction, prefs: both);
+        expect(find.text('bae'), findsNothing);
+        expect(find.text('[pɛ]'), findsNothing);
+      });
+
+      testWidgets('back shows both lines ($direction)', (tester) async {
+        await openStudy(tester, direction: direction, prefs: both);
+        await reveal(tester);
+        expect(find.text('bae'), findsOneWidget);
+        expect(find.text('[pɛ]'), findsOneWidget);
+      });
+    }
+
+    testWidgets('only romanization when only it is on', (tester) async {
+      await openStudy(
+        tester,
+        direction: CardDirection.targetToNative,
+        prefs: {'lingua_srs_show_romanization': true},
+      );
+      await reveal(tester);
+      expect(find.text('bae'), findsOneWidget);
+      expect(find.text('[pɛ]'), findsNothing);
+    });
+
+    testWidgets('only IPA when only it is on', (tester) async {
+      await openStudy(
+        tester,
+        direction: CardDirection.targetToNative,
+        prefs: {'lingua_srs_show_ipa': true},
+      );
+      await reveal(tester);
+      expect(find.text('bae'), findsNothing);
+      expect(find.text('[pɛ]'), findsOneWidget);
+    });
+
+    testWidgets('example sentence gets a line too', (tester) async {
+      await openStudy(
+        tester,
+        direction: CardDirection.targetToNative,
+        prefs: both,
+        yaml: withSentence,
+      );
+      await reveal(tester);
+      expect(find.text('jeoneun baereul meogeosseoyo'), findsOneWidget);
+    });
+
+    testWidgets('nothing for a non-Korean lesson', (tester) async {
+      await openStudy(
+        tester,
+        direction: CardDirection.targetToNative,
+        prefs: both,
+        targetLanguage: 'es',
+      );
+      await reveal(tester);
+      expect(find.text('bae'), findsNothing);
+      expect(find.text('[pɛ]'), findsNothing);
+    });
+  });
+
   group('Manual EN ➔ KO search dialog', () {
     Future<(AppProvider, VocabItem, List<Object?>)> setup(
       WidgetTester tester,

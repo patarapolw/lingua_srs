@@ -23,6 +23,8 @@ class StorageService {
   static const String _keyVocabMergeHistory = 'lingua_srs_vocab_merge_history';
   static const String _keyAiDiscussions = 'lingua_srs_ai_discussions';
   static const String _keyAutoplay = 'lingua_srs_autoplay';
+  static const String _keyShowRomanization = 'lingua_srs_show_romanization';
+  static const String _keyShowIpa = 'lingua_srs_show_ipa';
   static const String _keyLessonHierarchyOrder =
       'lingua_srs_lesson_hierarchy_order';
   static const String _keyLessonFolderExpansion =
@@ -151,6 +153,26 @@ class StorageService {
   static Future<void> saveAutoplay(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyAutoplay, value);
+  }
+
+  static Future<bool> loadShowRomanization() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyShowRomanization) ?? false;
+  }
+
+  static Future<void> saveShowRomanization(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyShowRomanization, value);
+  }
+
+  static Future<bool> loadShowIpa() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyShowIpa) ?? false;
+  }
+
+  static Future<void> saveShowIpa(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyShowIpa, value);
   }
 
   static Future<Map<String, int>> loadLessonHierarchyOrder() async {

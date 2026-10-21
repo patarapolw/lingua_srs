@@ -57,6 +57,8 @@ class AppProvider extends ChangeNotifier {
   List<Lesson> _lessons = [];
   List<Sentence> _sentences = [];
   bool _autoplayAudio = true;
+  bool _showRomanization = false;
+  bool _showIpa = false;
   String _deepSeekApiKey = '';
   bool _deepSeekKeyRejected = false;
   List<VocabMergeRecord> _mergeHistory = [];
@@ -78,6 +80,8 @@ class AppProvider extends ChangeNotifier {
   List<Lesson> get lessons => _lessons;
   List<Sentence> get sentences => _sentences;
   bool get autoplayAudio => _autoplayAudio;
+  bool get showRomanization => _showRomanization;
+  bool get showIpa => _showIpa;
   String get deepSeekApiKey => _deepSeekApiKey;
 
   /// False without a key, and after DeepSeek rejected it (until it changes).
@@ -143,6 +147,8 @@ class AppProvider extends ChangeNotifier {
       StorageService.loadReviewTimestamps(),
       StorageService.loadLessonHierarchyOrder(),
       StorageService.loadLessonFolderExpansion(),
+      StorageService.loadShowRomanization(),
+      StorageService.loadShowIpa(),
     ).wait;
     _autoplayAudio = results.$1;
     _deepSeekApiKey = results.$2;
@@ -152,6 +158,8 @@ class AppProvider extends ChangeNotifier {
     _reviewTimestamps24h = results.$5;
     _lessonHierarchyOrder = results.$6;
     _lessonFolderExpansion = results.$7;
+    _showRomanization = results.$8;
+    _showIpa = results.$9;
     _lessons = await StorageService.loadLessons();
     // Loaded after lessons because a fresh debug install seeds sentences there.
     _sentences = await StorageService.loadSentences();
@@ -222,6 +230,18 @@ class AppProvider extends ChangeNotifier {
   Future<void> toggleAutoplay() async {
     _autoplayAudio = !_autoplayAudio;
     await StorageService.saveAutoplay(_autoplayAudio);
+    notifyListeners();
+  }
+
+  Future<void> toggleRomanization() async {
+    _showRomanization = !_showRomanization;
+    await StorageService.saveShowRomanization(_showRomanization);
+    notifyListeners();
+  }
+
+  Future<void> toggleIpa() async {
+    _showIpa = !_showIpa;
+    await StorageService.saveShowIpa(_showIpa);
     notifyListeners();
   }
 

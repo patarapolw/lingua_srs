@@ -13,6 +13,7 @@ import '../services/srs_service.dart';
 import '../widgets/audio_button.dart';
 import '../widgets/icon_switch.dart';
 import '../widgets/markdown_content.dart';
+import '../widgets/pronunciation_line.dart';
 import 'ai_discussion_dialog.dart';
 import 'vocab_edit_dialog.dart';
 
@@ -1322,6 +1323,11 @@ class _StudyViewState extends State<StudyView> {
                                             ),
                                           ],
                                         ),
+                                        PronunciationLine(
+                                          text: item.vocab.targetWord,
+                                          languageCode:
+                                              item.lesson.targetLanguage,
+                                        ),
                                         const SizedBox(height: 6),
                                         Text(
                                           item.vocab.translation,
@@ -1379,6 +1385,12 @@ class _StudyViewState extends State<StudyView> {
                                                 compact: true,
                                               ),
                                             ],
+                                          ),
+                                          PronunciationLine(
+                                            text: item.sentence!.targetText,
+                                            languageCode:
+                                                item.lesson.targetLanguage,
+                                            centered: false,
                                           ),
                                           const SizedBox(height: 6),
                                           SpoilerBlock(
