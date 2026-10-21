@@ -514,6 +514,403 @@ void main() {
     });
   });
 
+  group('Study card pronunciation', () {
+    const withSentence = '''
+---
+vocabulary:
+  nouns:
+    - ko: 배
+      en: pear
+      examples:
+        - ko: 저는 **배**를 먹었어요
+          en: I ate a **pear**
+---
+# Pron
+''';
+    const sentenceRomanization = 'jeoneun baereul meogeosseoyo';
+    const sentenceIpa = '[t\u0361ɕʌ.nɯn pɛ.ɾɯl mʌ.ɡʌ.s\u0348ʌ.jo]';
+
+    Map<String, Object> options(List<String> enabled) => {
+      'lingua_srs_pronunciation': enabled,
+    };
+    final vocabOnly = options(['vocabulary_romanization', 'vocabulary_ipa']);
+    final sentenceOnly = options(['sentence_romanization', 'sentence_ipa']);
+    final everything = options([
+      'vocabulary_romanization',
+      'vocabulary_ipa',
+      'sentence_romanization',
+      'sentence_ipa',
+    ]);
+
+    Future<AppProvider> openStudy(
+      WidgetTester tester, {
+      required CardDirection direction,
+      Map<String, Object> prefs = const {},
+      String targetLanguage = 'ko',
+      String? yaml,
+    }) async {
+      final provider = await loadedProvider(tester, prefs);
+      final lesson = (await tester.runAsync(
+        () => provider.importYaml(
+          yaml ?? vocabYaml('Pron', 'nouns', '배', 'pear'),
+        ),
+      ))!;
+      lesson.targetLanguage = targetLanguage;
+      final vocab = only(lesson);
+      vocab.cardTargetToNative.isEnabled =
+          direction == CardDirection.targetToNative;
+      vocab.cardNativeToTarget.isEnabled =
+          direction == CardDirection.nativeToTarget;
+      await pumpWith(tester, provider, StudyView(lessonId: lesson.id));
+      return provider;
+    }
+
+    Future<void> reveal(WidgetTester tester) async {
+      await tester.tap(find.textContaining('Show Answer'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('nothing is shown by default', (tester) async {
+      await openStudy(
+        tester,
+        direction: CardDirection.targetToNative,
+        yaml: withSentence,
+      );
+      await reveal(tester);
+      expect(find.text('bae'), findsNothing);
+      expect(find.text('[pɛ]'), findsNothing);
+      expect(find.text(sentenceRomanization), findsNothing);
+    });
+
+    for (final direction in CardDirection.values) {
+      testWidgets('front never shows it ($direction)', (tester) async {
+        await openStudy(
+          tester,
+          direction: direction,
+          prefs: everything,
+          yaml: withSentence,
+        );
+        expect(find.text('bae'), findsNothing);
+        expect(find.text('[pɛ]'), findsNothing);
+        expect(find.text(sentenceRomanization), findsNothing);
+      });
+
+      testWidgets('back shows the vocabulary lines ($direction)', (
+        tester,
+      ) async {
+        await openStudy(tester, direction: direction, prefs: vocabOnly);
+        await reveal(tester);
+        expect(find.text('bae'), findsOneWidget);
+        expect(find.text('[pɛ]'), findsOneWidget);
+      });
+    }
+
+    testWidgets('sentence lines stay off while vocabulary lines are on', (
+      tester,
+    ) async {
+      await openStudy(
+        tester,
+        direction: CardDirection.targetToNative,
+        prefs: vocabOnly,
+        yaml: withSentence,
+      );
+      await reveal(tester);
+      expect(find.text('bae'), findsOneWidget);
+      expect(find.text(sentenceRomanization), findsNothing);
+      expect(find.text(sentenceIpa), findsNothing);
+    });
+
+    testWidgets('sentence lines show without the vocabulary lines', (
+      tester,
+    ) async {
+      await openStudy(
+        tester,
+        direction: CardDirection.targetToNative,
+        prefs: sentenceOnly,
+        yaml: withSentence,
+      );
+      await reveal(tester);
+      expect(find.text('bae'), findsNothing);
+      expect(find.text('[pɛ]'), findsNothing);
+      expect(find.text(sentenceRomanization), findsOneWidget);
+      expect(find.text(sentenceIpa), findsOneWidget);
+    });
+
+    Future<void> closeMenu(WidgetTester tester) async {
+      await tester.tapAt(Offset.zero); // tap the modal barrier
+      await tester.pumpAndSettle();
+    }
+
+    Finder menuItem(String value) => find.byWidgetPredicate(
+      (w) => w is PopupMenuItem<String> && w.value == value,
+    );
+
+    bool itemEnabled(WidgetTester tester, String value) =>
+        tester.widget<PopupMenuItem<String>>(menuItem(value)).enabled;
+
+    List<ToggleButtons> toggleGroups(WidgetTester tester) =>
+        tester.widgetList<ToggleButtons>(find.byType(ToggleButtons)).toList();
+
+    Future<void> openMore(WidgetTester tester) async {
+      await tester.tap(find.byTooltip('More'));
+      await tester.pumpAndSettle();
+    }
+
+    Finder toggle(String target, String kind) =>
+        find.byKey(ValueKey('pronunciation-$target-$kind'));
+
+    Future<void> tapToggle(
+      WidgetTester tester,
+      String target,
+      String kind,
+    ) async {
+      await tester.tap(toggle(target, kind));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('toggles are not on the card, only inside the More menu', (
+      tester,
+    ) async {
+      await openStudy(
+        tester,
+        direction: CardDirection.targetToNative,
+        yaml: withSentence,
+      );
+      expect(toggle('vocabulary', 'romanization'), findsNothing); // front
+      await reveal(tester);
+      expect(toggle('vocabulary', 'romanization'), findsNothing); // back
+
+      await openMore(tester);
+      expect(find.text('Pronunciation cue'), findsOneWidget);
+      for (final target in ['vocabulary', 'sentence']) {
+        expect(toggle(target, 'romanization'), findsOneWidget);
+        expect(toggle(target, 'ipa'), findsOneWidget);
+      }
+      expect(find.text('RR'), findsNWidgets(2));
+      expect(find.text('IPA'), findsNWidgets(2));
+    });
+
+    for (final width in [1200.0, 360.0]) {
+      testWidgets(
+        'toggled from the More menu at ${width.toInt()}dp, live on the same card',
+        (tester) async {
+          final provider = await openStudy(
+            tester,
+            direction: CardDirection.targetToNative,
+            yaml: withSentence,
+          );
+          tester.view.physicalSize = Size(width, 2400);
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull); // app bar fits, no overflow
+
+          await reveal(tester);
+          expect(find.text('bae'), findsNothing);
+
+          await openMore(tester);
+          await tapToggle(tester, 'vocabulary', 'romanization');
+          expect(
+            provider.showRomanization(PronunciationTarget.vocabulary),
+            isTrue,
+          );
+          expect(find.text('bae'), findsOneWidget); // card updates behind menu
+          expect(find.text(sentenceRomanization), findsNothing);
+          expect(toggle('sentence', 'ipa'), findsOneWidget); // menu stays open
+
+          await tapToggle(tester, 'sentence', 'romanization');
+          expect(find.text(sentenceRomanization), findsOneWidget);
+
+          await tapToggle(tester, 'vocabulary', 'romanization'); // off again
+          expect(find.text('bae'), findsNothing);
+          expect(find.text(sentenceRomanization), findsOneWidget);
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+
+    testWidgets('no pronunciation toggles for a non-Korean lesson', (
+      tester,
+    ) async {
+      await openStudy(
+        tester,
+        direction: CardDirection.targetToNative,
+        targetLanguage: 'es',
+      );
+      await openMore(tester);
+
+      expect(toggle('vocabulary', 'romanization'), findsNothing);
+      expect(find.text('Pronunciation cue'), findsNothing);
+    });
+
+    testWidgets('toggles are disabled until the back is shown', (tester) async {
+      final provider = await openStudy(
+        tester,
+        direction: CardDirection.targetToNative,
+        yaml: withSentence,
+      );
+      await openMore(tester); // front side
+      expect(find.byType(ToggleButtons), findsNWidgets(2));
+      expect(toggleGroups(tester).every((g) => g.onPressed == null), isTrue);
+
+      await tapToggle(tester, 'vocabulary', 'romanization');
+      await tapToggle(tester, 'sentence', 'ipa');
+      expect(
+        provider.showRomanization(PronunciationTarget.vocabulary),
+        isFalse,
+      );
+      expect(provider.showIpa(PronunciationTarget.sentence), isFalse);
+    });
+
+    testWidgets(
+      'toggles enable on reveal and disable again after flipping back',
+      (tester) async {
+        await openStudy(tester, direction: CardDirection.targetToNative);
+
+        Future<bool> togglesEnabled() async {
+          await openMore(tester);
+          final enabled = toggleGroups(tester)
+              .every((g) => g.onPressed != null);
+          await closeMenu(tester);
+          return enabled;
+        }
+
+        expect(await togglesEnabled(), isFalse);
+        await reveal(tester);
+        expect(await togglesEnabled(), isTrue);
+        await tester.tap(find.textContaining('Flip back to Front'));
+        await tester.pumpAndSettle();
+        expect(await togglesEnabled(), isFalse);
+      },
+    );
+
+    testWidgets('Edit and Ask AI are disabled until the back is shown', (
+      tester,
+    ) async {
+      await openStudy(tester, direction: CardDirection.targetToNative);
+      IconButton editButton() => tester.widget<IconButton>(
+        find.widgetWithIcon(IconButton, Icons.edit_outlined),
+      );
+
+      expect(editButton().onPressed, isNull);
+      await openMore(tester);
+      expect(itemEnabled(tester, 'ai'), isFalse);
+      await closeMenu(tester);
+
+      await reveal(tester);
+      expect(editButton().onPressed, isNotNull);
+      await openMore(tester);
+      expect(itemEnabled(tester, 'ai'), isTrue);
+    });
+
+    testWidgets(
+      'wide app bar (700dp): previous/next, undo, sound, edit, More',
+      (tester) async {
+        await openStudy(tester, direction: CardDirection.targetToNative);
+        tester.view.physicalSize = const Size(700, 2400); // boundary is wide
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+
+        for (final icon in [
+          Icons.chevron_left,
+          Icons.chevron_right,
+          Icons.undo,
+          Icons.edit_outlined,
+        ]) {
+          expect(find.byIcon(icon), findsOneWidget, reason: '$icon');
+        }
+        expect(find.byTooltip('Autoplay audio'), findsOneWidget);
+        expect(
+          tester
+              .widget<IconButton>(find.widgetWithIcon(IconButton, Icons.undo))
+              .onPressed,
+          isNull,
+          reason: 'nothing to undo yet',
+        );
+
+        await openMore(tester);
+        expect(menuItem('ai'), findsOneWidget);
+        for (final value in ['undo', 'autoplay', 'edit']) {
+          expect(menuItem(value), findsNothing, reason: value);
+        }
+        expect(find.text('Pronunciation cue'), findsOneWidget);
+      },
+    );
+
+    testWidgets('narrow app bar (699dp): previous/next and More only', (
+      tester,
+    ) async {
+      await openStudy(tester, direction: CardDirection.targetToNative);
+      tester.view.physicalSize = const Size(699, 2400);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      expect(find.byIcon(Icons.chevron_left), findsOneWidget);
+      expect(find.byIcon(Icons.chevron_right), findsOneWidget);
+      expect(find.byIcon(Icons.undo), findsNothing);
+      expect(find.byIcon(Icons.edit_outlined), findsNothing);
+      expect(find.byTooltip('Autoplay audio'), findsNothing);
+
+      await openMore(tester);
+      for (final value in ['undo', 'autoplay', 'edit', 'ai']) {
+        expect(menuItem(value), findsOneWidget, reason: value);
+      }
+      expect(itemEnabled(tester, 'undo'), isFalse, reason: 'nothing to undo');
+    });
+
+    testWidgets('autoplay toggle button works at 1200dp', (tester) async {
+      final provider = await openStudy(
+        tester,
+        direction: CardDirection.targetToNative,
+      );
+      tester.view.physicalSize = Size(1200, 2400);
+      await tester.pumpAndSettle();
+      expect(provider.autoplayAudio, isTrue);
+      await tester.tap(find.byTooltip('Autoplay audio'));
+      await tester.pumpAndSettle();
+      expect(provider.autoplayAudio, isFalse);
+    });
+
+    testWidgets('autoplay at 300dp lives in the More menu and toggles', (
+      tester,
+    ) async {
+      final provider = await openStudy(
+        tester,
+        direction: CardDirection.targetToNative,
+      );
+      tester.view.physicalSize = const Size(300, 2400);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.byTooltip('Autoplay audio'), findsNothing);
+      expect(provider.autoplayAudio, isTrue);
+
+      await openMore(tester);
+      expect(find.text('Turn autoplay off'), findsOneWidget);
+      await tester.tap(menuItem('autoplay'));
+      await tester.pumpAndSettle();
+      expect(provider.autoplayAudio, isFalse);
+
+      await openMore(tester);
+      expect(find.text('Turn autoplay on'), findsOneWidget);
+    });
+
+    testWidgets('nothing for a non-Korean lesson', (tester) async {
+      await openStudy(
+        tester,
+        direction: CardDirection.targetToNative,
+        prefs: everything,
+        targetLanguage: 'es',
+        yaml: withSentence,
+      );
+      await reveal(tester);
+      expect(find.text('bae'), findsNothing);
+      expect(find.text('[pɛ]'), findsNothing);
+      expect(find.text(sentenceRomanization), findsNothing);
+      expect(
+        find.byKey(const ValueKey('pronunciation-vocabulary-ipa')),
+        findsNothing,
+      );
+    });
+  });
+
   group('Manual EN ➔ KO search dialog', () {
     Future<(AppProvider, VocabItem, List<Object?>)> setup(
       WidgetTester tester,

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:provider/provider.dart';
 
 import '../models/srs_card.dart';
@@ -11,8 +12,9 @@ import '../providers/app_provider.dart';
 import '../services/audio_service.dart';
 import '../services/srs_service.dart';
 import '../widgets/audio_button.dart';
-import '../widgets/icon_switch.dart';
 import '../widgets/markdown_content.dart';
+import '../widgets/pronunciation_line.dart';
+import '../widgets/pronunciation_toggle.dart';
 import 'ai_discussion_dialog.dart';
 import 'vocab_edit_dialog.dart';
 
@@ -671,7 +673,8 @@ class _StudyViewState extends State<StudyView> {
         }
       }
     } else if (event.logicalKey == LogicalKeyboardKey.keyE &&
-        _currentIndex < _queue.length) {
+        _currentIndex < _queue.length &&
+        _isAnswerRevealed) {
       _openEditCurrentCard();
     }
   }
@@ -836,6 +839,24 @@ class _StudyViewState extends State<StudyView> {
     final canGoForward = _currentIndex < _answeredCount;
     final canUndo = _history.isNotEmpty;
 
+    const overflowWidthCutoff = 700;
+
+    PopupMenuItem<String> moreItem(
+      String value,
+      IconData icon,
+      String title, {
+      bool enabled = true,
+    }) => PopupMenuItem<String>(
+      value: value,
+      enabled: enabled,
+      child: ListTile(
+        dense: true,
+        contentPadding: EdgeInsets.zero,
+        leading: Icon(icon),
+        title: Text(title),
+      ),
+    );
+
     return KeyboardListener(
       focusNode: _keyboardFocusNode,
       autofocus: true,
@@ -854,7 +875,8 @@ class _StudyViewState extends State<StudyView> {
                         'Card $currentNumber of $total',
                         style: Theme.of(context).textTheme.labelSmall,
                       ),
-                    ] else if (MediaQuery.sizeOf(context).width < 700)
+                    ] else if (MediaQuery.sizeOf(context).width <
+                        overflowWidthCutoff)
                       Text(
                         '$currentNumber / $total',
                         maxLines: 1,
@@ -924,7 +946,7 @@ class _StudyViewState extends State<StudyView> {
                   : 'Cannot go forward beyond unanswered cards',
               onPressed: canGoForward ? _navigateForward : null,
             ),
-            if (MediaQuery.sizeOf(context).width >= 700)
+            if (MediaQuery.sizeOf(context).width >= overflowWidthCutoff) ...[
               IconButton(
                 icon: const Icon(Icons.undo),
                 tooltip: canUndo
@@ -934,80 +956,69 @@ class _StudyViewState extends State<StudyView> {
                     : 'Nothing to undo',
                 onPressed: canUndo ? _undo : null,
               ),
-            if (MediaQuery.sizeOf(context).width < 700)
-              PopupMenuButton<String>(
-                tooltip: 'More',
-                onSelected: (value) {
-                  switch (value) {
-                    case 'undo':
-                      _undo();
-                    case 'autoplay':
-                      provider.toggleAutoplay();
-                    case 'edit':
-                      _openEditCurrentCard();
-                    case 'ai':
-                      _openAiDiscussion(item);
-                  }
-                },
-                itemBuilder: (context) => [
-                  PopupMenuItem(
-                    value: 'undo',
-                    enabled: canUndo,
-                    child: const ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(Icons.undo),
-                      title: Text('Undo last rating'),
-                    ),
-                  ),
-                  CheckedPopupMenuItem(
-                    value: 'autoplay',
-                    checked: provider.autoplayAudio,
-                    child: const Text('Autoplay audio'),
-                  ),
-                  const PopupMenuItem(
-                    value: 'edit',
-                    child: ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(Icons.edit_outlined),
-                      title: Text('Edit card'),
-                    ),
-                  ),
-                  const PopupMenuItem(
-                    value: 'ai',
-                    child: ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(Icons.forum_outlined),
-                      title: Text('Ask AI'),
-                    ),
-                  ),
-                ],
-              )
-            else ...[
-              const VerticalDivider(width: 20, indent: 12, endIndent: 12),
-              Tooltip(
-                message: 'Autoplay audio',
-                child: IconSwitch(
-                  leading: Icons.volume_off,
-                  trailing: Icons.volume_up,
-                  value: provider.autoplayAudio,
-                  onChanged: (_) => provider.toggleAutoplay(),
-                ),
+              IconButton(
+                tooltip: 'Autoplay audio',
+                isSelected: provider.autoplayAudio,
+                icon: const Icon(Icons.volume_off),
+                selectedIcon: const Icon(Icons.volume_up),
+                onPressed: provider.toggleAutoplay,
               ),
-              const SizedBox(width: 6),
               IconButton(
                 icon: const Icon(Icons.edit_outlined),
-                tooltip: _showKeyHints ? 'Edit Card (E)' : 'Edit Card',
-                onPressed: _openEditCurrentCard,
-              ),
-              IconButton(
-                icon: const Icon(Icons.forum_outlined),
-                tooltip: 'Ask AI about this vocabulary and sentence',
-                onPressed: () => _openAiDiscussion(item),
+                tooltip: _showKeyHints ? 'Edit card (E)' : 'Edit card',
+                onPressed: _isAnswerRevealed ? _openEditCurrentCard : null,
               ),
             ],
+            PopupMenuButton<String>(
+              tooltip: 'More',
+              onSelected: (value) {
+                switch (value) {
+                  case 'undo':
+                    _undo();
+                  case 'autoplay':
+                    provider.toggleAutoplay();
+                  case 'edit':
+                    _openEditCurrentCard();
+                  case 'ai':
+                    _openAiDiscussion(item);
+                }
+              },
+              itemBuilder: (context) => [
+                if (MediaQuery.sizeOf(context).width < overflowWidthCutoff) ...[
+                  moreItem(
+                    'undo',
+                    Icons.undo,
+                    _showKeyHints
+                        ? 'Undo last rating (Z / Ctrl+Z)'
+                        : 'Undo last rating',
+                    enabled: canUndo,
+                  ),
+                  moreItem(
+                    'autoplay',
+                    provider.autoplayAudio ? Icons.volume_up : Icons.volume_off,
+                    provider.autoplayAudio
+                        ? 'Turn autoplay off'
+                        : 'Turn autoplay on',
+                  ),
+                  moreItem(
+                    'edit',
+                    Icons.edit_outlined,
+                    _showKeyHints ? 'Edit card (E)' : 'Edit card',
+                    enabled: _isAnswerRevealed,
+                  ),
+                ],
+                moreItem(
+                  'ai',
+                  Icons.forum_outlined,
+                  'Ask AI',
+                  enabled: _isAnswerRevealed,
+                ),
+                if (item.lesson.targetLanguage == 'ko') ...[
+                  const PopupMenuDivider(),
+                  PronunciationToggleMenuEntry(enabled: _isAnswerRevealed),
+                ],
+              ],
+            ),
             const SizedBox(width: 8),
           ],
           bottom: PreferredSize(
@@ -1322,6 +1333,13 @@ class _StudyViewState extends State<StudyView> {
                                             ),
                                           ],
                                         ),
+                                        PronunciationLine(
+                                          text: item.vocab.targetWord,
+                                          languageCode:
+                                              item.lesson.targetLanguage,
+                                          target:
+                                              PronunciationTarget.vocabulary,
+                                        ),
                                         const SizedBox(height: 6),
                                         Text(
                                           item.vocab.translation,
@@ -1379,6 +1397,14 @@ class _StudyViewState extends State<StudyView> {
                                                 compact: true,
                                               ),
                                             ],
+                                          ),
+                                          PronunciationLine(
+                                            text: item.sentence!.targetText,
+                                            languageCode:
+                                                item.lesson.targetLanguage,
+                                            centered: false,
+                                            target:
+                                                PronunciationTarget.sentence,
                                           ),
                                           const SizedBox(height: 6),
                                           SpoilerBlock(

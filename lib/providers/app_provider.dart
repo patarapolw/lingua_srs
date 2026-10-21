@@ -53,10 +53,23 @@ class StudyCardItem {
   bool get isTargetToNative => card.direction == CardDirection.targetToNative;
 }
 
+/// Where a pronunciation line can be shown. Each target has its own
+/// romanization and IPA switches (sentences are usually left off).
+enum PronunciationTarget {
+  vocabulary('Vocabulary'),
+  sentence('Sentence');
+
+  const PronunciationTarget(this.label);
+  final String label;
+}
+
 class AppProvider extends ChangeNotifier {
   List<Lesson> _lessons = [];
   List<Sentence> _sentences = [];
   bool _autoplayAudio = true;
+
+  /// Enabled options as `<target>_romanization` / `<target>_ipa`.
+  Set<String> _pronunciationOptions = {};
   String _deepSeekApiKey = '';
   bool _deepSeekKeyRejected = false;
   List<VocabMergeRecord> _mergeHistory = [];
@@ -78,6 +91,10 @@ class AppProvider extends ChangeNotifier {
   List<Lesson> get lessons => _lessons;
   List<Sentence> get sentences => _sentences;
   bool get autoplayAudio => _autoplayAudio;
+  bool showRomanization(PronunciationTarget target) =>
+      _pronunciationOptions.contains('${target.name}_romanization');
+  bool showIpa(PronunciationTarget target) =>
+      _pronunciationOptions.contains('${target.name}_ipa');
   String get deepSeekApiKey => _deepSeekApiKey;
 
   /// False without a key, and after DeepSeek rejected it (until it changes).
@@ -143,6 +160,7 @@ class AppProvider extends ChangeNotifier {
       StorageService.loadReviewTimestamps(),
       StorageService.loadLessonHierarchyOrder(),
       StorageService.loadLessonFolderExpansion(),
+      StorageService.loadPronunciationOptions(),
     ).wait;
     _autoplayAudio = results.$1;
     _deepSeekApiKey = results.$2;
@@ -152,6 +170,7 @@ class AppProvider extends ChangeNotifier {
     _reviewTimestamps24h = results.$5;
     _lessonHierarchyOrder = results.$6;
     _lessonFolderExpansion = results.$7;
+    _pronunciationOptions = results.$8;
     _lessons = await StorageService.loadLessons();
     // Loaded after lessons because a fresh debug install seeds sentences there.
     _sentences = await StorageService.loadSentences();
@@ -222,6 +241,20 @@ class AppProvider extends ChangeNotifier {
   Future<void> toggleAutoplay() async {
     _autoplayAudio = !_autoplayAudio;
     await StorageService.saveAutoplay(_autoplayAudio);
+    notifyListeners();
+  }
+
+  Future<void> toggleRomanization(PronunciationTarget target) =>
+      _togglePronunciation('${target.name}_romanization');
+
+  Future<void> toggleIpa(PronunciationTarget target) =>
+      _togglePronunciation('${target.name}_ipa');
+
+  Future<void> _togglePronunciation(String option) async {
+    if (!_pronunciationOptions.remove(option)) {
+      _pronunciationOptions.add(option);
+    }
+    await StorageService.savePronunciationOptions(_pronunciationOptions);
     notifyListeners();
   }
 

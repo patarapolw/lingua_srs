@@ -100,17 +100,6 @@ class _SettingsDialogState extends State<SettingsDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  const Expanded(child: Text('Autoplay audio')),
-                  IconSwitch(
-                    leading: Icons.volume_off,
-                    trailing: Icons.volume_up,
-                    value: provider.autoplayAudio,
-                    onChanged: (_) => provider.toggleAutoplay(),
-                  ),
-                ],
-              ),
               if (widget.onToggleTheme != null)
                 Row(
                   children: [
@@ -126,6 +115,17 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     ),
                   ],
                 ),
+              Row(
+                children: [
+                  const Expanded(child: Text('Autoplay audio')),
+                  IconSwitch(
+                    leading: Icons.volume_off,
+                    trailing: Icons.volume_up,
+                    value: provider.autoplayAudio,
+                    onChanged: (_) => provider.toggleAutoplay(),
+                  ),
+                ],
+              ),
               const Divider(),
               const SizedBox(height: 8),
               Text('Reviews', style: theme.textTheme.titleSmall),

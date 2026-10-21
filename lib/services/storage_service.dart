@@ -23,6 +23,7 @@ class StorageService {
   static const String _keyVocabMergeHistory = 'lingua_srs_vocab_merge_history';
   static const String _keyAiDiscussions = 'lingua_srs_ai_discussions';
   static const String _keyAutoplay = 'lingua_srs_autoplay';
+  static const String _keyPronunciation = 'lingua_srs_pronunciation';
   static const String _keyLessonHierarchyOrder =
       'lingua_srs_lesson_hierarchy_order';
   static const String _keyLessonFolderExpansion =
@@ -151,6 +152,16 @@ class StorageService {
   static Future<void> saveAutoplay(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyAutoplay, value);
+  }
+
+  static Future<Set<String>> loadPronunciationOptions() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getStringList(_keyPronunciation) ?? const <String>[]).toSet();
+  }
+
+  static Future<void> savePronunciationOptions(Set<String> options) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_keyPronunciation, options.toList()..sort());
   }
 
   static Future<Map<String, int>> loadLessonHierarchyOrder() async {
