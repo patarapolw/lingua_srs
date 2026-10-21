@@ -662,7 +662,7 @@ vocabulary:
       expect(find.text(sentenceIpa), findsOneWidget);
     });
 
-    testWidgets('toggled from the review toolbar, live on the same card', (
+    testWidgets('toggled from the strip, live on the same card', (
       tester,
     ) async {
       final provider = await openStudy(
@@ -673,42 +673,50 @@ vocabulary:
       await reveal(tester);
       expect(find.text('bae'), findsNothing);
 
-      Future<void> choose(String label) async {
-        await tester.tap(find.byTooltip('Romanization / IPA'));
-        await tester.pumpAndSettle();
-        await tester.tap(find.text(label));
+      Future<void> tapToggle(String target, String kind) async {
+        await tester.tap(find.byKey(ValueKey('pronunciation-$target-$kind')));
         await tester.pumpAndSettle();
       }
 
-      await choose('Vocabulary romanization');
+      await tapToggle('vocabulary', 'romanization');
       expect(provider.showRomanization(PronunciationTarget.vocabulary), isTrue);
       expect(find.text('bae'), findsOneWidget);
       expect(find.text(sentenceRomanization), findsNothing);
 
-      await choose('Sentence romanization');
+      await tapToggle('sentence', 'romanization');
       expect(find.text(sentenceRomanization), findsOneWidget);
-      expect(find.text('bae'), findsOneWidget);
 
-      await choose('Vocabulary romanization'); // and back off
+      await tapToggle('vocabulary', 'romanization'); // and back off
       expect(find.text('bae'), findsNothing);
       expect(find.text(sentenceRomanization), findsOneWidget);
     });
 
-    testWidgets('narrow screens toggle from the More menu', (tester) async {
+    testWidgets('strip fits and works on a narrow phone', (tester) async {
       final provider = await openStudy(
         tester,
         direction: CardDirection.targetToNative,
       );
-      tester.view.physicalSize = const Size(500, 2400);
+      tester.view.physicalSize = const Size(360, 800);
       await tester.pumpAndSettle();
-      expect(find.byTooltip('Romanization / IPA'), findsNothing);
+      expect(tester.takeException(), isNull); // no RenderFlex overflow
 
-      await tester.tap(find.byTooltip('More'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Sentence IPA'));
+      await tester.tap(
+        find.byKey(const ValueKey('pronunciation-sentence-ipa')),
+      );
       await tester.pumpAndSettle();
       expect(provider.showIpa(PronunciationTarget.sentence), isTrue);
       expect(provider.showIpa(PronunciationTarget.vocabulary), isFalse);
+    });
+
+    testWidgets('autoplay is a toggle button in the app bar', (tester) async {
+      final provider = await openStudy(
+        tester,
+        direction: CardDirection.targetToNative,
+      );
+      expect(provider.autoplayAudio, isTrue);
+      await tester.tap(find.byTooltip('Autoplay audio'));
+      await tester.pumpAndSettle();
+      expect(provider.autoplayAudio, isFalse);
     });
 
     testWidgets('nothing for a non-Korean lesson', (tester) async {
@@ -723,6 +731,10 @@ vocabulary:
       expect(find.text('bae'), findsNothing);
       expect(find.text('[pɛ]'), findsNothing);
       expect(find.text(sentenceRomanization), findsNothing);
+      expect(
+        find.byKey(const ValueKey('pronunciation-vocabulary-ipa')),
+        findsNothing,
+      );
     });
   });
 

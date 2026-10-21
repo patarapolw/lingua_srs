@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:lingua_srs/widgets/pronunciation_menu.dart';
+
 import 'package:provider/provider.dart';
 
 import '../models/srs_card.dart';
@@ -12,9 +12,9 @@ import '../providers/app_provider.dart';
 import '../services/audio_service.dart';
 import '../services/srs_service.dart';
 import '../widgets/audio_button.dart';
-import '../widgets/icon_switch.dart';
 import '../widgets/markdown_content.dart';
 import '../widgets/pronunciation_line.dart';
+import '../widgets/pronunciation_toggle.dart';
 import 'ai_discussion_dialog.dart';
 import 'vocab_edit_dialog.dart';
 
@@ -949,8 +949,6 @@ class _StudyViewState extends State<StudyView> {
                       _openEditCurrentCard();
                     case 'ai':
                       _openAiDiscussion(item);
-                    default:
-                      handlePronunciationSelection(provider, value);
                   }
                 },
                 itemBuilder: (context) => [
@@ -987,23 +985,18 @@ class _StudyViewState extends State<StudyView> {
                       title: Text('Ask AI'),
                     ),
                   ),
-                  const PopupMenuDivider(),
-                  ...pronunciationMenuEntries(provider),
                 ],
               )
             else ...[
               const VerticalDivider(width: 20, indent: 12, endIndent: 12),
-              Tooltip(
-                message: 'Autoplay audio',
-                child: IconSwitch(
-                  leading: Icons.volume_off,
-                  trailing: Icons.volume_up,
-                  value: provider.autoplayAudio,
-                  onChanged: (_) => provider.toggleAutoplay(),
-                ),
+              IconButton.filledTonal(
+                tooltip: 'Autoplay audio',
+                isSelected: provider.autoplayAudio,
+                icon: const Icon(Icons.volume_off),
+                selectedIcon: const Icon(Icons.volume_up),
+                onPressed: provider.toggleAutoplay,
               ),
               const SizedBox(width: 6),
-              const PronunciationMenuButton(),
               IconButton(
                 icon: const Icon(Icons.edit_outlined),
                 tooltip: _showKeyHints ? 'Edit Card (E)' : 'Edit Card',
@@ -1066,6 +1059,8 @@ class _StudyViewState extends State<StudyView> {
         body: SafeArea(
           child: Column(
             children: [
+              if (item.lesson.targetLanguage == 'ko')
+                const PronunciationToggles(),
               // Flashcard Canvas
               Expanded(
                 child: Center(
