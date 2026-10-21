@@ -12,11 +12,13 @@ class PronunciationLine extends StatelessWidget {
     required this.text,
     required this.languageCode,
     this.centered = true,
+    required this.target,
   });
 
   final String text;
   final String languageCode;
   final bool centered;
+  final PronunciationTarget target;
 
   @override
   Widget build(BuildContext context) {
@@ -26,8 +28,10 @@ class PronunciationLine extends StatelessWidget {
     }
     final provider = context.watch<AppProvider>();
     final lines = <String>[
-      if (provider.showRomanization) KoreanPronunciationService.romanize(text),
-      if (provider.showIpa) '[${KoreanPronunciationService.toIpa(text)}]',
+      if (provider.showRomanization(target))
+        KoreanPronunciationService.romanize(text),
+      if (provider.showIpa(target))
+        '[${KoreanPronunciationService.toIpa(text)}]',
     ];
     if (lines.isEmpty) return const SizedBox.shrink();
 

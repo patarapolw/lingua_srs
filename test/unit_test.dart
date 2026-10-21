@@ -170,27 +170,53 @@ The full lesson text remains available to render.
       expect(provider.sentences, isEmpty);
     });
 
-    test('Pronunciation toggles default off and persist', () async {
-      SharedPreferences.setMockInitialValues({
-        'lingua_srs_windows_legacy_migration_complete': true,
-      });
-      final provider = AppProvider();
-      while (provider.isLoading) {
-        await Future<void>.delayed(Duration.zero);
-      }
-      expect(provider.showRomanization, isFalse);
-      expect(provider.showIpa, isFalse);
+    test(
+      'Pronunciation options default off, are per target, and persist',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'lingua_srs_windows_legacy_migration_complete': true,
+        });
+        final provider = AppProvider();
+        while (provider.isLoading) {
+          await Future<void>.delayed(Duration.zero);
+        }
+        for (final target in PronunciationTarget.values) {
+          expect(provider.showRomanization(target), isFalse);
+          expect(provider.showIpa(target), isFalse);
+        }
 
-      await provider.toggleRomanization();
-      await provider.toggleIpa();
+        await provider.toggleRomanization(PronunciationTarget.vocabulary);
+        await provider.toggleIpa(PronunciationTarget.sentence);
 
-      final reloaded = AppProvider();
-      while (reloaded.isLoading) {
-        await Future<void>.delayed(Duration.zero);
-      }
-      expect(reloaded.showRomanization, isTrue);
-      expect(reloaded.showIpa, isTrue);
-    });
+        // Targets are independent: the other two stay off.
+        expect(provider.showIpa(PronunciationTarget.vocabulary), isFalse);
+        expect(
+          provider.showRomanization(PronunciationTarget.sentence),
+          isFalse,
+        );
+
+        final reloaded = AppProvider();
+        while (reloaded.isLoading) {
+          await Future<void>.delayed(Duration.zero);
+        }
+        expect(
+          reloaded.showRomanization(PronunciationTarget.vocabulary),
+          isTrue,
+        );
+        expect(reloaded.showIpa(PronunciationTarget.sentence), isTrue);
+        expect(reloaded.showIpa(PronunciationTarget.vocabulary), isFalse);
+        expect(
+          reloaded.showRomanization(PronunciationTarget.sentence),
+          isFalse,
+        );
+
+        await reloaded.toggleRomanization(PronunciationTarget.vocabulary);
+        expect(
+          reloaded.showRomanization(PronunciationTarget.vocabulary),
+          isFalse,
+        );
+      },
+    );
 
     test('Persists full Markdown separately from lesson JSON', () async {
       SharedPreferences.setMockInitialValues({

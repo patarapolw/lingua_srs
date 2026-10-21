@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lingua_srs/widgets/pronunciation_menu.dart';
 import 'package:provider/provider.dart';
 
 import '../models/srs_card.dart';
@@ -948,6 +949,8 @@ class _StudyViewState extends State<StudyView> {
                       _openEditCurrentCard();
                     case 'ai':
                       _openAiDiscussion(item);
+                    default:
+                      handlePronunciationSelection(provider, value);
                   }
                 },
                 itemBuilder: (context) => [
@@ -975,7 +978,7 @@ class _StudyViewState extends State<StudyView> {
                       title: Text('Edit card'),
                     ),
                   ),
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'ai',
                     child: ListTile(
                       dense: true,
@@ -984,6 +987,8 @@ class _StudyViewState extends State<StudyView> {
                       title: Text('Ask AI'),
                     ),
                   ),
+                  const PopupMenuDivider(),
+                  ...pronunciationMenuEntries(provider),
                 ],
               )
             else ...[
@@ -998,6 +1003,7 @@ class _StudyViewState extends State<StudyView> {
                 ),
               ),
               const SizedBox(width: 6),
+              const PronunciationMenuButton(),
               IconButton(
                 icon: const Icon(Icons.edit_outlined),
                 tooltip: _showKeyHints ? 'Edit Card (E)' : 'Edit Card',
@@ -1327,6 +1333,8 @@ class _StudyViewState extends State<StudyView> {
                                           text: item.vocab.targetWord,
                                           languageCode:
                                               item.lesson.targetLanguage,
+                                          target:
+                                              PronunciationTarget.vocabulary,
                                         ),
                                         const SizedBox(height: 6),
                                         Text(
@@ -1391,6 +1399,8 @@ class _StudyViewState extends State<StudyView> {
                                             languageCode:
                                                 item.lesson.targetLanguage,
                                             centered: false,
+                                            target:
+                                                PronunciationTarget.sentence,
                                           ),
                                           const SizedBox(height: 6),
                                           SpoilerBlock(

@@ -23,8 +23,7 @@ class StorageService {
   static const String _keyVocabMergeHistory = 'lingua_srs_vocab_merge_history';
   static const String _keyAiDiscussions = 'lingua_srs_ai_discussions';
   static const String _keyAutoplay = 'lingua_srs_autoplay';
-  static const String _keyShowRomanization = 'lingua_srs_show_romanization';
-  static const String _keyShowIpa = 'lingua_srs_show_ipa';
+  static const String _keyPronunciation = 'lingua_srs_pronunciation';
   static const String _keyLessonHierarchyOrder =
       'lingua_srs_lesson_hierarchy_order';
   static const String _keyLessonFolderExpansion =
@@ -155,24 +154,14 @@ class StorageService {
     await prefs.setBool(_keyAutoplay, value);
   }
 
-  static Future<bool> loadShowRomanization() async {
+  static Future<Set<String>> loadPronunciationOptions() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_keyShowRomanization) ?? false;
+    return (prefs.getStringList(_keyPronunciation) ?? const <String>[]).toSet();
   }
 
-  static Future<void> saveShowRomanization(bool value) async {
+  static Future<void> savePronunciationOptions(Set<String> options) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_keyShowRomanization, value);
-  }
-
-  static Future<bool> loadShowIpa() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_keyShowIpa) ?? false;
-  }
-
-  static Future<void> saveShowIpa(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_keyShowIpa, value);
+    await prefs.setStringList(_keyPronunciation, options.toList()..sort());
   }
 
   static Future<Map<String, int>> loadLessonHierarchyOrder() async {

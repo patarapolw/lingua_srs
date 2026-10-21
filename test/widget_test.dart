@@ -514,24 +514,30 @@ void main() {
     });
   });
 
-  testWidgets('Settings toggles romanization and IPA', (tester) async {
+  testWidgets('Settings toggles romanization and IPA per target', (
+    tester,
+  ) async {
     final provider = await pumpApp(tester);
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
 
-    Finder switchIn(String label) => find.descendant(
-      of: find.widgetWithText(Row, label),
-      matching: find.byType(Switch),
-    );
+    Future<void> flip(String label) async {
+      final finder = find.descendant(
+        of: find.widgetWithText(Row, label),
+        matching: find.byType(Switch),
+      );
+      await tester.ensureVisible(finder);
+      await tester.tap(finder);
+      await tester.pumpAndSettle();
+    }
 
-    await tester.tap(switchIn('Romanization on card back'));
-    await tester.pumpAndSettle();
-    expect(provider.showRomanization, isTrue);
-    expect(provider.showIpa, isFalse);
+    await flip('Vocabulary romanization');
+    expect(provider.showRomanization(PronunciationTarget.vocabulary), isTrue);
+    expect(provider.showRomanization(PronunciationTarget.sentence), isFalse);
 
-    await tester.tap(switchIn('IPA on card back'));
-    await tester.pumpAndSettle();
-    expect(provider.showIpa, isTrue);
+    await flip('Sentence IPA');
+    expect(provider.showIpa(PronunciationTarget.sentence), isTrue);
+    expect(provider.showIpa(PronunciationTarget.vocabulary), isFalse);
   });
 
   group('Study card pronunciation', () {
@@ -547,8 +553,22 @@ vocabulary:
 ---
 # Pron
 ''';
+    const sentenceRomanization = 'jeoneun baereul meogeosseoyo';
+    const sentenceIpa = '[t\u0361ɕʌ.nɯn pɛ.ɾɯl mʌ.ɡʌ.s\u0348ʌ.jo]';
 
-    Future<void> openStudy(
+    Map<String, Object> options(List<String> enabled) => {
+      'lingua_srs_pronunciation': enabled,
+    };
+    final vocabOnly = options(['vocabulary_romanization', 'vocabulary_ipa']);
+    final sentenceOnly = options(['sentence_romanization', 'sentence_ipa']);
+    final everything = options([
+      'vocabulary_romanization',
+      'vocabulary_ipa',
+      'sentence_romanization',
+      'sentence_ipa',
+    ]);
+
+    Future<AppProvider> openStudy(
       WidgetTester tester, {
       required CardDirection direction,
       Map<String, Object> prefs = const {},
@@ -568,6 +588,7 @@ vocabulary:
       vocab.cardNativeToTarget.isEnabled =
           direction == CardDirection.nativeToTarget;
       await pumpWith(tester, provider, StudyView(lessonId: lesson.id));
+      return provider;
     }
 
     Future<void> reveal(WidgetTester tester) async {
@@ -575,76 +596,133 @@ vocabulary:
       await tester.pumpAndSettle();
     }
 
-    const both = {
-      'lingua_srs_show_romanization': true,
-      'lingua_srs_show_ipa': true,
-    };
-
     testWidgets('nothing is shown by default', (tester) async {
-      await openStudy(tester, direction: CardDirection.targetToNative);
+      await openStudy(
+        tester,
+        direction: CardDirection.targetToNative,
+        yaml: withSentence,
+      );
       await reveal(tester);
       expect(find.text('bae'), findsNothing);
       expect(find.text('[pɛ]'), findsNothing);
+      expect(find.text(sentenceRomanization), findsNothing);
     });
 
     for (final direction in CardDirection.values) {
       testWidgets('front never shows it ($direction)', (tester) async {
-        await openStudy(tester, direction: direction, prefs: both);
+        await openStudy(
+          tester,
+          direction: direction,
+          prefs: everything,
+          yaml: withSentence,
+        );
         expect(find.text('bae'), findsNothing);
         expect(find.text('[pɛ]'), findsNothing);
+        expect(find.text(sentenceRomanization), findsNothing);
       });
 
-      testWidgets('back shows both lines ($direction)', (tester) async {
-        await openStudy(tester, direction: direction, prefs: both);
+      testWidgets('back shows the vocabulary lines ($direction)', (
+        tester,
+      ) async {
+        await openStudy(tester, direction: direction, prefs: vocabOnly);
         await reveal(tester);
         expect(find.text('bae'), findsOneWidget);
         expect(find.text('[pɛ]'), findsOneWidget);
       });
     }
 
-    testWidgets('only romanization when only it is on', (tester) async {
+    testWidgets('sentence lines stay off while vocabulary lines are on', (
+      tester,
+    ) async {
       await openStudy(
         tester,
         direction: CardDirection.targetToNative,
-        prefs: {'lingua_srs_show_romanization': true},
-      );
-      await reveal(tester);
-      expect(find.text('bae'), findsOneWidget);
-      expect(find.text('[pɛ]'), findsNothing);
-    });
-
-    testWidgets('only IPA when only it is on', (tester) async {
-      await openStudy(
-        tester,
-        direction: CardDirection.targetToNative,
-        prefs: {'lingua_srs_show_ipa': true},
-      );
-      await reveal(tester);
-      expect(find.text('bae'), findsNothing);
-      expect(find.text('[pɛ]'), findsOneWidget);
-    });
-
-    testWidgets('example sentence gets a line too', (tester) async {
-      await openStudy(
-        tester,
-        direction: CardDirection.targetToNative,
-        prefs: both,
+        prefs: vocabOnly,
         yaml: withSentence,
       );
       await reveal(tester);
-      expect(find.text('jeoneun baereul meogeosseoyo'), findsOneWidget);
+      expect(find.text('bae'), findsOneWidget);
+      expect(find.text(sentenceRomanization), findsNothing);
+      expect(find.text(sentenceIpa), findsNothing);
+    });
+
+    testWidgets('sentence lines show without the vocabulary lines', (
+      tester,
+    ) async {
+      await openStudy(
+        tester,
+        direction: CardDirection.targetToNative,
+        prefs: sentenceOnly,
+        yaml: withSentence,
+      );
+      await reveal(tester);
+      expect(find.text('bae'), findsNothing);
+      expect(find.text('[pɛ]'), findsNothing);
+      expect(find.text(sentenceRomanization), findsOneWidget);
+      expect(find.text(sentenceIpa), findsOneWidget);
+    });
+
+    testWidgets('toggled from the review toolbar, live on the same card', (
+      tester,
+    ) async {
+      final provider = await openStudy(
+        tester,
+        direction: CardDirection.targetToNative,
+        yaml: withSentence,
+      );
+      await reveal(tester);
+      expect(find.text('bae'), findsNothing);
+
+      Future<void> choose(String label) async {
+        await tester.tap(find.byTooltip('Romanization / IPA'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(label));
+        await tester.pumpAndSettle();
+      }
+
+      await choose('Vocabulary romanization');
+      expect(provider.showRomanization(PronunciationTarget.vocabulary), isTrue);
+      expect(find.text('bae'), findsOneWidget);
+      expect(find.text(sentenceRomanization), findsNothing);
+
+      await choose('Sentence romanization');
+      expect(find.text(sentenceRomanization), findsOneWidget);
+      expect(find.text('bae'), findsOneWidget);
+
+      await choose('Vocabulary romanization'); // and back off
+      expect(find.text('bae'), findsNothing);
+      expect(find.text(sentenceRomanization), findsOneWidget);
+    });
+
+    testWidgets('narrow screens toggle from the More menu', (tester) async {
+      final provider = await openStudy(
+        tester,
+        direction: CardDirection.targetToNative,
+      );
+      tester.view.physicalSize = const Size(500, 2400);
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Romanization / IPA'), findsNothing);
+
+      await tester.tap(find.byTooltip('More'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sentence IPA'));
+      await tester.pumpAndSettle();
+      expect(provider.showIpa(PronunciationTarget.sentence), isTrue);
+      expect(provider.showIpa(PronunciationTarget.vocabulary), isFalse);
     });
 
     testWidgets('nothing for a non-Korean lesson', (tester) async {
       await openStudy(
         tester,
         direction: CardDirection.targetToNative,
-        prefs: both,
+        prefs: everything,
         targetLanguage: 'es',
+        yaml: withSentence,
       );
       await reveal(tester);
       expect(find.text('bae'), findsNothing);
       expect(find.text('[pɛ]'), findsNothing);
+      expect(find.text(sentenceRomanization), findsNothing);
     });
   });
 
