@@ -838,6 +838,22 @@ class _StudyViewState extends State<StudyView> {
     final canGoForward = _currentIndex < _answeredCount;
     final canUndo = _history.isNotEmpty;
 
+    PopupMenuItem<String> moreItem(
+      String value,
+      IconData icon,
+      String title, {
+      bool enabled = true,
+    }) => PopupMenuItem<String>(
+      value: value,
+      enabled: enabled,
+      child: ListTile(
+        dense: true,
+        contentPadding: EdgeInsets.zero,
+        leading: Icon(icon),
+        title: Text(title),
+      ),
+    );
+
     return KeyboardListener(
       focusNode: _keyboardFocusNode,
       autofocus: true,
@@ -910,104 +926,62 @@ class _StudyViewState extends State<StudyView> {
             ],
           ),
           actions: [
-            // Back button (without undoing)
-            IconButton(
-              icon: const Icon(Icons.chevron_left),
-              tooltip: _showKeyHints
-                  ? 'Previous Card (Left Arrow)'
-                  : 'Previous Card',
-              onPressed: canGoBack ? _navigateBack : null,
+            IconButton.filledTonal(
+              tooltip: 'Autoplay audio',
+              isSelected: provider.autoplayAudio,
+              icon: const Icon(Icons.volume_off),
+              selectedIcon: const Icon(Icons.volume_up),
+              onPressed: provider.toggleAutoplay,
             ),
-            // Forward button (no forward beyond unanswered cards)
             IconButton(
-              icon: const Icon(Icons.chevron_right),
-              tooltip: canGoForward
-                  ? (_showKeyHints ? 'Next Card (Right Arrow)' : 'Next Card')
-                  : 'Cannot go forward beyond unanswered cards',
-              onPressed: canGoForward ? _navigateForward : null,
+              icon: const Icon(Icons.forum_outlined),
+              tooltip: 'Ask AI about this vocabulary and sentence',
+              onPressed: () => _openAiDiscussion(item),
             ),
-            if (MediaQuery.sizeOf(context).width >= 700)
-              IconButton(
-                icon: const Icon(Icons.undo),
-                tooltip: canUndo
-                    ? (_showKeyHints
-                          ? 'Undo Last Rating (Z / Ctrl+Z)'
-                          : 'Undo Last Rating')
-                    : 'Nothing to undo',
-                onPressed: canUndo ? _undo : null,
-              ),
-            if (MediaQuery.sizeOf(context).width < 700)
-              PopupMenuButton<String>(
-                tooltip: 'More',
-                onSelected: (value) {
-                  switch (value) {
-                    case 'undo':
-                      _undo();
-                    case 'autoplay':
-                      provider.toggleAutoplay();
-                    case 'edit':
-                      _openEditCurrentCard();
-                    case 'ai':
-                      _openAiDiscussion(item);
-                  }
-                },
-                itemBuilder: (context) => [
-                  PopupMenuItem(
-                    value: 'undo',
-                    enabled: canUndo,
-                    child: const ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(Icons.undo),
-                      title: Text('Undo last rating'),
-                    ),
-                  ),
-                  CheckedPopupMenuItem(
-                    value: 'autoplay',
-                    checked: provider.autoplayAudio,
-                    child: const Text('Autoplay audio'),
-                  ),
-                  const PopupMenuItem(
-                    value: 'edit',
-                    child: ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(Icons.edit_outlined),
-                      title: Text('Edit card'),
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: 'ai',
-                    child: ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(Icons.forum_outlined),
-                      title: Text('Ask AI'),
-                    ),
-                  ),
-                ],
-              )
-            else ...[
-              const VerticalDivider(width: 20, indent: 12, endIndent: 12),
-              IconButton.filledTonal(
-                tooltip: 'Autoplay audio',
-                isSelected: provider.autoplayAudio,
-                icon: const Icon(Icons.volume_off),
-                selectedIcon: const Icon(Icons.volume_up),
-                onPressed: provider.toggleAutoplay,
-              ),
-              const SizedBox(width: 6),
-              IconButton(
-                icon: const Icon(Icons.edit_outlined),
-                tooltip: _showKeyHints ? 'Edit Card (E)' : 'Edit Card',
-                onPressed: _openEditCurrentCard,
-              ),
-              IconButton(
-                icon: const Icon(Icons.forum_outlined),
-                tooltip: 'Ask AI about this vocabulary and sentence',
-                onPressed: () => _openAiDiscussion(item),
-              ),
-            ],
+            PopupMenuButton<String>(
+              tooltip: 'More',
+              onSelected: (value) {
+                switch (value) {
+                  case 'previous':
+                    _navigateBack();
+                  case 'next':
+                    _navigateForward();
+                  case 'undo':
+                    _undo();
+                  case 'edit':
+                    _openEditCurrentCard();
+                }
+              },
+              itemBuilder: (context) => [
+                moreItem(
+                  'previous',
+                  Icons.chevron_left,
+                  _showKeyHints
+                      ? 'Previous card (Left Arrow)'
+                      : 'Previous card',
+                  enabled: canGoBack,
+                ),
+                moreItem(
+                  'next',
+                  Icons.chevron_right,
+                  _showKeyHints ? 'Next card (Right Arrow)' : 'Next card',
+                  enabled: canGoForward,
+                ),
+                moreItem(
+                  'undo',
+                  Icons.undo,
+                  _showKeyHints
+                      ? 'Undo last rating (Z / Ctrl+Z)'
+                      : 'Undo last rating',
+                  enabled: canUndo,
+                ),
+                moreItem(
+                  'edit',
+                  Icons.edit_outlined,
+                  _showKeyHints ? 'Edit card (E)' : 'Edit card',
+                ),
+              ],
+            ),
             const SizedBox(width: 8),
           ],
           bottom: PreferredSize(

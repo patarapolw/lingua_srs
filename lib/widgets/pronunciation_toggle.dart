@@ -41,7 +41,7 @@ class PronunciationToggles extends StatelessWidget {
                   ),
                   children: [
                     Text(
-                      'Rom',
+                      'RR',
                       key: ValueKey(
                         'pronunciation-${target.name}-romanization',
                       ),

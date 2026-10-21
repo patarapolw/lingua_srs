@@ -736,6 +736,70 @@ vocabulary:
         findsNothing,
       );
     });
+
+    for (final width in [1200.0, 360.0]) {
+      testWidgets(
+        'toggled from the strip at ${width.toInt()}dp, live on the same card',
+        (tester) async {
+          final provider = await openStudy(
+            tester,
+            direction: CardDirection.targetToNative,
+            yaml: withSentence,
+          );
+          tester.view.physicalSize = Size(width, 2400);
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull); // app bar and strip fit
+
+          await reveal(tester);
+          expect(find.text('bae'), findsNothing);
+
+          Future<void> tapToggle(String target, String kind) async {
+            await tester.tap(
+              find.byKey(ValueKey('pronunciation-$target-$kind')),
+            );
+            await tester.pumpAndSettle();
+          }
+
+          await tapToggle('vocabulary', 'romanization');
+          expect(
+            provider.showRomanization(PronunciationTarget.vocabulary),
+            isTrue,
+          );
+          expect(find.text('bae'), findsOneWidget);
+          expect(find.text(sentenceRomanization), findsNothing);
+
+          await tapToggle('sentence', 'romanization');
+          expect(find.text(sentenceRomanization), findsOneWidget);
+
+          await tapToggle('vocabulary', 'romanization'); // back off
+          expect(find.text('bae'), findsNothing);
+          expect(find.text(sentenceRomanization), findsOneWidget);
+        },
+      );
+    }
+
+    testWidgets('app bar has the sound toggle, Ask AI and More', (
+      tester,
+    ) async {
+      await openStudy(tester, direction: CardDirection.targetToNative);
+      expect(find.byTooltip('Autoplay audio'), findsOneWidget);
+      expect(
+        find.byTooltip('Ask AI about this vocabulary and sentence'),
+        findsOneWidget,
+      );
+      expect(find.byTooltip('More'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('More'));
+      await tester.pumpAndSettle();
+      for (final label in [
+        'Previous card',
+        'Next card',
+        'Undo last rating',
+        'Edit card',
+      ]) {
+        expect(find.textContaining(label), findsOneWidget, reason: label);
+      }
+    });
   });
 
   group('Manual EN ➔ KO search dialog', () {
