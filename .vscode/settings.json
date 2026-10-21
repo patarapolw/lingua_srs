@@ -8,5 +8,5 @@
         "editor.defaultFormatter": "Dart-Code.dart-code",
         "editor.inlayHints.enabled": "offUnlessPressed"
     },
-    "cmake.sourceDirectory": "C:/Users/HP/.gemini/antigravity/scratch/lingua_srs/windows"
+    "cmake.sourceDirectory": "${workspaceFolder}/windows"
 }

@@ -1,0 +1,71 @@
+# Features
+
+Full feature reference. For a short overview see the [README](../README.md).
+
+1. **YAML/Markdown Lesson Architecture**:
+   - Create lessons from the **Import Lessons** screen (**Add Lessons** in the section header) with a lesson-name field and a Markdown editor. Both start empty; the editor shows a placeholder example of Markdown with YAML frontmatter and an optional Markdown body.
+   - Use `::` in the lesson name to separate hierarchy levels. For example, `Unit 2::Lesson 26` groups the lesson under `Unit 2`; `Topic::Subtopic::Lesson A` creates a deeper hierarchy.
+   - Import Markdown/YAML files or ZIP archives with one picker, or drag `.md`, `.yaml`/`.yml`, and `.zip` files onto the desktop import screen. Markdown containing only YAML frontmatter imports the same as equivalent plain YAML. Import folder(s) with a separate action. Multiple folders can be selected together on macOS; other platforms select one folder at a time. Nested folder and archive paths preserve lesson hierarchy.
+   - Importing ZIP archives provides a batch-import option on Android, where directory import is restricted. Choose which Markdown lessons to import (all unchecked initially, with **Check all** and **Uncheck all** controls).
+   - YAML and Markdown frontmatter are parsed in a background isolate with parse errors and an import preview. Folder import parsing also runs off the UI isolate.
+   - Unit and nested folder groups in the library are expanded by default; expansion states and sibling order are saved across view changes and app restarts. Drag lessons and folders to reorder them, or use their menus to move them between folders. `::`-separated lesson paths create nested folders. Vocabulary frontmatter uses `vocabulary:` as the root, with part-of-speech keys directly beneath it and vocabulary entries listed under each key. Re-importing updates matching lessons and vocabulary in place while retaining SRS progress and entries not present in the import.
+   - Imported vocabulary with the same target form and meaning shares SRS progress across part-of-speech groups. Different meanings receive separate generated IDs; an optional `id` on a vocabulary entry can explicitly control sharing.
+   - Importing Markdown lessons keeps the document body for reading from the lesson list; it can be edited and saved at any time. The reader renders the whole lesson as a single document in a WebView, and **View Vocabulary** remains a separate view.
+
+2. **Language Support**:
+   - Currently only Korean to English is supported: use `ko:` for the target text and `en:` for the translation in vocabulary entries and examples.
+   - Other language pairs are not supported yet.
+
+3. **Intelligent Flashcard Visibility Rules**:
+   - **Target ➔ Native (KO ➔ EN)**: Hidden by default for verbs and adjectives; enabled by default for other parts of speech (e.g., nouns).
+   - **Native ➔ Target (EN ➔ KO)**: Enabled by default for verbs and adjectives; hidden by default for other cards.
+   - **Individual Overrides**: Both directions can be freely toggled on or off per vocabulary item.
+   - **Reset Progress**: Reset SRS progress for an entire lesson or an individual vocabulary item without changing card visibility.
+   - Delete a part-of-speech group and its vocabulary, or delete an individual vocabulary entry. Deleting an entry resets SRS progress for any other entries sharing its ID.
+   - Detects enabled cards with the same front prompt (without comparing their example sentences) and lets you add a disambiguation cue displayed on the card front.
+   - Each card direction has editable Markdown notes displayed on its back.
+
+4. **Front-of-Card Random Sentence with Cloze Deletion**:
+   - Each card dynamically selects a **random example sentence** from the vocabulary's pool to display on the front.
+   - For **KO ➔ EN** cards: Displays the target word and the Korean example sentence.
+   - For **EN ➔ KO** cards: Displays the English translation prompt and the random sentence with **Cloze Deletion** (e.g. `저는 (___)를 위해 문을 열었어요`), handling bold tags and Korean verb/adjective stems.
+   - The user can flip back and forth between front and back anytime (via `Space`, `Enter`, `F`, or tapping the card).
+
+5. **Sentence Pooling**:
+   - Sentences from all lessons are indexed into a central **Sentence Pool**.
+   - Browse, search, edit notes on, and link any sentence from the pool to any vocabulary item.
+   - The sentence picker opens with the selected vocabulary as its search query. Korean-aware local tokenization handles Hangul subwords, common particles, and frequent verb/adjective endings without downloading a large model.
+   - Create new sentences directly in the pool or while editing a vocabulary item.
+
+6. **Instant Audio Streaming with Offline Caching**:
+   - **Stream-on-First-Play**: Audio starts streaming immediately on the very first play with zero wait time.
+   - **Background Caching**: Simultaneously downloads and stores the `.mp3` bytes in the app's sandbox cache directory (`audio_cache/`).
+   - On Windows, the cache parent directory uses the app's company and product metadata (`%LOCALAPPDATA%\cc.polv\lingua.srs\audio_cache`).
+   - **Instant Offline Playback**: Subsequent plays of that vocabulary or sentence play directly from the local disk file with **zero network latency** and 100% offline availability.
+   - **Pre-buffering**: Automatically pre-buffers upcoming cards in the background so cards play instantaneously without delays.
+
+7. **Text-to-Speech**:
+   - **Android** uses an installed offline system TTS voice. Install the desired language voice in Android text-to-speech settings; generated TTS is not sent to an online service or prefetched.
+   - **Windows and other platforms** use online streamed TTS with local caching. Windows does not fall back to SAPI.
+
+8. **Keyboard Navigation & Anki-Style Hotkeys**: see [hotkeys.md](hotkeys.md).
+
+9. **Adaptive Desktop & Mobile UI**:
+   - **Desktop**: Navigation Rail sidebar, wide-screen flashcard canvas, complete hotkey bar, undo & navigation controls.
+   - **Mobile**: Responsive bottom navigation, touch-friendly card taps, swipeable sheet editors.
+
+10. **Recent Mistakes & Adaptive Queueing**:
+   - **Top-Level "Recent Mistakes" Review**: Directly review active mistakes across all lessons (or per lesson) from the Daily Review Queue card, which shows a **Recent Mistakes** button with a live count only while mistakes exist.
+   - **Interleaved Re-queuing**: Cards rated *Again* are automatically re-inserted a few cards ahead in the active session for delayed retrieval practice.
+   - **Intelligent Session Completion**: Looping continues as long as multiple unmastered cards remain, and concludes when at most 1 *Again*'d card is left to avoid immediate zero-delay 1-card echo loops.
+   - **Color-Coded Review Progress Bar**: Displays live Wrong (Red) and Right (Green) breakdown indicators directly on the top progress bar and AppBar during study sessions.
+   - **24-Hour Review Window Limit**: Caps daily review volume to a rolling 24-hour limit (default: 100 cards), customizable or set to unlimited in **Settings** (gear icon). The dashboard shows cards due today (or, when none are due, how many are due tomorrow), plus the number of reviews in the last 24 hours once it is above zero.
+   - **Sub-24h Repetition for Difficult Cards**: Cards marked *Again* are scheduled to repeat after a sensible 1-hour minimum delay (rather than waiting an entire day), while early *Hard* reviews repeat in 12 hours.
+   - **POS-Category Shuffling**: Cards within each lesson are shuffled and interleaved across parts of speech (nouns, verbs, adjectives, etc.) rather than displaying oldest-inserted cards first, while continuing to prioritize oldest-inserted lessons first.
+
+11. **AI-Assisted Quiz Discussions**:
+   - Configure a DeepSeek API key in **Settings** (gear icon), then ask questions about the current vocabulary and example sentence during a quiz. Answers stream into the chat and render as Markdown.
+   - Start with suggested questions about etymology/Hanja, key sentence vocabulary, everyday usage, and examples; get suggested follow-ups during the discussion.
+   - Press Enter to send a chat message and Shift+Enter or Ctrl+Enter to add a new line.
+   - Discussions are saved locally per vocabulary and sentence, restored when revisiting that card, and can be deleted from the discussion view.
+   - The **Recent Discussions** tab lists every saved discussion, most recently active first, with the vocabulary, its example sentence, and the latest question. Tap one to reopen it. Discussions saved before timestamps were added are listed last.
