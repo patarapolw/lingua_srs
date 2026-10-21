@@ -21,3 +21,4 @@ Flutter app (Dart, `provider` state management). See [README.md](README.md) for 
 - When the lesson syntax changes, update `docs/lesson-format.md`. `test/docs_test.dart` parses its examples and will fail if they break.
 - Keep `README.md` short; put detail in `docs/`.
 - Don't commit machine-specific paths or personal study data.
+- Add: - Track bugs and planned work in GitHub Issues, not in the repo. Reference the issue in PRs (e.g. "Fixes #12")

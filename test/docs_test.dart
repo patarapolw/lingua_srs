@@ -59,7 +59,7 @@ void main() {
       File('README.md'),
       File('AGENTS.md'),
       File('CLAUDE.md'),
-      File('TODO.md'),
+      // File('TODO.md'),
       ...Directory('docs')
           .listSync()
           .whereType<File>()
