@@ -838,6 +838,8 @@ class _StudyViewState extends State<StudyView> {
     final canGoForward = _currentIndex < _answeredCount;
     final canUndo = _history.isNotEmpty;
 
+    const overflowWidthCutoff = 700;
+
     PopupMenuItem<String> moreItem(
       String value,
       IconData icon,
@@ -872,7 +874,8 @@ class _StudyViewState extends State<StudyView> {
                         'Card $currentNumber of $total',
                         style: Theme.of(context).textTheme.labelSmall,
                       ),
-                    ] else if (MediaQuery.sizeOf(context).width < 700)
+                    ] else if (MediaQuery.sizeOf(context).width <
+                        overflowWidthCutoff)
                       Text(
                         '$currentNumber / $total',
                         maxLines: 1,
@@ -942,7 +945,7 @@ class _StudyViewState extends State<StudyView> {
                   : 'Cannot go forward beyond unanswered cards',
               onPressed: canGoForward ? _navigateForward : null,
             ),
-            if (canUndo && MediaQuery.sizeOf(context).width >= 700)
+            if (MediaQuery.sizeOf(context).width >= overflowWidthCutoff) ...[
               IconButton(
                 icon: const Icon(Icons.undo),
                 tooltip: canUndo
@@ -952,7 +955,6 @@ class _StudyViewState extends State<StudyView> {
                     : 'Nothing to undo',
                 onPressed: canUndo ? _undo : null,
               ),
-            if (MediaQuery.sizeOf(context).width >= 700)
               IconButton(
                 tooltip: 'Autoplay audio',
                 isSelected: provider.autoplayAudio,
@@ -960,6 +962,12 @@ class _StudyViewState extends State<StudyView> {
                 selectedIcon: const Icon(Icons.volume_up),
                 onPressed: provider.toggleAutoplay,
               ),
+              IconButton(
+                icon: const Icon(Icons.edit_outlined),
+                tooltip: _showKeyHints ? 'Edit card (E)' : 'Edit card',
+                onPressed: _isAnswerRevealed ? _openEditCurrentCard : null,
+              ),
+            ],
             PopupMenuButton<String>(
               tooltip: 'More',
               onSelected: (value) {
@@ -975,7 +983,7 @@ class _StudyViewState extends State<StudyView> {
                 }
               },
               itemBuilder: (context) => [
-                if (canUndo && MediaQuery.sizeOf(context).width < 700)
+                if (MediaQuery.sizeOf(context).width < overflowWidthCutoff) ...[
                   moreItem(
                     'undo',
                     Icons.undo,
@@ -984,7 +992,6 @@ class _StudyViewState extends State<StudyView> {
                         : 'Undo last rating',
                     enabled: canUndo,
                   ),
-                if (MediaQuery.sizeOf(context).width < 700)
                   moreItem(
                     'autoplay',
                     provider.autoplayAudio ? Icons.volume_up : Icons.volume_off,
@@ -992,11 +999,13 @@ class _StudyViewState extends State<StudyView> {
                         ? 'Turn autoplay off'
                         : 'Turn autoplay on',
                   ),
-                moreItem(
-                  'edit',
-                  Icons.edit_outlined,
-                  _showKeyHints ? 'Edit card (E)' : 'Edit card',
-                ),
+                  moreItem(
+                    'edit',
+                    Icons.edit_outlined,
+                    _showKeyHints ? 'Edit card (E)' : 'Edit card',
+                    enabled: _isAnswerRevealed,
+                  ),
+                ],
                 moreItem(
                   'ai',
                   Icons.forum_outlined,
