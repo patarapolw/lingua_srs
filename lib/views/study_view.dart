@@ -952,19 +952,22 @@ class _StudyViewState extends State<StudyView> {
                     : 'Nothing to undo',
                 onPressed: canUndo ? _undo : null,
               ),
-            IconButton(
-              tooltip: 'Autoplay audio',
-              isSelected: provider.autoplayAudio,
-              icon: const Icon(Icons.volume_off),
-              selectedIcon: const Icon(Icons.volume_up),
-              onPressed: provider.toggleAutoplay,
-            ),
+            if (MediaQuery.sizeOf(context).width >= 700)
+              IconButton(
+                tooltip: 'Autoplay audio',
+                isSelected: provider.autoplayAudio,
+                icon: const Icon(Icons.volume_off),
+                selectedIcon: const Icon(Icons.volume_up),
+                onPressed: provider.toggleAutoplay,
+              ),
             PopupMenuButton<String>(
               tooltip: 'More',
               onSelected: (value) {
                 switch (value) {
                   case 'undo':
                     _undo();
+                  case 'autoplay':
+                    provider.toggleAutoplay();
                   case 'edit':
                     _openEditCurrentCard();
                   case 'ai':
@@ -980,6 +983,14 @@ class _StudyViewState extends State<StudyView> {
                         ? 'Undo last rating (Z / Ctrl+Z)'
                         : 'Undo last rating',
                     enabled: canUndo,
+                  ),
+                if (MediaQuery.sizeOf(context).width < 700)
+                  moreItem(
+                    'autoplay',
+                    provider.autoplayAudio ? Icons.volume_up : Icons.volume_off,
+                    provider.autoplayAudio
+                        ? 'Turn autoplay off'
+                        : 'Turn autoplay on',
                   ),
                 moreItem(
                   'edit',

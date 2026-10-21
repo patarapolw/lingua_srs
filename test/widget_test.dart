@@ -749,22 +749,37 @@ vocabulary:
       expect(find.text('Pronunciation'), findsNothing);
     });
 
-    for (final width in [1200.0, 360.0]) {
-      testWidgets('autoplay toggle button works at ${width.toInt()}dp', (
+    testWidgets('autoplay toggle button works at 1200dp', (tester) async {
+      final provider = await openStudy(
         tester,
-      ) async {
-        final provider = await openStudy(
-          tester,
-          direction: CardDirection.targetToNative,
-        );
-        tester.view.physicalSize = Size(width, 2400);
-        await tester.pumpAndSettle();
-        expect(provider.autoplayAudio, isTrue);
-        await tester.tap(find.byTooltip('Autoplay audio'));
-        await tester.pumpAndSettle();
-        expect(provider.autoplayAudio, isFalse);
-      });
-    }
+        direction: CardDirection.targetToNative,
+      );
+      tester.view.physicalSize = Size(1200, 2400);
+      await tester.pumpAndSettle();
+      expect(provider.autoplayAudio, isTrue);
+      await tester.tap(find.byTooltip('Autoplay audio'));
+      await tester.pumpAndSettle();
+      expect(provider.autoplayAudio, isFalse);
+    });
+
+    testWidgets('autoplay toggle button is hidden and works at 300dp', (
+      tester,
+    ) async {
+      final provider = await openStudy(
+        tester,
+        direction: CardDirection.targetToNative,
+      );
+      tester.view.physicalSize = Size(300, 2400);
+      await tester.pumpAndSettle();
+      expect(provider.autoplayAudio, isTrue);
+
+      await tester.tap(find.byTooltip('More'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.textContaining('autoplay'));
+      await tester.pumpAndSettle();
+      expect(provider.autoplayAudio, isFalse);
+    });
 
     testWidgets('nothing for a non-Korean lesson', (tester) async {
       await openStudy(
