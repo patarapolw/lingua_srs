@@ -662,50 +662,86 @@ vocabulary:
       expect(find.text(sentenceIpa), findsOneWidget);
     });
 
-    testWidgets('toggled from the strip, live on the same card', (
+    Future<void> chooseFromMore(WidgetTester tester, String label) async {
+      await tester.tap(find.byTooltip('More'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.widgetWithText(CheckedPopupMenuItem<String>, label),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    for (final width in [1200.0, 360.0]) {
+      testWidgets(
+        'toggled from the More menu at ${width.toInt()}dp, live on the same card',
+        (tester) async {
+          final provider = await openStudy(
+            tester,
+            direction: CardDirection.targetToNative,
+            yaml: withSentence,
+          );
+          tester.view.physicalSize = Size(width, 2400);
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull); // app bar fits, no overflow
+
+          await reveal(tester);
+          expect(find.text('bae'), findsNothing);
+
+          await chooseFromMore(tester, 'Vocabulary romanization');
+          expect(
+            provider.showRomanization(PronunciationTarget.vocabulary),
+            isTrue,
+          );
+          expect(find.text('bae'), findsOneWidget);
+          expect(find.text(sentenceRomanization), findsNothing);
+
+          await chooseFromMore(tester, 'Sentence romanization');
+          expect(find.text(sentenceRomanization), findsOneWidget);
+
+          await chooseFromMore(tester, 'Vocabulary romanization'); // back off
+          expect(find.text('bae'), findsNothing);
+          expect(find.text(sentenceRomanization), findsOneWidget);
+        },
+      );
+    }
+
+    testWidgets('app bar has the sound toggle, Ask AI and More', (
       tester,
     ) async {
-      final provider = await openStudy(
-        tester,
-        direction: CardDirection.targetToNative,
-        yaml: withSentence,
+      await openStudy(tester, direction: CardDirection.targetToNative);
+      expect(find.byTooltip('Autoplay audio'), findsOneWidget);
+      expect(
+        find.byTooltip('Ask AI about this vocabulary and sentence'),
+        findsOneWidget,
       );
-      await reveal(tester);
-      expect(find.text('bae'), findsNothing);
+      expect(find.byTooltip('More'), findsOneWidget);
 
-      Future<void> tapToggle(String target, String kind) async {
-        await tester.tap(find.byKey(ValueKey('pronunciation-$target-$kind')));
-        await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('More'));
+      await tester.pumpAndSettle();
+      for (final label in [
+        'Previous card',
+        'Next card',
+        'Undo last rating',
+        'Edit card',
+        'Vocabulary romanization',
+        'Sentence IPA',
+      ]) {
+        expect(find.textContaining(label), findsOneWidget, reason: label);
       }
-
-      await tapToggle('vocabulary', 'romanization');
-      expect(provider.showRomanization(PronunciationTarget.vocabulary), isTrue);
-      expect(find.text('bae'), findsOneWidget);
-      expect(find.text(sentenceRomanization), findsNothing);
-
-      await tapToggle('sentence', 'romanization');
-      expect(find.text(sentenceRomanization), findsOneWidget);
-
-      await tapToggle('vocabulary', 'romanization'); // and back off
-      expect(find.text('bae'), findsNothing);
-      expect(find.text(sentenceRomanization), findsOneWidget);
     });
 
-    testWidgets('strip fits and works on a narrow phone', (tester) async {
-      final provider = await openStudy(
+    testWidgets('no pronunciation items for a non-Korean lesson', (
+      tester,
+    ) async {
+      await openStudy(
         tester,
         direction: CardDirection.targetToNative,
+        targetLanguage: 'es',
       );
-      tester.view.physicalSize = const Size(360, 800);
+      await tester.tap(find.byTooltip('More'));
       await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull); // no RenderFlex overflow
-
-      await tester.tap(
-        find.byKey(const ValueKey('pronunciation-sentence-ipa')),
-      );
-      await tester.pumpAndSettle();
-      expect(provider.showIpa(PronunciationTarget.sentence), isTrue);
-      expect(provider.showIpa(PronunciationTarget.vocabulary), isFalse);
+      expect(find.textContaining('Edit card'), findsOneWidget);
+      expect(find.text('Vocabulary romanization'), findsNothing);
     });
 
     testWidgets('autoplay is a toggle button in the app bar', (tester) async {
@@ -736,47 +772,6 @@ vocabulary:
         findsNothing,
       );
     });
-
-    for (final width in [1200.0, 360.0]) {
-      testWidgets(
-        'toggled from the strip at ${width.toInt()}dp, live on the same card',
-        (tester) async {
-          final provider = await openStudy(
-            tester,
-            direction: CardDirection.targetToNative,
-            yaml: withSentence,
-          );
-          tester.view.physicalSize = Size(width, 2400);
-          await tester.pumpAndSettle();
-          expect(tester.takeException(), isNull); // app bar and strip fit
-
-          await reveal(tester);
-          expect(find.text('bae'), findsNothing);
-
-          Future<void> tapToggle(String target, String kind) async {
-            await tester.tap(
-              find.byKey(ValueKey('pronunciation-$target-$kind')),
-            );
-            await tester.pumpAndSettle();
-          }
-
-          await tapToggle('vocabulary', 'romanization');
-          expect(
-            provider.showRomanization(PronunciationTarget.vocabulary),
-            isTrue,
-          );
-          expect(find.text('bae'), findsOneWidget);
-          expect(find.text(sentenceRomanization), findsNothing);
-
-          await tapToggle('sentence', 'romanization');
-          expect(find.text(sentenceRomanization), findsOneWidget);
-
-          await tapToggle('vocabulary', 'romanization'); // back off
-          expect(find.text('bae'), findsNothing);
-          expect(find.text(sentenceRomanization), findsOneWidget);
-        },
-      );
-    }
 
     testWidgets('app bar has the sound toggle, Ask AI and More', (
       tester,

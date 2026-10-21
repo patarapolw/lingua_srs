@@ -14,7 +14,7 @@ import '../services/srs_service.dart';
 import '../widgets/audio_button.dart';
 import '../widgets/markdown_content.dart';
 import '../widgets/pronunciation_line.dart';
-import '../widgets/pronunciation_toggle.dart';
+import '../widgets/pronunciation_menu.dart';
 import 'ai_discussion_dialog.dart';
 import 'vocab_edit_dialog.dart';
 
@@ -950,6 +950,8 @@ class _StudyViewState extends State<StudyView> {
                     _undo();
                   case 'edit':
                     _openEditCurrentCard();
+                  default:
+                    handlePronunciationSelection(provider, value);
                 }
               },
               itemBuilder: (context) => [
@@ -980,6 +982,10 @@ class _StudyViewState extends State<StudyView> {
                   Icons.edit_outlined,
                   _showKeyHints ? 'Edit card (E)' : 'Edit card',
                 ),
+                if (item.lesson.targetLanguage == 'ko') ...[
+                  const PopupMenuDivider(),
+                  ...pronunciationMenuEntries(provider),
+                ],
               ],
             ),
             const SizedBox(width: 8),
@@ -1033,8 +1039,6 @@ class _StudyViewState extends State<StudyView> {
         body: SafeArea(
           child: Column(
             children: [
-              if (item.lesson.targetLanguage == 'ko')
-                const PronunciationToggles(),
               // Flashcard Canvas
               Expanded(
                 child: Center(
