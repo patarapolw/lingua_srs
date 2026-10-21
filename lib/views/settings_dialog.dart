@@ -118,32 +118,14 @@ class _SettingsDialogState extends State<SettingsDialog> {
               Row(
                 children: [
                   const Expanded(child: Text('Autoplay audio')),
-                  Switch(
+                  IconSwitch(
+                    leading: Icons.volume_off,
+                    trailing: Icons.volume_up,
                     value: provider.autoplayAudio,
                     onChanged: (_) => provider.toggleAutoplay(),
                   ),
                 ],
               ),
-              for (final target in PronunciationTarget.values) ...[
-                Row(
-                  children: [
-                    Expanded(child: Text('${target.label} romanization')),
-                    Switch(
-                      value: provider.showRomanization(target),
-                      onChanged: (_) => provider.toggleRomanization(target),
-                    ),
-                  ],
-                ),
-                Row(
-                  children: [
-                    Expanded(child: Text('${target.label} IPA')),
-                    Switch(
-                      value: provider.showIpa(target),
-                      onChanged: (_) => provider.toggleIpa(target),
-                    ),
-                  ],
-                ),
-              ],
               const Divider(),
               const SizedBox(height: 8),
               Text('Reviews', style: theme.textTheme.titleSmall),

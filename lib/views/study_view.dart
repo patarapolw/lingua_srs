@@ -926,61 +926,76 @@ class _StudyViewState extends State<StudyView> {
             ],
           ),
           actions: [
-            IconButton.filledTonal(
+            // Back button (without undoing)
+            IconButton(
+              icon: const Icon(Icons.chevron_left),
+              tooltip: _showKeyHints
+                  ? 'Previous Card (Left Arrow)'
+                  : 'Previous Card',
+              onPressed: canGoBack ? _navigateBack : null,
+            ),
+            // Forward button (no forward beyond unanswered cards)
+            IconButton(
+              icon: const Icon(Icons.chevron_right),
+              tooltip: canGoForward
+                  ? (_showKeyHints ? 'Next Card (Right Arrow)' : 'Next Card')
+                  : 'Cannot go forward beyond unanswered cards',
+              onPressed: canGoForward ? _navigateForward : null,
+            ),
+            if (canUndo && MediaQuery.sizeOf(context).width >= 700)
+              IconButton(
+                icon: const Icon(Icons.undo),
+                tooltip: canUndo
+                    ? (_showKeyHints
+                          ? 'Undo Last Rating (Z / Ctrl+Z)'
+                          : 'Undo Last Rating')
+                    : 'Nothing to undo',
+                onPressed: canUndo ? _undo : null,
+              ),
+            IconButton(
               tooltip: 'Autoplay audio',
               isSelected: provider.autoplayAudio,
               icon: const Icon(Icons.volume_off),
               selectedIcon: const Icon(Icons.volume_up),
               onPressed: provider.toggleAutoplay,
             ),
-            IconButton(
-              icon: const Icon(Icons.forum_outlined),
-              tooltip: 'Ask AI about this vocabulary and sentence',
-              onPressed: () => _openAiDiscussion(item),
-            ),
             PopupMenuButton<String>(
               tooltip: 'More',
               onSelected: (value) {
                 switch (value) {
-                  case 'previous':
-                    _navigateBack();
-                  case 'next':
-                    _navigateForward();
                   case 'undo':
                     _undo();
                   case 'edit':
                     _openEditCurrentCard();
+                  case 'ai':
+                    _openAiDiscussion(item);
                   default:
                     handlePronunciationSelection(provider, value);
                 }
               },
               itemBuilder: (context) => [
-                moreItem(
-                  'previous',
-                  Icons.chevron_left,
-                  _showKeyHints
-                      ? 'Previous card (Left Arrow)'
-                      : 'Previous card',
-                  enabled: canGoBack,
-                ),
-                moreItem(
-                  'next',
-                  Icons.chevron_right,
-                  _showKeyHints ? 'Next card (Right Arrow)' : 'Next card',
-                  enabled: canGoForward,
-                ),
-                moreItem(
-                  'undo',
-                  Icons.undo,
-                  _showKeyHints
-                      ? 'Undo last rating (Z / Ctrl+Z)'
-                      : 'Undo last rating',
-                  enabled: canUndo,
-                ),
+                if (canUndo && MediaQuery.sizeOf(context).width < 700)
+                  moreItem(
+                    'undo',
+                    Icons.undo,
+                    _showKeyHints
+                        ? 'Undo last rating (Z / Ctrl+Z)'
+                        : 'Undo last rating',
+                    enabled: canUndo,
+                  ),
                 moreItem(
                   'edit',
                   Icons.edit_outlined,
                   _showKeyHints ? 'Edit card (E)' : 'Edit card',
+                ),
+                PopupMenuItem(
+                  value: 'ai',
+                  child: ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.forum_outlined),
+                    title: Text('Ask AI'),
+                  ),
                 ),
                 if (item.lesson.targetLanguage == 'ko') ...[
                   const PopupMenuDivider(),

@@ -514,32 +514,6 @@ void main() {
     });
   });
 
-  testWidgets('Settings toggles romanization and IPA per target', (
-    tester,
-  ) async {
-    final provider = await pumpApp(tester);
-    await tester.tap(find.byTooltip('Settings'));
-    await tester.pumpAndSettle();
-
-    Future<void> flip(String label) async {
-      final finder = find.descendant(
-        of: find.widgetWithText(Row, label),
-        matching: find.byType(Switch),
-      );
-      await tester.ensureVisible(finder);
-      await tester.tap(finder);
-      await tester.pumpAndSettle();
-    }
-
-    await flip('Vocabulary romanization');
-    expect(provider.showRomanization(PronunciationTarget.vocabulary), isTrue);
-    expect(provider.showRomanization(PronunciationTarget.sentence), isFalse);
-
-    await flip('Sentence IPA');
-    expect(provider.showIpa(PronunciationTarget.sentence), isTrue);
-    expect(provider.showIpa(PronunciationTarget.vocabulary), isFalse);
-  });
-
   group('Study card pronunciation', () {
     const withSentence = '''
 ---
@@ -709,20 +683,28 @@ vocabulary:
       tester,
     ) async {
       await openStudy(tester, direction: CardDirection.targetToNative);
-      expect(find.byTooltip('Autoplay audio'), findsOneWidget);
       expect(
-        find.byTooltip('Ask AI about this vocabulary and sentence'),
+        find.byIcon(Icons.chevron_left),
         findsOneWidget,
+        reason: 'Previous card',
       );
-      expect(find.byTooltip('More'), findsOneWidget);
+      expect(
+        find.byIcon(Icons.chevron_right),
+        findsOneWidget,
+        reason: 'Next card',
+      );
+      expect(
+        find.byTooltip('Autoplay audio'),
+        findsOneWidget,
+        reason: 'Autoplay audio',
+      );
+      expect(find.byTooltip('More'), findsOneWidget, reason: 'More');
 
       await tester.tap(find.byTooltip('More'));
       await tester.pumpAndSettle();
       for (final label in [
-        'Previous card',
-        'Next card',
-        'Undo last rating',
         'Edit card',
+        'Ask AI',
         'Vocabulary romanization',
         'Sentence IPA',
       ]) {
@@ -771,29 +753,6 @@ vocabulary:
         find.byKey(const ValueKey('pronunciation-vocabulary-ipa')),
         findsNothing,
       );
-    });
-
-    testWidgets('app bar has the sound toggle, Ask AI and More', (
-      tester,
-    ) async {
-      await openStudy(tester, direction: CardDirection.targetToNative);
-      expect(find.byTooltip('Autoplay audio'), findsOneWidget);
-      expect(
-        find.byTooltip('Ask AI about this vocabulary and sentence'),
-        findsOneWidget,
-      );
-      expect(find.byTooltip('More'), findsOneWidget);
-
-      await tester.tap(find.byTooltip('More'));
-      await tester.pumpAndSettle();
-      for (final label in [
-        'Previous card',
-        'Next card',
-        'Undo last rating',
-        'Edit card',
-      ]) {
-        expect(find.textContaining(label), findsOneWidget, reason: label);
-      }
     });
   });
 
