@@ -636,14 +636,43 @@ vocabulary:
       expect(find.text(sentenceIpa), findsOneWidget);
     });
 
-    Future<void> chooseFromMore(WidgetTester tester, String label) async {
+    Future<void> openMore(WidgetTester tester) async {
       await tester.tap(find.byTooltip('More'));
       await tester.pumpAndSettle();
-      await tester.tap(
-        find.widgetWithText(CheckedPopupMenuItem<String>, label),
-      );
+    }
+
+    Finder toggle(String target, String kind) =>
+        find.byKey(ValueKey('pronunciation-$target-$kind'));
+
+    Future<void> tapToggle(
+      WidgetTester tester,
+      String target,
+      String kind,
+    ) async {
+      await tester.tap(toggle(target, kind));
       await tester.pumpAndSettle();
     }
+
+    testWidgets('toggles are not on the card, only inside the More menu', (
+      tester,
+    ) async {
+      await openStudy(
+        tester,
+        direction: CardDirection.targetToNative,
+        yaml: withSentence,
+      );
+      expect(toggle('vocabulary', 'romanization'), findsNothing); // front
+      await reveal(tester);
+      expect(toggle('vocabulary', 'romanization'), findsNothing); // back
+
+      await openMore(tester);
+      for (final target in ['vocabulary', 'sentence']) {
+        expect(toggle(target, 'romanization'), findsOneWidget);
+        expect(toggle(target, 'ipa'), findsOneWidget);
+      }
+      expect(find.text('RR'), findsNWidgets(2));
+      expect(find.text('IPA'), findsNWidgets(2));
+    });
 
     for (final width in [1200.0, 360.0]) {
       testWidgets(
@@ -661,25 +690,28 @@ vocabulary:
           await reveal(tester);
           expect(find.text('bae'), findsNothing);
 
-          await chooseFromMore(tester, 'Vocabulary romanization');
+          await openMore(tester);
+          await tapToggle(tester, 'vocabulary', 'romanization');
           expect(
             provider.showRomanization(PronunciationTarget.vocabulary),
             isTrue,
           );
-          expect(find.text('bae'), findsOneWidget);
+          expect(find.text('bae'), findsOneWidget); // card updates behind menu
           expect(find.text(sentenceRomanization), findsNothing);
+          expect(toggle('sentence', 'ipa'), findsOneWidget); // menu stays open
 
-          await chooseFromMore(tester, 'Sentence romanization');
+          await tapToggle(tester, 'sentence', 'romanization');
           expect(find.text(sentenceRomanization), findsOneWidget);
 
-          await chooseFromMore(tester, 'Vocabulary romanization'); // back off
+          await tapToggle(tester, 'vocabulary', 'romanization'); // off again
           expect(find.text('bae'), findsNothing);
           expect(find.text(sentenceRomanization), findsOneWidget);
+          expect(tester.takeException(), isNull);
         },
       );
     }
 
-    testWidgets('app bar has the sound toggle, Ask AI and More', (
+    testWidgets('app bar keeps previous/next, sound toggle and More', (
       tester,
     ) async {
       await openStudy(tester, direction: CardDirection.targetToNative);
@@ -693,26 +725,17 @@ vocabulary:
         findsOneWidget,
         reason: 'Next card',
       );
-      expect(
-        find.byTooltip('Autoplay audio'),
-        findsOneWidget,
-        reason: 'Autoplay audio',
-      );
-      expect(find.byTooltip('More'), findsOneWidget, reason: 'More');
+      expect(find.byTooltip('Autoplay audio'), findsOneWidget);
+      expect(find.byTooltip('More'), findsOneWidget);
 
-      await tester.tap(find.byTooltip('More'));
-      await tester.pumpAndSettle();
-      for (final label in [
-        'Edit card',
-        'Ask AI',
-        'Vocabulary romanization',
-        'Sentence IPA',
-      ]) {
+      await openMore(tester);
+      for (final label in ['Edit card', 'Ask AI']) {
         expect(find.textContaining(label), findsOneWidget, reason: label);
       }
+      expect(toggle('vocabulary', 'romanization'), findsOneWidget);
     });
 
-    testWidgets('no pronunciation items for a non-Korean lesson', (
+    testWidgets('no pronunciation toggles for a non-Korean lesson', (
       tester,
     ) async {
       await openStudy(
@@ -720,22 +743,28 @@ vocabulary:
         direction: CardDirection.targetToNative,
         targetLanguage: 'es',
       );
-      await tester.tap(find.byTooltip('More'));
-      await tester.pumpAndSettle();
+      await openMore(tester);
       expect(find.textContaining('Edit card'), findsOneWidget);
-      expect(find.text('Vocabulary romanization'), findsNothing);
+      expect(toggle('vocabulary', 'romanization'), findsNothing);
+      expect(find.text('Pronunciation'), findsNothing);
     });
 
-    testWidgets('autoplay is a toggle button in the app bar', (tester) async {
-      final provider = await openStudy(
+    for (final width in [1200.0, 360.0]) {
+      testWidgets('autoplay toggle button works at ${width.toInt()}dp', (
         tester,
-        direction: CardDirection.targetToNative,
-      );
-      expect(provider.autoplayAudio, isTrue);
-      await tester.tap(find.byTooltip('Autoplay audio'));
-      await tester.pumpAndSettle();
-      expect(provider.autoplayAudio, isFalse);
-    });
+      ) async {
+        final provider = await openStudy(
+          tester,
+          direction: CardDirection.targetToNative,
+        );
+        tester.view.physicalSize = Size(width, 2400);
+        await tester.pumpAndSettle();
+        expect(provider.autoplayAudio, isTrue);
+        await tester.tap(find.byTooltip('Autoplay audio'));
+        await tester.pumpAndSettle();
+        expect(provider.autoplayAudio, isFalse);
+      });
+    }
 
     testWidgets('nothing for a non-Korean lesson', (tester) async {
       await openStudy(

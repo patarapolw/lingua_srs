@@ -14,7 +14,7 @@ import '../services/srs_service.dart';
 import '../widgets/audio_button.dart';
 import '../widgets/markdown_content.dart';
 import '../widgets/pronunciation_line.dart';
-import '../widgets/pronunciation_menu.dart';
+import '../widgets/pronunciation_toggle.dart';
 import 'ai_discussion_dialog.dart';
 import 'vocab_edit_dialog.dart';
 
@@ -969,8 +969,6 @@ class _StudyViewState extends State<StudyView> {
                     _openEditCurrentCard();
                   case 'ai':
                     _openAiDiscussion(item);
-                  default:
-                    handlePronunciationSelection(provider, value);
                 }
               },
               itemBuilder: (context) => [
@@ -988,18 +986,15 @@ class _StudyViewState extends State<StudyView> {
                   Icons.edit_outlined,
                   _showKeyHints ? 'Edit card (E)' : 'Edit card',
                 ),
-                PopupMenuItem(
-                  value: 'ai',
-                  child: ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.forum_outlined),
-                    title: Text('Ask AI'),
-                  ),
+                moreItem(
+                  'ai',
+                  Icons.forum_outlined,
+                  'Ask AI',
+                  enabled: _isAnswerRevealed,
                 ),
                 if (item.lesson.targetLanguage == 'ko') ...[
                   const PopupMenuDivider(),
-                  ...pronunciationMenuEntries(provider),
+                  PronunciationToggleMenuEntry(enabled: _isAnswerRevealed),
                 ],
               ],
             ),
