@@ -274,34 +274,53 @@ class VocabAiPrompts {
     return hint.length > 40 ? hint.substring(0, 40).trim() : hint;
   }
 
+  static const int _maxNoteChars = 60;
+
+  static int? _asInt(Object? value) {
+    if (value is int) return value;
+    if (value is num && value == value.toInt()) return value.toInt();
+    if (value is String) return int.tryParse(value.trim());
+    return null;
+  }
+
+  static String _itemLine(int number, VocabGroup item) {
+    final e = item.entry;
+    var line = '$number|${_oneLine(e.pos)}|${_oneLine(e.translation)}';
+    var note = _oneLine(e.notes);
+    if (note.isNotEmpty) {
+      if (note.length > _maxNoteChars) {
+        note = '${note.substring(0, _maxNoteChars)}…';
+      }
+      line += '|$note';
+    }
+    return line;
+  }
+
+  /// Entries are numbered 1..N across the whole request, so the reply can use
+  /// short numbers instead of 70-character ids.
   static List<AiDiscussionMessage> mergeMessages(List<VocabMergeGroup> groups) {
     const system =
-        'You help clean up a language-learning flashcard deck. Each group lists '
-        'vocabulary entries that share the same target-language word but have '
-        'different ids. Decide which entries are the SAME vocabulary item with '
-        'the SAME sense and should share one progress record. These are NOT '
-        'differences: a leading "to", "to be" or "be", articles (a/an/the), '
-        'capitalisation, punctuation, optional text in parentheses, or equivalent '
-        'glosses in a different order. Do NOT merge entries with genuinely '
-        'different senses (homonyms) . When unsure, do not merge. Reply with JSON '
-        'only: {"merges":[{"group":<number>,"keep":"<id>","merge":["<id>"],'
-        '"reason":"<at most 12 words>"}]}. Use only ids from the input. Omit '
-        'groups with nothing to merge.';
+        'You help clean up a language-learning flashcard deck. Each group has a '
+        'Korean word and numbered entries sharing that spelling, one per line '
+        'as number|part of speech|English or number|part of speech|English|note. '
+        'Decide which entries are the SAME vocabulary item with the SAME sense '
+        'and should share one progress record. These are NOT differences: a '
+        'leading "to", "to be" or "be", articles (a/an/the), capitalisation, '
+        'punctuation, optional text in parentheses, or equivalent glosses in a '
+        'different order. Do NOT merge entries with genuinely different senses '
+        '(homonyms). When unsure, do not merge. Reply with JSON only: '
+        '{"merges":[{"keep":<number>,"merge":[<number>],"reason":"<at most 8 '
+        'words>"}]}. Use only numbers from the input, and only numbers from the '
+        'same group. Omit groups with nothing to merge.';
+    var number = 0;
     final payload = {
       'groups': [
         for (final group in groups)
           {
             'group': group.number,
-            'target': group.items.first.entry.targetWord,
+            'korean': group.items.first.entry.targetWord,
             'items': [
-              for (final item in group.items)
-                {
-                  'id': item.id,
-                  'translation': item.entry.translation,
-                  'pos': item.entry.pos,
-                  'notes': item.entry.notes,
-                  'lessons': item.lessonTitles,
-                },
+              for (final item in group.items) _itemLine(++number, item),
             ],
           },
       ],
@@ -312,41 +331,49 @@ class VocabAiPrompts {
     ];
   }
 
+  /// [groups] must be the same list given to [mergeMessages].
   static List<VocabMergeSuggestion> parseMergeSuggestions(
     String reply,
     List<VocabMergeGroup> groups,
   ) {
-    final byNumber = {for (final g in groups) g.number: g};
+    final flat = [for (final g in groups) ...g.items];
+    final groupOf = <int, int>{}; // item number -> index of its group
+    var number = 0;
+    for (var g = 0; g < groups.length; g++) {
+      for (var i = 0; i < groups[g].items.length; i++) {
+        groupOf[++number] = g;
+      }
+    }
     final merges = _decodeObject(reply)['merges'];
     if (merges is! List) return const [];
-    final used = <String>{};
+    final used = <int>{};
     final result = <VocabMergeSuggestion>[];
     for (final raw in merges) {
       if (raw is! Map) continue;
-      final number = raw['group'];
-      final group = number is num ? byNumber[number.toInt()] : null;
-      if (group == null) continue;
-      final valid = group.items.map((item) => item.id).toSet();
-      final keep = raw['keep'];
-      if (keep is! String || !valid.contains(keep) || used.contains(keep)) {
+      final keep = _asInt(raw['keep']);
+      if (keep == null || !groupOf.containsKey(keep) || used.contains(keep)) {
         continue;
       }
-      final mergeIds = <String>{
-        for (final id in (raw['merge'] as List? ?? const []))
-          if (id is String &&
-              valid.contains(id) &&
-              id != keep &&
-              !used.contains(id))
-            id,
-      }.toList();
-      if (mergeIds.isEmpty) continue;
+      final mergeNumbers = <int>[];
+      for (final n in (raw['merge'] as List? ?? const [])) {
+        final value = _asInt(n);
+        if (value == null ||
+            value == keep ||
+            used.contains(value) ||
+            mergeNumbers.contains(value) ||
+            groupOf[value] != groupOf[keep]) {
+          continue;
+        }
+        mergeNumbers.add(value);
+      }
+      if (mergeNumbers.isEmpty) continue;
       used
         ..add(keep)
-        ..addAll(mergeIds);
+        ..addAll(mergeNumbers);
       result.add(
         VocabMergeSuggestion(
-          keepId: keep,
-          mergeIds: mergeIds,
+          keepId: flat[keep - 1].id,
+          mergeIds: [for (final n in mergeNumbers) flat[n - 1].id],
           reason: (raw['reason'] as String? ?? '').trim(),
         ),
       );

@@ -1138,14 +1138,18 @@ vocabulary:
       AppProvider Function() provider,
       Lesson Function() a,
       Lesson Function() b,
-    ) => MockClient((_) async {
+    ) => MockClient((request) async {
       counter.add(1);
+      expect(
+        request.body,
+        isNot(contains('auto-')),
+        reason: 'merge requests should use entry numbers, not ids',
+      );
       return aiOk({
         'merges': [
           {
-            'group': 1,
-            'keep': only(a()).id,
-            'merge': [only(b()).id],
+            'keep': 1,
+            'merge': [2],
             'reason': 'same word',
           },
         ],
@@ -1230,24 +1234,20 @@ vocabulary:
       tester,
     ) async {
       var calls = 0;
-      late Lesson a, b;
       final client = MockClient((_) async {
         calls++;
         if (calls == 1) return http.Response('boom', 500);
         return aiOk({
           'merges': [
             {
-              'group': 1,
-              'keep': only(a).id,
-              'merge': [only(b).id],
+              'keep': 1,
+              'merge': [2],
               'reason': 'same word',
             },
           ],
         });
       });
-      final (_, a0, b0) = await setup(tester, client);
-      a = a0;
-      b = b0;
+      final (_, _, _) = await setup(tester, client);
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
       expect(
@@ -1271,6 +1271,197 @@ vocabulary:
       await tester.pumpAndSettle();
       expect(find.textContaining('(401)'), findsOneWidget);
       expect(provider.canUseAi, isFalse);
+    });
+  });
+
+  group('Merge section in the edit dialog', () {
+    Future<(AppProvider, Lesson, Lesson)> open(
+      WidgetTester tester, {
+      Map<String, Object> prefs = const {},
+      http.Client? client,
+    }) async {
+      final provider = await loadedProvider(tester, prefs);
+      final a = await seed(
+        tester,
+        provider,
+        'L1',
+        'adjectives',
+        '아름답다',
+        'beautiful',
+      );
+      final b = await seed(
+        tester,
+        provider,
+        'L2',
+        'adjectives',
+        '아름답다',
+        'to be beautiful',
+      );
+      provider.aiClient = client;
+      await pumpWith(
+        tester,
+        provider,
+        opener(
+          (context) => VocabEditDialog.show(context, only(a), lessonId: a.id),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      return (provider, a, b);
+    }
+
+    testWidgets('is shown for a saved vocab, AI button only with a key', (
+      tester,
+    ) async {
+      await open(tester);
+      expect(
+        find.text('Merge duplicates', skipOffstage: false),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Merge with another word…', skipOffstage: false),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Suggest merge with AI', skipOffstage: false),
+        findsNothing,
+      );
+    });
+
+    testWidgets('shows the AI merge button when a DeepSeek key is set', (
+      tester,
+    ) async {
+      await open(tester, prefs: {'lingua_srs_deepseek_api_key': 'k'});
+      expect(
+        find.text('Suggest merge with AI', skipOffstage: false),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('is hidden for a vocab that is not saved yet', (tester) async {
+      final provider = await loadedProvider(tester);
+      await pumpWith(
+        tester,
+        provider,
+        opener(
+          (context) => VocabEditDialog.show(
+            context,
+            VocabItem(targetWord: '배', translation: 'pear', pos: 'nouns'),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      expect(find.text('Merge duplicates', skipOffstage: false), findsNothing);
+    });
+
+    testWidgets(
+      'manual merge: pick, confirm with the warning, dialog closes, undo offered',
+      (tester) async {
+        final (provider, a, b) = await open(tester);
+        await tester.ensureVisible(find.text('Merge with another word…'));
+        await tester.tap(find.text('Merge with another word…'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('아름답다 — to be beautiful'));
+        await tester.pumpAndSettle();
+        expect(
+          find.text('Unsaved changes in this edit form will be discarded.'),
+          findsOneWidget,
+        );
+
+        final confirm = find.byType(ConfirmMergeDialog);
+        await tester.tap(
+          find.descendant(of: confirm, matching: find.byType(CheckboxListTile)),
+        );
+        await tester.pump();
+        await tester.tap(
+          find.descendant(
+            of: confirm,
+            matching: find.widgetWithText(FilledButton, 'Merge'),
+          ),
+        );
+        await tester.pump();
+        await waitFor(tester, () => provider.mergeHistory.length == 1);
+        await tester.pumpAndSettle();
+
+        expect(only(b).id, only(a).id);
+        expect(find.byType(VocabEditDialog), findsNothing);
+        expect(find.textContaining('Merged'), findsOneWidget);
+        expect(find.text('Undo'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'cancelling the picker keeps the edit dialog open and merges nothing',
+      (tester) async {
+        final (provider, a, b) = await open(tester);
+        await tester.ensureVisible(find.text('Merge with another word…'));
+        await tester.tap(find.text('Merge with another word…'));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.descendant(
+            of: find.byType(MergePickerDialog),
+            matching: find.text('Cancel'),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byType(VocabEditDialog), findsOneWidget);
+        expect(provider.mergeHistory, isEmpty);
+        expect(only(b).id, isNot(only(a).id));
+      },
+    );
+
+    testWidgets('AI merge: scoped suggestions, confirm, both dialogs close', (
+      tester,
+    ) async {
+      var requests = 0;
+      final client = MockClient((request) async {
+        requests++;
+        final user =
+            ((jsonDecode(request.body) as Map<String, dynamic>)['messages']
+                    as List)[1]['content']
+                as String;
+        expect(user, contains('아름답다'));
+        return aiOk({
+          'merges': [
+            {
+              'keep': 1,
+              'merge': [2],
+              'reason': 'same word',
+            },
+          ],
+        });
+      });
+      final (provider, a, b) = await open(
+        tester,
+        prefs: {'lingua_srs_deepseek_api_key': 'k'},
+        client: client,
+      );
+      await tester.ensureVisible(find.text('Suggest merge with AI'));
+      await tester.tap(find.text('Suggest merge with AI'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('AI merge suggestions for 아름답다'), findsOneWidget);
+      expect(requests, 1);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AlertDialog).last,
+          matching: find.byType(CheckboxListTile),
+        ),
+      );
+      await tester.pump();
+      await tester.tap(find.text('Merge selected (1)'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Merge 1'));
+      await tester.pump();
+      await waitFor(tester, () => provider.mergeHistory.length == 1);
+      await tester.pumpAndSettle();
+
+      expect(only(b).id, only(a).id);
+      expect(provider.mergeHistory.single.source, 'ai');
+      expect(find.byType(VocabEditDialog), findsNothing);
     });
   });
 
@@ -1343,5 +1534,92 @@ vocabulary:
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
     expect(find.text('Nothing to undo.'), findsOneWidget);
+  });
+
+  testWidgets('Merge picker suggests likely duplicates before typing', (
+    tester,
+  ) async {
+    final current = vg('cur', '아름답다', 'beautiful');
+    await openDialog(
+      tester,
+      () => MergePickerDialog(
+        current: current,
+        groups: [
+          current,
+          vg('zzz', '크다', 'big'),
+          vg('same', '아름답다', 'to be beautiful'),
+          vg('variant', '아름답고', 'pretty'),
+          vg('meaning', '예쁘다', 'beautiful'),
+        ],
+      ),
+      (_) {},
+    );
+    expect(find.text('Suggestions'), findsOneWidget);
+    expect(find.text('All other words'), findsOneWidget);
+    // Rows are built lazily: check the visible suggestions first...
+    final titles = tester
+        .widgetList<ListTile>(find.byType(ListTile))
+        .map((t) => (t.title as Text).data)
+        .toList();
+    expect(titles.take(3), [
+      '아름답다 — to be beautiful',
+      '아름답고 — pretty',
+      '예쁘다 — beautiful',
+    ]);
+    expect(find.textContaining('same Korean'), findsOneWidget);
+    expect(find.textContaining('similar Korean'), findsOneWidget);
+    expect(find.textContaining('same meaning'), findsNWidgets(2));
+
+    // ...then scroll to the "All other words" section.
+    await tester.scrollUntilVisible(
+      find.text('크다 — big'),
+      100,
+      scrollable: find.descendant(
+        of: find.byType(ListView),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    expect(find.text('크다 — big'), findsOneWidget);
+    expect(find.text('All other words'), findsOneWidget);
+  });
+
+  testWidgets('Merge picker searches Korean variants and English', (
+    tester,
+  ) async {
+    final current = vg('cur', '아름답다', 'beautiful');
+    await openDialog(
+      tester,
+      () => MergePickerDialog(
+        current: current,
+        groups: [
+          current,
+          vg('same', '아름답다', 'to be beautiful'),
+          vg('variant', '아름답고', 'pretty'),
+          vg('meaning', '예쁘다', 'beautiful'),
+        ],
+      ),
+      (_) {},
+    );
+    List<String?> titles() => tester
+        .widgetList<ListTile>(find.byType(ListTile))
+        .map((t) => (t.title as Text).data)
+        .toList();
+
+    await tester.enterText(find.byType(TextField), '아름답습니다');
+    await tester.pump();
+    expect(titles(), containsAll(['아름답다 — to be beautiful', '아름답고 — pretty']));
+    expect(titles(), isNot(contains('예쁘다 — beautiful')));
+    expect(
+      find.text('Suggestions'),
+      findsNothing,
+    ); // headers only before typing
+
+    await tester.enterText(find.byType(TextField), 'pretty');
+    await tester.pump();
+    expect(titles(), ['아름답고 — pretty']);
+
+    await tester.enterText(find.byType(TextField), 'zzzz');
+    await tester.pump();
+    expect(find.text('No matching vocabulary.'), findsOneWidget);
   });
 }

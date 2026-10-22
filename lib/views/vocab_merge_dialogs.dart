@@ -5,6 +5,7 @@ import '../models/vocab_item.dart';
 import '../models/vocab_merge_record.dart';
 import '../providers/app_provider.dart';
 import '../services/vocab_ai_service.dart';
+import '../services/vocab_picker_search.dart';
 
 void showMergeUndoSnackBar(
   ScaffoldMessengerState messenger,
@@ -30,7 +31,12 @@ void showMergeUndoSnackBar(
 }
 
 /// Manual flow: pick the other vocabulary, read the warning, confirm.
-Future<void> startManualMerge(BuildContext context, VocabItem vocab) async {
+/// Returns true if a merge happened.
+Future<bool> startManualMerge(
+  BuildContext context,
+  VocabItem vocab, {
+  String? note,
+}) async {
   final provider = context.read<AppProvider>();
   final messenger = ScaffoldMessenger.of(context);
   final groups = provider.vocabGroups;
@@ -40,20 +46,22 @@ Future<void> startManualMerge(BuildContext context, VocabItem vocab) async {
     context: context,
     builder: (_) => MergePickerDialog(current: current, groups: groups),
   );
-  if (other == null || !context.mounted) return;
+  if (other == null || !context.mounted) return false;
 
   final survivorId = await showDialog<String>(
     context: context,
-    builder: (_) => ConfirmMergeDialog(a: current, b: other),
+    builder: (_) => ConfirmMergeDialog(a: current, b: other, note: note),
   );
-  if (survivorId == null) return;
+  if (survivorId == null) return false;
 
   final absorbedId = survivorId == current.id ? other.id : current.id;
   final record = await provider.mergeVocab(
     survivorId: survivorId,
     absorbedIds: [absorbedId],
   );
-  if (record != null) showMergeUndoSnackBar(messenger, provider, [record]);
+  if (record == null) return false;
+  showMergeUndoSnackBar(messenger, provider, [record]);
+  return true;
 }
 
 @visibleForTesting
@@ -66,34 +74,70 @@ class MergePickerDialog extends StatefulWidget {
   State<MergePickerDialog> createState() => _MergePickerDialogState();
 }
 
+class _PickerRow {
+  const _PickerRow.header(this.header)
+    : group = null,
+      matches = const <PickerMatch>{};
+  const _PickerRow.item(
+    VocabGroup this.group, [
+    this.matches = const <PickerMatch>{},
+  ]) : header = null;
+  final String? header;
+  final VocabGroup? group;
+  final Set<PickerMatch> matches;
+}
+
+String _matchBadge(Set<PickerMatch> matches) {
+  const names = {
+    PickerMatch.sameKorean: 'same Korean',
+    PickerMatch.similarKorean: 'similar Korean',
+    PickerMatch.sameMeaning: 'same meaning',
+    PickerMatch.similarMeaning: 'similar meaning',
+  };
+  return [
+    for (final kind in PickerMatch.values)
+      if (matches.contains(kind)) names[kind]!,
+  ].join(', ');
+}
+
 class _MergePickerDialogState extends State<MergePickerDialog> {
   String _query = '';
+  late final List<PickerHit> _suggestions = VocabPickerSearch.suggest(
+    widget.current,
+    widget.groups,
+  );
 
-  int _rank(VocabGroup g) {
-    final c = widget.current.entry;
-    if (VocabSimilarity.normalizeTarget(g.entry.targetWord) ==
-        VocabSimilarity.normalizeTarget(c.targetWord)) {
-      return 0;
+  List<_PickerRow> _rows() {
+    if (_query.isNotEmpty) {
+      return [
+        for (final hit in VocabPickerSearch.search(
+          _query,
+          widget.current,
+          widget.groups,
+        ))
+          _PickerRow.item(hit.group, hit.matches),
+      ];
     }
-    if (VocabSimilarity.normalizeTranslation(g.entry.translation) ==
-        VocabSimilarity.normalizeTranslation(c.translation)) {
-      return 1;
-    }
-    return 2;
+    final suggested = {for (final h in _suggestions) h.group.id};
+    final rest =
+        widget.groups
+            .where(
+              (g) => g.id != widget.current.id && !suggested.contains(g.id),
+            )
+            .toList()
+          ..sort((a, b) => a.label.compareTo(b.label));
+    return [
+      if (_suggestions.isNotEmpty) const _PickerRow.header('Suggestions'),
+      for (final h in _suggestions) _PickerRow.item(h.group, h.matches),
+      if (_suggestions.isNotEmpty && rest.isNotEmpty)
+        const _PickerRow.header('All other words'),
+      for (final g in rest) _PickerRow.item(g),
+    ];
   }
 
   @override
   Widget build(BuildContext context) {
-    final q = _query.toLowerCase();
-    final options =
-        widget.groups
-            .where((g) => g.id != widget.current.id)
-            .where((g) => q.isEmpty || g.label.toLowerCase().contains(q))
-            .toList()
-          ..sort((a, b) {
-            final byRank = _rank(a).compareTo(_rank(b));
-            return byRank != 0 ? byRank : a.label.compareTo(b.label);
-          });
+    final rows = _rows();
     return AlertDialog(
       title: Text('Merge "${widget.current.label}" with…'),
       content: SizedBox(
@@ -105,25 +149,40 @@ class _MergePickerDialogState extends State<MergePickerDialog> {
               autofocus: true,
               decoration: const InputDecoration(
                 prefixIcon: Icon(Icons.search),
-                hintText: 'Search vocabulary',
+                hintText: 'Search Korean or English',
               ),
               onChanged: (v) => setState(() => _query = v.trim()),
             ),
             const SizedBox(height: 8),
             Expanded(
-              child: ListView.builder(
-                itemCount: options.length,
-                itemBuilder: (_, i) {
-                  final g = options[i];
-                  return ListTile(
-                    title: Text(g.label),
-                    subtitle: Text(
-                      '${g.entry.pos} • ${g.lessonTitles.join(', ')} • ${g.reviews} reviews',
+              child: rows.isEmpty
+                  ? const Center(child: Text('No matching vocabulary.'))
+                  : ListView.builder(
+                      itemCount: rows.length,
+                      itemBuilder: (_, i) {
+                        final row = rows[i];
+                        if (row.header != null) {
+                          return Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                            child: Text(
+                              row.header!,
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                          );
+                        }
+                        final g = row.group!;
+                        final badge = _matchBadge(row.matches);
+                        return ListTile(
+                          title: Text(g.label),
+                          subtitle: Text(
+                            '${g.entry.pos} • ${g.lessonTitles.join(', ')} • '
+                            '${g.reviews} reviews'
+                            '${badge.isEmpty ? '' : ' • $badge'}',
+                          ),
+                          onTap: () => Navigator.pop(context, g),
+                        );
+                      },
                     ),
-                    onTap: () => Navigator.pop(context, g),
-                  );
-                },
-              ),
             ),
           ],
         ),
@@ -140,9 +199,10 @@ class _MergePickerDialogState extends State<MergePickerDialog> {
 
 @visibleForTesting
 class ConfirmMergeDialog extends StatefulWidget {
-  const ConfirmMergeDialog({required this.a, required this.b});
+  const ConfirmMergeDialog({required this.a, required this.b, this.note});
   final VocabGroup a;
   final VocabGroup b;
+  final String? note;
 
   @override
   State<ConfirmMergeDialog> createState() => _ConfirmMergeDialogState();
@@ -174,6 +234,17 @@ class _ConfirmMergeDialogState extends State<ConfirmMergeDialog> {
               'They become one vocabulary in every lesson: shared SRS progress, '
               'audio, notes and front hint. Each lesson keeps its own wording.',
             ),
+            if (widget.note != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  widget.note!,
+                  style: TextStyle(
+                    color: theme.colorScheme.error,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
             const SizedBox(height: 8),
             RadioGroup<String>(
               groupValue: _survivorId,
@@ -212,11 +283,19 @@ class _ConfirmMergeDialogState extends State<ConfirmMergeDialog> {
   }
 }
 
-Future<void> showAiMergeSuggestions(BuildContext context) =>
-    showDialog(context: context, builder: (_) => const _AiMergeDialog());
+/// Returns true if something was merged. [scope] limits the suggestions to
+/// words spelled like that vocab.
+Future<bool?> showAiMergeSuggestions(
+  BuildContext context, {
+  VocabItem? scope,
+}) => showDialog<bool>(
+  context: context,
+  builder: (_) => _AiMergeDialog(scope: scope),
+);
 
 class _AiMergeDialog extends StatefulWidget {
-  const _AiMergeDialog();
+  const _AiMergeDialog({this.scope});
+  final VocabItem? scope;
   @override
   State<_AiMergeDialog> createState() => _AiMergeDialogState();
 }
@@ -241,7 +320,9 @@ class _AiMergeDialogState extends State<_AiMergeDialog> {
       _selected.clear();
     });
     try {
-      final result = await provider.suggestVocabMerges();
+      final result = widget.scope == null
+          ? await provider.suggestVocabMerges()
+          : await provider.suggestMergesForVocab(widget.scope!);
       if (mounted) setState(() => _suggestions = result);
     } catch (error) {
       if (mounted) setState(() => _error = '$error');
@@ -295,7 +376,7 @@ class _AiMergeDialogState extends State<_AiMergeDialog> {
       );
       if (record != null) records.add(record);
     }
-    navigator.pop();
+    navigator.pop(true);
     showMergeUndoSnackBar(
       messenger,
       provider,
@@ -351,11 +432,15 @@ class _AiMergeDialogState extends State<_AiMergeDialog> {
     }
 
     return AlertDialog(
-      title: const Text('AI merge suggestions'),
+      title: Text(
+        widget.scope == null
+            ? 'AI merge suggestions'
+            : 'AI merge suggestions for ${widget.scope!.targetWord}',
+      ),
       content: SizedBox(width: 520, height: 420, child: body),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => Navigator.pop(context, false),
           child: const Text('Close'),
         ),
         FilledButton(
