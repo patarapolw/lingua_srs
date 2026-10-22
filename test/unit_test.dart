@@ -1812,6 +1812,17 @@ ${audio != null ? '      audio: $audio\n' : ''}---
 # $title
 ''';
 
+    String vocabYamlFor(String title, String ko, String en) =>
+        '''
+---
+vocabulary:
+  nouns:
+    - ko: $ko
+      en: $en
+---
+# $title
+''';
+
     VocabItem only(Lesson lesson) => lesson.vocabularies.single;
 
     group('Vocabulary merging', () {
@@ -2413,6 +2424,115 @@ vocabulary:
         });
         expect(await provider.suggestVocabMerges(client: client), isEmpty);
         expect(requests, 1);
+        provider.dispose();
+      });
+
+      test(
+        'suggestMergesForVocab sends only the same-spelling group',
+        () async {
+          final provider = await newProvider();
+          await provider.setDeepSeekApiKey('k');
+          final l1 = await provider.importYaml(
+            adjYaml('L1', '아름답다', 'beautiful'),
+          );
+          final l2 = await provider.importYaml(
+            adjYaml('L2', '아름답다', 'to be beautiful'),
+          );
+          await provider.importYaml(vocabYamlFor('L3', '배', 'pear'));
+          await provider.importYaml(vocabYamlFor('L4', '배', 'stomach'));
+
+          var requests = 0;
+          final client = MockClient((request) async {
+            requests++;
+            final body = jsonDecode(request.body) as Map<String, dynamic>;
+            final user = (body['messages'] as List)[1]['content'] as String;
+            expect(user, contains('아름답다'));
+            expect(user, isNot(contains('pear')));
+            expect(user, isNot(contains('auto-')));
+            return ok({
+              'merges': [
+                {
+                  'keep': 1,
+                  'merge': [2],
+                  'reason': 'same',
+                },
+              ],
+            });
+          });
+
+          final suggestions = await provider.suggestMergesForVocab(
+            only(l1),
+            client: client,
+          );
+          expect(requests, 1);
+          expect(suggestions.single.keepId, only(l1).id);
+          expect(suggestions.single.mergeIds, [only(l2).id]);
+          provider.dispose();
+        },
+      );
+
+      test(
+        'suggestMergesForVocab drops suggestions that do not involve the vocab',
+        () async {
+          final provider = await newProvider();
+          await provider.setDeepSeekApiKey('k');
+          final l1 = await provider.importYaml(
+            adjYaml('L1', '아름답다', 'beautiful'),
+          );
+          await provider.importYaml(adjYaml('L2', '아름답다', 'to be beautiful'));
+          await provider.importYaml(adjYaml('L3', '아름답다', 'lovely'));
+          // entries: 1 = this vocab, 2 and 3 = the others; the AI merges 2 and 3 only
+          final client = MockClient(
+            (_) async => ok({
+              'merges': [
+                {
+                  'keep': 2,
+                  'merge': [3],
+                  'reason': 'same',
+                },
+              ],
+            }),
+          );
+          expect(
+            await provider.suggestMergesForVocab(only(l1), client: client),
+            isEmpty,
+          );
+          provider.dispose();
+        },
+      );
+
+      test(
+        'suggestMergesForVocab makes no request when nothing is spelled alike',
+        () async {
+          final provider = await newProvider();
+          await provider.setDeepSeekApiKey('k');
+          final l1 = await provider.importYaml(
+            adjYaml('L1', '아름답다', 'beautiful'),
+          );
+          final client = MockClient((_) async {
+            fail('no request expected');
+          });
+          expect(
+            await provider.suggestMergesForVocab(only(l1), client: client),
+            isEmpty,
+          );
+          provider.dispose();
+        },
+      );
+
+      test('suggestMergesForVocab reports an auth failure', () async {
+        final provider = await newProvider();
+        await provider.setDeepSeekApiKey('k');
+        final l1 = await provider.importYaml(
+          adjYaml('L1', '아름답다', 'beautiful'),
+        );
+        await provider.importYaml(adjYaml('L2', '아름답다', 'to be beautiful'));
+        final client = MockClient((_) async => http.Response('bad', 401));
+        await expectLater(
+          provider.suggestMergesForVocab(only(l1), client: client),
+          throwsA(isA<DeepSeekException>()),
+        );
+        expect(provider.canUseAi, isFalse);
         provider.dispose();
       });
     });

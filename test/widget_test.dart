@@ -1274,6 +1274,197 @@ vocabulary:
     });
   });
 
+  group('Merge section in the edit dialog', () {
+    Future<(AppProvider, Lesson, Lesson)> open(
+      WidgetTester tester, {
+      Map<String, Object> prefs = const {},
+      http.Client? client,
+    }) async {
+      final provider = await loadedProvider(tester, prefs);
+      final a = await seed(
+        tester,
+        provider,
+        'L1',
+        'adjectives',
+        '아름답다',
+        'beautiful',
+      );
+      final b = await seed(
+        tester,
+        provider,
+        'L2',
+        'adjectives',
+        '아름답다',
+        'to be beautiful',
+      );
+      provider.aiClient = client;
+      await pumpWith(
+        tester,
+        provider,
+        opener(
+          (context) => VocabEditDialog.show(context, only(a), lessonId: a.id),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      return (provider, a, b);
+    }
+
+    testWidgets('is shown for a saved vocab, AI button only with a key', (
+      tester,
+    ) async {
+      await open(tester);
+      expect(
+        find.text('Merge duplicates', skipOffstage: false),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Merge with another word…', skipOffstage: false),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Suggest merge with AI', skipOffstage: false),
+        findsNothing,
+      );
+    });
+
+    testWidgets('shows the AI merge button when a DeepSeek key is set', (
+      tester,
+    ) async {
+      await open(tester, prefs: {'lingua_srs_deepseek_api_key': 'k'});
+      expect(
+        find.text('Suggest merge with AI', skipOffstage: false),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('is hidden for a vocab that is not saved yet', (tester) async {
+      final provider = await loadedProvider(tester);
+      await pumpWith(
+        tester,
+        provider,
+        opener(
+          (context) => VocabEditDialog.show(
+            context,
+            VocabItem(targetWord: '배', translation: 'pear', pos: 'nouns'),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      expect(find.text('Merge duplicates', skipOffstage: false), findsNothing);
+    });
+
+    testWidgets(
+      'manual merge: pick, confirm with the warning, dialog closes, undo offered',
+      (tester) async {
+        final (provider, a, b) = await open(tester);
+        await tester.ensureVisible(find.text('Merge with another word…'));
+        await tester.tap(find.text('Merge with another word…'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('아름답다 — to be beautiful'));
+        await tester.pumpAndSettle();
+        expect(
+          find.text('Unsaved changes in this edit form will be discarded.'),
+          findsOneWidget,
+        );
+
+        final confirm = find.byType(ConfirmMergeDialog);
+        await tester.tap(
+          find.descendant(of: confirm, matching: find.byType(CheckboxListTile)),
+        );
+        await tester.pump();
+        await tester.tap(
+          find.descendant(
+            of: confirm,
+            matching: find.widgetWithText(FilledButton, 'Merge'),
+          ),
+        );
+        await tester.pump();
+        await waitFor(tester, () => provider.mergeHistory.length == 1);
+        await tester.pumpAndSettle();
+
+        expect(only(b).id, only(a).id);
+        expect(find.byType(VocabEditDialog), findsNothing);
+        expect(find.textContaining('Merged'), findsOneWidget);
+        expect(find.text('Undo'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'cancelling the picker keeps the edit dialog open and merges nothing',
+      (tester) async {
+        final (provider, a, b) = await open(tester);
+        await tester.ensureVisible(find.text('Merge with another word…'));
+        await tester.tap(find.text('Merge with another word…'));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.descendant(
+            of: find.byType(MergePickerDialog),
+            matching: find.text('Cancel'),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byType(VocabEditDialog), findsOneWidget);
+        expect(provider.mergeHistory, isEmpty);
+        expect(only(b).id, isNot(only(a).id));
+      },
+    );
+
+    testWidgets('AI merge: scoped suggestions, confirm, both dialogs close', (
+      tester,
+    ) async {
+      var requests = 0;
+      final client = MockClient((request) async {
+        requests++;
+        final user =
+            ((jsonDecode(request.body) as Map<String, dynamic>)['messages']
+                    as List)[1]['content']
+                as String;
+        expect(user, contains('아름답다'));
+        return aiOk({
+          'merges': [
+            {
+              'keep': 1,
+              'merge': [2],
+              'reason': 'same word',
+            },
+          ],
+        });
+      });
+      final (provider, a, b) = await open(
+        tester,
+        prefs: {'lingua_srs_deepseek_api_key': 'k'},
+        client: client,
+      );
+      await tester.ensureVisible(find.text('Suggest merge with AI'));
+      await tester.tap(find.text('Suggest merge with AI'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('AI merge suggestions for 아름답다'), findsOneWidget);
+      expect(requests, 1);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AlertDialog).last,
+          matching: find.byType(CheckboxListTile),
+        ),
+      );
+      await tester.pump();
+      await tester.tap(find.text('Merge selected (1)'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Merge 1'));
+      await tester.pump();
+      await waitFor(tester, () => provider.mergeHistory.length == 1);
+      await tester.pumpAndSettle();
+
+      expect(only(b).id, only(a).id);
+      expect(provider.mergeHistory.single.source, 'ai');
+      expect(find.byType(VocabEditDialog), findsNothing);
+    });
+  });
+
   testWidgets('Merge history: Undo is enabled only for the newest merge', (
     tester,
   ) async {

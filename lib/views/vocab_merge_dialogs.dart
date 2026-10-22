@@ -30,7 +30,12 @@ void showMergeUndoSnackBar(
 }
 
 /// Manual flow: pick the other vocabulary, read the warning, confirm.
-Future<void> startManualMerge(BuildContext context, VocabItem vocab) async {
+/// Returns true if a merge happened.
+Future<bool> startManualMerge(
+  BuildContext context,
+  VocabItem vocab, {
+  String? note,
+}) async {
   final provider = context.read<AppProvider>();
   final messenger = ScaffoldMessenger.of(context);
   final groups = provider.vocabGroups;
@@ -40,20 +45,22 @@ Future<void> startManualMerge(BuildContext context, VocabItem vocab) async {
     context: context,
     builder: (_) => MergePickerDialog(current: current, groups: groups),
   );
-  if (other == null || !context.mounted) return;
+  if (other == null || !context.mounted) return false;
 
   final survivorId = await showDialog<String>(
     context: context,
-    builder: (_) => ConfirmMergeDialog(a: current, b: other),
+    builder: (_) => ConfirmMergeDialog(a: current, b: other, note: note),
   );
-  if (survivorId == null) return;
+  if (survivorId == null) return false;
 
   final absorbedId = survivorId == current.id ? other.id : current.id;
   final record = await provider.mergeVocab(
     survivorId: survivorId,
     absorbedIds: [absorbedId],
   );
-  if (record != null) showMergeUndoSnackBar(messenger, provider, [record]);
+  if (record == null) return false;
+  showMergeUndoSnackBar(messenger, provider, [record]);
+  return true;
 }
 
 @visibleForTesting
@@ -140,9 +147,10 @@ class _MergePickerDialogState extends State<MergePickerDialog> {
 
 @visibleForTesting
 class ConfirmMergeDialog extends StatefulWidget {
-  const ConfirmMergeDialog({required this.a, required this.b});
+  const ConfirmMergeDialog({required this.a, required this.b, this.note});
   final VocabGroup a;
   final VocabGroup b;
+  final String? note;
 
   @override
   State<ConfirmMergeDialog> createState() => _ConfirmMergeDialogState();
@@ -174,6 +182,17 @@ class _ConfirmMergeDialogState extends State<ConfirmMergeDialog> {
               'They become one vocabulary in every lesson: shared SRS progress, '
               'audio, notes and front hint. Each lesson keeps its own wording.',
             ),
+            if (widget.note != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  widget.note!,
+                  style: TextStyle(
+                    color: theme.colorScheme.error,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
             const SizedBox(height: 8),
             RadioGroup<String>(
               groupValue: _survivorId,
@@ -212,11 +231,19 @@ class _ConfirmMergeDialogState extends State<ConfirmMergeDialog> {
   }
 }
 
-Future<void> showAiMergeSuggestions(BuildContext context) =>
-    showDialog(context: context, builder: (_) => const _AiMergeDialog());
+/// Returns true if something was merged. [scope] limits the suggestions to
+/// words spelled like that vocab.
+Future<bool?> showAiMergeSuggestions(
+  BuildContext context, {
+  VocabItem? scope,
+}) => showDialog<bool>(
+  context: context,
+  builder: (_) => _AiMergeDialog(scope: scope),
+);
 
 class _AiMergeDialog extends StatefulWidget {
-  const _AiMergeDialog();
+  const _AiMergeDialog({this.scope});
+  final VocabItem? scope;
   @override
   State<_AiMergeDialog> createState() => _AiMergeDialogState();
 }
@@ -241,7 +268,9 @@ class _AiMergeDialogState extends State<_AiMergeDialog> {
       _selected.clear();
     });
     try {
-      final result = await provider.suggestVocabMerges();
+      final result = widget.scope == null
+          ? await provider.suggestVocabMerges()
+          : await provider.suggestMergesForVocab(widget.scope!);
       if (mounted) setState(() => _suggestions = result);
     } catch (error) {
       if (mounted) setState(() => _error = '$error');
@@ -295,7 +324,7 @@ class _AiMergeDialogState extends State<_AiMergeDialog> {
       );
       if (record != null) records.add(record);
     }
-    navigator.pop();
+    navigator.pop(true);
     showMergeUndoSnackBar(
       messenger,
       provider,
@@ -351,11 +380,15 @@ class _AiMergeDialogState extends State<_AiMergeDialog> {
     }
 
     return AlertDialog(
-      title: const Text('AI merge suggestions'),
+      title: Text(
+        widget.scope == null
+            ? 'AI merge suggestions'
+            : 'AI merge suggestions for ${widget.scope!.targetWord}',
+      ),
       content: SizedBox(width: 520, height: 420, child: body),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => Navigator.pop(context, false),
           child: const Text('Close'),
         ),
         FilledButton(

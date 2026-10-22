@@ -1168,6 +1168,32 @@ class AppProvider extends ChangeNotifier {
     ];
   }
 
+  /// Merge suggestions for one vocabulary. Only words spelled like it are sent,
+  /// and only suggestions that involve it are returned.
+  Future<List<VocabMergeSuggestion>> suggestMergesForVocab(
+    VocabItem vocab, {
+    http.Client? client,
+  }) {
+    return _withAi(() async {
+      final groups = vocabGroups;
+      final self = groups.where((g) => g.id == vocab.id).firstOrNull;
+      final others = VocabSimilarity.sameFormPool(vocab, groups);
+      if (self == null || others.isEmpty) return const <VocabMergeSuggestion>[];
+      final reviewsById = {for (final g in groups) g.id: g.reviews};
+      final group = VocabMergeGroup(
+        1,
+        VocabSimilarity.normalizeTarget(vocab.targetWord),
+        [self, ...others],
+      );
+      final suggestions = await _suggestMergesFor([group], client);
+      return [
+        for (final s in suggestions)
+          if (s.keepId == vocab.id || s.mergeIds.contains(vocab.id))
+            s.withSurvivor(reviewsById),
+      ];
+    });
+  }
+
   /// KO ➔ EN: only words with the same Korean spelling matter. No request is
   /// made when there are none.
   Future<SimilarMeaningResult> suggestKoEnHint(
