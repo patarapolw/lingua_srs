@@ -1556,19 +1556,31 @@ vocabulary:
     );
     expect(find.text('Suggestions'), findsOneWidget);
     expect(find.text('All other words'), findsOneWidget);
+    // Rows are built lazily: check the visible suggestions first...
     final titles = tester
         .widgetList<ListTile>(find.byType(ListTile))
         .map((t) => (t.title as Text).data)
         .toList();
-    expect(titles, [
+    expect(titles.take(3), [
       '아름답다 — to be beautiful',
       '아름답고 — pretty',
       '예쁘다 — beautiful',
-      // '크다 — big',
     ]);
     expect(find.textContaining('same Korean'), findsOneWidget);
     expect(find.textContaining('similar Korean'), findsOneWidget);
     expect(find.textContaining('same meaning'), findsNWidgets(2));
+
+    // ...then scroll to the "All other words" section.
+    await tester.scrollUntilVisible(
+      find.text('크다 — big'),
+      100,
+      scrollable: find.descendant(
+        of: find.byType(ListView),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    expect(find.text('크다 — big'), findsOneWidget);
+    expect(find.text('All other words'), findsOneWidget);
   });
 
   testWidgets('Merge picker searches Korean variants and English', (
