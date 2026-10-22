@@ -74,7 +74,7 @@ class AppProvider extends ChangeNotifier {
   bool _deepSeekKeyRejected = false;
   List<VocabMergeRecord> _mergeHistory = [];
   static const int _maxMergeHistory = 20;
-  static const int _aiBatchSize = 40;
+  static const int _maxItemsPerRequest = 150;
   Map<String, List<AiDiscussionMessage>> _aiDiscussions = {};
   bool _isLoading = true;
   String? _selectedLessonId;
@@ -1104,22 +1104,68 @@ class AppProvider extends ChangeNotifier {
     return _withAi(() async {
       final groups = vocabGroups;
       final reviewsById = {for (final g in groups) g.id: g.reviews};
-      final candidates = VocabSimilarity.findCandidateGroups(groups);
       final suggestions = <VocabMergeSuggestion>[];
-      for (var start = 0; start < candidates.length; start += _aiBatchSize) {
-        final batch = candidates.sublist(
-          start,
-          min(start + _aiBatchSize, candidates.length),
-        );
-        final reply = await DeepSeekService.completeJson(
-          apiKey: _deepSeekApiKey,
-          messages: VocabAiPrompts.mergeMessages(batch),
-          client: client ?? aiClient,
-        );
-        suggestions.addAll(VocabAiPrompts.parseMergeSuggestions(reply, batch));
+      for (final batch in _mergeBatches(
+        VocabSimilarity.findCandidateGroups(groups),
+      )) {
+        suggestions.addAll(await _suggestMergesFor(batch, client));
       }
       return [for (final s in suggestions) s.withSurvivor(reviewsById)];
     });
+  }
+
+  /// Packs groups into requests of at most [_maxItemsPerRequest] entries.
+  static List<List<VocabMergeGroup>> _mergeBatches(
+    List<VocabMergeGroup> groups,
+  ) {
+    final batches = <List<VocabMergeGroup>>[];
+    var current = <VocabMergeGroup>[];
+    var items = 0;
+    for (final group in groups) {
+      if (current.isNotEmpty &&
+          items + group.items.length > _maxItemsPerRequest) {
+        batches.add(current);
+        current = [];
+        items = 0;
+      }
+      current.add(group);
+      items += group.items.length;
+    }
+    if (current.isNotEmpty) batches.add(current);
+    return batches;
+  }
+
+  /// One request. If the answer is cut off or unreadable, retry in halves.
+  Future<List<VocabMergeSuggestion>> _suggestMergesFor(
+    List<VocabMergeGroup> batch,
+    http.Client? client,
+  ) async {
+    try {
+      final reply = await DeepSeekService.completeJson(
+        apiKey: _deepSeekApiKey,
+        messages: VocabAiPrompts.mergeMessages(batch),
+        client: client ?? aiClient,
+      );
+      return VocabAiPrompts.parseMergeSuggestions(reply, batch);
+    } on DeepSeekTruncatedException {
+      return _retrySmaller(batch, client);
+    } on FormatException {
+      return _retrySmaller(batch, client);
+    }
+  }
+
+  /// A single group that still fails is skipped, so one bad group cannot throw
+  /// away the suggestions for all the others.
+  Future<List<VocabMergeSuggestion>> _retrySmaller(
+    List<VocabMergeGroup> batch,
+    http.Client? client,
+  ) async {
+    if (batch.length < 2) return const [];
+    final middle = batch.length ~/ 2;
+    return [
+      ...await _suggestMergesFor(batch.sublist(0, middle), client),
+      ...await _suggestMergesFor(batch.sublist(middle), client),
+    ];
   }
 
   /// KO ➔ EN: only words with the same Korean spelling matter. No request is

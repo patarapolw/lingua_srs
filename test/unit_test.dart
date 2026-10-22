@@ -2068,6 +2068,30 @@ ${audio != null ? '      audio: $audio\n' : ''}---
         200,
       );
 
+      http.Response cutOff() => http.Response(
+        jsonEncode({
+          'choices': [
+            {
+              'message': {
+                'content': '{"merges":[{"keep":1,"merge":[2],"reason',
+              },
+              'finish_reason': 'length',
+            },
+          ],
+        }),
+        200,
+      );
+
+      String lessonOf(String title, String prefix, int count) =>
+          '''
+---
+vocabulary:
+  adjectives:
+${[for (var i = 0; i < count; i++) '    - ko: 단어$i\n      en: $prefix$i'].join('\n')}
+---
+# $title
+''';
+
       test('canUseAi follows the key and a rejected key', () async {
         final provider = await newProvider();
         expect(provider.canUseAi, isFalse);
@@ -2094,6 +2118,52 @@ ${audio != null ? '      audio: $audio\n' : ''}---
         expect(provider.canUseAi, isTrue);
         provider.dispose();
       });
+
+      test(
+        'suggestVocabMerges sends only same-target groups and prefers progress',
+        () async {
+          final provider = await newProvider();
+          await provider.setDeepSeekApiKey('k');
+          final a = await provider.importYaml(
+            adjYaml('L1', '아름답다', 'beautiful'),
+          );
+          final b = await provider.importYaml(
+            adjYaml('L2', '아름답다', 'to be beautiful'),
+          );
+          await provider.importYaml('''
+---
+vocabulary:
+  nouns:
+    - ko: 배
+      en: pear
+---
+# L3
+''');
+          only(b).cardTargetToNative.repetitions = 5;
+
+          final client = MockClient((request) async {
+            final body = jsonDecode(request.body) as Map<String, dynamic>;
+            final user = (body['messages'] as List)[1]['content'] as String;
+            expect(user, contains('아름답다'));
+            expect(user, isNot(contains('pear')));
+            expect(user, isNot(contains('auto-')));
+            return ok({
+              'merges': [
+                {
+                  'keep': 1,
+                  'merge': [2],
+                  'reason': 'same',
+                },
+              ],
+            });
+          });
+
+          final suggestions = await provider.suggestVocabMerges(client: client);
+          expect(suggestions.single.keepId, only(b).id);
+          expect(suggestions.single.mergeIds, [only(a).id]);
+          provider.dispose();
+        },
+      );
 
       test(
         'suggestEnKoHint feeds all same-POS vocab and maps numbers back',
@@ -2257,31 +2327,94 @@ vocabulary:
       });
 
       test(
-        'suggestVocabMerges batches candidate groups (40 per request)',
+        'suggestVocabMerges packs requests by entry count (150 per request)',
         () async {
           final provider = await newProvider();
           await provider.setDeepSeekApiKey('k');
-          String lesson(String title, String prefix) =>
-              '''
----
-vocabulary:
-  adjectives:
-${[for (var i = 0; i < 45; i++) '    - ko: 단어$i\n      en: $prefix$i'].join('\n')}
----
-# $title
-''';
-          await provider.importYaml(lesson('A', 'word '));
-          await provider.importYaml(lesson('B', 'to be word '));
+          await provider.importYaml(lessonOf('A', 'word ', 80));
+          await provider.importYaml(
+            lessonOf('B', 'to be word ', 80),
+          ); // 80 groups, 160 entries
           var requests = 0;
           final client = MockClient((_) async {
             requests++;
             return ok({'merges': []});
           });
           expect(await provider.suggestVocabMerges(client: client), isEmpty);
-          expect(requests, 2);
+          expect(requests, 2); // 75 groups (150 entries) + 5 groups
           provider.dispose();
         },
       );
+
+      test(
+        'a cut-off answer is retried in halves and nothing is lost',
+        () async {
+          final provider = await newProvider();
+          await provider.setDeepSeekApiKey('k');
+          await provider.importYaml(lessonOf('A', 'word ', 4));
+          await provider.importYaml(lessonOf('B', 'to be word ', 4));
+          var requests = 0;
+          final client = MockClient((_) async {
+            requests++;
+            if (requests == 1) return cutOff(); // the whole batch of 4 groups
+            return ok({
+              'merges': [
+                {
+                  'keep': 1,
+                  'merge': [2],
+                  'reason': 'same',
+                },
+              ],
+            });
+          });
+          final suggestions = await provider.suggestVocabMerges(client: client);
+          expect(requests, 3); // 1 failed + 2 halves
+          expect(suggestions, hasLength(2));
+          provider.dispose();
+        },
+      );
+
+      test('unreadable JSON is retried the same way', () async {
+        final provider = await newProvider();
+        await provider.setDeepSeekApiKey('k');
+        await provider.importYaml(lessonOf('A', 'word ', 2));
+        await provider.importYaml(lessonOf('B', 'to be word ', 2));
+        var requests = 0;
+        final client = MockClient((_) async {
+          requests++;
+          if (requests == 1) {
+            return http.Response(
+              jsonEncode({
+                'choices': [
+                  {
+                    'message': {'content': 'not json'},
+                  },
+                ],
+              }),
+              200,
+            );
+          }
+          return ok({'merges': []});
+        });
+        expect(await provider.suggestVocabMerges(client: client), isEmpty);
+        expect(requests, 3);
+        provider.dispose();
+      });
+
+      test('a single group that keeps failing is skipped, not fatal', () async {
+        final provider = await newProvider();
+        await provider.setDeepSeekApiKey('k');
+        await provider.importYaml(lessonOf('A', 'word ', 1));
+        await provider.importYaml(lessonOf('B', 'to be word ', 1));
+        var requests = 0;
+        final client = MockClient((_) async {
+          requests++;
+          return cutOff();
+        });
+        expect(await provider.suggestVocabMerges(client: client), isEmpty);
+        expect(requests, 1);
+        provider.dispose();
+      });
     });
 
     test('Later duplicate inherits audio from the earlier lesson', () async {

@@ -159,5 +159,57 @@ void main() {
         ),
       );
     });
+
+    test('completeJson asks for a generous max_tokens', () async {
+      final client = MockClient((request) async {
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        expect(body['max_tokens'], 4096);
+        return http.Response(
+          jsonEncode({
+            'choices': [
+              {
+                'message': {'content': '{}'},
+                'finish_reason': 'stop',
+              },
+            ],
+          }),
+          200,
+        );
+      });
+      expect(
+        await DeepSeekService.completeJson(
+          apiKey: 'k',
+          messages: const [AiDiscussionMessage(role: 'user', content: 'json')],
+          client: client,
+        ),
+        '{}',
+      );
+    });
+
+    test('completeJson reports an answer cut off by the token limit', () async {
+      final client = MockClient(
+        (_) async => http.Response(
+          jsonEncode({
+            'choices': [
+              {
+                'message': {
+                  'content': '{"merges":[{"keep":1,"merge":[2],"reason',
+                },
+                'finish_reason': 'length',
+              },
+            ],
+          }),
+          200,
+        ),
+      );
+      await expectLater(
+        DeepSeekService.completeJson(
+          apiKey: 'k',
+          messages: const [AiDiscussionMessage(role: 'user', content: 'json')],
+          client: client,
+        ),
+        throwsA(isA<DeepSeekTruncatedException>()),
+      );
+    });
   });
 }

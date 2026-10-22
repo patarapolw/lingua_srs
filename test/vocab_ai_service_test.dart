@@ -3,9 +3,21 @@ import 'package:lingua_srs/models/vocab_item.dart';
 import 'package:lingua_srs/models/vocab_merge_record.dart';
 import 'package:lingua_srs/services/vocab_ai_service.dart';
 
-VocabGroup vg(String id, String ko, String en, {int reviews = 0}) => VocabGroup(
+VocabGroup vg(
+  String id,
+  String ko,
+  String en, {
+  int reviews = 0,
+  String notes = '',
+}) => VocabGroup(
   id: id,
-  entry: VocabItem(id: id, targetWord: ko, translation: en, pos: 'adjectives'),
+  entry: VocabItem(
+    id: id,
+    targetWord: ko,
+    translation: en,
+    pos: 'adjectives',
+    notes: notes,
+  ),
   reviews: reviews,
 )..lessonTitles.add('Lesson');
 
@@ -37,44 +49,81 @@ void main() {
     });
   });
 
-  group('VocabAiPrompts.parseMergeSuggestions', () {
+  group('merge prompt and parser (numbered entries)', () {
     final groups = VocabSimilarity.findCandidateGroups([
-      vg('a', '아름답다', 'beautiful'),
-      vg('b', '아름답다', 'to be beautiful'),
-    ]);
+      vg('auto-aaa', '아름답다', 'beautiful'),
+      vg('auto-bbb', '아름답다', 'to be beautiful'),
+      vg('auto-ccc', '배', 'pear'),
+      vg('auto-ddd', '배', 'stomach'),
+    ]); // entries 1,2 are group 1; entries 3,4 are group 2
 
-    test('accepts valid suggestions, also inside a code fence', () {
+    test('prompt numbers entries across groups and never sends ids', () {
+      final user = VocabAiPrompts.mergeMessages(groups)[1].content;
+      expect(user, contains('1|adjectives|beautiful'));
+      expect(user, contains('2|adjectives|to be beautiful'));
+      expect(user, contains('3|adjectives|pear'));
+      expect(user, isNot(contains('auto-')));
+    });
+
+    test('notes are cut to one short line', () {
+      final long = [
+        vg('x', '크다', 'big', notes: 'line one\nline two ${'z' * 200}'),
+        vg('y', '크다', 'large'),
+      ];
+      final user = VocabAiPrompts.mergeMessages(
+        VocabSimilarity.findCandidateGroups(long),
+      )[1].content;
+      final line = RegExp(r'1\|adjectives\|big\|[^"]*')
+          .firstMatch(user)!
+          .group(0)!;
+      expect(line.length, lessThan(100));
+      expect(line, isNot(contains(r'\n')));
+    });
+
+    test('maps numbers back to ids, also inside a code fence', () {
       const reply =
-          '```json\n{"merges":[{"group":1,"keep":"a","merge":["b"],"reason":"same"}]}\n```';
+          '```json\n{"merges":[{"keep":1,"merge":[2],"reason":"same"}]}\n```';
       final result = VocabAiPrompts.parseMergeSuggestions(reply, groups);
-      expect(result.single.keepId, 'a');
-      expect(result.single.mergeIds, ['b']);
+      expect(result.single.keepId, 'auto-aaa');
+      expect(result.single.mergeIds, ['auto-bbb']);
       expect(result.single.reason, 'same');
     });
 
-    test('drops unknown ids, self merges and unknown groups', () {
+    test('accepts numbers sent as strings or whole doubles', () {
+      final result = VocabAiPrompts.parseMergeSuggestions(
+        '{"merges":[{"keep":"3","merge":[4.0]}]}',
+        groups,
+      );
+      expect(result.single.keepId, 'auto-ccc');
+      expect(result.single.mergeIds, ['auto-ddd']);
+    });
+
+    test('rejects numbers from another group, out of range, or self', () {
       const reply =
           '{"merges":['
-          '{"group":1,"keep":"a","merge":["a","zzz"]},'
-          '{"group":9,"keep":"a","merge":["b"]},'
-          '{"group":1,"keep":"nope","merge":["b"]}]}';
+          '{"keep":1,"merge":[3]},' // other group
+          '{"keep":9,"merge":[1]},' // out of range
+          '{"keep":1,"merge":[1]},' // itself
+          '{"keep":1.5,"merge":[2]}]}'; // not an integer
       expect(VocabAiPrompts.parseMergeSuggestions(reply, groups), isEmpty);
     });
 
-    test('does not reuse an id in two suggestions', () {
+    test('does not reuse an entry in two suggestions', () {
       const reply =
-          '{"merges":['
-          '{"group":1,"keep":"a","merge":["b"]},'
-          '{"group":1,"keep":"b","merge":["a"]}]}';
+          '{"merges":[{"keep":1,"merge":[2]},{"keep":2,"merge":[1]}]}';
       expect(VocabAiPrompts.parseMergeSuggestions(reply, groups), hasLength(1));
     });
 
-    test('rejects non-JSON replies', () {
-      expect(
-        () => VocabAiPrompts.parseMergeSuggestions('nope', groups),
-        throwsFormatException,
-      );
-    });
+    test(
+      'a reply cut off mid-string is a FormatException (the reported bug)',
+      () {
+        const cut = '{"merges":[{"keep":1,"merge":[2],"reason":"sam';
+        expect(
+          () => VocabAiPrompts.parseMergeSuggestions(cut, groups),
+          throwsFormatException,
+        );
+      },
+    );
   });
 
   test('withSurvivor keeps the most reviewed entry', () {

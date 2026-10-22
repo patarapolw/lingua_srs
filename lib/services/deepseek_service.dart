@@ -94,6 +94,7 @@ class DeepSeekService {
   static Future<String> completeJson({
     required String apiKey,
     required List<AiDiscussionMessage> messages,
+    int maxTokens = 4096,
     http.Client? client,
   }) async {
     final trimmedApiKey = apiKey.trim();
@@ -113,7 +114,7 @@ class DeepSeekService {
               'model': 'deepseek-chat',
               'stream': false,
               'temperature': 0,
-              'max_tokens': 2000,
+              'max_tokens': maxTokens,
               'response_format': {'type': 'json_object'},
               'messages': messages.map((m) => m.toJson()).toList(),
             }),
@@ -132,6 +133,9 @@ class DeepSeekService {
           : null;
       final message = first is Map ? first['message'] : null;
       final content = message is Map ? message['content'] : null;
+      if (first is Map && first['finish_reason'] == 'length') {
+        throw const DeepSeekTruncatedException();
+      }
       if (content is! String || content.trim().isEmpty) {
         throw const FormatException('DeepSeek returned an empty answer.');
       }
@@ -152,4 +156,12 @@ class DeepSeekException implements Exception {
 
   @override
   String toString() => message;
+}
+
+/// The answer hit max_tokens, so its JSON is cut off.
+class DeepSeekTruncatedException extends DeepSeekException {
+  const DeepSeekTruncatedException()
+    : super(
+        'DeepSeek stopped before finishing its answer (token limit reached).',
+      );
 }

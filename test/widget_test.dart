@@ -1138,14 +1138,18 @@ vocabulary:
       AppProvider Function() provider,
       Lesson Function() a,
       Lesson Function() b,
-    ) => MockClient((_) async {
+    ) => MockClient((request) async {
       counter.add(1);
+      expect(
+        request.body,
+        isNot(contains('auto-')),
+        reason: 'merge requests should use entry numbers, not ids',
+      );
       return aiOk({
         'merges': [
           {
-            'group': 1,
-            'keep': only(a()).id,
-            'merge': [only(b()).id],
+            'keep': 1,
+            'merge': [2],
             'reason': 'same word',
           },
         ],
@@ -1230,24 +1234,20 @@ vocabulary:
       tester,
     ) async {
       var calls = 0;
-      late Lesson a, b;
       final client = MockClient((_) async {
         calls++;
         if (calls == 1) return http.Response('boom', 500);
         return aiOk({
           'merges': [
             {
-              'group': 1,
-              'keep': only(a).id,
-              'merge': [only(b).id],
+              'keep': 1,
+              'merge': [2],
               'reason': 'same word',
             },
           ],
         });
       });
-      final (_, a0, b0) = await setup(tester, client);
-      a = a0;
-      b = b0;
+      final (_, _, _) = await setup(tester, client);
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
       expect(
