@@ -142,6 +142,30 @@ class KoreanTextSearch {
 
   static Set<String> tokenize(String text) => _tokens(_normalize(text));
 
+  /// True if [a] and [b] look like forms of the same Korean word: identical, or
+  /// sharing a stem once endings, particles and irregular conjugation are
+  /// removed. A one-syllable stem only counts as the dictionary stem of one of
+  /// them (크 from 크다), which keeps 아이/아 and 배/배우다 apart.
+  static bool areVariants(String a, String b) {
+    final wordsA = _words(_normalize(a));
+    final wordsB = _words(_normalize(b));
+    if (wordsA.isEmpty || wordsA.length != wordsB.length) return false;
+    for (var i = 0; i < wordsA.length; i++) {
+      final x = wordsA[i], y = wordsB[i];
+      if (x != y && !_stemOverlap(x, y) && !_stemOverlap(y, x)) return false;
+    }
+    return true;
+  }
+
+  // The query side never expands irregular stems (it over-generates).
+  static bool _stemOverlap(String query, String document) {
+    final q = _variants(query);
+    final d = _variants(document, expandIrregular: true);
+    return q
+        .intersection(d)
+        .any((s) => s.runes.length >= 2 || query == '$s다' || document == '$s다');
+  }
+
   static String _normalize(String text) {
     return text
         .replaceAll(RegExp(r'<[^>]*>'), ' ')
@@ -253,6 +277,17 @@ class KoreanTextSearch {
   /// only use for document tokens, never for the query.
   static Set<String> _irregularStems(String word) {
     final stems = <String>{};
+    // ㅂ irregular attributive: 추운→춥, 아름다운→아름답
+    if (word.endsWith('운') && word.runes.length > 1) {
+      final head = word.substring(0, word.length - 1);
+      final last = _decompose(head.substring(head.length - 1));
+      if (last != null && last[2] == 0) {
+        stems.add(
+          '${head.substring(0, head.length - 1)}${_compose(last[0], last[1], 17)}',
+        );
+      }
+    }
+
     for (final suffix in _irregularSuffixes) {
       if (!word.endsWith(suffix) || word.length <= suffix.length) continue;
       final head = word.substring(0, word.length - suffix.length);

@@ -5,6 +5,7 @@ import '../models/vocab_item.dart';
 import '../models/vocab_merge_record.dart';
 import '../providers/app_provider.dart';
 import '../services/vocab_ai_service.dart';
+import '../services/vocab_picker_search.dart';
 
 void showMergeUndoSnackBar(
   ScaffoldMessengerState messenger,
@@ -73,34 +74,70 @@ class MergePickerDialog extends StatefulWidget {
   State<MergePickerDialog> createState() => _MergePickerDialogState();
 }
 
+class _PickerRow {
+  const _PickerRow.header(this.header)
+    : group = null,
+      matches = const <PickerMatch>{};
+  const _PickerRow.item(
+    VocabGroup this.group, [
+    this.matches = const <PickerMatch>{},
+  ]) : header = null;
+  final String? header;
+  final VocabGroup? group;
+  final Set<PickerMatch> matches;
+}
+
+String _matchBadge(Set<PickerMatch> matches) {
+  const names = {
+    PickerMatch.sameKorean: 'same Korean',
+    PickerMatch.similarKorean: 'similar Korean',
+    PickerMatch.sameMeaning: 'same meaning',
+    PickerMatch.similarMeaning: 'similar meaning',
+  };
+  return [
+    for (final kind in PickerMatch.values)
+      if (matches.contains(kind)) names[kind]!,
+  ].join(', ');
+}
+
 class _MergePickerDialogState extends State<MergePickerDialog> {
   String _query = '';
+  late final List<PickerHit> _suggestions = VocabPickerSearch.suggest(
+    widget.current,
+    widget.groups,
+  );
 
-  int _rank(VocabGroup g) {
-    final c = widget.current.entry;
-    if (VocabSimilarity.normalizeTarget(g.entry.targetWord) ==
-        VocabSimilarity.normalizeTarget(c.targetWord)) {
-      return 0;
+  List<_PickerRow> _rows() {
+    if (_query.isNotEmpty) {
+      return [
+        for (final hit in VocabPickerSearch.search(
+          _query,
+          widget.current,
+          widget.groups,
+        ))
+          _PickerRow.item(hit.group, hit.matches),
+      ];
     }
-    if (VocabSimilarity.normalizeTranslation(g.entry.translation) ==
-        VocabSimilarity.normalizeTranslation(c.translation)) {
-      return 1;
-    }
-    return 2;
+    final suggested = {for (final h in _suggestions) h.group.id};
+    final rest =
+        widget.groups
+            .where(
+              (g) => g.id != widget.current.id && !suggested.contains(g.id),
+            )
+            .toList()
+          ..sort((a, b) => a.label.compareTo(b.label));
+    return [
+      if (_suggestions.isNotEmpty) const _PickerRow.header('Suggestions'),
+      for (final h in _suggestions) _PickerRow.item(h.group, h.matches),
+      if (_suggestions.isNotEmpty && rest.isNotEmpty)
+        const _PickerRow.header('All other words'),
+      for (final g in rest) _PickerRow.item(g),
+    ];
   }
 
   @override
   Widget build(BuildContext context) {
-    final q = _query.toLowerCase();
-    final options =
-        widget.groups
-            .where((g) => g.id != widget.current.id)
-            .where((g) => q.isEmpty || g.label.toLowerCase().contains(q))
-            .toList()
-          ..sort((a, b) {
-            final byRank = _rank(a).compareTo(_rank(b));
-            return byRank != 0 ? byRank : a.label.compareTo(b.label);
-          });
+    final rows = _rows();
     return AlertDialog(
       title: Text('Merge "${widget.current.label}" with…'),
       content: SizedBox(
@@ -112,25 +149,40 @@ class _MergePickerDialogState extends State<MergePickerDialog> {
               autofocus: true,
               decoration: const InputDecoration(
                 prefixIcon: Icon(Icons.search),
-                hintText: 'Search vocabulary',
+                hintText: 'Search Korean or English',
               ),
               onChanged: (v) => setState(() => _query = v.trim()),
             ),
             const SizedBox(height: 8),
             Expanded(
-              child: ListView.builder(
-                itemCount: options.length,
-                itemBuilder: (_, i) {
-                  final g = options[i];
-                  return ListTile(
-                    title: Text(g.label),
-                    subtitle: Text(
-                      '${g.entry.pos} • ${g.lessonTitles.join(', ')} • ${g.reviews} reviews',
+              child: rows.isEmpty
+                  ? const Center(child: Text('No matching vocabulary.'))
+                  : ListView.builder(
+                      itemCount: rows.length,
+                      itemBuilder: (_, i) {
+                        final row = rows[i];
+                        if (row.header != null) {
+                          return Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                            child: Text(
+                              row.header!,
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                          );
+                        }
+                        final g = row.group!;
+                        final badge = _matchBadge(row.matches);
+                        return ListTile(
+                          title: Text(g.label),
+                          subtitle: Text(
+                            '${g.entry.pos} • ${g.lessonTitles.join(', ')} • '
+                            '${g.reviews} reviews'
+                            '${badge.isEmpty ? '' : ' • $badge'}',
+                          ),
+                          onTap: () => Navigator.pop(context, g),
+                        );
+                      },
                     ),
-                    onTap: () => Navigator.pop(context, g),
-                  );
-                },
-              ),
             ),
           ],
         ),

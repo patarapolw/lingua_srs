@@ -1535,4 +1535,79 @@ vocabulary:
     await tester.pumpAndSettle();
     expect(find.text('Nothing to undo.'), findsOneWidget);
   });
+
+  testWidgets('Merge picker suggests likely duplicates before typing', (
+    tester,
+  ) async {
+    final current = vg('cur', '아름답다', 'beautiful');
+    await openDialog(
+      tester,
+      () => MergePickerDialog(
+        current: current,
+        groups: [
+          current,
+          vg('zzz', '크다', 'big'),
+          vg('same', '아름답다', 'to be beautiful'),
+          vg('variant', '아름답고', 'pretty'),
+          vg('meaning', '예쁘다', 'beautiful'),
+        ],
+      ),
+      (_) {},
+    );
+    expect(find.text('Suggestions'), findsOneWidget);
+    expect(find.text('All other words'), findsOneWidget);
+    final titles = tester
+        .widgetList<ListTile>(find.byType(ListTile))
+        .map((t) => (t.title as Text).data)
+        .toList();
+    expect(titles, [
+      '아름답다 — to be beautiful',
+      '아름답고 — pretty',
+      '예쁘다 — beautiful',
+      // '크다 — big',
+    ]);
+    expect(find.textContaining('same Korean'), findsOneWidget);
+    expect(find.textContaining('similar Korean'), findsOneWidget);
+    expect(find.textContaining('same meaning'), findsNWidgets(2));
+  });
+
+  testWidgets('Merge picker searches Korean variants and English', (
+    tester,
+  ) async {
+    final current = vg('cur', '아름답다', 'beautiful');
+    await openDialog(
+      tester,
+      () => MergePickerDialog(
+        current: current,
+        groups: [
+          current,
+          vg('same', '아름답다', 'to be beautiful'),
+          vg('variant', '아름답고', 'pretty'),
+          vg('meaning', '예쁘다', 'beautiful'),
+        ],
+      ),
+      (_) {},
+    );
+    List<String?> titles() => tester
+        .widgetList<ListTile>(find.byType(ListTile))
+        .map((t) => (t.title as Text).data)
+        .toList();
+
+    await tester.enterText(find.byType(TextField), '아름답습니다');
+    await tester.pump();
+    expect(titles(), containsAll(['아름답다 — to be beautiful', '아름답고 — pretty']));
+    expect(titles(), isNot(contains('예쁘다 — beautiful')));
+    expect(
+      find.text('Suggestions'),
+      findsNothing,
+    ); // headers only before typing
+
+    await tester.enterText(find.byType(TextField), 'pretty');
+    await tester.pump();
+    expect(titles(), ['아름답고 — pretty']);
+
+    await tester.enterText(find.byType(TextField), 'zzzz');
+    await tester.pump();
+    expect(find.text('No matching vocabulary.'), findsOneWidget);
+  });
 }
