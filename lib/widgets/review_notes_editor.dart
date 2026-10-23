@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/srs_card.dart';
 import 'markdown_content.dart';
+import 'markdown_text_field.dart';
 
 /// True while a text field has focus, so single-key shortcuts (space, R, 1-4,
 /// ...) must not fire.
@@ -149,7 +150,7 @@ class _ReviewNotesEditorState extends State<ReviewNotesEditor> {
                   : MarkdownContent(content: _controller.text),
             )
           else
-            TextField(
+            MarkdownTextField(
               controller: _controller,
               autofocus: true,
               minLines: 3,

@@ -5,6 +5,8 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   audioplayers_linux
   desktop_drop
+  irondash_engine_context
+  super_native_extensions
   webview_all_linux
 )
 

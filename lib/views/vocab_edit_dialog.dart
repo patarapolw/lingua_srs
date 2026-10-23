@@ -12,6 +12,7 @@ import '../services/korean_text_search.dart';
 import '../widgets/audio_button.dart';
 import '../widgets/markdown_content.dart';
 import '../widgets/markdown_notes_field.dart';
+import '../widgets/markdown_text_field.dart';
 import 'similar_meanings_dialog.dart';
 import 'similar_search_dialog.dart';
 import 'vocab_merge_dialogs.dart';
@@ -439,7 +440,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                             : MarkdownContent(content: _notesCtrl.text),
                       )
                     else
-                      TextField(
+                      MarkdownTextField(
                         controller: _notesCtrl,
                         maxLines: 5,
                         decoration: const InputDecoration(
@@ -1043,7 +1044,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                 decoration: const InputDecoration(labelText: 'Audio URL'),
               ),
               const SizedBox(height: 12),
-              TextField(
+              MarkdownTextField(
                 controller: notesCtrl,
                 minLines: 2,
                 maxLines: 5,

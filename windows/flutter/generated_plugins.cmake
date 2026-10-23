@@ -6,6 +6,8 @@ list(APPEND FLUTTER_PLUGIN_LIST
   audioplayers_windows
   desktop_drop
   flutter_tts
+  irondash_engine_context
+  super_native_extensions
   webview_all_windows
 )
 

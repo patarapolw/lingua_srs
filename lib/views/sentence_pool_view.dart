@@ -5,6 +5,7 @@ import '../models/sentence.dart';
 import '../providers/app_provider.dart';
 import '../widgets/audio_button.dart';
 import '../widgets/markdown_content.dart';
+import '../widgets/markdown_text_field.dart';
 
 class SentencePoolView extends StatefulWidget {
   const SentencePoolView({super.key});
@@ -64,7 +65,7 @@ class _SentencePoolViewState extends State<SentencePoolView> {
                 ),
               ),
               const SizedBox(height: 12),
-              TextField(
+              MarkdownTextField(
                 controller: notesCtrl,
                 minLines: 2,
                 maxLines: 5,

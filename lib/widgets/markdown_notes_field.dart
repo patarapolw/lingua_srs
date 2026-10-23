@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'markdown_content.dart';
+import 'markdown_text_field.dart';
 
 /// A multi-line Markdown field with an Edit/Preview toggle, like Vocab notes.
 class MarkdownNotesField extends StatefulWidget {
@@ -62,7 +63,7 @@ class _MarkdownNotesFieldState extends State<MarkdownNotesField> {
                   : MarkdownContent(content: widget.controller.text),
             )
           else
-            TextField(
+            MarkdownTextField(
               controller: widget.controller,
               minLines: 2,
               maxLines: 4,
