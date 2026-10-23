@@ -1317,10 +1317,7 @@ vocabulary:
       );
 
       expect(sentence.toCloze(), '(___)와 (___)를 먹어요');
-      expect(
-        Sentence.withoutEmphasis(sentence.targetText),
-        '배와 사과를 먹어요',
-      );
+      expect(Sentence.withoutEmphasis(sentence.targetText), '배와 사과를 먹어요');
     });
 
     test('suggestEmphasis wraps every occurrence of the word', () {
@@ -1335,11 +1332,17 @@ vocabulary:
         Sentence.suggestEmphasis('I ate an apple and a pear', 'apple, pear'),
         'I ate an **apple** and a **pear**',
       );
-      expect(Sentence.suggestEmphasis('I ate a plum', 'apple, pear'), 'I ate a plum');
+      expect(
+        Sentence.suggestEmphasis('I ate a plum', 'apple, pear'),
+        'I ate a plum',
+      );
     });
 
     test('suggestEmphasis merges overlaps and keeps existing emphasis', () {
-      expect(Sentence.suggestEmphasis('an abc here', 'ab, abc'), 'an **abc** here');
+      expect(
+        Sentence.suggestEmphasis('an abc here', 'ab, abc'),
+        'an **abc** here',
+      );
       expect(
         Sentence.suggestEmphasis('저는 **배**를 먹어요', '사과', korean: true),
         '저는 **배**를 먹어요',
@@ -1355,7 +1358,10 @@ vocabulary:
 
     test('sameExceptEmphasis only allows ** changes', () {
       const original = '배와 사과를 먹어요';
-      expect(Sentence.sameExceptEmphasis(original, '**배**와 **사과**를 먹어요'), isTrue);
+      expect(
+        Sentence.sameExceptEmphasis(original, '**배**와 **사과**를 먹어요'),
+        isTrue,
+      );
       expect(Sentence.sameExceptEmphasis('**배**와 사과를 먹어요', original), isTrue);
       expect(Sentence.sameExceptEmphasis(original, '배와 사과를 먹었어요'), isFalse);
       expect(Sentence.sameExceptEmphasis(original, '**배와 사과를 먹어요'), isFalse);
@@ -2717,14 +2723,12 @@ vocabulary:
       provider.dispose();
     });
 
-    test(
-      'Importing under an existing lesson name adds vocabulary and keeps the rest',
-      () async {
-        final provider = await newProvider();
-        final first = await provider.importYaml(lessonYaml('Lesson 1'));
-        pear(first).cardTargetToNative.repetitions = 3;
+    test('Importing under an existing lesson name adds vocabulary and keeps the rest', () async {
+      final provider = await newProvider();
+      final first = await provider.importYaml(lessonYaml('Lesson 1'));
+      pear(first).cardTargetToNative.repetitions = 3;
 
-        final again = await provider.importYaml('''
+      final again = await provider.importYaml('''
 ---
 vocabulary:
   nouns:
@@ -2734,18 +2738,17 @@ vocabulary:
 # Lesson 1
 ''');
 
-        expect(
-          provider.lessons.where((lesson) => lesson.title == 'Lesson 1'),
-          hasLength(1),
-        );
-        expect(again.vocabularies.map((v) => v.translation).toSet(), {
-          'pear',
-          'apple',
-        });
-        expect(pear(again).cardTargetToNative.repetitions, 3);
-        provider.dispose();
-      },
-    );
+      expect(
+        provider.lessons.where((lesson) => lesson.title == 'Lesson 1'),
+        hasLength(1),
+      );
+      expect(again.vocabularies.map((v) => v.translation).toSet(), {
+        'pear',
+        'apple',
+      });
+      expect(pear(again).cardTargetToNative.repetitions, 3);
+      provider.dispose();
+    });
 
     test('Re-import keeps ko_text when the new YAML omits it', () async {
       final provider = await newProvider();

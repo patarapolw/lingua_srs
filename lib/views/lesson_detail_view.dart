@@ -262,17 +262,14 @@ class _LessonDetailViewState extends State<LessonDetailView> {
 
   void _showAddVocabDialog(Lesson lesson) {
     final vocab = VocabItem(targetWord: '', translation: '', pos: '');
-    VocabEditDialog.show(
-      context,
-      vocab,
-      lessonId: lesson.id,
-      isNew: true,
-    ).then((_) {
-      if (!mounted) return;
-      if (vocab.targetWord.isNotEmpty) {
-        context.read<AppProvider>().addVocabToLesson(lesson.id, vocab);
-      }
-    });
+    VocabEditDialog.show(context, vocab, lessonId: lesson.id, isNew: true).then(
+      (_) {
+        if (!mounted) return;
+        if (vocab.targetWord.isNotEmpty) {
+          context.read<AppProvider>().addVocabToLesson(lesson.id, vocab);
+        }
+      },
+    );
   }
 
   @override

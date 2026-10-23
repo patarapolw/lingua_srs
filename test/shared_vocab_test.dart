@@ -16,11 +16,17 @@ void main() {
     test('is a detail field, imported once and kept after a manual edit', () {
       expect(SharedVocab.detailFields, contains(SharedVocab.ttsField));
       final s = sv();
-      expect(s.mergeImport(SharedVocab.ttsField, '세 개', lessonId: 'L1'), isTrue);
+      expect(
+        s.mergeImport(SharedVocab.ttsField, '세 개', lessonId: 'L1'),
+        isTrue,
+      );
       expect(s.ttsText, '세 개');
 
       s.setManual(SharedVocab.ttsField, '셋 개');
-      expect(s.mergeImport(SharedVocab.ttsField, '세 개 b', lessonId: 'L1'), isFalse);
+      expect(
+        s.mergeImport(SharedVocab.ttsField, '세 개 b', lessonId: 'L1'),
+        isFalse,
+      );
       expect(s.ttsText, '셋 개');
       expect(SharedVocab.fromJson(s.toJson()).ttsText, '셋 개');
       expect(s.detachedCopy().ttsText, '셋 개');

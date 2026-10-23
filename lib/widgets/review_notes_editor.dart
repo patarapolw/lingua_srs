@@ -24,7 +24,11 @@ class ReviewNotesEditor extends StatefulWidget {
   final SrsCard card;
   final ValueChanged<String> onSave;
 
-  const ReviewNotesEditor({super.key, required this.card, required this.onSave});
+  const ReviewNotesEditor({
+    super.key,
+    required this.card,
+    required this.onSave,
+  });
 
   @override
   State<ReviewNotesEditor> createState() => _ReviewNotesEditorState();
@@ -58,7 +62,11 @@ class _ReviewNotesEditorState extends State<ReviewNotesEditor> {
     super.dispose();
   }
 
-  Widget _panel(ThemeData theme, {required Widget header, required Widget body}) {
+  Widget _panel(
+    ThemeData theme, {
+    required Widget header,
+    required Widget body,
+  }) {
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 16),
@@ -77,7 +85,10 @@ class _ReviewNotesEditorState extends State<ReviewNotesEditor> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final title = Text('Review notes · $_label', style: theme.textTheme.labelMedium);
+    final title = Text(
+      'Review notes · $_label',
+      style: theme.textTheme.labelMedium,
+    );
 
     if (!_editing) {
       final notes = widget.card.backNotes;

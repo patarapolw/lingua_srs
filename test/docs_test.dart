@@ -38,7 +38,10 @@ void main() {
       final verb = parsed.lesson.vocabularies[1];
       expect(verb.pos, 'verbs');
       expect(verb.targetWord, '만들다');
-      expect(verb.notes, 'First paragraph of **Markdown** notes.\n\nSecond paragraph.');
+      expect(
+        verb.notes,
+        'First paragraph of **Markdown** notes.\n\nSecond paragraph.',
+      );
 
       final number = parsed.lesson.vocabularies[2];
       expect(number.targetWord, '3개');

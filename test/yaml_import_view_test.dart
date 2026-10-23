@@ -104,7 +104,8 @@ The full lesson body.
       const MaterialApp(
         home: YamlImportView(
           initialLessonName: 'Unit 2::Lesson 26',
-          initialYaml: 'vocabulary:\n  nouns:\n    - ko: "새"\n      en: "new"\n',
+          initialYaml:
+              'vocabulary:\n  nouns:\n    - ko: "새"\n      en: "new"\n',
         ),
       ),
     );
@@ -115,7 +116,10 @@ The full lesson body.
         .map((field) => field.controller?.text)
         .toList();
     expect(fields, contains('Unit 2::Lesson 26'));
-    expect(fields.any((text) => text?.contains('vocabulary:') ?? false), isTrue);
+    expect(
+      fields.any((text) => text?.contains('vocabulary:') ?? false),
+      isTrue,
+    );
   });
 
   testWidgets('explains that an existing lesson name adds to that lesson', (

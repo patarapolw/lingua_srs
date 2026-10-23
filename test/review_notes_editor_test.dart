@@ -39,7 +39,9 @@ void main() {
       expect(find.textContaining('Review notes'), findsNothing);
     });
 
-    testWidgets('adds a note for this card only, with Markdown', (tester) async {
+    testWidgets('adds a note for this card only, with Markdown', (
+      tester,
+    ) async {
       final card = SrsCard(direction: CardDirection.nativeToTarget);
       final other = SrsCard(direction: CardDirection.targetToNative);
       String? saved;
@@ -68,7 +70,10 @@ void main() {
 
       await tester.tap(find.byTooltip('Edit review note'));
       await tester.pumpAndSettle();
-      expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, 'old');
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        'old',
+      );
 
       await tester.tap(find.text('Preview'));
       await tester.pumpAndSettle();

@@ -191,66 +191,65 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                       decoration: const InputDecoration(
                         labelText: 'Korean TTS text (optional)',
                         hintText: 'e.g. 세 개 for 3개',
-                        helperText:
-                            'Spoken instead of the Korean word when there is no audio.',
+                        helperText: 'Spoken instead of the Korean word when there is no audio.',
                         helperMaxLines: 2,
                         border: OutlineInputBorder(),
                       ),
                     ),
                     if (!widget.isNew) ...[
-                    const SizedBox(height: 16),
-                    _duplicateFrontWarning(
-                      provider,
-                      CardDirection.targetToNative,
-                    ),
-                    _duplicateFrontWarning(
-                      provider,
-                      CardDirection.nativeToTarget,
-                    ),
-                    // Collapsed unless this word needs telling apart from
-                    // another card with the same front.
-                    Theme(
-                      data: theme.copyWith(dividerColor: Colors.transparent),
-                      child: ExpansionTile(
-                        initiallyExpanded: CardDirection.values.any(
-                          (direction) => provider
-                              .getDuplicateFrontVocabularies(
-                                widget.vocab,
-                                direction,
-                              )
-                              .isNotEmpty,
-                        ),
-                        maintainState: true,
-                        tilePadding: EdgeInsets.zero,
-                        childrenPadding: const EdgeInsets.only(top: 8),
-                        title: Text(
-                          'Hints',
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.bold,
+                      const SizedBox(height: 16),
+                      _duplicateFrontWarning(
+                        provider,
+                        CardDirection.targetToNative,
+                      ),
+                      _duplicateFrontWarning(
+                        provider,
+                        CardDirection.nativeToTarget,
+                      ),
+                      // Collapsed unless this word needs telling apart from
+                      // another card with the same front.
+                      Theme(
+                        data: theme.copyWith(dividerColor: Colors.transparent),
+                        child: ExpansionTile(
+                          initiallyExpanded: CardDirection.values.any(
+                            (direction) => provider
+                                .getDuplicateFrontVocabularies(
+                                  widget.vocab,
+                                  direction,
+                                )
+                                .isNotEmpty,
                           ),
-                        ),
-                        subtitle: Text(
-                          'Tell apart cards with the same front.',
-                          style: theme.textTheme.bodySmall,
-                        ),
-                        children: [
-                          TextField(
-                            controller: _disambiguationCtrl,
-                            decoration: const InputDecoration(
-                              labelText: 'Front hint, both directions (optional)',
-                              hintText: 'e.g. fruit, vehicle',
-                              helperText:
-                                  'Shown on card fronts unless a direction-specific hint below is set.',
-                              helperMaxLines: 3,
-                              border: OutlineInputBorder(),
+                          maintainState: true,
+                          tilePadding: EdgeInsets.zero,
+                          childrenPadding: const EdgeInsets.only(top: 8),
+                          title: Text(
+                            'Hints',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
-                          _hintField(provider, CardDirection.targetToNative),
-                          _hintField(provider, CardDirection.nativeToTarget),
-                        ],
+                          subtitle: Text(
+                            'Tell apart cards with the same front.',
+                            style: theme.textTheme.bodySmall,
+                          ),
+                          children: [
+                            TextField(
+                              controller: _disambiguationCtrl,
+                              decoration: const InputDecoration(
+                                labelText:
+                                    'Front hint, both directions (optional)',
+                                hintText: 'e.g. fruit, vehicle',
+                                helperText: 'Shown on card fronts unless a direction-specific hint below is set.',
+                                helperMaxLines: 3,
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                            _hintField(provider, CardDirection.targetToNative),
+                            _hintField(provider, CardDirection.nativeToTarget),
+                          ],
+                        ),
                       ),
-                    ),
-                    _mergeSection(provider),
+                      _mergeSection(provider),
                     ],
                     const SizedBox(height: 20),
 
@@ -296,102 +295,102 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                       ],
                     ),
                     if (!widget.isNew) ...[
-                    const SizedBox(height: 20),
-                    TextField(
-                      controller: _idCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'ID (optional)',
-                        helperText: 'Same ID shares SRS progress. Blank uses word + meaning.',
-                        helperMaxLines: 3,
-                        border: OutlineInputBorder(),
+                      const SizedBox(height: 20),
+                      TextField(
+                        controller: _idCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'ID (optional)',
+                          helperText: 'Same ID shares SRS progress. Blank uses word + meaning.',
+                          helperMaxLines: 3,
+                          border: OutlineInputBorder(),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 20),
+                      const SizedBox(height: 20),
 
-                    // SRS Direction Toggles
-                    Card(
-                      elevation: 0,
-                      color: theme.colorScheme.surfaceContainerHighest
-                          .withValues(alpha: 0.5),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(
-                          color: theme.colorScheme.outlineVariant,
+                      // SRS Direction Toggles
+                      Card(
+                        elevation: 0,
+                        color: theme.colorScheme.surfaceContainerHighest
+                            .withValues(alpha: 0.5),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(
+                            color: theme.colorScheme.outlineVariant,
+                          ),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Cards',
+                                style: theme.textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              SwitchListTile(
+                                title: const Text('KO ➔ EN'),
+                                subtitle: const Text(
+                                  'Off by default for verbs, adjectives',
+                                ),
+                                value: _enableTargetToNative,
+                                onChanged: (val) =>
+                                    setState(() => _enableTargetToNative = val),
+                              ),
+                              SwitchListTile(
+                                title: const Text('EN ➔ KO (cloze)'),
+                                subtitle: const Text(
+                                  'Off by default for other cards',
+                                ),
+                                value: _enableNativeToTarget,
+                                onChanged: (val) =>
+                                    setState(() => _enableNativeToTarget = val),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                      const SizedBox(height: 20),
+
+                      // Collapsed: these are usually edited from the back of the
+                      // card while reviewing.
+                      Theme(
+                        data: theme.copyWith(dividerColor: Colors.transparent),
+                        child: ExpansionTile(
+                          maintainState: true,
+                          tilePadding: EdgeInsets.zero,
+                          childrenPadding: const EdgeInsets.only(top: 8),
+                          title: Text(
+                            'Review notes',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          subtitle: Text(
+                            'Per card. Also editable on the back of the card '
+                            'while reviewing.',
+                            style: theme.textTheme.bodySmall,
+                          ),
                           children: [
-                            Text(
-                              'Cards',
-                              style: theme.textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
+                            MarkdownNotesField(
+                              key: const ValueKey('review-notes-ko-en'),
+                              label: 'KO ➔ EN',
+                              controller: _targetToNativeBackNotesCtrl,
                             ),
-                            const SizedBox(height: 8),
-                            SwitchListTile(
-                              title: const Text('KO ➔ EN'),
-                              subtitle: const Text(
-                                'Off by default for verbs, adjectives',
-                              ),
-                              value: _enableTargetToNative,
-                              onChanged: (val) =>
-                                  setState(() => _enableTargetToNative = val),
-                            ),
-                            SwitchListTile(
-                              title: const Text('EN ➔ KO (cloze)'),
-                              subtitle: const Text(
-                                'Off by default for other cards',
-                              ),
-                              value: _enableNativeToTarget,
-                              onChanged: (val) =>
-                                  setState(() => _enableNativeToTarget = val),
+                            MarkdownNotesField(
+                              key: const ValueKey('review-notes-en-ko'),
+                              label: 'EN ➔ KO',
+                              controller: _nativeToTargetBackNotesCtrl,
                             ),
                           ],
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    // Collapsed: these are usually edited from the back of the
-                    // card while reviewing.
-                    Theme(
-                      data: theme.copyWith(dividerColor: Colors.transparent),
-                      child: ExpansionTile(
-                        maintainState: true,
-                        tilePadding: EdgeInsets.zero,
-                        childrenPadding: const EdgeInsets.only(top: 8),
-                        title: Text(
-                          'Review notes',
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        subtitle: Text(
-                          'Per card. Also editable on the back of the card '
-                          'while reviewing.',
-                          style: theme.textTheme.bodySmall,
-                        ),
-                        children: [
-                          MarkdownNotesField(
-                            key: const ValueKey('review-notes-ko-en'),
-                            label: 'KO ➔ EN',
-                            controller: _targetToNativeBackNotesCtrl,
-                          ),
-                          MarkdownNotesField(
-                            key: const ValueKey('review-notes-en-ko'),
-                            label: 'EN ➔ KO',
-                            controller: _nativeToTargetBackNotesCtrl,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 20),
+                      const SizedBox(height: 20),
                     ],
 
                     // Notes Section (with Markdown preview toggle)
@@ -752,8 +751,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                       onChanged: (_) => setDialogState(() {}),
                       decoration: InputDecoration(
                         labelText: 'Korean sentence',
-                        helperText:
-                            'Wrap each part in **double asterisks**; use several for several words.',
+                        helperText: 'Wrap each part in **double asterisks**; use several for several words.',
                         helperMaxLines: 2,
                         errorText: targetOk ? null : mismatch,
                         border: const OutlineInputBorder(),
@@ -1091,7 +1089,8 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                         ),
                         actions: [
                           TextButton(
-                            onPressed: () => Navigator.pop(dialogContext, false),
+                            onPressed: () =>
+                                Navigator.pop(dialogContext, false),
                             child: const Text('Go back'),
                           ),
                           FilledButton(
@@ -1130,14 +1129,13 @@ class _VocabEditDialogState extends State<VocabEditDialog>
         ],
       ),
     ).whenComplete(
-      () =>
-          _disposeAfterRouteExit([
-            targetCtrl,
-            ttsCtrl,
-            transCtrl,
-            audioCtrl,
-            notesCtrl,
-          ]),
+      () => _disposeAfterRouteExit([
+        targetCtrl,
+        ttsCtrl,
+        transCtrl,
+        audioCtrl,
+        notesCtrl,
+      ]),
     );
   }
 
@@ -1234,7 +1232,9 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                               trailing: Checkbox(
                                 value: isAttached,
                                 onChanged: (val) {
-                                  if (val == true && !isAttached && widget.isNew) {
+                                  if (val == true &&
+                                      !isAttached &&
+                                      widget.isNew) {
                                     // Nothing is edited in the pool until the
                                     // word is saved; emphasis can be adjusted
                                     // later by editing the word.
@@ -1328,7 +1328,9 @@ class _VocabEditDialogState extends State<VocabEditDialog>
             : null;
         _posError = pos.isEmpty ? 'Required' : null;
       });
-      if (_targetError != null || _translationError != null || _posError != null) {
+      if (_targetError != null ||
+          _translationError != null ||
+          _posError != null) {
         return;
       }
       // The card toggles are hidden when adding; use the defaults for this POS.
@@ -1338,7 +1340,8 @@ class _VocabEditDialogState extends State<VocabEditDialog>
       final pool = context.read<AppProvider>();
       for (final draft in _draftSentences) {
         final canonical = await pool.addSentenceToPool(draft);
-        if (!_sentenceIds.contains(canonical.id)) _sentenceIds.add(canonical.id);
+        if (!_sentenceIds.contains(canonical.id))
+          _sentenceIds.add(canonical.id);
       }
       if (!mounted) return;
     }
