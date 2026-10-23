@@ -12,6 +12,21 @@ SharedVocab sv({String? audio, String notes = ''}) => SharedVocab(
 );
 
 void main() {
+  group('SharedVocab ttsText', () {
+    test('is a detail field, imported once and kept after a manual edit', () {
+      expect(SharedVocab.detailFields, contains(SharedVocab.ttsField));
+      final s = sv();
+      expect(s.mergeImport(SharedVocab.ttsField, '세 개', lessonId: 'L1'), isTrue);
+      expect(s.ttsText, '세 개');
+
+      s.setManual(SharedVocab.ttsField, '셋 개');
+      expect(s.mergeImport(SharedVocab.ttsField, '세 개 b', lessonId: 'L1'), isFalse);
+      expect(s.ttsText, '셋 개');
+      expect(SharedVocab.fromJson(s.toJson()).ttsText, '셋 개');
+      expect(s.detachedCopy().ttsText, '셋 개');
+    });
+  });
+
   group('SharedVocab.setManual', () {
     test('is a no-op when unchanged, so saving a dialog locks nothing', () {
       final s = sv(audio: 'a');

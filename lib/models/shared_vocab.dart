@@ -26,10 +26,19 @@ class SharedVocab {
   static const audioField = 'audioUrl';
   static const notesField = 'notes';
   static const disambiguationField = 'disambiguation';
-  static const detailFields = [audioField, notesField, disambiguationField];
+  static const ttsField = 'ttsText';
+  static const detailFields = [
+    audioField,
+    notesField,
+    disambiguationField,
+    ttsField,
+  ];
   static const _maxAlternates = 5;
 
   String? audioUrl;
+
+  /// Alternate text spoken by text-to-speech instead of the target word.
+  String? ttsText;
   String notes;
   String disambiguation;
   SrsCard cardTargetToNative;
@@ -39,6 +48,7 @@ class SharedVocab {
 
   SharedVocab({
     this.audioUrl,
+    this.ttsText,
     this.notes = '',
     this.disambiguation = '',
     required this.cardTargetToNative,
@@ -58,6 +68,8 @@ class SharedVocab {
         return notes;
       case disambiguationField:
         return disambiguation;
+      case ttsField:
+        return ttsText;
     }
     throw ArgumentError.value(field, 'field');
   }
@@ -70,6 +82,8 @@ class SharedVocab {
         notes = value ?? '';
       case disambiguationField:
         disambiguation = value ?? '';
+      case ttsField:
+        ttsText = value;
       default:
         throw ArgumentError.value(field, 'field');
     }
@@ -154,6 +168,7 @@ class SharedVocab {
   /// Same details, fresh progress. Used when a vocab is split off by id change.
   SharedVocab detachedCopy() => SharedVocab(
     audioUrl: audioUrl,
+    ttsText: ttsText,
     notes: notes,
     disambiguation: disambiguation,
     cardTargetToNative: SrsCard(
@@ -176,6 +191,7 @@ class SharedVocab {
 
   Map<String, dynamic> toJson() => {
     'audioUrl': audioUrl,
+    'ttsText': ttsText,
     'notes': notes,
     'disambiguation': disambiguation,
     'cardTargetToNative': cardTargetToNative.toJson(),
@@ -186,6 +202,7 @@ class SharedVocab {
 
   factory SharedVocab.fromJson(Map<String, dynamic> json) => SharedVocab(
     audioUrl: json['audioUrl'] as String?,
+    ttsText: json['ttsText'] as String?,
     notes: json['notes'] as String? ?? '',
     disambiguation: json['disambiguation'] as String? ?? '',
     cardTargetToNative: SrsCard.fromJson(

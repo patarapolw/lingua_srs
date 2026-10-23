@@ -653,7 +653,7 @@ class _StudyViewState extends State<StudyView> {
         audioService.playAudio(item.vocab.audioUrl);
       } else {
         audioService.speak(
-          item.vocab.targetWord,
+          item.vocab.speechText,
           language: item.lesson.targetLanguage,
         );
       }
@@ -667,7 +667,7 @@ class _StudyViewState extends State<StudyView> {
           audioService.playAudio(item.sentence!.audioUrl);
         } else {
           audioService.speak(
-            item.sentence!.targetText,
+            item.sentence!.speechText,
             language: item.lesson.targetLanguage,
           );
         }
@@ -1326,7 +1326,7 @@ class _StudyViewState extends State<StudyView> {
                                             AudioButton(
                                               audioUrl: item.vocab.audioUrl,
                                               fallbackText:
-                                                  item.vocab.targetWord,
+                                                  item.vocab.speechText,
                                               language:
                                                   item.lesson.targetLanguage,
                                               compact: true,
@@ -1391,7 +1391,7 @@ class _StudyViewState extends State<StudyView> {
                                                 audioUrl:
                                                     item.sentence!.audioUrl,
                                                 fallbackText:
-                                                    item.sentence!.targetText,
+                                                    item.sentence!.speechText,
                                                 language:
                                                     item.lesson.targetLanguage,
                                                 compact: true,

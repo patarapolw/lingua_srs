@@ -209,6 +209,11 @@ class AppProvider extends ChangeNotifier {
       if (canonical.notes.trim().isEmpty && sentence.notes.trim().isNotEmpty) {
         canonical.notes = sentence.notes;
       }
+      final mergedTts = canonical.ttsText?.trim().isNotEmpty == true
+          ? canonical.ttsText
+          : sentence.ttsText;
+      canonical.ttsText = mergedTts;
+      sentence.ttsText = mergedTts;
       if (!canonicalHasAudio && sentenceHasAudio) {
         sentence.lessonId ??= canonical.lessonId;
         sentence.notes = canonical.notes;
@@ -310,6 +315,15 @@ class AppProvider extends ChangeNotifier {
         .toList();
   }
 
+  /// The pool sentence [sentence] would merge into when added, if any.
+  Sentence? findDuplicateSentence(Sentence sentence) {
+    final signature = _sentenceSignature(sentence);
+    for (final existing in _sentences) {
+      if (_sentenceSignature(existing) == signature) return existing;
+    }
+    return null;
+  }
+
   Future<Sentence> addSentenceToPool(Sentence sentence) async {
     final canonical = _upsertSentence(sentence);
     await StorageService.saveSentences(_sentences);
@@ -357,10 +371,17 @@ class AppProvider extends ChangeNotifier {
     final notes = candidates
         .map((sentence) => sentence.notes)
         .firstWhere((notes) => notes.trim().isNotEmpty, orElse: () => '');
+    final ttsText = candidates
+        .map((sentence) => sentence.ttsText)
+        .firstWhere(
+          (tts) => tts?.trim().isNotEmpty == true,
+          orElse: () => null,
+        );
     canonical
       ..targetText = incoming.targetText
       ..translationText = incoming.translationText
       ..audioUrl = audioUrl
+      ..ttsText = ttsText
       ..notes = notes
       ..lessonId ??= incoming.lessonId;
     final known = _importSentenceSet;
@@ -582,6 +603,9 @@ class AppProvider extends ChangeNotifier {
           ..audioUrl = existingSentence.audioUrl?.trim().isNotEmpty == true
               ? existingSentence.audioUrl
               : sentence.audioUrl
+          ..ttsText = sentence.ttsText?.trim().isNotEmpty == true
+              ? sentence.ttsText
+              : existingSentence.ttsText
           ..notes = sentence.notes.trim().isNotEmpty
               ? sentence.notes
               : existingSentence.notes
@@ -656,6 +680,11 @@ class AppProvider extends ChangeNotifier {
         ..mergeImport(
           SharedVocab.disambiguationField,
           importedVocab.disambiguation,
+          lessonId: lesson.id,
+        )
+        ..mergeImport(
+          SharedVocab.ttsField,
+          importedVocab.ttsText,
           lessonId: lesson.id,
         );
       _addVocabToIndexes(lessonMatch, vocabById, vocabByMeaning);

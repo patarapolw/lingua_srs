@@ -22,6 +22,7 @@ class VocabItem {
     required this.pos,
     List<String>? sectionPath,
     String? audioUrl,
+    String? ttsText,
     String notes = '',
     String disambiguation = '',
     List<String>? sentenceIds,
@@ -32,6 +33,7 @@ class VocabItem {
        sentenceIds = sentenceIds ?? [],
        shared = SharedVocab(
          audioUrl: audioUrl,
+         ttsText: ttsText,
          notes: notes,
          disambiguation: disambiguation,
          cardTargetToNative:
@@ -52,6 +54,15 @@ class VocabItem {
   set audioUrl(String? v) {
     shared.setManual(SharedVocab.audioField, v);
   }
+
+  String? get ttsText => shared.ttsText;
+  set ttsText(String? v) {
+    shared.setManual(SharedVocab.ttsField, v);
+  }
+
+  /// What text-to-speech should say: [ttsText] when set, else [targetWord].
+  String get speechText =>
+      SharedVocab.isBlank(ttsText) ? targetWord : ttsText!.trim();
 
   String get notes => shared.notes;
   set notes(String v) {
@@ -98,6 +109,7 @@ class VocabItem {
     'pos': pos,
     'sectionPath': sectionPath,
     'audioUrl': audioUrl,
+    'ttsText': ttsText,
     'notes': notes,
     'disambiguation': disambiguation,
     'sentenceIds': sentenceIds,
@@ -115,6 +127,7 @@ class VocabItem {
         ?.map((e) => e.toString())
         .toList(),
     audioUrl: json['audioUrl'] as String?,
+    ttsText: json['ttsText'] as String?,
     notes: json['notes'] as String? ?? '',
     disambiguation: json['disambiguation'] as String? ?? '',
     sentenceIds:

@@ -270,7 +270,7 @@ class _SentencePoolViewState extends State<SentencePoolView> {
                                     ),
                                     AudioButton(
                                       audioUrl: item.audioUrl,
-                                      fallbackText: item.targetText,
+                                      fallbackText: item.speechText,
                                       compact: true,
                                     ),
                                     IconButton(

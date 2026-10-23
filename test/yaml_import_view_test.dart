@@ -93,4 +93,40 @@ The full lesson body.
     );
     expect(find.text('Lesson 7: Markdown import'), findsOneWidget);
   });
+
+  testWidgets('prefills the lesson name and YAML when adding to a lesson', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: YamlImportView(
+          initialLessonName: 'Unit 2::Lesson 26',
+          initialYaml: 'vocabulary:\n  nouns:\n    - ko: "새"\n      en: "new"\n',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final fields = tester
+        .widgetList<TextField>(find.byType(TextField))
+        .map((field) => field.controller?.text)
+        .toList();
+    expect(fields, contains('Unit 2::Lesson 26'));
+    expect(fields.any((text) => text?.contains('vocabulary:') ?? false), isTrue);
+  });
+
+  testWidgets('explains that an existing lesson name adds to that lesson', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(const MaterialApp(home: YamlImportView()));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('existing lesson'), findsOneWidget);
+  });
 }

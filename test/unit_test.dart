@@ -58,6 +58,80 @@ verbs:
     notes: Regular verb
 ''';
 
+    test('notes may be a string or a list of strings', () {
+      final parsed = YamlParserService.parseLessonYaml('''
+---
+vocabulary:
+  nouns:
+    - ko: 배
+      en: pear
+      notes:
+        - First paragraph.
+        - Second **paragraph**.
+      examples:
+        - ko: 저는 **배**를 먹었어요
+          en: I ate a **pear**
+          notes: [One, Two]
+    - ko: 사과
+      en: apple
+      notes: Single note.
+---
+# Lesson 1
+''');
+      expect(
+        parsed.lesson.vocabularies[0].notes,
+        'First paragraph.\n\nSecond **paragraph**.',
+      );
+      expect(parsed.sentences.single.notes, 'One\n\nTwo');
+      expect(parsed.lesson.vocabularies[1].notes, 'Single note.');
+    });
+
+    test('ko_text is alternate TTS text for vocabulary and examples', () {
+      final parsed = YamlParserService.parseLessonYaml('''
+---
+vocabulary:
+  nouns:
+    - ko: 3개
+      ko_text: 세 개
+      en: three items
+      examples:
+        - ko: 3개 주세요
+          ko_text: 세 개 주세요
+          en: Three, please
+    - ko: 배
+      en: pear
+---
+# Lesson 1
+''');
+      final three = parsed.lesson.vocabularies[0];
+      expect(three.targetWord, '3개');
+      expect(three.ttsText, '세 개');
+      expect(three.speechText, '세 개');
+      expect(parsed.sentences.single.targetText, '3개 주세요');
+      expect(parsed.sentences.single.speechText, '세 개 주세요');
+
+      final pear = parsed.lesson.vocabularies[1];
+      expect(pear.ttsText, isNull);
+      expect(pear.speechText, '배');
+    });
+
+    test('ko_text survives a JSON round trip', () {
+      final vocab = VocabItem(
+        targetWord: '3개',
+        translation: 'three items',
+        pos: 'nouns',
+        ttsText: '세 개',
+      );
+      expect(VocabItem.fromJson(vocab.toJson()).ttsText, '세 개');
+
+      final sentence = Sentence(
+        targetText: '3개 주세요',
+        translationText: 'Three, please',
+        ttsText: '세 개 주세요',
+      );
+      expect(Sentence.fromJson(sentence.toJson()).speechText, '세 개 주세요');
+    });
+
     test('Parses lesson title, categories and cards', () {
       final res = YamlParserService.parseLessonYaml(sampleYaml);
       expect(res.lesson.title, 'Unit 2::Lesson 26');
@@ -1234,6 +1308,57 @@ vocabulary:
 
       final cloze = sentence.toCloze(targetWord: '아줌마');
       expect(cloze, '저는 (___)를 위해 문을 열었어요');
+    });
+
+    test('Cloze deletion blanks every bold segment', () {
+      final sentence = Sentence(
+        targetText: '**배**와 **사과**를 먹어요',
+        translationText: 'I eat a pear and an apple',
+      );
+
+      expect(sentence.toCloze(), '(___)와 (___)를 먹어요');
+      expect(
+        Sentence.withoutEmphasis(sentence.targetText),
+        '배와 사과를 먹어요',
+      );
+    });
+
+    test('suggestEmphasis wraps every occurrence of the word', () {
+      expect(
+        Sentence.suggestEmphasis('사과를 먹고 사과를 샀어요', '사과', korean: true),
+        '**사과**를 먹고 **사과**를 샀어요',
+      );
+    });
+
+    test('suggestEmphasis wraps each listed meaning', () {
+      expect(
+        Sentence.suggestEmphasis('I ate an apple and a pear', 'apple, pear'),
+        'I ate an **apple** and a **pear**',
+      );
+      expect(Sentence.suggestEmphasis('I ate a plum', 'apple, pear'), 'I ate a plum');
+    });
+
+    test('suggestEmphasis merges overlaps and keeps existing emphasis', () {
+      expect(Sentence.suggestEmphasis('an abc here', 'ab, abc'), 'an **abc** here');
+      expect(
+        Sentence.suggestEmphasis('저는 **배**를 먹어요', '사과', korean: true),
+        '저는 **배**를 먹어요',
+      );
+    });
+
+    test('suggestEmphasis matches conjugated Korean verbs', () {
+      expect(
+        Sentence.suggestEmphasis('우리는 정각에 도착했어요', '도착하다', korean: true),
+        '우리는 정각에 **도착했어요**',
+      );
+    });
+
+    test('sameExceptEmphasis only allows ** changes', () {
+      const original = '배와 사과를 먹어요';
+      expect(Sentence.sameExceptEmphasis(original, '**배**와 **사과**를 먹어요'), isTrue);
+      expect(Sentence.sameExceptEmphasis('**배**와 사과를 먹어요', original), isTrue);
+      expect(Sentence.sameExceptEmphasis(original, '배와 사과를 먹었어요'), isFalse);
+      expect(Sentence.sameExceptEmphasis(original, '**배와 사과를 먹어요'), isFalse);
     });
 
     test('Cloze deletion with conjugated verb stems', () {
@@ -2589,6 +2714,62 @@ vocabulary:
       final again = await provider.importYaml(lessonYaml('Lesson 1'));
 
       expect(pear(again).audioUrl, 'https://a/1.mp3');
+      provider.dispose();
+    });
+
+    test(
+      'Importing under an existing lesson name adds vocabulary and keeps the rest',
+      () async {
+        final provider = await newProvider();
+        final first = await provider.importYaml(lessonYaml('Lesson 1'));
+        pear(first).cardTargetToNative.repetitions = 3;
+
+        final again = await provider.importYaml('''
+---
+vocabulary:
+  nouns:
+    - ko: 사과
+      en: apple
+---
+# Lesson 1
+''');
+
+        expect(
+          provider.lessons.where((lesson) => lesson.title == 'Lesson 1'),
+          hasLength(1),
+        );
+        expect(again.vocabularies.map((v) => v.translation).toSet(), {
+          'pear',
+          'apple',
+        });
+        expect(pear(again).cardTargetToNative.repetitions, 3);
+        provider.dispose();
+      },
+    );
+
+    test('Re-import keeps ko_text when the new YAML omits it', () async {
+      final provider = await newProvider();
+      await provider.importYaml('''
+---
+vocabulary:
+  nouns:
+    - ko: 3개
+      ko_text: 세 개
+      en: three items
+---
+# Lesson 1
+''');
+      final again = await provider.importYaml('''
+---
+vocabulary:
+  nouns:
+    - ko: 3개
+      en: three items
+---
+# Lesson 1
+''');
+
+      expect(again.vocabularies.single.ttsText, '세 개');
       provider.dispose();
     });
 

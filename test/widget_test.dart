@@ -6,14 +6,17 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:lingua_srs/models/lesson.dart';
+import 'package:lingua_srs/models/sentence.dart';
 import 'package:lingua_srs/models/srs_card.dart';
 import 'package:lingua_srs/models/vocab_item.dart';
 import 'package:lingua_srs/services/audio_service.dart';
+import 'package:lingua_srs/views/lesson_detail_view.dart';
 import 'package:lingua_srs/views/similar_meanings_dialog.dart';
 import 'package:lingua_srs/views/similar_search_dialog.dart';
 import 'package:lingua_srs/views/study_view.dart';
 import 'package:lingua_srs/views/vocab_edit_dialog.dart';
 import 'package:lingua_srs/views/vocab_merge_dialogs.dart';
+import 'package:lingua_srs/views/yaml_import_view.dart';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -1621,5 +1624,449 @@ vocabulary:
     await tester.enterText(find.byType(TextField), 'zzzz');
     await tester.pump();
     expect(find.text('No matching vocabulary.'), findsOneWidget);
+  });
+
+  group('Add vocabulary dialog', () {
+    Future<(AppProvider, VocabItem)> openAdd(
+      WidgetTester tester, {
+      List<Sentence> pool = const [],
+    }) async {
+      final provider = await loadedProvider(tester);
+      final lesson = await seed(tester, provider, 'L1', 'nouns', '사과', 'apple');
+      for (final sentence in pool) {
+        await tester.runAsync(() => provider.addSentenceToPool(sentence));
+      }
+      final draft = VocabItem(targetWord: '', translation: '', pos: '');
+      await pumpWith(
+        tester,
+        provider,
+        opener(
+          (context) => VocabEditDialog.show(
+            context,
+            draft,
+            lessonId: lesson.id,
+            isNew: true,
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      return (provider, draft);
+    }
+
+    Future<void> fill(
+      WidgetTester tester, {
+      String ko = '',
+      String en = '',
+      String pos = '',
+    }) async {
+      Future<void> type(String label, String text) async {
+        if (text.isEmpty) return;
+        await tester.enterText(find.widgetWithText(TextField, label), text);
+      }
+
+      await type('Korean *', ko);
+      await type('English *', en);
+      await type('Part of speech *', pos);
+      await tester.pump();
+    }
+
+    /// Save when it writes to storage (new examples join the pool).
+    Future<void> saveAndWait(WidgetTester tester) async {
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      for (var i = 0;
+          i < 50 && find.byType(VocabEditDialog).evaluate().isNotEmpty;
+          i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+      await tester.pumpAndSettle();
+    }
+
+    Finder inSentenceDialog(String label) => find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.widgetWithText(TextField, label),
+    );
+
+    Future<void> save(WidgetTester tester) async {
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('has a title and only the schema fields', (tester) async {
+      await openAdd(tester);
+
+      expect(find.text('Add vocabulary'), findsOneWidget);
+      // ko, ko_text, en, audio, notes, plus the required part of speech.
+      expect(find.widgetWithText(TextField, 'Korean *'), findsOneWidget);
+      expect(
+        find.widgetWithText(TextField, 'Korean TTS text (optional)'),
+        findsOneWidget,
+      );
+      expect(find.widgetWithText(TextField, 'English *'), findsOneWidget);
+      expect(find.widgetWithText(TextField, 'Audio URL'), findsOneWidget);
+      expect(find.text('Vocab notes'), findsOneWidget);
+      expect(find.text('Examples (0)'), findsOneWidget);
+      expect(find.byTooltip('Add from pool'), findsOneWidget);
+      expect(find.byTooltip('Create new sentence'), findsOneWidget);
+      expect(find.widgetWithText(TextField, 'Part of speech *'), findsOneWidget);
+      for (final hidden in [
+        'ID (optional)',
+        'Front hint, both directions (optional)',
+        'KO ➔ EN',
+        'EN ➔ KO (cloze)',
+      ]) {
+        expect(find.text(hidden, skipOffstage: false), findsNothing, reason: hidden);
+      }
+    });
+
+    testWidgets('part of speech starts empty and is required', (tester) async {
+      final (_, draft) = await openAdd(tester);
+      final pos = tester.widget<TextField>(
+        find.widgetWithText(TextField, 'Part of speech *'),
+      );
+      expect(pos.controller!.text, isEmpty);
+
+      await fill(tester, ko: '배', en: 'pear');
+      await save(tester);
+
+      expect(find.text('Required'), findsOneWidget);
+      expect(find.byType(VocabEditDialog), findsOneWidget);
+      expect(draft.targetWord, isEmpty);
+    });
+
+    testWidgets('Korean and English are required too', (tester) async {
+      await openAdd(tester);
+      await fill(tester, pos: 'nouns');
+      await save(tester);
+
+      expect(find.text('Required'), findsNWidgets(2));
+      expect(find.byType(VocabEditDialog), findsOneWidget);
+    });
+
+    testWidgets('saves a new word without a duplicate warning', (tester) async {
+      final (_, draft) = await openAdd(tester);
+      await fill(tester, ko: '배', en: 'pear', pos: 'nouns');
+      await save(tester);
+
+      expect(find.byType(VocabEditDialog), findsNothing);
+      expect(find.text('Similar vocabulary exists'), findsNothing);
+      expect(draft.targetWord, '배');
+      expect(draft.pos, 'nouns');
+    });
+
+    testWidgets('saves ko_text, audio and notes with the new word', (
+      tester,
+    ) async {
+      final (_, draft) = await openAdd(tester);
+      await fill(tester, ko: '3개', en: 'three items', pos: 'numbers');
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Korean TTS text (optional)'),
+        '세 개',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Audio URL'),
+        'https://example.com/three.mp3',
+      );
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField &&
+              (widget.decoration?.hintText ?? '').startsWith('Markdown notes'),
+        ),
+        'Counter for things.',
+      );
+      await save(tester);
+
+      expect(draft.ttsText, '세 개');
+      expect(draft.speechText, '세 개');
+      expect(draft.audioUrl, 'https://example.com/three.mp3');
+      expect(draft.notes, 'Counter for things.');
+    });
+
+    testWidgets('blank ko_text leaves speech on the Korean word', (
+      tester,
+    ) async {
+      final (_, draft) = await openAdd(tester);
+      await fill(tester, ko: '배', en: 'pear', pos: 'nouns');
+      await save(tester);
+
+      expect(draft.ttsText, isNull);
+      expect(draft.speechText, '배');
+    });
+
+    testWidgets('suggests pool sentences for the typed word and links the pick', (
+      tester,
+    ) async {
+      final (provider, draft) = await openAdd(
+        tester,
+        pool: [Sentence(targetText: '배를 먹어요', translationText: 'I eat a pear')],
+      );
+      final before = provider.sentences.length;
+      expect(find.text('Suggested from the pool'), findsNothing);
+
+      await fill(tester, ko: '배', en: 'pear', pos: 'nouns');
+      expect(find.text('Suggested from the pool'), findsOneWidget);
+      await tester.tap(find.byType(CheckboxListTile));
+      await tester.pump();
+      expect(find.text('Examples (1)'), findsOneWidget);
+      expect(find.text('Suggested from the pool'), findsNothing);
+
+      await save(tester);
+      expect(provider.sentences.length, before, reason: 'nothing new in the pool');
+      expect(draft.sentenceIds, [
+        provider.sentences.firstWhere((s) => s.targetText == '배를 먹어요').id,
+      ]);
+    });
+
+    testWidgets('a new sentence already in the pool offers the existing one', (
+      tester,
+    ) async {
+      final (provider, _) = await openAdd(
+        tester,
+        pool: [Sentence(targetText: '배를 먹어요', translationText: 'I eat a pear')],
+      );
+      final before = provider.sentences.length;
+
+      await tester.tap(find.byTooltip('Create new sentence'));
+      await tester.pumpAndSettle();
+      await tester.enterText(inSentenceDialog('Korean sentence'), '배를 먹어요');
+      await tester.enterText(inSentenceDialog('English translation'), 'I eat a pear');
+      await tester.tap(find.widgetWithText(FilledButton, 'Add'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Sentence already exists'), findsOneWidget);
+      await tester.tap(find.text('Use existing'));
+      await tester.pumpAndSettle();
+      expect(find.text('Examples (1)'), findsOneWidget);
+      expect(provider.sentences.length, before);
+    });
+
+    testWidgets('a new example joins the pool only when the word is saved', (
+      tester,
+    ) async {
+      final (provider, draft) = await openAdd(tester);
+      final before = provider.sentences.length;
+
+      await tester.tap(find.byTooltip('Create new sentence'));
+      await tester.pumpAndSettle();
+      await tester.enterText(inSentenceDialog('Korean sentence'), '3개 주세요');
+      await tester.enterText(
+        inSentenceDialog('Korean TTS text (optional)'),
+        '세 개 주세요',
+      );
+      await tester.enterText(inSentenceDialog('English translation'), 'Three, please');
+      await tester.tap(find.widgetWithText(FilledButton, 'Add'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Examples (1)'), findsOneWidget);
+      expect(provider.sentences.length, before, reason: 'still only a draft');
+
+      await fill(tester, ko: '3개', en: 'three items', pos: 'numbers');
+      await saveAndWait(tester);
+
+      expect(provider.sentences.length, before + 1);
+      final added = provider.sentences.firstWhere(
+        (s) => s.targetText == '3개 주세요',
+      );
+      expect(added.ttsText, '세 개 주세요');
+      expect(draft.sentenceIds, [added.id]);
+    });
+
+    testWidgets('cancelling discards new examples', (tester) async {
+      final (provider, draft) = await openAdd(tester);
+      final before = provider.sentences.length;
+
+      await tester.tap(find.byTooltip('Create new sentence'));
+      await tester.pumpAndSettle();
+      await tester.enterText(inSentenceDialog('Korean sentence'), '3개 주세요');
+      await tester.tap(find.widgetWithText(FilledButton, 'Add'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Remove example'));
+      await tester.pump();
+      expect(find.text('Examples (0)'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Cancel'));
+      await tester.pumpAndSettle();
+      expect(provider.sentences.length, before);
+      expect(draft.sentenceIds, isEmpty);
+    });
+
+    testWidgets('tapping an example edits its emphasis with several segments', (
+      tester,
+    ) async {
+      final (provider, draft) = await openAdd(
+        tester,
+        pool: [
+          Sentence(
+            targetText: '배와 사과를 먹어요',
+            translationText: 'I eat a pear and an apple',
+          ),
+        ],
+      );
+      await fill(tester, ko: '배', en: 'pear', pos: 'nouns');
+      await tester.tap(find.byType(CheckboxListTile));
+      await tester.pump();
+
+      await tester.tap(find.byType(ListTile).first);
+      await tester.pumpAndSettle();
+      expect(find.text('Edit emphasis'), findsOneWidget);
+      await tester.enterText(
+        inSentenceDialog('Korean sentence'),
+        '**배**와 **사과**를 먹어요',
+      );
+      await tester.pump();
+      expect(find.textContaining('Cloze: (___)와 (___)를 먹어요'), findsOneWidget);
+      await tester.tap(find.widgetWithText(FilledButton, 'Apply'));
+      await tester.pumpAndSettle();
+
+      final pooled = provider.sentences.firstWhere(
+        (s) => s.translationText == 'I eat a pear and an apple',
+      );
+      expect(pooled.targetText, '배와 사과를 먹어요', reason: 'applied on Save');
+
+      await saveAndWait(tester);
+      final saved = provider.sentences.firstWhere(
+        (s) => s.translationText == 'I eat a pear and an apple',
+      );
+      expect(saved.targetText, '**배**와 **사과**를 먹어요');
+      expect(saved.toCloze(), '(___)와 (___)를 먹어요');
+      expect(draft.sentenceIds, [saved.id]);
+    });
+
+    testWidgets('cancelling the emphasis editor leaves the sentence alone', (
+      tester,
+    ) async {
+      final (provider, _) = await openAdd(
+        tester,
+        pool: [
+          Sentence(targetText: '배와 사과를 먹어요', translationText: 'I eat fruit'),
+        ],
+      );
+      await fill(tester, ko: '배', en: 'pear', pos: 'nouns');
+      await tester.tap(find.byType(CheckboxListTile));
+      await tester.pump();
+
+      await tester.tap(find.byType(ListTile).first);
+      await tester.pumpAndSettle();
+      await tester.enterText(inSentenceDialog('Korean sentence'), '**배**와 사과를 먹어요');
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+      await tester.pumpAndSettle();
+      await save(tester);
+
+      final pooled = provider.sentences.firstWhere(
+        (s) => s.translationText == 'I eat fruit',
+      );
+      expect(pooled.targetText, '배와 사과를 먹어요');
+    });
+
+    testWidgets('changing text other than ** is rejected', (tester) async {
+      await openAdd(
+        tester,
+        pool: [
+          Sentence(targetText: '배와 사과를 먹어요', translationText: 'I eat fruit'),
+        ],
+      );
+      await fill(tester, ko: '배', en: 'pear', pos: 'nouns');
+      await tester.tap(find.byType(CheckboxListTile));
+      await tester.pump();
+
+      await tester.tap(find.byType(ListTile).first);
+      await tester.pumpAndSettle();
+      await tester.enterText(inSentenceDialog('Korean sentence'), '배와 사과를 먹었어요');
+      await tester.pump();
+
+      expect(find.text('Only ** emphasis can be changed here.'), findsOneWidget);
+      final apply = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Apply'),
+      );
+      expect(apply.onPressed, isNull);
+    });
+
+    testWidgets('verbs get the EN ➔ KO card by default', (tester) async {
+      final (_, draft) = await openAdd(tester);
+      await fill(tester, ko: '만들다', en: 'to make', pos: 'verbs');
+      await save(tester);
+
+      expect(draft.cardTargetToNative.isEnabled, isFalse);
+      expect(draft.cardNativeToTarget.isEnabled, isTrue);
+    });
+
+    testWidgets('warns before adding a word with an existing card front', (
+      tester,
+    ) async {
+      final (_, draft) = await openAdd(tester);
+      await fill(tester, ko: '사과', en: 'apology', pos: 'nouns');
+      await save(tester);
+
+      expect(find.text('Similar vocabulary exists'), findsOneWidget);
+      expect(find.textContaining('사과 — apple'), findsOneWidget);
+      expect(draft.targetWord, isEmpty, reason: 'nothing is applied yet');
+
+      await tester.tap(find.text('Go back'));
+      await tester.pumpAndSettle();
+      expect(find.byType(VocabEditDialog), findsOneWidget);
+      expect(draft.targetWord, isEmpty);
+
+      await save(tester);
+      await tester.tap(find.text('Add anyway'));
+      await tester.pumpAndSettle();
+      expect(find.byType(VocabEditDialog), findsNothing);
+      expect(draft.targetWord, '사과');
+    });
+
+    testWidgets('editing an existing word still shows every field', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      final lesson = await seed(tester, provider, 'L1', 'nouns', '사과', 'apple');
+      await pumpWith(
+        tester,
+        provider,
+        opener(
+          (context) => VocabEditDialog.show(
+            context,
+            only(lesson),
+            lessonId: lesson.id,
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('사과'), findsWidgets);
+      expect(find.text('Add vocabulary'), findsNothing);
+      expect(find.text('Audio URL', skipOffstage: false), findsOneWidget);
+      expect(
+        find.text('Korean TTS text (optional)', skipOffstage: false),
+        findsOneWidget,
+      );
+      expect(find.text('ID (optional)', skipOffstage: false), findsOneWidget);
+      expect(find.text('KO ➔ EN', skipOffstage: false), findsWidgets);
+    });
+
+    testWidgets('lesson menu offers one word or YAML, prefilled with the name', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      final lesson = await seed(tester, provider, 'L1', 'nouns', '사과', 'apple');
+      await pumpWith(tester, provider, LessonDetailView(lessonId: lesson.id));
+
+      await tester.tap(find.byIcon(Icons.add_circle_outline));
+      await tester.pumpAndSettle();
+      expect(find.text('Add one word'), findsOneWidget);
+      expect(find.text('Add from YAML'), findsOneWidget);
+
+      await tester.tap(find.text('Add from YAML'));
+      await tester.pumpAndSettle();
+      expect(find.byType(YamlImportView), findsOneWidget);
+      final texts = tester
+          .widgetList<TextField>(find.byType(TextField))
+          .map((field) => field.controller?.text)
+          .toList();
+      expect(texts, contains('L1'));
+    });
   });
 }

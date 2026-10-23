@@ -9,6 +9,7 @@ import '../widgets/audio_button.dart';
 import '../widgets/markdown_content.dart';
 import 'vocab_edit_dialog.dart';
 import 'study_view.dart';
+import 'yaml_import_view.dart';
 
 class LessonDetailView extends StatefulWidget {
   final String lessonId;
@@ -181,9 +182,32 @@ class _LessonDetailViewState extends State<LessonDetailView> {
     });
   }
 
+  /// Opens the YAML import prefilled with this lesson's name. Importing under
+  /// an existing lesson name adds to it and keeps existing vocabulary.
+  void _showAddFromYaml(Lesson lesson) {
+    final name = joinHierarchyPath([...lesson.folderPath, lesson.displayTitle]);
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => YamlImportView(
+          initialLessonName: name,
+          initialYaml:
+              'vocabulary:\n'
+              '  nouns:\n'
+              '    - ${lesson.targetLanguage}: ""\n'
+              '      ${lesson.nativeLanguage}: ""\n',
+        ),
+      ),
+    );
+  }
+
   void _showAddVocabDialog(Lesson lesson) {
-    final vocab = VocabItem(targetWord: '', translation: '', pos: 'nouns');
-    VocabEditDialog.show(context, vocab, lessonId: lesson.id).then((_) {
+    final vocab = VocabItem(targetWord: '', translation: '', pos: '');
+    VocabEditDialog.show(
+      context,
+      vocab,
+      lessonId: lesson.id,
+      isNew: true,
+    ).then((_) {
       if (!mounted) return;
       if (vocab.targetWord.isNotEmpty) {
         context.read<AppProvider>().addVocabToLesson(lesson.id, vocab);
@@ -315,10 +339,17 @@ class _LessonDetailViewState extends State<LessonDetailView> {
               tooltip: 'Reset all SRS progress in this lesson',
               onPressed: () => _confirmResetLesson(lesson),
             ),
-          IconButton(
+          PopupMenuButton<String>(
             icon: const Icon(Icons.add_circle_outline),
             tooltip: 'Add Vocabulary',
-            onPressed: () => _showAddVocabDialog(lesson),
+            onSelected: (value) {
+              if (value == 'word') _showAddVocabDialog(lesson);
+              if (value == 'yaml') _showAddFromYaml(lesson);
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: 'word', child: Text('Add one word')),
+              PopupMenuItem(value: 'yaml', child: Text('Add from YAML')),
+            ],
           ),
           if (context.watch<AppProvider>().getRecentMistakesCount(
                 lessonId: lesson.id,
@@ -499,10 +530,22 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                         ),
                         const SizedBox(height: 12),
                         if (lesson.vocabularies.isEmpty)
-                          FilledButton.tonalIcon(
-                            icon: const Icon(Icons.add),
-                            label: const Text('Add Word'),
-                            onPressed: () => _showAddVocabDialog(lesson),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            alignment: WrapAlignment.center,
+                            children: [
+                              FilledButton.tonalIcon(
+                                icon: const Icon(Icons.add),
+                                label: const Text('Add Word'),
+                                onPressed: () => _showAddVocabDialog(lesson),
+                              ),
+                              OutlinedButton.icon(
+                                icon: const Icon(Icons.code),
+                                label: const Text('Add from YAML'),
+                                onPressed: () => _showAddFromYaml(lesson),
+                              ),
+                            ],
                           ),
                       ],
                     ),
@@ -623,7 +666,7 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                                               ),
                                               AudioButton(
                                                 audioUrl: vocab.audioUrl,
-                                                fallbackText: vocab.targetWord,
+                                                fallbackText: vocab.speechText,
                                                 language: lesson.targetLanguage,
                                                 compact: true,
                                               ),
@@ -746,7 +789,7 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                                           ),
                                           AudioButton(
                                             audioUrl: s.audioUrl,
-                                            fallbackText: s.targetText,
+                                            fallbackText: s.speechText,
                                             language: lesson.targetLanguage,
                                             compact: true,
                                           ),

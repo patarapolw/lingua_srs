@@ -27,7 +27,7 @@ void main() {
       );
 
       expect(parsed.lesson.title, 'Docs example');
-      expect(parsed.lesson.vocabularies.length, 2);
+      expect(parsed.lesson.vocabularies.length, 3);
 
       final noun = parsed.lesson.vocabularies[0];
       expect(noun.pos, 'nouns');
@@ -38,6 +38,12 @@ void main() {
       final verb = parsed.lesson.vocabularies[1];
       expect(verb.pos, 'verbs');
       expect(verb.targetWord, '만들다');
+      expect(verb.notes, 'First paragraph of **Markdown** notes.\n\nSecond paragraph.');
+
+      final number = parsed.lesson.vocabularies[2];
+      expect(number.targetWord, '3개');
+      expect(number.ttsText, '세 개');
+      expect(number.speechText, '세 개');
 
       expect(parsed.sentences.length, 2);
     });
@@ -51,6 +57,22 @@ void main() {
       expect(parsed.lesson.title, 'Lesson 1: Example title');
       expect(parsed.lesson.vocabularies, isEmpty);
       expect(parsed.lesson.markdownContent, contains('Lesson notes go here.'));
+    });
+
+    test('adding-to-an-existing-lesson example parses', () {
+      final block = RegExp(
+        '```yaml\\n(.*?)```',
+        dotAll: true,
+      ).allMatches(doc).last.group(1)!;
+
+      final parsed = YamlParserService.parseLessonYaml(
+        block,
+        defaultTitle: 'Existing lesson',
+      );
+
+      expect(parsed.lesson.title, 'Existing lesson');
+      expect(parsed.lesson.vocabularies, hasLength(1));
+      expect(parsed.lesson.vocabularies.single.targetWord, '새 단어');
     });
   });
 
