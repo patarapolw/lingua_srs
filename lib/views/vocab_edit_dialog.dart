@@ -11,6 +11,7 @@ import '../providers/app_provider.dart';
 import '../services/korean_text_search.dart';
 import '../widgets/audio_button.dart';
 import '../widgets/markdown_content.dart';
+import '../widgets/markdown_notes_field.dart';
 import 'similar_meanings_dialog.dart';
 import 'similar_search_dialog.dart';
 import 'vocab_merge_dialogs.dart';
@@ -198,26 +199,57 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                     ),
                     if (!widget.isNew) ...[
                     const SizedBox(height: 16),
-                    TextField(
-                      controller: _disambiguationCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Front hint, both directions (optional)',
-                        hintText: 'e.g. fruit, vehicle',
-                        helperText: 'Shown on card fronts unless a direction-specific hint below is set.',
-                        helperMaxLines: 3,
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
                     _duplicateFrontWarning(
                       provider,
                       CardDirection.targetToNative,
                     ),
-                    _hintField(provider, CardDirection.targetToNative),
                     _duplicateFrontWarning(
                       provider,
                       CardDirection.nativeToTarget,
                     ),
-                    _hintField(provider, CardDirection.nativeToTarget),
+                    // Collapsed unless this word needs telling apart from
+                    // another card with the same front.
+                    Theme(
+                      data: theme.copyWith(dividerColor: Colors.transparent),
+                      child: ExpansionTile(
+                        initiallyExpanded: CardDirection.values.any(
+                          (direction) => provider
+                              .getDuplicateFrontVocabularies(
+                                widget.vocab,
+                                direction,
+                              )
+                              .isNotEmpty,
+                        ),
+                        maintainState: true,
+                        tilePadding: EdgeInsets.zero,
+                        childrenPadding: const EdgeInsets.only(top: 8),
+                        title: Text(
+                          'Hints',
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        subtitle: Text(
+                          'Tell apart cards with the same front.',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                        children: [
+                          TextField(
+                            controller: _disambiguationCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Front hint, both directions (optional)',
+                              hintText: 'e.g. fruit, vehicle',
+                              helperText:
+                                  'Shown on card fronts unless a direction-specific hint below is set.',
+                              helperMaxLines: 3,
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                          _hintField(provider, CardDirection.targetToNative),
+                          _hintField(provider, CardDirection.nativeToTarget),
+                        ],
+                      ),
+                    ),
                     _mergeSection(provider),
                     ],
                     const SizedBox(height: 20),
@@ -331,6 +363,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                     Theme(
                       data: theme.copyWith(dividerColor: Colors.transparent),
                       child: ExpansionTile(
+                        maintainState: true,
                         tilePadding: EdgeInsets.zero,
                         childrenPadding: const EdgeInsets.only(top: 8),
                         title: Text(
@@ -345,8 +378,16 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                           style: theme.textTheme.bodySmall,
                         ),
                         children: [
-                          _sideNotesField('KO ➔ EN', _targetToNativeBackNotesCtrl),
-                          _sideNotesField('EN ➔ KO', _nativeToTargetBackNotesCtrl),
+                          MarkdownNotesField(
+                            key: const ValueKey('review-notes-ko-en'),
+                            label: 'KO ➔ EN',
+                            controller: _targetToNativeBackNotesCtrl,
+                          ),
+                          MarkdownNotesField(
+                            key: const ValueKey('review-notes-en-ko'),
+                            label: 'EN ➔ KO',
+                            controller: _nativeToTargetBackNotesCtrl,
+                          ),
                         ],
                       ),
                     ),
@@ -634,7 +675,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
       padding: const EdgeInsets.only(top: 8),
       child: Text(
         '$directionLabel has the same front prompt as another enabled card: '
-        '$meanings. Add a front hint for this card below to tell them apart.',
+        '$meanings. Add a front hint for this card under Hints to tell them apart.',
         style: TextStyle(
           color: Theme.of(context).colorScheme.error,
           fontSize: 12,
@@ -1385,21 +1426,6 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     );
     if (choice == null || !mounted) return;
     _applyChoice(CardDirection.nativeToTarget, choice);
-  }
-
-  Widget _sideNotesField(String label, TextEditingController controller) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: TextField(
-        controller: controller,
-        minLines: 2,
-        maxLines: 4,
-        decoration: InputDecoration(
-          labelText: label,
-          border: const OutlineInputBorder(),
-        ),
-      ),
-    );
   }
 
   Future<void> _suggestHint(

@@ -17,6 +17,8 @@ import 'package:lingua_srs/views/study_view.dart';
 import 'package:lingua_srs/views/vocab_edit_dialog.dart';
 import 'package:lingua_srs/views/vocab_merge_dialogs.dart';
 import 'package:lingua_srs/views/yaml_import_view.dart';
+import 'package:lingua_srs/widgets/markdown_content.dart';
+import 'package:lingua_srs/widgets/markdown_notes_field.dart';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -2062,9 +2064,11 @@ vocabulary:
       expect(find.text('KO ➔ EN', skipOffstage: false), findsWidgets);
     });
 
-    testWidgets('review notes are collapsed when editing', (tester) async {
-      final provider = await loadedProvider(tester);
-      final lesson = await seed(tester, provider, 'L1', 'nouns', '사과', 'apple');
+    Future<void> openEdit(
+      WidgetTester tester,
+      AppProvider provider,
+      Lesson lesson,
+    ) async {
       await pumpWith(
         tester,
         provider,
@@ -2078,21 +2082,127 @@ vocabulary:
       );
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
+    }
+
+    testWidgets('review notes are collapsed, with a preview for each', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      final lesson = await seed(tester, provider, 'L1', 'nouns', '사과', 'apple');
+      await openEdit(tester, provider, lesson);
 
       expect(find.text('Review notes', skipOffstage: false), findsOneWidget);
-      expect(find.widgetWithText(TextField, 'KO ➔ EN', skipOffstage: false), findsNothing);
+      expect(find.byType(MarkdownNotesField), findsNothing);
 
       await tester.ensureVisible(find.text('Review notes'));
       await tester.tap(find.text('Review notes'));
       await tester.pumpAndSettle();
+      expect(find.byType(MarkdownNotesField), findsNWidgets(2));
+
+      final koEn = find.byKey(const ValueKey('review-notes-ko-en'));
+      final enKo = find.byKey(const ValueKey('review-notes-en-ko'));
+      await tester.enterText(
+        find.descendant(of: koEn, matching: find.byType(TextField)),
+        'Use **polite** form',
+      );
+      await tester.tap(find.descendant(of: koEn, matching: find.text('Preview')));
+      await tester.pumpAndSettle();
       expect(
-        find.widgetWithText(TextField, 'KO ➔ EN', skipOffstage: false),
-        findsOneWidget,
+        find.descendant(of: koEn, matching: find.byType(TextField)),
+        findsNothing,
       );
       expect(
-        find.widgetWithText(TextField, 'EN ➔ KO', skipOffstage: false),
+        find.descendant(of: koEn, matching: find.byType(MarkdownContent)),
         findsOneWidget,
       );
+      // The other card's field is independent and still in edit mode.
+      expect(
+        find.descendant(of: enKo, matching: find.byType(TextField)),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.descendant(of: koEn, matching: find.text('Edit')));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<TextField>(
+              find.descendant(of: koEn, matching: find.byType(TextField)),
+            )
+            .controller!
+            .text,
+        'Use **polite** form',
+      );
+
+      await saveAndWait(tester);
+      final vocab = only(lesson);
+      expect(vocab.cardTargetToNative.backNotes, 'Use **polite** form');
+      expect(vocab.cardNativeToTarget.backNotes, isEmpty);
+    });
+
+    testWidgets('hint fields are collapsed unless the word needs a hint', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      final lesson = await seed(tester, provider, 'L1', 'nouns', '사과', 'apple');
+      await openEdit(tester, provider, lesson);
+
+      const label = 'Front hint, both directions (optional)';
+      expect(find.widgetWithText(TextField, label), findsNothing);
+      expect(find.text('Hints', skipOffstage: false), findsOneWidget);
+
+      await tester.ensureVisible(find.text('Hints'));
+      await tester.tap(find.text('Hints'));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(TextField, label), findsOneWidget);
+      expect(find.text('KO ➔ EN front hint'), findsOneWidget);
+      expect(find.text('EN ➔ KO front hint'), findsOneWidget);
+    });
+
+    testWidgets('hints start expanded when another card has the same front', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      await seed(tester, provider, 'L1', 'nouns', '사과', 'apple');
+      final second = await seed(tester, provider, 'L2', 'nouns', '사과', 'apology');
+      await openEdit(tester, provider, second);
+
+      expect(
+        find.widgetWithText(TextField, 'Front hint, both directions (optional)'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('has the same front prompt'), findsOneWidget);
+    });
+
+    testWidgets('the vocab list warns about a duplicate front prompt', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      await seed(tester, provider, 'L1', 'nouns', '사과', 'apple');
+      final second = await seed(tester, provider, 'L2', 'nouns', '사과', 'apology');
+      await pumpWith(tester, provider, LessonDetailView(lessonId: second.id));
+
+      expect(
+        find.textContaining('KO ➔ EN card has the same front as 사과 — apple'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.textContaining('has the same front as'));
+      await tester.pumpAndSettle();
+      expect(find.byType(VocabEditDialog), findsOneWidget);
+      expect(
+        find.widgetWithText(TextField, 'Front hint, both directions (optional)'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('the vocab list has no warning without duplicates', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      final lesson = await seed(tester, provider, 'L1', 'nouns', '사과', 'apple');
+      await pumpWith(tester, provider, LessonDetailView(lessonId: lesson.id));
+
+      expect(find.textContaining('has the same front as'), findsNothing);
     });
 
     testWidgets('lesson menu offers one word or YAML, prefilled with the name', (

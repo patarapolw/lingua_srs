@@ -200,6 +200,66 @@ class _LessonDetailViewState extends State<LessonDetailView> {
     );
   }
 
+  /// Warns when an enabled card has the same front prompt as another card.
+  /// Uses the same check as the edit dialog; tapping opens it to add a hint.
+  List<Widget> _duplicateFrontNotices(
+    AppProvider provider,
+    Lesson lesson,
+    VocabItem vocab,
+    ThemeData theme,
+  ) {
+    final notices = <Widget>[];
+    for (final direction in CardDirection.values) {
+      final toNative = direction == CardDirection.targetToNative;
+      if (!(toNative ? vocab.cardTargetToNative : vocab.cardNativeToTarget)
+          .isEnabled) {
+        continue;
+      }
+      final duplicates = provider.getDuplicateFrontVocabularies(
+        vocab,
+        direction,
+      );
+      if (duplicates.isEmpty) continue;
+
+      final others = duplicates
+          .map((other) => '${other.targetWord} — ${other.translation}')
+          .join('; ');
+      notices.add(
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: InkWell(
+            key: ValueKey('duplicate-front-${vocab.id}-${direction.name}'),
+            borderRadius: BorderRadius.circular(6),
+            onTap: () =>
+                VocabEditDialog.show(context, vocab, lessonId: lesson.id),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.warning_amber_rounded,
+                  size: 16,
+                  color: theme.colorScheme.error,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    '${toNative ? 'KO ➔ EN' : 'EN ➔ KO'} card has the same '
+                    'front as $others. Tap to add a front hint.',
+                    style: TextStyle(
+                      color: theme.colorScheme.error,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    return notices;
+  }
+
   void _showAddVocabDialog(Lesson lesson) {
     final vocab = VocabItem(targetWord: '', translation: '', pos: '');
     VocabEditDialog.show(
@@ -676,6 +736,12 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                                           Text(
                                             vocab.translation,
                                             style: theme.textTheme.titleMedium,
+                                          ),
+                                          ..._duplicateFrontNotices(
+                                            provider,
+                                            lesson,
+                                            vocab,
+                                            theme,
                                           ),
                                         ],
                                       ),
