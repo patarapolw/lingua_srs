@@ -1340,8 +1340,9 @@ class _VocabEditDialogState extends State<VocabEditDialog>
       final pool = context.read<AppProvider>();
       for (final draft in _draftSentences) {
         final canonical = await pool.addSentenceToPool(draft);
-        if (!_sentenceIds.contains(canonical.id))
+        if (!_sentenceIds.contains(canonical.id)) {
           _sentenceIds.add(canonical.id);
+        }
       }
       if (!mounted) return;
     }
