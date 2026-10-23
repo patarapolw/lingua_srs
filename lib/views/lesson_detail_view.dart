@@ -341,13 +341,13 @@ class _LessonDetailViewState extends State<LessonDetailView> {
             ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.add_circle_outline),
-            tooltip: 'Add Vocabulary',
+            tooltip: 'Add vocabulary',
             onSelected: (value) {
               if (value == 'word') _showAddVocabDialog(lesson);
               if (value == 'yaml') _showAddFromYaml(lesson);
             },
             itemBuilder: (context) => const [
-              PopupMenuItem(value: 'word', child: Text('Add one word')),
+              PopupMenuItem(value: 'word', child: Text('Add manually')),
               PopupMenuItem(value: 'yaml', child: Text('Add from YAML')),
             ],
           ),
@@ -537,7 +537,7 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                             children: [
                               FilledButton.tonalIcon(
                                 icon: const Icon(Icons.add),
-                                label: const Text('Add Word'),
+                                label: const Text('Add vocabulary'),
                                 onPressed: () => _showAddVocabDialog(lesson),
                               ),
                               OutlinedButton.icon(

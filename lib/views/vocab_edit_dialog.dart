@@ -326,15 +326,30 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                     ),
                     const SizedBox(height: 20),
 
-                    Text(
-                      'Review notes',
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
+                    // Collapsed: these are usually edited from the back of the
+                    // card while reviewing.
+                    Theme(
+                      data: theme.copyWith(dividerColor: Colors.transparent),
+                      child: ExpansionTile(
+                        tilePadding: EdgeInsets.zero,
+                        childrenPadding: const EdgeInsets.only(top: 8),
+                        title: Text(
+                          'Review notes',
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        subtitle: Text(
+                          'Per card. Also editable on the back of the card '
+                          'while reviewing.',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                        children: [
+                          _sideNotesField('KO ➔ EN', _targetToNativeBackNotesCtrl),
+                          _sideNotesField('EN ➔ KO', _nativeToTargetBackNotesCtrl),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    _sideNotesField('KO ➔ EN', _targetToNativeBackNotesCtrl),
-                    _sideNotesField('EN ➔ KO', _nativeToTargetBackNotesCtrl),
                     const SizedBox(height: 20),
                     ],
 

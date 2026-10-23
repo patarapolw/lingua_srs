@@ -1842,6 +1842,9 @@ vocabulary:
       await tester.pumpAndSettle();
       expect(find.text('Examples (1)'), findsOneWidget);
       expect(provider.sentences.length, before);
+
+      // _disposeAfterRouteExit keeps a 1s timer for the closed dialog.
+      await tester.pump(const Duration(seconds: 1));
     });
 
     testWidgets('a new example joins the pool only when the word is saved', (
@@ -1873,6 +1876,9 @@ vocabulary:
       );
       expect(added.ttsText, '세 개 주세요');
       expect(draft.sentenceIds, [added.id]);
+
+      // _disposeAfterRouteExit keeps a 1s timer for the closed dialog.
+      await tester.pump(const Duration(seconds: 1));
     });
 
     testWidgets('cancelling discards new examples', (tester) async {
@@ -1892,6 +1898,9 @@ vocabulary:
       await tester.pumpAndSettle();
       expect(provider.sentences.length, before);
       expect(draft.sentenceIds, isEmpty);
+
+      // _disposeAfterRouteExit keeps a 1s timer for the closed dialog.
+      await tester.pump(const Duration(seconds: 1));
     });
 
     testWidgets('tapping an example edits its emphasis with several segments', (
@@ -1928,12 +1937,15 @@ vocabulary:
       expect(pooled.targetText, '배와 사과를 먹어요', reason: 'applied on Save');
 
       await saveAndWait(tester);
-      final saved = provider.sentences.firstWhere(
-        (s) => s.translationText == 'I eat a pear and an apple',
-      );
+      // The translation also gets a suggested emphasis for the typed meaning.
+      final saved = provider.sentences.firstWhere((s) => s.id == pooled.id);
+      expect(saved.translationText, 'I eat a **pear** and an apple');
       expect(saved.targetText, '**배**와 **사과**를 먹어요');
       expect(saved.toCloze(), '(___)와 (___)를 먹어요');
       expect(draft.sentenceIds, [saved.id]);
+
+      // _disposeAfterRouteExit keeps a 1s timer for the closed dialog.
+      await tester.pump(const Duration(seconds: 1));
     });
 
     testWidgets('cancelling the emphasis editor leaves the sentence alone', (
@@ -1960,6 +1972,9 @@ vocabulary:
         (s) => s.translationText == 'I eat fruit',
       );
       expect(pooled.targetText, '배와 사과를 먹어요');
+
+      // _disposeAfterRouteExit keeps a 1s timer for the closed dialog.
+      await tester.pump(const Duration(seconds: 1));
     });
 
     testWidgets('changing text other than ** is rejected', (tester) async {
@@ -2047,6 +2062,39 @@ vocabulary:
       expect(find.text('KO ➔ EN', skipOffstage: false), findsWidgets);
     });
 
+    testWidgets('review notes are collapsed when editing', (tester) async {
+      final provider = await loadedProvider(tester);
+      final lesson = await seed(tester, provider, 'L1', 'nouns', '사과', 'apple');
+      await pumpWith(
+        tester,
+        provider,
+        opener(
+          (context) => VocabEditDialog.show(
+            context,
+            only(lesson),
+            lessonId: lesson.id,
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Review notes', skipOffstage: false), findsOneWidget);
+      expect(find.widgetWithText(TextField, 'KO ➔ EN', skipOffstage: false), findsNothing);
+
+      await tester.ensureVisible(find.text('Review notes'));
+      await tester.tap(find.text('Review notes'));
+      await tester.pumpAndSettle();
+      expect(
+        find.widgetWithText(TextField, 'KO ➔ EN', skipOffstage: false),
+        findsOneWidget,
+      );
+      expect(
+        find.widgetWithText(TextField, 'EN ➔ KO', skipOffstage: false),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('lesson menu offers one word or YAML, prefilled with the name', (
       tester,
     ) async {
@@ -2056,7 +2104,7 @@ vocabulary:
 
       await tester.tap(find.byIcon(Icons.add_circle_outline));
       await tester.pumpAndSettle();
-      expect(find.text('Add one word'), findsOneWidget);
+      expect(find.text('Add manually'), findsOneWidget);
       expect(find.text('Add from YAML'), findsOneWidget);
 
       await tester.tap(find.text('Add from YAML'));

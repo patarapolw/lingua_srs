@@ -89,4 +89,4 @@ vocabulary:
       en: "new word"
 ```
 
-For a single word, choose **Add → Add one word** instead; it asks only for the Korean, English and part of speech. Everything else can be filled in later by editing the word.
+For a single word, choose **Add → Add manually** instead; it asks only for the Korean, English and part of speech. Everything else can be filled in later by editing the word.

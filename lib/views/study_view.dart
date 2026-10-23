@@ -15,6 +15,7 @@ import '../widgets/audio_button.dart';
 import '../widgets/markdown_content.dart';
 import '../widgets/pronunciation_line.dart';
 import '../widgets/pronunciation_toggle.dart';
+import '../widgets/review_notes_editor.dart';
 import 'ai_discussion_dialog.dart';
 import 'vocab_edit_dialog.dart';
 
@@ -588,6 +589,8 @@ class _StudyViewState extends State<StudyView> {
 
   void _handleKeyEvent(KeyEvent event) {
     if (event is! KeyDownEvent) return;
+    // Typing a review note must not trigger flip/rate/audio shortcuts.
+    if (isEditingText()) return;
 
     // Space: Flip between Front and Back
     if (event.logicalKey == LogicalKeyboardKey.space) {
@@ -1429,10 +1432,16 @@ class _StudyViewState extends State<StudyView> {
                                     const SizedBox(height: 16),
                                   ],
 
-                                  _notePanel(
-                                    context,
-                                    'Back notes',
-                                    item.card.backNotes,
+                                  ReviewNotesEditor(
+                                    key: ValueKey(
+                                      'review-notes-$_currentIndex-${item.card.id}',
+                                    ),
+                                    card: item.card,
+                                    onSave: (text) {
+                                      item.card.backNotes = text;
+                                      context.read<AppProvider>().saveState();
+                                      setState(() {});
+                                    },
                                   ),
                                   if (item.sentence != null)
                                     _notePanel(
