@@ -103,14 +103,17 @@ class LessonListView extends StatelessWidget {
     }
   }
 
+  static String _limitText(int limit) => limit > 0 ? '$limit' : 'unlimited';
+
   void _showLimitReachedDialog(BuildContext context, AppProvider provider) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Daily 24h Review Limit Reached'),
+        title: const Text('Daily 24h Limit Reached'),
         content: Text(
-          'You have reviewed ${provider.reviewsInLast24Hours} cards in the last 24 hours (limit is ${provider.maxReviews24h}).\n\n'
-          'You can adjust your limit in Settings, or continue practicing in Cram Mode (which ignores the daily limit).',
+          'In the last 24 hours you reviewed ${provider.reviewsOfSeenCardsInLast24Hours} cards (limit ${_limitText(provider.maxReviews24h)}) '
+          'and started ${provider.newCardsIntroducedLast24h} new cards (limit ${_limitText(provider.maxNewCards24h)}).\n\n'
+          'You can adjust your limits in Settings, or continue practicing in Cram Mode (which ignores the daily limits).',
         ),
         actions: [
           TextButton(
@@ -307,6 +310,7 @@ class LessonListView extends StatelessWidget {
     LessonOrderActions orderActions,
   ) {
     final due = lesson.dueCardsCount;
+    final newCards = lesson.newCardsCount;
     final active = lesson.activeCardsCount;
     void openStudy() => Navigator.push(
       context,
@@ -362,6 +366,11 @@ class LessonListView extends StatelessWidget {
                     Badge(
                       label: Text('$due Due'),
                       backgroundColor: Colors.amber.shade800,
+                    ),
+                  if (newCards > 0)
+                    Badge(
+                      label: Text('$newCards New'),
+                      backgroundColor: theme.colorScheme.tertiary,
                     ),
                   if (compact && active > 0)
                     FilledButton.tonalIcon(
@@ -496,7 +505,9 @@ class LessonListView extends StatelessWidget {
     final theme = Theme.of(context);
 
     int totalDue = 0;
+    int totalNew = 0;
     final dueCardIds = <String>{};
+    final newCardIds = <String>{};
     final tomorrowCardIds = <String>{};
     var dueTomorrow = 0;
     final now = DateTime.now();
@@ -511,7 +522,9 @@ class LessonListView extends StatelessWidget {
           vocab.cardNativeToTarget,
         ]) {
           if (!card.isEnabled) continue;
-          if (card.isDue) {
+          if (card.isNewCard) {
+            if (newCardIds.add(card.id)) totalNew++;
+          } else if (card.isDue) {
             if (dueCardIds.add(card.id)) totalDue++;
           } else if (!card.dueDate.isBefore(tomorrowStart) &&
               card.dueDate.isBefore(dayAfterTomorrowStart) &&
@@ -526,8 +539,14 @@ class LessonListView extends StatelessWidget {
     }
 
     final availableDue = min(totalDue, provider.remainingReviews24h);
+    final availableNew = min(totalNew, provider.remainingNewCards24h);
+    final availableTotal = availableDue + availableNew;
     final isDailyLimitReached =
-        totalDue > 0 && provider.remainingReviews24h == 0;
+        availableTotal == 0 && (totalDue > 0 || totalNew > 0);
+    final studyLabelParts = [
+      if (availableDue > 0) '$availableDue due',
+      if (availableNew > 0) '$availableNew new',
+    ];
 
     final dueNoticeParts = <String>[];
     if (provider.reviewsInLast24Hours > 0) {
@@ -536,7 +555,8 @@ class LessonListView extends StatelessWidget {
     if (totalRecentMistakes > 1) {
       dueNoticeParts.add('$totalRecentMistakes forgotten');
     }
-    if (availableDue == 0) dueNoticeParts.add('$dueTomorrow due tomorrow');
+    if (availableNew > 0) dueNoticeParts.add('$availableNew new');
+    if (availableTotal == 0) dueNoticeParts.add('$dueTomorrow due tomorrow');
     if (totalDue > availableDue && totalDue > 0) {
       dueNoticeParts.add('$totalDue remaining');
     }
@@ -711,10 +731,10 @@ class LessonListView extends StatelessWidget {
                                     ),
                                     label: Text(
                                       isDailyLimitReached
-                                          ? 'Daily Limit (${provider.reviewsInLast24Hours}/${provider.maxReviews24h})'
-                                          : 'Study Due ($availableDue)',
+                                          ? 'Daily Limit'
+                                          : 'Study (${studyLabelParts.isEmpty ? '0 due' : studyLabelParts.join(' + ')})',
                                     ),
-                                    onPressed: availableDue == 0
+                                    onPressed: availableTotal == 0
                                         ? (isDailyLimitReached
                                               ? () => _showLimitReachedDialog(
                                                   context,

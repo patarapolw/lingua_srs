@@ -36,6 +36,7 @@ class ReviewHistoryRecord {
   final bool wasInAgainSet;
   final bool wasFirstSessionRating;
   final DateTime? oldMistakesClearedAt;
+  final DateTime? oldIntroducedAt;
 
   ReviewHistoryRecord({
     required this.queueIndex,
@@ -53,6 +54,7 @@ class ReviewHistoryRecord {
     this.wasInAgainSet = false,
     this.wasFirstSessionRating = true,
     this.oldMistakesClearedAt,
+    this.oldIntroducedAt,
   });
 
   /// Must be called BEFORE the review mutates [card].
@@ -78,6 +80,7 @@ class ReviewHistoryRecord {
     wasInAgainSet: wasInAgainSet,
     wasFirstSessionRating: wasFirstSessionRating,
     oldMistakesClearedAt: card.mistakesClearedAt,
+    oldIntroducedAt: card.introducedAt,
   );
 
   void restore() {
@@ -91,6 +94,7 @@ class ReviewHistoryRecord {
     card.lastMistakeDate = oldLastMistakeDate;
     card.lastRating = oldLastRating;
     card.mistakesClearedAt = oldMistakesClearedAt;
+    card.introducedAt = oldIntroducedAt;
   }
 }
 

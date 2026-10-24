@@ -11,6 +11,27 @@ import 'vocab_edit_dialog.dart';
 import 'study_view.dart';
 import 'yaml_import_view.dart';
 
+/// Short state shown on a card chip: Hidden, New, Due, or its interval.
+String cardStatusLabel(SrsCard card) {
+  if (!card.isEnabled) return 'Hidden';
+  if (card.isNewCard) return 'New';
+  if (card.isDue) return 'Due';
+  return '${card.interval}d';
+}
+
+/// Label of a lesson's Study button. Only as many new cards as the daily
+/// limit still allows are counted, because that is all the session will hold.
+String lessonStudyLabel({
+  required int due,
+  required int newCards,
+  required int remainingNewCards,
+  required bool compact,
+}) {
+  final fresh = newCards < remainingNewCards ? newCards : remainingNewCards;
+  if (compact) return due + fresh > 0 ? 'Study ${due + fresh}' : 'Study';
+  return fresh > 0 ? 'Study ($due Due + $fresh New)' : 'Study ($due Due)';
+}
+
 class LessonDetailView extends StatefulWidget {
   final String lessonId;
 
@@ -461,11 +482,14 @@ class _LessonDetailViewState extends State<LessonDetailView> {
           FilledButton.icon(
             icon: const Icon(Icons.play_arrow_rounded),
             label: Text(
-              compact
-                  ? (lesson.dueCardsCount > 0
-                        ? 'Study ${lesson.dueCardsCount}'
-                        : 'Study')
-                  : 'Study (${lesson.dueCardsCount} Due)',
+              lessonStudyLabel(
+                due: lesson.dueCardsCount,
+                newCards: lesson.newCardsCount,
+                remainingNewCards: context
+                    .watch<AppProvider>()
+                    .remainingNewCards24h,
+                compact: compact,
+              ),
             ),
             onPressed: lesson.activeCardsCount == 0
                 ? null
@@ -880,7 +904,7 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                                         size: 16,
                                       ),
                                       label: Text(
-                                        'KO ➔ EN (${vocab.cardTargetToNative.isEnabled ? (vocab.cardTargetToNative.isDue ? "Due" : "${vocab.cardTargetToNative.interval}d") : "Hidden"})',
+                                        'KO ➔ EN (${cardStatusLabel(vocab.cardTargetToNative)})',
                                       ),
                                       selected:
                                           vocab.cardTargetToNative.isEnabled,
@@ -901,7 +925,7 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                                         size: 16,
                                       ),
                                       label: Text(
-                                        'EN ➔ KO Cloze (${vocab.cardNativeToTarget.isEnabled ? (vocab.cardNativeToTarget.isDue ? "Due" : "${vocab.cardNativeToTarget.interval}d") : "Hidden"})',
+                                        'EN ➔ KO Cloze (${cardStatusLabel(vocab.cardNativeToTarget)})',
                                       ),
                                       selected:
                                           vocab.cardNativeToTarget.isEnabled,

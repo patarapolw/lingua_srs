@@ -1561,12 +1561,19 @@ vocabulary:
       }
       provider.lessons.clear();
 
+      // Already-seen cards that are due: new cards have their own limit.
+      VocabItem dueVocab(int n) => VocabItem(
+        targetWord: '단어$n',
+        translation: 'word $n',
+        pos: 'nouns',
+        cardTargetToNative: SrsCard(
+          direction: CardDirection.targetToNative,
+          status: SrsStatus.review,
+          dueDate: now.subtract(const Duration(days: 1)),
+        ),
+      );
       final lesson = Lesson(title: 'Review Limit Lesson');
-      lesson.vocabularies.addAll([
-        VocabItem(targetWord: '단어1', translation: 'word 1', pos: 'nouns'),
-        VocabItem(targetWord: '단어2', translation: 'word 2', pos: 'nouns'),
-        VocabItem(targetWord: '단어3', translation: 'word 3', pos: 'nouns'),
-      ]);
+      lesson.vocabularies.addAll([dueVocab(1), dueVocab(2), dueVocab(3)]);
       provider.lessons.add(lesson);
 
       expect(provider.maxReviews24h, 2);
