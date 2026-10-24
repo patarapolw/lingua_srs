@@ -33,12 +33,20 @@ vocabulary:
   verbs:
     - ko: "만들다"
       en: "to make"
+      notes:
+        - "First paragraph of **Markdown** notes."
+        - "Second paragraph."
+  numbers:
+    - ko: "3개"
+      ko_text: "세 개"
+      en: "three items"
 ```
 
-Each entry needs a target-language field (such as `ko`) and a translation field (such as `en`). `audio`, `notes`, `disambiguation`, `id` and `examples` are optional.
+Each entry needs a target-language field (such as `ko`) and a translation field (such as `en`). `ko_text`, `audio`, `notes`, `disambiguation`, `id` and `examples` are optional.
 
-- **Notes** are Markdown (`**bold**`, `*italic*`). Notes on an example are imported as sentence notes, shown on the card back, and editable from the Sentence Pool. Per-card back notes are edited in the vocabulary editor.
-- **Emphasis** in example sentences uses `**bold**`; the app uses it for cloze cards.
+- **`ko_text`** (`<language>_text` for other languages) is alternate text for text-to-speech, used when there is no `audio` file, for example to spell out a number. It also works on entries in `examples`.
+- **Notes** are Markdown (`**bold**`, `*italic*`), written as one string or a list of strings (one paragraph each). Notes on an example are imported as sentence notes, shown on the card back, and editable from the Sentence Pool. Per-card back notes are edited in the vocabulary editor. Every Markdown editor (notes fields and the lesson editor) converts copied HTML, such as a web page or a Google Docs selection, to Markdown when you paste. Copied text without formatting pastes as it is.
+- **Emphasis** in example sentences uses `**bold**`; the app uses it for cloze cards. A sentence can have several emphasized segments, and every one becomes a blank. In the app, tap an example in the vocabulary editor to change its emphasis; only the `**` markers can be changed there, because a sentence is identified by its text without emphasis, and it is shared by every word that links to it.
 - **`disambiguation`** shows an extra cue on the card front. Cards with the same front prompt are flagged even when their example sentences differ.
 - **`id`** makes entries explicitly share SRS progress (including across part-of-speech groups) or forces separate identities. Without an `id`, entries with the same target form and meaning share progress; different meanings get separate generated IDs.
 
@@ -69,3 +77,16 @@ The import button stays disabled until the input can be previewed. Fix any displ
 - Folder and ZIP results start unchecked; select lessons individually or use **Check all** / **Uncheck all**.
 - Only files with a `vocabulary:` key in their frontmatter are imported; other Markdown is ignored.
 - Re-importing updates matching lessons and vocabulary in place, keeping SRS progress and any entries not present in the import.
+
+### Adding vocabulary to an existing lesson
+
+Open the lesson and choose **Add → Add from YAML**. The import screen opens with the lesson's name filled in. Write only the new entries; importing under an existing lesson's name adds them to it and leaves its other vocabulary and SRS progress untouched.
+
+```yaml
+vocabulary:
+  nouns:
+    - ko: "새 단어"
+      en: "new word"
+```
+
+For a single word, choose **Add → Add manually** instead; it asks only for the Korean, English and part of speech. Everything else can be filled in later by editing the word.

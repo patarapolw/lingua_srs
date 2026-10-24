@@ -125,6 +125,7 @@ class YamlParserService {
         String translation = '';
         String? vocabId;
         String? vocabAudio;
+        String? ttsText;
         String notes = '';
         String disambiguation = '';
         final List<String> itemSentenceIds = [];
@@ -141,7 +142,7 @@ class YamlParserService {
           vocabAudio = item['audio'].toString().trim();
         }
         if (item['notes'] != null) {
-          notes = item['notes'].toString().trim();
+          notes = _notesText(item['notes']);
         }
         if (item['disambiguation'] != null) {
           disambiguation = item['disambiguation'].toString().trim();
@@ -161,6 +162,8 @@ class YamlParserService {
             if (fKey == 'en' || fKey == 'eng') {
               nativeLang = 'en';
             }
+          } else if (_isTtsKey(fKey) && fVal.isNotEmpty) {
+            ttsText = fVal; // e.g. ko_text: alternate text for TTS
           }
         }
 
@@ -172,13 +175,14 @@ class YamlParserService {
             String exTarget = '';
             String exTrans = '';
             String? exAudio;
+            String? exTts;
             String exNotes = '';
 
             if (ex['audio'] != null) {
               exAudio = ex['audio'].toString().trim();
             }
             if (ex['notes'] != null) {
-              exNotes = ex['notes'].toString().trim();
+              exNotes = _notesText(ex['notes']);
             }
 
             for (final exField in ex.entries) {
@@ -189,6 +193,8 @@ class YamlParserService {
                 exTarget = exVal;
               } else if (knownNativeKeys.contains(exKey) && exTrans.isEmpty) {
                 exTrans = exVal;
+              } else if (_isTtsKey(exKey) && exVal.isNotEmpty) {
+                exTts = exVal;
               }
             }
 
@@ -197,6 +203,7 @@ class YamlParserService {
                 targetText: exTarget,
                 translationText: exTrans,
                 audioUrl: exAudio,
+                ttsText: exTts,
                 notes: exNotes,
               );
               allSentences.add(sentence);
@@ -216,6 +223,7 @@ class YamlParserService {
             pos: sectionPath.last,
             sectionPath: sectionPath,
             audioUrl: vocabAudio,
+            ttsText: ttsText,
             notes: notes,
             disambiguation: disambiguation,
             sentenceIds: itemSentenceIds,
@@ -295,3 +303,21 @@ class YamlParserService {
     return 'auto-${sha256.convert(utf8.encode(identity))}';
   }
 }
+
+/// `notes` may be one string or a list of strings (joined as paragraphs).
+String _notesText(dynamic value) {
+  if (value is List) {
+    return value
+        .map((note) => note.toString().trim())
+        .where((note) => note.isNotEmpty)
+        .join('\n\n');
+  }
+  return value.toString().trim();
+}
+
+/// `<lang>_text` (such as `ko_text`) holds alternate text for TTS.
+bool _isTtsKey(String key) =>
+    key.endsWith('_text') &&
+    YamlParserService.knownLangKeys.contains(
+      key.substring(0, key.length - '_text'.length),
+    );

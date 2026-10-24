@@ -26,4 +26,7 @@ jobs:
       - run: flutter pub get
       - run: dart format --output=none --set-exit-if-changed lib test
       - run: flutter analyze
+      # super_clipboard's build hook compiles Rust, which links GTK on Linux.
+      - name: Install Linux build libraries
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config libgtk-3-dev
       - run: flutter test

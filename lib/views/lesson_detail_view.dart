@@ -9,6 +9,7 @@ import '../widgets/audio_button.dart';
 import '../widgets/markdown_content.dart';
 import 'vocab_edit_dialog.dart';
 import 'study_view.dart';
+import 'yaml_import_view.dart';
 
 class LessonDetailView extends StatefulWidget {
   final String lessonId;
@@ -181,14 +182,94 @@ class _LessonDetailViewState extends State<LessonDetailView> {
     });
   }
 
-  void _showAddVocabDialog(Lesson lesson) {
-    final vocab = VocabItem(targetWord: '', translation: '', pos: 'nouns');
-    VocabEditDialog.show(context, vocab, lessonId: lesson.id).then((_) {
-      if (!mounted) return;
-      if (vocab.targetWord.isNotEmpty) {
-        context.read<AppProvider>().addVocabToLesson(lesson.id, vocab);
+  /// Opens the YAML import prefilled with this lesson's name. Importing under
+  /// an existing lesson name adds to it and keeps existing vocabulary.
+  void _showAddFromYaml(Lesson lesson) {
+    final name = joinHierarchyPath([...lesson.folderPath, lesson.displayTitle]);
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => YamlImportView(
+          initialLessonName: name,
+          initialYaml:
+              'vocabulary:\n'
+              '  nouns:\n'
+              '    - ${lesson.targetLanguage}: ""\n'
+              '      ${lesson.nativeLanguage}: ""\n',
+        ),
+      ),
+    );
+  }
+
+  /// Warns when an enabled card has the same front prompt as another card.
+  /// Uses the same check as the edit dialog; tapping opens it to add a hint.
+  List<Widget> _duplicateFrontNotices(
+    AppProvider provider,
+    Lesson lesson,
+    VocabItem vocab,
+    ThemeData theme,
+  ) {
+    final notices = <Widget>[];
+    for (final direction in CardDirection.values) {
+      final toNative = direction == CardDirection.targetToNative;
+      if (!(toNative ? vocab.cardTargetToNative : vocab.cardNativeToTarget)
+          .isEnabled) {
+        continue;
       }
-    });
+      final duplicates = provider.getDuplicateFrontVocabularies(
+        vocab,
+        direction,
+      );
+      if (duplicates.isEmpty) continue;
+
+      final others = duplicates
+          .map((other) => '${other.targetWord} — ${other.translation}')
+          .join('; ');
+      notices.add(
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: InkWell(
+            key: ValueKey('duplicate-front-${vocab.id}-${direction.name}'),
+            borderRadius: BorderRadius.circular(6),
+            onTap: () =>
+                VocabEditDialog.show(context, vocab, lessonId: lesson.id),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.warning_amber_rounded,
+                  size: 16,
+                  color: theme.colorScheme.error,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    '${toNative ? 'KO ➔ EN' : 'EN ➔ KO'} card has the same '
+                    'front as $others. Tap to add a front hint.',
+                    style: TextStyle(
+                      color: theme.colorScheme.error,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    return notices;
+  }
+
+  void _showAddVocabDialog(Lesson lesson) {
+    final vocab = VocabItem(targetWord: '', translation: '', pos: '');
+    VocabEditDialog.show(context, vocab, lessonId: lesson.id, isNew: true).then(
+      (_) {
+        if (!mounted) return;
+        if (vocab.targetWord.isNotEmpty) {
+          context.read<AppProvider>().addVocabToLesson(lesson.id, vocab);
+        }
+      },
+    );
   }
 
   @override
@@ -315,10 +396,17 @@ class _LessonDetailViewState extends State<LessonDetailView> {
               tooltip: 'Reset all SRS progress in this lesson',
               onPressed: () => _confirmResetLesson(lesson),
             ),
-          IconButton(
+          PopupMenuButton<String>(
             icon: const Icon(Icons.add_circle_outline),
-            tooltip: 'Add Vocabulary',
-            onPressed: () => _showAddVocabDialog(lesson),
+            tooltip: 'Add vocabulary',
+            onSelected: (value) {
+              if (value == 'word') _showAddVocabDialog(lesson);
+              if (value == 'yaml') _showAddFromYaml(lesson);
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: 'word', child: Text('Add manually')),
+              PopupMenuItem(value: 'yaml', child: Text('Add from YAML')),
+            ],
           ),
           if (context.watch<AppProvider>().getRecentMistakesCount(
                 lessonId: lesson.id,
@@ -499,10 +587,22 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                         ),
                         const SizedBox(height: 12),
                         if (lesson.vocabularies.isEmpty)
-                          FilledButton.tonalIcon(
-                            icon: const Icon(Icons.add),
-                            label: const Text('Add Word'),
-                            onPressed: () => _showAddVocabDialog(lesson),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            alignment: WrapAlignment.center,
+                            children: [
+                              FilledButton.tonalIcon(
+                                icon: const Icon(Icons.add),
+                                label: const Text('Add vocabulary'),
+                                onPressed: () => _showAddVocabDialog(lesson),
+                              ),
+                              OutlinedButton.icon(
+                                icon: const Icon(Icons.code),
+                                label: const Text('Add from YAML'),
+                                onPressed: () => _showAddFromYaml(lesson),
+                              ),
+                            ],
                           ),
                       ],
                     ),
@@ -623,7 +723,7 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                                               ),
                                               AudioButton(
                                                 audioUrl: vocab.audioUrl,
-                                                fallbackText: vocab.targetWord,
+                                                fallbackText: vocab.speechText,
                                                 language: lesson.targetLanguage,
                                                 compact: true,
                                               ),
@@ -633,6 +733,12 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                                           Text(
                                             vocab.translation,
                                             style: theme.textTheme.titleMedium,
+                                          ),
+                                          ..._duplicateFrontNotices(
+                                            provider,
+                                            lesson,
+                                            vocab,
+                                            theme,
                                           ),
                                         ],
                                       ),
@@ -746,7 +852,7 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                                           ),
                                           AudioButton(
                                             audioUrl: s.audioUrl,
-                                            fallbackText: s.targetText,
+                                            fallbackText: s.speechText,
                                             language: lesson.targetLanguage,
                                             compact: true,
                                           ),

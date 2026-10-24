@@ -16,7 +16,12 @@ import '../services/storage_service.dart';
 import '../services/yaml_parser_service.dart';
 
 class YamlImportView extends StatefulWidget {
-  const YamlImportView({super.key});
+  /// Prefills the lesson name. Using an existing lesson's name adds the YAML's
+  /// vocabulary to that lesson.
+  final String? initialLessonName;
+  final String? initialYaml;
+
+  const YamlImportView({super.key, this.initialLessonName, this.initialYaml});
 
   @override
   State<YamlImportView> createState() => _YamlImportViewState();
@@ -46,6 +51,13 @@ class _YamlImportViewState extends State<YamlImportView>
   int _progressTotal = 0;
   Timer? _parseTimer;
   int _parseGeneration = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _lessonNameController.text = widget.initialLessonName ?? '';
+    _yamlController.text = widget.initialYaml ?? '';
+  }
 
   @override
   void dispose() {
@@ -653,7 +665,11 @@ class _YamlImportViewState extends State<YamlImportView>
                         decoration: const InputDecoration(
                           border: OutlineInputBorder(),
                           hintText: 'e.g. Unit 2::Lesson 26',
-                          helperText: 'Use :: to separate hierarchy levels.',
+                          helperText:
+                              'Use :: to separate hierarchy levels. Enter an existing '
+                              'lesson\'s name to add vocabulary to it; existing '
+                              'words and SRS progress are kept.',
+                          helperMaxLines: 3,
                         ),
                         onChanged: (_) => _parseCurrentYaml(),
                       ),
@@ -679,6 +695,14 @@ class _YamlImportViewState extends State<YamlImportView>
                             fontFamily: 'monospace',
                             fontSize: 14,
                             height: 1.45,
+                          ),
+                          // Fixed line boxes keep the first line from riding up
+                          // against the top border.
+                          strutStyle: const StrutStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 14,
+                            height: 1.45,
+                            forceStrutHeight: true,
                           ),
                           decoration: InputDecoration(
                             border: const OutlineInputBorder(),

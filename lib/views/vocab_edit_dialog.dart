@@ -11,6 +11,8 @@ import '../providers/app_provider.dart';
 import '../services/korean_text_search.dart';
 import '../widgets/audio_button.dart';
 import '../widgets/markdown_content.dart';
+import '../widgets/markdown_notes_field.dart';
+import '../widgets/markdown_text_field.dart';
 import 'similar_meanings_dialog.dart';
 import 'similar_search_dialog.dart';
 import 'vocab_merge_dialogs.dart';
@@ -19,7 +21,16 @@ class VocabEditDialog extends StatefulWidget {
   final VocabItem vocab;
   final String? lessonId;
 
-  const VocabEditDialog({super.key, required this.vocab, this.lessonId});
+  /// True when [vocab] is a blank draft being added: shows only the required
+  /// fields. Everything else is available by editing the word afterwards.
+  final bool isNew;
+
+  const VocabEditDialog({
+    super.key,
+    required this.vocab,
+    this.lessonId,
+    this.isNew = false,
+  });
 
   @override
   State<VocabEditDialog> createState() => _VocabEditDialogState();
@@ -28,11 +39,13 @@ class VocabEditDialog extends StatefulWidget {
     BuildContext context,
     VocabItem vocab, {
     String? lessonId,
+    bool isNew = false,
   }) {
     return showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => VocabEditDialog(vocab: vocab, lessonId: lessonId),
+      builder: (ctx) =>
+          VocabEditDialog(vocab: vocab, lessonId: lessonId, isNew: isNew),
     );
   }
 }
@@ -43,6 +56,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
   late TextEditingController _translationCtrl;
   late TextEditingController _posCtrl;
   late TextEditingController _audioCtrl;
+  late TextEditingController _ttsCtrl;
   late TextEditingController _notesCtrl;
   late TextEditingController _disambiguationCtrl;
   late TextEditingController _targetToNativeHintCtrl;
@@ -61,7 +75,19 @@ class _VocabEditDialogState extends State<VocabEditDialog>
   late bool _enableNativeToTarget;
   late List<String> _sentenceIds;
 
+  /// Examples typed while adding a word. Like a YAML import, they join the
+  /// sentence pool and get linked only when the word is saved.
+  final List<Sentence> _draftSentences = [];
+
+  /// Emphasis edits to pool sentences, applied on Save so cancelling leaves
+  /// the pool untouched.
+  final Map<String, ({String target, String translation})> _pendingEmphasis =
+      {};
+
   bool _showNotesPreview = false;
+  String? _targetError;
+  String? _translationError;
+  String? _posError;
 
   /// Only a vocab that is already saved can be merged.
   late final bool _isSaved = context.read<AppProvider>().lessons.any(
@@ -88,11 +114,16 @@ class _VocabEditDialogState extends State<VocabEditDialog>
               padding: const EdgeInsets.fromLTRB(24, 20, 20, 12),
               child: Row(
                 children: [
-                  const Icon(Icons.edit_note_rounded, size: 28),
+                  Icon(
+                    widget.isNew
+                        ? Icons.add_circle_outline
+                        : Icons.edit_note_rounded,
+                    size: 28,
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      widget.vocab.targetWord,
+                      widget.isNew ? 'Add vocabulary' : widget.vocab.targetWord,
                       style: theme.textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
@@ -126,10 +157,14 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                           flex: 5,
                           child: TextField(
                             controller: _targetWordCtrl,
-                            decoration: const InputDecoration(
+                            decoration: InputDecoration(
                               labelText: 'Korean *',
-                              border: OutlineInputBorder(),
+                              errorText: _targetError,
+                              border: const OutlineInputBorder(),
                             ),
+                            // Also refreshes the suggested examples.
+                            onChanged: (_) =>
+                                setState(() => _targetError = null),
                           ),
                         ),
                         const SizedBox(width: 16),
@@ -137,36 +172,86 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                           flex: 5,
                           child: TextField(
                             controller: _translationCtrl,
-                            decoration: const InputDecoration(
+                            decoration: InputDecoration(
                               labelText: 'English *',
-                              border: OutlineInputBorder(),
+                              errorText: _translationError,
+                              border: const OutlineInputBorder(),
                             ),
+                            onChanged: (_) {
+                              if (_translationError != null) {
+                                setState(() => _translationError = null);
+                              }
+                            },
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 16),
                     TextField(
-                      controller: _disambiguationCtrl,
+                      controller: _ttsCtrl,
                       decoration: const InputDecoration(
-                        labelText: 'Front hint, both directions (optional)',
-                        hintText: 'e.g. fruit, vehicle',
-                        helperText: 'Shown on card fronts unless a direction-specific hint below is set.',
-                        helperMaxLines: 3,
+                        labelText: 'Korean TTS text (optional)',
+                        hintText: 'e.g. 세 개 for 3개',
+                        helperText: 'Spoken instead of the Korean word when there is no audio.',
+                        helperMaxLines: 2,
                         border: OutlineInputBorder(),
                       ),
                     ),
-                    _duplicateFrontWarning(
-                      provider,
-                      CardDirection.targetToNative,
-                    ),
-                    _hintField(provider, CardDirection.targetToNative),
-                    _duplicateFrontWarning(
-                      provider,
-                      CardDirection.nativeToTarget,
-                    ),
-                    _hintField(provider, CardDirection.nativeToTarget),
-                    _mergeSection(provider),
+                    if (!widget.isNew) ...[
+                      const SizedBox(height: 16),
+                      _duplicateFrontWarning(
+                        provider,
+                        CardDirection.targetToNative,
+                      ),
+                      _duplicateFrontWarning(
+                        provider,
+                        CardDirection.nativeToTarget,
+                      ),
+                      // Collapsed unless this word needs telling apart from
+                      // another card with the same front.
+                      Theme(
+                        data: theme.copyWith(dividerColor: Colors.transparent),
+                        child: ExpansionTile(
+                          initiallyExpanded: CardDirection.values.any(
+                            (direction) => provider
+                                .getDuplicateFrontVocabularies(
+                                  widget.vocab,
+                                  direction,
+                                )
+                                .isNotEmpty,
+                          ),
+                          maintainState: true,
+                          tilePadding: EdgeInsets.zero,
+                          childrenPadding: const EdgeInsets.only(top: 8),
+                          title: Text(
+                            'Hints',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          subtitle: Text(
+                            'Tell apart cards with the same front.',
+                            style: theme.textTheme.bodySmall,
+                          ),
+                          children: [
+                            TextField(
+                              controller: _disambiguationCtrl,
+                              decoration: const InputDecoration(
+                                labelText:
+                                    'Front hint, both directions (optional)',
+                                hintText: 'e.g. fruit, vehicle',
+                                helperText: 'Shown on card fronts unless a direction-specific hint below is set.',
+                                helperMaxLines: 3,
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                            _hintField(provider, CardDirection.targetToNative),
+                            _hintField(provider, CardDirection.nativeToTarget),
+                          ],
+                        ),
+                      ),
+                      _mergeSection(provider),
+                    ],
                     const SizedBox(height: 20),
 
                     // Part of speech / Category & Audio URL
@@ -177,11 +262,19 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                           flex: 4,
                           child: TextField(
                             controller: _posCtrl,
-                            decoration: const InputDecoration(
-                              labelText: 'Part of speech',
-                              hintText: 'e.g. nouns',
-                              border: OutlineInputBorder(),
+                            decoration: InputDecoration(
+                              labelText: widget.isNew
+                                  ? 'Part of speech *'
+                                  : 'Part of speech',
+                              hintText: 'e.g. nouns, verbs',
+                              errorText: _posError,
+                              border: const OutlineInputBorder(),
                             ),
+                            onChanged: (_) {
+                              if (_posError != null) {
+                                setState(() => _posError = null);
+                              }
+                            },
                           ),
                         ),
                         const SizedBox(width: 16),
@@ -202,78 +295,104 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                         ),
                       ],
                     ),
-                    const SizedBox(height: 20),
-                    TextField(
-                      controller: _idCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'ID (optional)',
-                        helperText: 'Same ID shares SRS progress. Blank uses word + meaning.',
-                        helperMaxLines: 3,
-                        border: OutlineInputBorder(),
+                    if (!widget.isNew) ...[
+                      const SizedBox(height: 20),
+                      TextField(
+                        controller: _idCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'ID (optional)',
+                          helperText: 'Same ID shares SRS progress. Blank uses word + meaning.',
+                          helperMaxLines: 3,
+                          border: OutlineInputBorder(),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 20),
+                      const SizedBox(height: 20),
 
-                    // SRS Direction Toggles
-                    Card(
-                      elevation: 0,
-                      color: theme.colorScheme.surfaceContainerHighest
-                          .withValues(alpha: 0.5),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(
-                          color: theme.colorScheme.outlineVariant,
+                      // SRS Direction Toggles
+                      Card(
+                        elevation: 0,
+                        color: theme.colorScheme.surfaceContainerHighest
+                            .withValues(alpha: 0.5),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(
+                            color: theme.colorScheme.outlineVariant,
+                          ),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Cards',
+                                style: theme.textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              SwitchListTile(
+                                title: const Text('KO ➔ EN'),
+                                subtitle: const Text(
+                                  'Off by default for verbs, adjectives',
+                                ),
+                                value: _enableTargetToNative,
+                                onChanged: (val) =>
+                                    setState(() => _enableTargetToNative = val),
+                              ),
+                              SwitchListTile(
+                                title: const Text('EN ➔ KO (cloze)'),
+                                subtitle: const Text(
+                                  'Off by default for other cards',
+                                ),
+                                value: _enableNativeToTarget,
+                                onChanged: (val) =>
+                                    setState(() => _enableNativeToTarget = val),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                      const SizedBox(height: 20),
+
+                      // Collapsed: these are usually edited from the back of the
+                      // card while reviewing.
+                      Theme(
+                        data: theme.copyWith(dividerColor: Colors.transparent),
+                        child: ExpansionTile(
+                          maintainState: true,
+                          tilePadding: EdgeInsets.zero,
+                          childrenPadding: const EdgeInsets.only(top: 8),
+                          title: Text(
+                            'Review notes',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          subtitle: Text(
+                            'Per card. Also editable on the back of the card '
+                            'while reviewing.',
+                            style: theme.textTheme.bodySmall,
+                          ),
                           children: [
-                            Text(
-                              'Cards',
-                              style: theme.textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
+                            MarkdownNotesField(
+                              key: const ValueKey('review-notes-ko-en'),
+                              label: 'KO ➔ EN',
+                              controller: _targetToNativeBackNotesCtrl,
                             ),
-                            const SizedBox(height: 8),
-                            SwitchListTile(
-                              title: const Text('KO ➔ EN'),
-                              subtitle: const Text(
-                                'Off by default for verbs, adjectives',
-                              ),
-                              value: _enableTargetToNative,
-                              onChanged: (val) =>
-                                  setState(() => _enableTargetToNative = val),
-                            ),
-                            SwitchListTile(
-                              title: const Text('EN ➔ KO (cloze)'),
-                              subtitle: const Text(
-                                'Off by default for other cards',
-                              ),
-                              value: _enableNativeToTarget,
-                              onChanged: (val) =>
-                                  setState(() => _enableNativeToTarget = val),
+                            MarkdownNotesField(
+                              key: const ValueKey('review-notes-en-ko'),
+                              label: 'EN ➔ KO',
+                              controller: _nativeToTargetBackNotesCtrl,
                             ),
                           ],
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    Text(
-                      'Review notes',
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    _sideNotesField('KO ➔ EN', _targetToNativeBackNotesCtrl),
-                    _sideNotesField('EN ➔ KO', _nativeToTargetBackNotesCtrl),
-                    const SizedBox(height: 20),
+                      const SizedBox(height: 20),
+                    ],
 
                     // Notes Section (with Markdown preview toggle)
                     Row(
@@ -321,7 +440,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                             : MarkdownContent(content: _notesCtrl.text),
                       )
                     else
-                      TextField(
+                      MarkdownTextField(
                         controller: _notesCtrl,
                         maxLines: 5,
                         decoration: const InputDecoration(
@@ -337,39 +456,66 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                       children: [
                         Expanded(
                           child: Text(
-                            'Examples (${_sentenceIds.length})',
+                            'Examples (${_sentenceIds.length + _draftSentences.length})',
                             style: theme.textTheme.titleSmall?.copyWith(
                               fontWeight: FontWeight.bold,
                             ),
                           ),
                         ),
-                        IconButton.outlined(
-                          icon: const Icon(Icons.library_add_outlined),
-                          tooltip: 'Add from pool',
-                          onPressed: _openSentencePicker,
-                        ),
-                        const SizedBox(width: 4),
-                        IconButton.filledTonal(
-                          icon: const Icon(Icons.add),
-                          tooltip: 'Create new sentence',
-                          onPressed: _openCreateSentenceDialog,
-                        ),
+                        // Choosing from the pool is the default; a new sentence
+                        // has to be checked for duplicates first.
+                        if (widget.isNew) ...[
+                          IconButton.filledTonal(
+                            icon: const Icon(Icons.library_add_outlined),
+                            tooltip: 'Add from pool',
+                            onPressed: _openSentencePicker,
+                          ),
+                          const SizedBox(width: 4),
+                          IconButton.outlined(
+                            icon: const Icon(Icons.add),
+                            tooltip: 'Create new sentence',
+                            onPressed: _openCreateSentenceDialog,
+                          ),
+                        ] else ...[
+                          IconButton.outlined(
+                            icon: const Icon(Icons.library_add_outlined),
+                            tooltip: 'Add from pool',
+                            onPressed: _openSentencePicker,
+                          ),
+                          const SizedBox(width: 4),
+                          IconButton.filledTonal(
+                            icon: const Icon(Icons.add),
+                            tooltip: 'Create new sentence',
+                            onPressed: _openCreateSentenceDialog,
+                          ),
+                        ],
                       ],
                     ),
                     const SizedBox(height: 8),
-                    if (_sentenceIds.isEmpty)
+                    if (_sentenceIds.isNotEmpty || _draftSentences.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text(
+                          'Tap an example to edit its **emphasis**.',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      ),
+                    if (widget.isNew) ..._suggestedExamples(provider, theme),
+                    if (_sentenceIds.isEmpty && _draftSentences.isEmpty)
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(vertical: 20),
                         alignment: Alignment.center,
                         child: Text(
-                          'No examples yet. Add one from the pool or create a new one.',
+                          widget.isNew
+                              ? 'No examples yet. Choose from the pool, or create a new one with +.'
+                              : 'No examples yet. Add one from the pool or create a new one.',
                           style: TextStyle(
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
                         ),
                       )
-                    else
+                    else if (_sentenceIds.isNotEmpty)
                       ListView.builder(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
@@ -383,13 +529,17 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                           return Card(
                             margin: const EdgeInsets.symmetric(vertical: 4),
                             child: ListTile(
+                              onTap: () => _editLinkedSentence(sentence),
                               title: MarkdownContent(
-                                content: sentence.targetText,
-                                selectable: true,
+                                content:
+                                    _pendingEmphasis[sentence.id]?.target ??
+                                    sentence.targetText,
                               ),
                               subtitle: MarkdownContent(
-                                content: sentence.translationText,
-                                selectable: true,
+                                content:
+                                    _pendingEmphasis[sentence.id]
+                                        ?.translation ??
+                                    sentence.translationText,
                               ),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
@@ -417,6 +567,8 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                           );
                         },
                       ),
+                    for (var i = 0; i < _draftSentences.length; i++)
+                      _draftSentenceCard(i, theme),
                   ],
                 ),
               ),
@@ -450,6 +602,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     _translationCtrl.dispose();
     _posCtrl.dispose();
     _audioCtrl.dispose();
+    _ttsCtrl.dispose();
     _notesCtrl.dispose();
     _disambiguationCtrl.dispose();
     _targetToNativeBackNotesCtrl.dispose();
@@ -465,6 +618,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     _translationCtrl = TextEditingController(text: widget.vocab.translation);
     _posCtrl = TextEditingController(text: widget.vocab.pos);
     _audioCtrl = TextEditingController(text: widget.vocab.audioUrl ?? '');
+    _ttsCtrl = TextEditingController(text: widget.vocab.ttsText ?? '');
     _notesCtrl = TextEditingController(text: widget.vocab.notes);
     _disambiguationCtrl = TextEditingController(
       text: widget.vocab.disambiguation,
@@ -521,7 +675,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
       padding: const EdgeInsets.only(top: 8),
       child: Text(
         '$directionLabel has the same front prompt as another enabled card: '
-        '$meanings. Add a front hint for this card below to tell them apart.',
+        '$meanings. Add a front hint for this card under Hints to tell them apart.',
         style: TextStyle(
           color: Theme.of(context).colorScheme.error,
           fontSize: 12,
@@ -536,82 +690,143 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     required StateSetter setSheetState,
   }) async {
     final provider = this.context.read<AppProvider>();
+    final edited = await _editEmphasis(
+      target: sentence.targetText,
+      translation: sentence.translationText,
+    );
+    if (edited == null || !mounted) return;
+
+    sentence
+      ..targetText = edited.target
+      ..translationText = edited.translation;
+    final canonical = await provider.updateSentenceInPool(sentence);
+    if (mounted && context.mounted) {
+      setSheetState(() {
+        if (!_sentenceIds.contains(canonical.id)) {
+          _sentenceIds.add(canonical.id);
+        }
+      });
+      setState(() {});
+    }
+  }
+
+  /// Edits only the `**` emphasis of a sentence. The plain text has to stay
+  /// the same: a sentence is identified by its text without emphasis, and one
+  /// sentence can be shared by several words.
+  Future<({String target, String translation})?> _editEmphasis({
+    required String target,
+    required String translation,
+  }) async {
     final targetCtrl = TextEditingController(
-      text: _suggestEmphasis(
-        sentence.targetText,
-        widget.vocab.targetWord,
+      text: Sentence.suggestEmphasis(
+        target,
+        _targetWordCtrl.text,
         korean: true,
       ),
     );
     final translationCtrl = TextEditingController(
-      text: _suggestEmphasis(
-        sentence.translationText,
-        widget.vocab.translation,
-      ),
+      text: Sentence.suggestEmphasis(translation, _translationCtrl.text),
     );
-    final shouldLink = await showDialog<bool>(
+    const mismatch = 'Only ** emphasis can be changed here.';
+    final result = await showDialog<({String target, String translation})>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Emphasize vocabulary in sentence'),
-        content: SizedBox(
-          width: 520,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: targetCtrl,
-                  minLines: 2,
-                  maxLines: 5,
-                  decoration: const InputDecoration(
-                    labelText: 'Korean sentence',
-                    helperText: 'Edit the suggested **vocabulary** emphasis.',
-                    border: OutlineInputBorder(),
-                  ),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          final targetOk = Sentence.sameExceptEmphasis(target, targetCtrl.text);
+          final translationOk = Sentence.sameExceptEmphasis(
+            translation,
+            translationCtrl.text,
+          );
+          return AlertDialog(
+            title: const Text('Edit emphasis'),
+            content: SizedBox(
+              width: 520,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: targetCtrl,
+                      minLines: 2,
+                      maxLines: 5,
+                      onChanged: (_) => setDialogState(() {}),
+                      decoration: InputDecoration(
+                        labelText: 'Korean sentence',
+                        helperText: 'Wrap each part in **double asterisks**; use several for several words.',
+                        helperMaxLines: 2,
+                        errorText: targetOk ? null : mismatch,
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Cloze: ${Sentence(targetText: targetCtrl.text, translationText: '').toCloze(targetWord: _targetWordCtrl.text)}',
+                        style: Theme.of(dialogContext).textTheme.bodySmall,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: translationCtrl,
+                      minLines: 2,
+                      maxLines: 5,
+                      onChanged: (_) => setDialogState(() {}),
+                      decoration: InputDecoration(
+                        labelText: 'Translation',
+                        errorText: translationOk ? null : mismatch,
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: translationCtrl,
-                  minLines: 2,
-                  maxLines: 5,
-                  decoration: const InputDecoration(
-                    labelText: 'Translation',
-                    helperText: 'Edit the suggested **meaning** emphasis.',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Link sentence'),
-          ),
-        ],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: targetOk && translationOk
+                    ? () => Navigator.pop(dialogContext, (
+                        target: targetCtrl.text.trim(),
+                        translation: translationCtrl.text.trim(),
+                      ))
+                    : null,
+                child: const Text('Apply'),
+              ),
+            ],
+          );
+        },
       ),
     );
-
-    if (shouldLink == true && mounted) {
-      sentence
-        ..targetText = targetCtrl.text.trim()
-        ..translationText = translationCtrl.text.trim();
-      final canonical = await provider.updateSentenceInPool(sentence);
-      if (mounted && context.mounted) {
-        setSheetState(() {
-          if (!_sentenceIds.contains(canonical.id)) {
-            _sentenceIds.add(canonical.id);
-          }
-        });
-        setState(() {});
-      }
-    }
     _disposeAfterRouteExit([targetCtrl, translationCtrl]);
+    return result;
+  }
+
+  Future<void> _editLinkedSentence(Sentence sentence) async {
+    final pending = _pendingEmphasis[sentence.id];
+    final edited = await _editEmphasis(
+      target: pending?.target ?? sentence.targetText,
+      translation: pending?.translation ?? sentence.translationText,
+    );
+    if (edited == null || !mounted) return;
+    setState(() => _pendingEmphasis[sentence.id] = edited);
+  }
+
+  Future<void> _editDraftSentence(int index) async {
+    final sentence = _draftSentences[index];
+    final edited = await _editEmphasis(
+      target: sentence.targetText,
+      translation: sentence.translationText,
+    );
+    if (edited == null || !mounted) return;
+    setState(() {
+      sentence
+        ..targetText = edited.target
+        ..translationText = edited.translation;
+    });
   }
 
   Widget _hintField(AppProvider provider, CardDirection direction) {
@@ -730,8 +945,66 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     if (merged == true && mounted) Navigator.of(context).pop();
   }
 
+  /// Pool sentences matching the word typed so far, one tap to link.
+  List<Widget> _suggestedExamples(AppProvider provider, ThemeData theme) {
+    final word = _targetWordCtrl.text.trim();
+    if (word.isEmpty) return const [];
+    final matches = provider.sentences
+        .where(
+          (sentence) =>
+              !_sentenceIds.contains(sentence.id) &&
+              KoreanTextSearch.matches(
+                query: word,
+                targetText: sentence.targetText,
+                translationText: sentence.translationText,
+              ),
+        )
+        .take(5)
+        .toList();
+    if (matches.isEmpty) return const [];
+    return [
+      Text('Suggested from the pool', style: theme.textTheme.labelMedium),
+      for (final sentence in matches)
+        CheckboxListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          controlAffinity: ListTileControlAffinity.leading,
+          value: false,
+          onChanged: (_) => setState(() => _sentenceIds.add(sentence.id)),
+          title: MarkdownContent(content: sentence.targetText),
+          subtitle: MarkdownContent(content: sentence.translationText),
+        ),
+      const SizedBox(height: 8),
+    ];
+  }
+
+  Widget _draftSentenceCard(int index, ThemeData theme) {
+    final sentence = _draftSentences[index];
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      child: ListTile(
+        onTap: () => _editDraftSentence(index),
+        title: MarkdownContent(content: sentence.targetText),
+        subtitle: MarkdownContent(content: sentence.translationText),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (sentence.audioUrl != null)
+              AudioButton(audioUrl: sentence.audioUrl, compact: true),
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: Colors.red),
+              tooltip: 'Remove example',
+              onPressed: () => setState(() => _draftSentences.removeAt(index)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _openCreateSentenceDialog() {
     final targetCtrl = TextEditingController();
+    final ttsCtrl = TextEditingController();
     final transCtrl = TextEditingController();
     final audioCtrl = TextEditingController();
     final notesCtrl = TextEditingController();
@@ -739,7 +1012,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Add New Sentence to Pool'),
+        title: Text(widget.isNew ? 'Add example' : 'Add New Sentence to Pool'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -749,6 +1022,13 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                 decoration: const InputDecoration(
                   labelText: 'Korean sentence',
                   hintText: 'Use **word** for bold/cloze',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ttsCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Korean TTS text (optional)',
                 ),
               ),
               const SizedBox(height: 12),
@@ -764,7 +1044,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                 decoration: const InputDecoration(labelText: 'Audio URL'),
               ),
               const SizedBox(height: 12),
-              TextField(
+              MarkdownTextField(
                 controller: notesCtrl,
                 minLines: 2,
                 maxLines: 5,
@@ -789,9 +1069,51 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                   audioUrl: audioCtrl.text.trim().isEmpty
                       ? null
                       : audioCtrl.text.trim(),
+                  ttsText: ttsCtrl.text.trim().isEmpty
+                      ? null
+                      : ttsCtrl.text.trim(),
                   notes: notesCtrl.text.trim(),
                   lessonId: widget.lessonId,
                 );
+                if (widget.isNew) {
+                  final existing = context
+                      .read<AppProvider>()
+                      .findDuplicateSentence(newSentence);
+                  if (existing != null) {
+                    final useExisting = await showDialog<bool>(
+                      context: ctx,
+                      builder: (dialogContext) => AlertDialog(
+                        title: const Text('Sentence already exists'),
+                        content: Text(
+                          'The pool already has:\n\n${existing.targetText}\n'
+                          '${existing.translationText}',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () =>
+                                Navigator.pop(dialogContext, false),
+                            child: const Text('Go back'),
+                          ),
+                          FilledButton(
+                            onPressed: () => Navigator.pop(dialogContext, true),
+                            child: const Text('Use existing'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (useExisting != true) return;
+                    if (!mounted) return;
+                    setState(() {
+                      if (!_sentenceIds.contains(existing.id)) {
+                        _sentenceIds.add(existing.id);
+                      }
+                    });
+                  } else {
+                    setState(() => _draftSentences.add(newSentence));
+                  }
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  return;
+                }
                 final canonical = await context
                     .read<AppProvider>()
                     .addSentenceToPool(newSentence);
@@ -803,19 +1125,25 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                 if (ctx.mounted) Navigator.pop(ctx);
               }
             },
-            child: const Text('Create & Link'),
+            child: Text(widget.isNew ? 'Add' : 'Create & Link'),
           ),
         ],
       ),
     ).whenComplete(
-      () =>
-          _disposeAfterRouteExit([targetCtrl, transCtrl, audioCtrl, notesCtrl]),
+      () => _disposeAfterRouteExit([
+        targetCtrl,
+        ttsCtrl,
+        transCtrl,
+        audioCtrl,
+        notesCtrl,
+      ]),
     );
   }
 
   void _openSentencePicker() {
     final provider = context.read<AppProvider>();
-    final word = widget.vocab.targetWord.trim();
+    final word = (widget.isNew ? _targetWordCtrl.text : widget.vocab.targetWord)
+        .trim();
     final searchCtrl = TextEditingController(
       text: word.length <= 30 ? word : '',
     );
@@ -905,7 +1233,17 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                               trailing: Checkbox(
                                 value: isAttached,
                                 onChanged: (val) {
-                                  if (val == true && !isAttached) {
+                                  if (val == true &&
+                                      !isAttached &&
+                                      widget.isNew) {
+                                    // Nothing is edited in the pool until the
+                                    // word is saved; emphasis can be adjusted
+                                    // later by editing the word.
+                                    setSheetState(
+                                      () => _sentenceIds.add(sentence.id),
+                                    );
+                                    setState(() {});
+                                  } else if (val == true && !isAttached) {
                                     _editAndLinkSentence(
                                       context: ctx,
                                       sentence: sentence,
@@ -933,7 +1271,97 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     ).whenComplete(() => _disposeAfterRouteExit([searchCtrl]));
   }
 
-  void _save() {
+  /// Asks before adding a word whose card front matches an existing card.
+  Future<bool> _confirmDuplicates() async {
+    final provider = context.read<AppProvider>();
+    final draft = VocabItem(
+      targetWord: _targetWordCtrl.text.trim(),
+      translation: _translationCtrl.text.trim(),
+      pos: _posCtrl.text.trim(),
+    );
+    final duplicates = <VocabItem>{
+      if (_enableTargetToNative)
+        ...provider.getDuplicateFrontVocabularies(
+          draft,
+          CardDirection.targetToNative,
+        ),
+      if (_enableNativeToTarget)
+        ...provider.getDuplicateFrontVocabularies(
+          draft,
+          CardDirection.nativeToTarget,
+        ),
+    };
+    if (duplicates.isEmpty) return true;
+
+    final meanings = duplicates
+        .map((vocab) => '${vocab.targetWord} — ${vocab.translation}')
+        .join('\n');
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Similar vocabulary exists'),
+        content: Text(
+          'Another card already has the same front prompt:\n\n$meanings\n\n'
+          'You can add a front hint later by editing this word.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Go back'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Add anyway'),
+          ),
+        ],
+      ),
+    );
+    return proceed ?? false;
+  }
+
+  Future<void> _save() async {
+    if (widget.isNew) {
+      final pos = _posCtrl.text.trim();
+      setState(() {
+        _targetError = _targetWordCtrl.text.trim().isEmpty ? 'Required' : null;
+        _translationError = _translationCtrl.text.trim().isEmpty
+            ? 'Required'
+            : null;
+        _posError = pos.isEmpty ? 'Required' : null;
+      });
+      if (_targetError != null ||
+          _translationError != null ||
+          _posError != null) {
+        return;
+      }
+      // The card toggles are hidden when adding; use the defaults for this POS.
+      _enableTargetToNative = !VocabItem.isVerbOrAdjective(pos);
+      _enableNativeToTarget = VocabItem.isVerbOrAdjective(pos);
+      if (!await _confirmDuplicates() || !mounted) return;
+      final pool = context.read<AppProvider>();
+      for (final draft in _draftSentences) {
+        final canonical = await pool.addSentenceToPool(draft);
+        if (!_sentenceIds.contains(canonical.id)) {
+          _sentenceIds.add(canonical.id);
+        }
+      }
+      if (!mounted) return;
+    }
+    final sentencePool = context.read<AppProvider>();
+    for (final entry in _pendingEmphasis.entries) {
+      if (!_sentenceIds.contains(entry.key)) continue;
+      final sentence = sentencePool.getSentenceById(entry.key);
+      if (sentence == null) continue;
+      if (sentence.targetText == entry.value.target &&
+          sentence.translationText == entry.value.translation) {
+        continue;
+      }
+      sentence
+        ..targetText = entry.value.target
+        ..translationText = entry.value.translation;
+      await sentencePool.updateSentenceInPool(sentence);
+    }
+    if (!mounted) return;
     final provider = context.read<AppProvider>();
     final explicitId = _idCtrl.text.trim();
     if (explicitId.isNotEmpty) {
@@ -952,6 +1380,11 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     widget.vocab.audioUrl = _audioCtrl.text.trim().isEmpty
         ? null
         : _audioCtrl.text.trim();
+    if ((widget.vocab.ttsText ?? '') != _ttsCtrl.text.trim()) {
+      widget.vocab.ttsText = _ttsCtrl.text.trim().isEmpty
+          ? null
+          : _ttsCtrl.text.trim();
+    }
     widget.vocab.notes = _notesCtrl.text.trim();
     widget.vocab.disambiguation = _disambiguationCtrl.text.trim();
     widget.vocab.sentenceIds = _sentenceIds;
@@ -998,21 +1431,6 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     );
     if (choice == null || !mounted) return;
     _applyChoice(CardDirection.nativeToTarget, choice);
-  }
-
-  Widget _sideNotesField(String label, TextEditingController controller) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: TextField(
-        controller: controller,
-        minLines: 2,
-        maxLines: 4,
-        decoration: InputDecoration(
-          labelText: label,
-          border: const OutlineInputBorder(),
-        ),
-      ),
-    );
   }
 
   Future<void> _suggestHint(
@@ -1067,46 +1485,5 @@ class _VocabEditDialogState extends State<VocabEditDialog>
         controller.dispose();
       }
     });
-  }
-
-  static String _suggestEmphasis(
-    String text,
-    String vocabulary, {
-    bool korean = false,
-  }) {
-    if (text.contains('**')) return text;
-    final candidates = korean
-        ? [vocabulary.trim()]
-        : vocabulary
-              .split(RegExp(r'[,;/]'))
-              .map((candidate) => candidate.trim())
-              .where((candidate) => candidate.isNotEmpty)
-              .toList();
-    for (final candidate in candidates) {
-      if (candidate.isEmpty) continue;
-      final exact = RegExp(RegExp.escape(candidate), caseSensitive: false);
-      if (exact.hasMatch(text)) {
-        return text.replaceFirstMapped(exact, (match) => '**${match[0]}**');
-      }
-      if (korean) {
-        final stem = candidate.endsWith('하다')
-            ? candidate.substring(0, candidate.length - 2)
-            : candidate.endsWith('다')
-            ? candidate.substring(0, candidate.length - 1)
-            : candidate;
-        if (stem.isEmpty) continue;
-        final conjugated = RegExp(
-          '${RegExp.escape(stem)}[가-힣]*',
-          caseSensitive: false,
-        );
-        if (conjugated.hasMatch(text)) {
-          return text.replaceFirstMapped(
-            conjugated,
-            (match) => '**${match[0]}**',
-          );
-        }
-      }
-    }
-    return text;
   }
 }

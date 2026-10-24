@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/lesson.dart';
 import '../providers/app_provider.dart';
 import '../widgets/lesson_html_view.dart';
+import '../widgets/markdown_text_field.dart';
 import 'lesson_detail_view.dart';
 
 class LessonReaderView extends StatelessWidget {
@@ -163,7 +164,7 @@ class _LessonMarkdownEditorState extends State<_LessonMarkdownEditor> {
           constraints: const BoxConstraints(maxWidth: 1000),
           child: Padding(
             padding: const EdgeInsets.all(16),
-            child: TextField(
+            child: MarkdownTextField(
               controller: _controller,
               enabled: !_saving,
               expands: true,
