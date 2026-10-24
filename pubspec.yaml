@@ -52,7 +52,7 @@ dependencies:
   desktop_drop: ^0.8.0
   html: ^0.15.4
   html2md: ^1.3.2 # paste HTML as Markdown
-  super_clipboard: ^0.10.0-dev.2 # read HTML from the clipboard
+  super_clipboard: ^0.9.1 # read HTML from the clipboard
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -63,6 +63,13 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+
+dependency_overrides:
+  # super_clipboard 0.9.1 asks for device_info_plus <12, which needs win32 <6,
+  # but file_picker (windows_file_picker) needs win32 ^6. The plugin only calls
+  # DeviceInfoPlugin().deviceInfo, which device_info_plus 13 still has. Drop
+  # this once super_clipboard 0.10 is stable and no longer builds Rust in tests.
+  device_info_plus: ^13.2.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
