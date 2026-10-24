@@ -17,7 +17,7 @@ Add screenshots here once captured, e.g.:
 - **Sentence pool**: browse, edit and link sentences across lessons.
 - **Audio**: stream-on-first-play with offline caching; offline system TTS on Android.
 - **Adaptive review**: recent-mistakes queue, re-queuing of *Again* cards, rolling 24-hour review limit.
-- **AI discussions**: ask DeepSeek about the current card; chats are saved locally.
+- **AI discussions**: ask DeepSeek about the current card or a whole lesson; chats are saved locally.
 - **Keyboard-first**: Anki-style [hotkeys](docs/hotkeys.md), with undo.
 
 Currently only Korean ➔ English is supported. Full details in [docs/features.md](docs/features.md).

@@ -7,7 +7,7 @@ void main() {
       '### Title\n\nBody **bold**\n\n---\n\n| a | b |\n|---|---|\n| 1 | 2 |',
     );
 
-    expect(html, contains('<h3>Title</h3>'));
+    expect(html, contains('>Title</h3>'));
     expect(html, contains('<hr />'));
     expect(html, contains('<table>'));
   });
@@ -33,5 +33,31 @@ void main() {
 
     expect(html, contains('&lt;YouTube'));
     expect(html, isNot(contains('class="yt"')));
+  });
+
+  test('extracts headings with ids and levels', () {
+    const source = '# One\n\ntext\n\n## 두 번째\n\n### Three';
+    final headings = LessonHtmlView.extractHeadings(source);
+
+    expect(headings.map((h) => h.level), [1, 2, 3]);
+    expect(headings.map((h) => h.text), ['One', '두 번째', 'Three']);
+    final html = LessonHtmlView.markdownToHtmlBody(source);
+    for (final heading in headings) {
+      expect(html, contains('id="${heading.id}"'));
+    }
+  });
+
+  test('ignores headings inside fenced code and keeps ids unique', () {
+    final headings = LessonHtmlView.extractHeadings(
+      '## A\n\n```\n# not a heading\n```\n\n## A',
+    );
+
+    expect(headings.length, 2);
+    expect(headings[0].id, isNot(headings[1].id));
+  });
+
+  test('returns no headings for plain text or empty input', () {
+    expect(LessonHtmlView.extractHeadings('just text'), isEmpty);
+    expect(LessonHtmlView.extractHeadings(''), isEmpty);
   });
 }

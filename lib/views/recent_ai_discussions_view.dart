@@ -6,6 +6,7 @@ import '../models/lesson.dart';
 import '../models/sentence.dart';
 import '../models/vocab_item.dart';
 import '../providers/app_provider.dart';
+import '../services/lesson_ai_prompt.dart';
 import '../widgets/markdown_content.dart';
 import 'ai_discussion_dialog.dart';
 
@@ -69,7 +70,9 @@ class RecentAiDiscussionsView extends StatelessWidget {
                       child: Icon(Icons.forum_outlined),
                     ),
                     title: Text(
-                      discussion.vocab?.targetWord ?? 'AI discussion',
+                      discussion.vocab?.targetWord ??
+                          discussion.lesson?.displayTitle ??
+                          'AI discussion',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -130,16 +133,22 @@ class RecentAiDiscussionsView extends StatelessWidget {
   }
 
   void _openDiscussion(BuildContext context, _DiscussionSummary discussion) {
+    final isLesson = LessonAiPrompt.isLessonDiscussion(discussion.id);
+    // The lesson this discussion belonged to was deleted.
+    if (isLesson && discussion.lesson == null) return;
     showDialog<void>(
       context: context,
       builder: (_) => AiDiscussionDialog(
         discussionId: discussion.id,
-        targetWord: discussion.vocab?.targetWord ?? discussion.id,
+        targetWord:
+            discussion.vocab?.targetWord ??
+            (isLesson ? discussion.lesson!.displayTitle : discussion.id),
         translation: discussion.vocab?.translation ?? '',
         targetLanguage: discussion.lesson?.targetLanguage ?? 'ko',
         nativeLanguage: discussion.lesson?.nativeLanguage ?? 'en',
         sentenceTarget: discussion.sentence?.targetText,
         sentenceTranslation: discussion.sentence?.translationText,
+        lesson: isLesson ? discussion.lesson : null,
       ),
     );
   }
@@ -195,6 +204,23 @@ class _DiscussionSummary {
     MapEntry<String, List<AiDiscussionMessage>> entry,
     AppProvider provider,
   ) {
+    if (LessonAiPrompt.isLessonDiscussion(entry.key)) {
+      final lessonId = LessonAiPrompt.lessonIdFrom(entry.key);
+      Lesson? lesson;
+      for (final candidate in provider.lessons) {
+        if (candidate.id == lessonId) {
+          lesson = candidate;
+          break;
+        }
+      }
+      return _DiscussionSummary(
+        id: entry.key,
+        messages: entry.value,
+        lesson: lesson,
+        vocab: null,
+        sentence: null,
+      );
+    }
     final idParts = entry.key.split(':');
     final vocabId = idParts.first;
     Lesson? lesson;

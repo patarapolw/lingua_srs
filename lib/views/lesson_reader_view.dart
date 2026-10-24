@@ -3,14 +3,25 @@ import 'package:provider/provider.dart';
 
 import '../models/lesson.dart';
 import '../providers/app_provider.dart';
+import '../services/lesson_ai_prompt.dart';
 import '../widgets/lesson_html_view.dart';
 import '../widgets/markdown_text_field.dart';
+import 'ai_discussion_dialog.dart';
 import 'lesson_detail_view.dart';
 
-class LessonReaderView extends StatelessWidget {
+class LessonReaderView extends StatefulWidget {
   final String lessonId;
 
   const LessonReaderView({super.key, required this.lessonId});
+
+  @override
+  State<LessonReaderView> createState() => _LessonReaderViewState();
+}
+
+class _LessonReaderViewState extends State<LessonReaderView> {
+  final LessonHtmlController _htmlController = LessonHtmlController();
+
+  String get lessonId => widget.lessonId;
 
   @override
   Widget build(BuildContext context) {
@@ -29,11 +40,25 @@ class LessonReaderView extends StatelessWidget {
       );
     }
     final selectedLesson = lesson;
+    final headings = LessonHtmlView.extractHeadings(
+      selectedLesson.markdownContent,
+    );
 
     return Scaffold(
       appBar: AppBar(
         title: Text(selectedLesson.displayTitle),
         actions: [
+          if (headings.isNotEmpty)
+            IconButton(
+              tooltip: 'Table of contents',
+              icon: const Icon(Icons.toc),
+              onPressed: () => _showToc(context, headings),
+            ),
+          IconButton(
+            tooltip: 'Ask AI about lesson',
+            icon: const Icon(Icons.forum_outlined),
+            onPressed: () => _openAiDiscussion(context, selectedLesson),
+          ),
           IconButton(
             tooltip: 'Edit Markdown',
             icon: const Icon(Icons.edit_outlined),
@@ -63,7 +88,58 @@ class LessonReaderView extends StatelessWidget {
       ),
       body: selectedLesson.markdownContent.trim().isEmpty
           ? _emptyLessonContent(context, selectedLesson)
-          : LessonHtmlView(markdown: selectedLesson.markdownContent),
+          : LessonHtmlView(
+              markdown: selectedLesson.markdownContent,
+              controller: _htmlController,
+            ),
+    );
+  }
+
+  void _showToc(BuildContext context, List<LessonHeading> headings) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.7,
+          ),
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: headings.length,
+            itemBuilder: (_, index) {
+              final heading = headings[index];
+              return ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.only(
+                  left: 16.0 + (heading.level - 1) * 16,
+                  right: 16,
+                ),
+                title: Text(heading.text),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _htmlController.scrollToHeading(heading.id);
+                },
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openAiDiscussion(BuildContext context, Lesson lesson) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => AiDiscussionDialog(
+        discussionId: LessonAiPrompt.discussionId(lesson.id),
+        targetWord: lesson.displayTitle,
+        translation: '',
+        targetLanguage: lesson.targetLanguage,
+        nativeLanguage: lesson.nativeLanguage,
+        lesson: lesson,
+      ),
     );
   }
 

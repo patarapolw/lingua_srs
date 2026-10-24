@@ -8,15 +8,55 @@ import 'package:webview_all/webview_all.dart';
 import '../services/audio_service.dart';
 import 'youtube_embed.dart';
 
+/// A heading found in a lesson, used for the table of contents.
+class LessonHeading {
+  final int level;
+  final String text;
+  final String id;
+
+  const LessonHeading(this.level, this.text, this.id);
+}
+
+/// Lets a parent widget ask [LessonHtmlView] to scroll to a heading.
+class LessonHtmlController {
+  void Function(String id)? _scrollTo;
+
+  void scrollToHeading(String id) => _scrollTo?.call(id);
+}
+
 /// Renders a whole lesson as one HTML document (Dart `markdown` -> HTML) in a
 /// WebView, so the browser handles layout, scrolling and text selection.
 class LessonHtmlView extends StatefulWidget {
   final String markdown;
+  final LessonHtmlController? controller;
 
-  const LessonHtmlView({super.key, required this.markdown});
+  const LessonHtmlView({super.key, required this.markdown, this.controller});
 
   /// Converts lesson Markdown (including custom lesson tags) to an HTML body.
-  static String markdownToHtmlBody(String markdown) {
+  static String markdownToHtmlBody(String markdown) => render(markdown).html;
+
+  /// Top-level headings of a lesson, in document order.
+  static List<LessonHeading> extractHeadings(String markdown) =>
+      render(markdown).headings;
+
+  /// Renders HTML and collects headings; each heading gets a stable `id`.
+  static ({String html, List<LessonHeading> headings}) render(String markdown) {
+    final document = md.Document(extensionSet: md.ExtensionSet.gitHubFlavored);
+    final nodes = document.parseLines(_preprocess(markdown).split('\n'));
+    final headings = <LessonHeading>[];
+    for (final node in nodes) {
+      if (node is md.Element && RegExp(r'^h[1-6]$').hasMatch(node.tag)) {
+        final text = node.textContent.trim();
+        if (text.isEmpty) continue;
+        final id = 'lesson-h-${headings.length}';
+        node.attributes['id'] = id;
+        headings.add(LessonHeading(int.parse(node.tag.substring(1)), text, id));
+      }
+    }
+    return (html: md.renderToHtml(nodes), headings: headings);
+  }
+
+  static String _preprocess(String markdown) {
     final fencedCodeBlocks = <String>[];
     var text = markdown.replaceAllMapped(
       RegExp(
@@ -95,10 +135,7 @@ class LessonHtmlView extends StatefulWidget {
       text = text.replaceAll('LINGUA_CODE_BLOCK_$i', fencedCodeBlocks[i]);
     }
 
-    return md.markdownToHtml(
-      text,
-      extensionSet: md.ExtensionSet.gitHubFlavored,
-    );
+    return text.replaceAll('\r\n', '\n');
   }
 
   static String _css(ThemeData theme) {
@@ -175,6 +212,7 @@ class _LessonHtmlViewState extends State<LessonHtmlView> {
   @override
   void initState() {
     super.initState();
+    widget.controller?._scrollTo = _scrollTo;
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       // Audio and TTS go through the Flutter AudioService, not the WebView.
@@ -196,7 +234,25 @@ class _LessonHtmlViewState extends State<LessonHtmlView> {
   @override
   void didUpdateWidget(LessonHtmlView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller?._scrollTo = null;
+      widget.controller?._scrollTo = _scrollTo;
+    }
     if (oldWidget.markdown != widget.markdown) _inject();
+  }
+
+  @override
+  void dispose() {
+    widget.controller?._scrollTo = null;
+    super.dispose();
+  }
+
+  void _scrollTo(String id) {
+    if (!_pageLoaded) return;
+    _controller.runJavaScript(
+      'var e=document.getElementById(${jsonEncode(id)});'
+      "if(e)e.scrollIntoView({behavior:'smooth',block:'start'});",
+    );
   }
 
   @override

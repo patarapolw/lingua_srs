@@ -19,6 +19,7 @@ lingua_srs/
 │   │   ├── yaml_parser_service.dart   # Markdown/YAML lesson & sentence parser
 │   │   ├── audio_service.dart         # Audio playback, TTS and offline caching
 │   │   ├── deepseek_service.dart      # DeepSeek chat client for quiz discussions
+│   │   ├── lesson_ai_prompt.dart      # Prompt, ids and suggestions for lesson AI chats
 │   │   ├── korean_text_search.dart    # Korean-aware sentence search tokenizer
 │   │   └── storage_service.dart       # Local persistence and debug seed data
 │   ├── views/

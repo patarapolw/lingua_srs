@@ -10,7 +10,7 @@ Full feature reference. For a short overview see the [README](../README.md).
    - YAML and Markdown frontmatter are parsed in a background isolate with parse errors and an import preview. Folder import parsing also runs off the UI isolate.
    - Unit and nested folder groups in the library are expanded by default; expansion states and sibling order are saved across view changes and app restarts. Drag lessons and folders to reorder them, or use their menus to move them between folders. `::`-separated lesson paths create nested folders. Vocabulary frontmatter uses `vocabulary:` as the root, with part-of-speech keys directly beneath it and vocabulary entries listed under each key. Re-importing updates matching lessons and vocabulary in place while retaining SRS progress and entries not present in the import.
    - Imported vocabulary with the same target form and meaning shares SRS progress across part-of-speech groups. Different meanings receive separate generated IDs; an optional `id` on a vocabulary entry can explicitly control sharing.
-   - Importing Markdown lessons keeps the document body for reading from the lesson list; it can be edited and saved at any time. The reader renders the whole lesson as a single document in a WebView, and **View Vocabulary** remains a separate view.
+   - Importing Markdown lessons keeps the document body for reading from the lesson list; it can be edited and saved at any time. The reader renders the whole lesson as a single document in a WebView, and **View Vocabulary** remains a separate view. A table-of-contents button lists the lesson's headings and scrolls to the chosen one.
 
 2. **Language Support**:
    - Currently only Korean to English is supported: use `ko:` for the target text and `en:` for the translation in vocabulary entries and examples.
@@ -67,5 +67,6 @@ Full feature reference. For a short overview see the [README](../README.md).
    - Configure a DeepSeek API key in **Settings** (gear icon), then ask questions about the current vocabulary and example sentence during a quiz. Answers stream into the chat and render as Markdown.
    - Start with suggested questions about etymology/Hanja, key sentence vocabulary, everyday usage, and examples; get suggested follow-ups during the discussion.
    - Press Enter to send a chat message and Shift+Enter or Ctrl+Enter to add a new line.
+   - **Ask AI about lesson** in the lesson reader opens a discussion grounded in the lesson's Markdown and vocabulary. Lesson chats are saved with the others under Recent Discussions.
    - Discussions are saved locally per vocabulary and sentence, restored when revisiting that card, and can be deleted from the discussion view.
    - The **Recent Discussions** tab lists every saved discussion, most recently active first, with the vocabulary, its example sentence, and the latest question. Tap one to reopen it. Discussions saved before timestamps were added are listed last.

@@ -3,8 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../models/ai_discussion_message.dart';
+import '../models/lesson.dart';
 import '../providers/app_provider.dart';
 import '../services/deepseek_service.dart';
+import '../services/lesson_ai_prompt.dart';
 import '../widgets/markdown_content.dart';
 import 'settings_dialog.dart';
 
@@ -16,6 +18,7 @@ class AiDiscussionDialog extends StatefulWidget {
   final String nativeLanguage;
   final String? sentenceTarget;
   final String? sentenceTranslation;
+  final Lesson? lesson;
 
   const AiDiscussionDialog({
     super.key,
@@ -26,6 +29,7 @@ class AiDiscussionDialog extends StatefulWidget {
     required this.nativeLanguage,
     this.sentenceTarget,
     this.sentenceTranslation,
+    this.lesson,
   });
 
   @override
@@ -99,6 +103,9 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
   }
 
   String _systemPrompt() {
+    if (widget.lesson case final lesson?) {
+      return LessonAiPrompt.systemPrompt(lesson);
+    }
     final sentence = widget.sentenceTarget?.trim();
     final sentenceTranslation = widget.sentenceTranslation?.trim();
     return [
@@ -113,6 +120,9 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
   }
 
   List<String> _suggestedQuestions(bool hasMessages) {
+    if (widget.lesson != null) {
+      return LessonAiPrompt.suggestedQuestions(hasMessages);
+    }
     final questions = !hasMessages
         ? [
             'Explain the etymology and Hanja of "${widget.targetWord}".',
@@ -266,7 +276,9 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                         children: [
                           Text('Ask AI', style: theme.textTheme.titleLarge),
                           Text(
-                            '${widget.targetWord} — ${widget.translation}',
+                            widget.translation.trim().isEmpty
+                                ? widget.targetWord
+                                : '${widget.targetWord} — ${widget.translation}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.bodySmall,
@@ -314,7 +326,9 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                             child: Column(
                               children: [
                                 Text(
-                                  'Ask a question about this word or sentence.',
+                                  widget.lesson != null
+                                      ? 'Ask a question about this lesson.'
+                                      : 'Ask a question about this word or sentence.',
                                   style: theme.textTheme.bodyMedium?.copyWith(
                                     color: theme.colorScheme.onSurfaceVariant,
                                   ),
@@ -458,8 +472,10 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                           maxLines: 4,
                           textCapitalization: TextCapitalization.sentences,
                           textInputAction: TextInputAction.send,
-                          decoration: const InputDecoration(
-                            hintText: 'Ask about the vocabulary or sentence…',
+                          decoration: InputDecoration(
+                            hintText: widget.lesson != null
+                                ? 'Ask about this lesson…'
+                                : 'Ask about the vocabulary or sentence…',
                           ),
                           onSubmitted: (_) => _sendQuestion(),
                         ),
