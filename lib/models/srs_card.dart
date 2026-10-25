@@ -31,6 +31,10 @@ class SrsCard {
   SrsRating? lastRating;
   DateTime? mistakesClearedAt;
 
+  /// When the card was first reviewed; null while it is still new. Drives the
+  /// rolling new-cards-per-day limit.
+  DateTime? introducedAt;
+
   SrsCard({
     String? id,
     required this.direction,
@@ -47,12 +51,21 @@ class SrsCard {
     this.lastMistakeDate,
     this.lastRating,
     this.mistakesClearedAt,
+    this.introducedAt,
   }) : id = id ?? const Uuid().v4(),
        dueDate = dueDate ?? DateTime.now();
 
+  /// Never reviewed. New cards are not "due": they have their own daily limit.
+  bool get isNewCard => isEnabled && status == SrsStatus.isNew;
+
+  /// Already learned or being learned, and scheduled for now or earlier.
   bool get isDue =>
       isEnabled &&
-      (status == SrsStatus.isNew || !dueDate.isAfter(DateTime.now()));
+      status != SrsStatus.isNew &&
+      !dueDate.isAfter(DateTime.now());
+
+  /// Can be studied now: due, or new.
+  bool get isAvailable => isNewCard || isDue;
 
   bool get hasRecentMistake {
     if (!isEnabled) return false;
@@ -85,6 +98,7 @@ class SrsCard {
     lastMistakeDate = null;
     lastRating = null;
     mistakesClearedAt = null;
+    introducedAt = null;
   }
 
   Map<String, dynamic> toJson() => {
@@ -103,11 +117,15 @@ class SrsCard {
     'lastMistakeDate': lastMistakeDate?.toIso8601String(),
     'lastRating': lastRating?.name,
     'mistakesClearedAt': mistakesClearedAt?.toIso8601String(),
+    'introducedAt': introducedAt?.toIso8601String(),
   };
 
   factory SrsCard.fromJson(Map<String, dynamic> json) => SrsCard(
     mistakesClearedAt: json['mistakesClearedAt'] != null
         ? DateTime.parse(json['mistakesClearedAt'] as String)
+        : null,
+    introducedAt: json['introducedAt'] != null
+        ? DateTime.parse(json['introducedAt'] as String)
         : null,
     id: json['id'] as String?,
     direction: CardDirection.values.firstWhere(

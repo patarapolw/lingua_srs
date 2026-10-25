@@ -32,7 +32,12 @@ class StorageService {
       'lingua_srs_windows_legacy_migration_complete';
 
   static const String _keyMaxReviews24h = 'lingua_srs_max_reviews_24h';
+  static const String _keyMaxNewCards24h = 'lingua_srs_max_new_cards_24h';
   static const String _keyReviewTimestamps = 'lingua_srs_review_timestamps_24h';
+
+  /// Defaults for the rolling 24-hour limits. 0 means unlimited.
+  static const int defaultMaxReviews24h = 100;
+  static const int defaultMaxNewCards24h = 10;
   static final Map<String, String> _lessonMarkdownCache = {};
   static Set<String> _storedLessonMarkdownIds = {};
 
@@ -212,12 +217,22 @@ class StorageService {
 
   static Future<int> loadMaxReviews24h() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt(_keyMaxReviews24h) ?? 100;
+    return prefs.getInt(_keyMaxReviews24h) ?? defaultMaxReviews24h;
   }
 
   static Future<void> saveMaxReviews24h(int limit) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_keyMaxReviews24h, limit);
+  }
+
+  static Future<int> loadMaxNewCards24h() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_keyMaxNewCards24h) ?? defaultMaxNewCards24h;
+  }
+
+  static Future<void> saveMaxNewCards24h(int limit) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyMaxNewCards24h, limit);
   }
 
   static Future<List<DateTime>> loadReviewTimestamps() async {

@@ -85,7 +85,8 @@ class AppProvider extends ChangeNotifier {
   @visibleForTesting
   http.Client? aiClient;
 
-  int _maxReviews24h = 100;
+  int _maxReviews24h = StorageService.defaultMaxReviews24h;
+  int _maxNewCards24h = StorageService.defaultMaxNewCards24h;
   List<DateTime> _reviewTimestamps24h = [];
 
   List<Lesson> get lessons => _lessons;
@@ -104,6 +105,7 @@ class AppProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get selectedLessonId => _selectedLessonId;
   int get maxReviews24h => _maxReviews24h;
+  int get maxNewCards24h => _maxNewCards24h;
   Map<String, List<AiDiscussionMessage>> get aiDiscussions => Map.unmodifiable(
     _aiDiscussions.map<String, List<AiDiscussionMessage>>(
       (id, messages) =>
@@ -121,14 +123,52 @@ class AppProvider extends ChangeNotifier {
     return _reviewTimestamps24h.length;
   }
 
+  /// Cards seen for the first time in the last 24 hours. Derived from the
+  /// cards, so undoing or re-rating a first review gives the quota back.
+  int get newCardsIntroducedLast24h {
+    final now = DateTime.now();
+    final counted = <String>{};
+    for (final lesson in _lessons) {
+      for (final vocab in lesson.vocabularies) {
+        for (final card in [
+          vocab.cardTargetToNative,
+          vocab.cardNativeToTarget,
+        ]) {
+          final introducedAt = card.introducedAt;
+          if (introducedAt != null &&
+              now.difference(introducedAt).inHours < 24) {
+            counted.add(card.id);
+          }
+        }
+      }
+    }
+    return counted.length;
+  }
+
+  /// Reviews of already-seen cards. A card's first review counts against the
+  /// new-card limit instead.
+  int get reviewsOfSeenCardsInLast24Hours =>
+      max(0, reviewsInLast24Hours - newCardsIntroducedLast24h);
+
   int get remainingReviews24h {
     if (_maxReviews24h <= 0) return 999999;
-    return max(0, _maxReviews24h - reviewsInLast24Hours);
+    return max(0, _maxReviews24h - reviewsOfSeenCardsInLast24Hours);
+  }
+
+  int get remainingNewCards24h {
+    if (_maxNewCards24h <= 0) return 999999;
+    return max(0, _maxNewCards24h - newCardsIntroducedLast24h);
   }
 
   Future<void> setMaxReviews24h(int limit) async {
     _maxReviews24h = limit;
     await StorageService.saveMaxReviews24h(limit);
+    notifyListeners();
+  }
+
+  Future<void> setMaxNewCards24h(int limit) async {
+    _maxNewCards24h = limit;
+    await StorageService.saveMaxNewCards24h(limit);
     notifyListeners();
   }
 
@@ -161,6 +201,7 @@ class AppProvider extends ChangeNotifier {
       StorageService.loadLessonHierarchyOrder(),
       StorageService.loadLessonFolderExpansion(),
       StorageService.loadPronunciationOptions(),
+      StorageService.loadMaxNewCards24h(),
     ).wait;
     _autoplayAudio = results.$1;
     _deepSeekApiKey = results.$2;
@@ -171,6 +212,7 @@ class AppProvider extends ChangeNotifier {
     _lessonHierarchyOrder = results.$6;
     _lessonFolderExpansion = results.$7;
     _pronunciationOptions = results.$8;
+    _maxNewCards24h = results.$9;
     _lessons = await StorageService.loadLessons();
     // Loaded after lessons because a fresh debug install seeds sentences there.
     _sentences = await StorageService.loadSentences();
@@ -1522,7 +1564,7 @@ class AppProvider extends ChangeNotifier {
           final card = vocab.cardTargetToNative;
           final isEligible = mistakesOnly
               ? card.hasRecentMistake
-              : (!dueOnly || card.isDue);
+              : (!dueOnly || card.isAvailable);
           if (isEligible && seenCardIds.add(card.id)) {
             posGroups
                 .putIfAbsent(posKey, () => [])
@@ -1542,7 +1584,7 @@ class AppProvider extends ChangeNotifier {
           final card = vocab.cardNativeToTarget;
           final isEligible = mistakesOnly
               ? card.hasRecentMistake
-              : (!dueOnly || card.isDue);
+              : (!dueOnly || card.isAvailable);
           if (isEligible && seenCardIds.add(card.id)) {
             posGroups
                 .putIfAbsent(posKey, () => [])
@@ -1584,11 +1626,18 @@ class AppProvider extends ChangeNotifier {
       }
     }
 
-    if (dueOnly && !mistakesOnly && _maxReviews24h > 0) {
-      final limit = remainingReviews24h;
-      if (queue.length > limit) {
-        return queue.sublist(0, limit);
+    if (dueOnly && !mistakesOnly) {
+      // Reviews first, then new cards; each has its own rolling 24h limit.
+      // Lesson order is kept within both groups.
+      final due = <StudyCardItem>[];
+      final newCards = <StudyCardItem>[];
+      for (final item in queue) {
+        (item.card.isNewCard ? newCards : due).add(item);
       }
+      return [
+        ...due.take(remainingReviews24h),
+        ...newCards.take(remainingNewCards24h),
+      ];
     }
 
     return queue;

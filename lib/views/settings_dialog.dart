@@ -21,10 +21,12 @@ class SettingsDialog extends StatefulWidget {
 class _SettingsDialogState extends State<SettingsDialog> {
   late final TextEditingController _apiKeyController;
   late final TextEditingController _maxReviewsController;
+  late final TextEditingController _maxNewCardsController;
   late bool _darkMode = widget.isDarkMode;
   bool _obscureApiKey = true;
   bool _saving = false;
   String? _maxReviewsError;
+  String? _maxNewCardsError;
 
   @override
   void initState() {
@@ -34,30 +36,46 @@ class _SettingsDialogState extends State<SettingsDialog> {
     _maxReviewsController = TextEditingController(
       text: '${provider.maxReviews24h > 0 ? provider.maxReviews24h : 0}',
     );
+    _maxNewCardsController = TextEditingController(
+      text: '${provider.maxNewCards24h > 0 ? provider.maxNewCards24h : 0}',
+    );
   }
 
   @override
   void dispose() {
     _apiKeyController.dispose();
     _maxReviewsController.dispose();
+    _maxNewCardsController.dispose();
     super.dispose();
   }
 
   Future<void> _save() async {
+    const limitError = 'Enter a whole number, or 0 for unlimited.';
     final maxReviews = int.tryParse(_maxReviewsController.text.trim());
-    if (maxReviews == null || maxReviews < 0) {
-      setState(
-        () => _maxReviewsError = 'Enter a whole number, or 0 for unlimited.',
-      );
+    final maxNewCards = int.tryParse(_maxNewCardsController.text.trim());
+    if (maxReviews == null ||
+        maxReviews < 0 ||
+        maxNewCards == null ||
+        maxNewCards < 0) {
+      setState(() {
+        _maxReviewsError = maxReviews == null || maxReviews < 0
+            ? limitError
+            : null;
+        _maxNewCardsError = maxNewCards == null || maxNewCards < 0
+            ? limitError
+            : null;
+      });
       return;
     }
     setState(() {
       _maxReviewsError = null;
+      _maxNewCardsError = null;
       _saving = true;
     });
     try {
       final provider = context.read<AppProvider>();
       await provider.setMaxReviews24h(maxReviews);
+      await provider.setMaxNewCards24h(maxNewCards);
       await provider.setDeepSeekApiKey(_apiKeyController.text);
       if (mounted) Navigator.of(context).pop();
     } catch (error) {
@@ -131,7 +149,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
               Text('Reviews', style: theme.textTheme.titleSmall),
               const SizedBox(height: 8),
               const Text(
-                'Maximum number of reviews allowed in any rolling 24-hour window. Enter 0 for unlimited.',
+                'Maximum number of due cards you can review in any rolling 24-hour window. Enter 0 for unlimited.',
               ),
               const SizedBox(height: 12),
               TextField(
@@ -153,6 +171,36 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     onPressed: () => setState(() {
                       _maxReviewsController.text = '$value';
                       _maxReviewsError = null;
+                    }),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 24),
+              Text('New cards', style: theme.textTheme.titleSmall),
+              const SizedBox(height: 8),
+              const Text(
+                'Maximum number of never-seen cards you can start in any rolling 24-hour window. They are studied after your due reviews and do not use up the review limit. Enter 0 for unlimited.',
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _maxNewCardsController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: 'Max new cards per 24 hours',
+                  border: const OutlineInputBorder(),
+                  suffixText: 'cards',
+                  errorText: _maxNewCardsError,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                children: [5, 10, 20, 0].map((value) {
+                  return ActionChip(
+                    label: Text(value == 0 ? 'Unlimited' : '$value'),
+                    onPressed: () => setState(() {
+                      _maxNewCardsController.text = '$value';
+                      _maxNewCardsError = null;
                     }),
                   );
                 }).toList(),

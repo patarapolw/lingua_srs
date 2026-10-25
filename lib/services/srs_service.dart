@@ -15,6 +15,7 @@ class SrsService {
       card.dueDate,
       card.lapses,
       card.lastMistakeDate,
+      card.introducedAt,
     );
     processReview(card, rating);
     final result = card.dueDate.difference(card.lastReviewed ?? DateTime.now());
@@ -27,6 +28,7 @@ class SrsService {
     card.dueDate = saved.$7;
     card.lapses = saved.$8;
     card.lastMistakeDate = saved.$9;
+    card.introducedAt = saved.$10;
     return result;
   }
 
@@ -44,6 +46,7 @@ class SrsService {
     final now = DateTime.now();
     card.lastReviewed = now;
     card.lastRating = rating;
+    if (card.status == SrsStatus.isNew) card.introducedAt = now;
 
     switch (rating) {
       case SrsRating.again:
