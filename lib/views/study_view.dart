@@ -1122,6 +1122,20 @@ class _StudyViewState extends State<StudyView> {
                                   runSpacing: 4,
                                   crossAxisAlignment: WrapCrossAlignment.center,
                                   children: [
+                                    // Same colour as the New badge in the
+                                    // lesson list; explains the two buttons.
+                                    if (_isFreshCard)
+                                      Chip(
+                                        visualDensity: VisualDensity.compact,
+                                        side: BorderSide.none,
+                                        label: const Text('NEW'),
+                                        backgroundColor:
+                                            theme.colorScheme.tertiary,
+                                        labelStyle: TextStyle(
+                                          color: theme.colorScheme.onTertiary,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
                                     Chip(
                                       visualDensity: VisualDensity.compact,
                                       avatar: Icon(

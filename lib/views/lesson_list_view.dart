@@ -13,18 +13,8 @@ import 'settings_dialog.dart';
 import 'vocab_merge_dialogs.dart';
 import 'yaml_import_view.dart';
 
-/// One muted line under a lesson title: its size, then what is waiting.
-String lessonSummary({
-  required int words,
-  required int due,
-  required int newCards,
-}) {
-  return [
-    '$words ${words == 1 ? 'word' : 'words'}',
-    if (due > 0) '$due due',
-    if (newCards > 0) '$newCards new',
-  ].join(' · ');
-}
+/// The size of a lesson, shown beside its Due and New badges.
+String lessonWordsLabel(int words) => '$words ${words == 1 ? 'word' : 'words'}';
 
 class LessonListView extends StatelessWidget {
   final VoidCallback? onToggleTheme;
@@ -374,12 +364,23 @@ class LessonListView extends StatelessWidget {
             ),
             subtitle: Padding(
               padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                lessonSummary(
-                  words: lesson.vocabularies.length,
-                  due: due,
-                  newCards: newCards,
-                ),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(lessonWordsLabel(lesson.vocabularies.length)),
+                  if (due > 0)
+                    Badge(
+                      label: Text('$due Due'),
+                      backgroundColor: Colors.amber.shade800,
+                    ),
+                  if (newCards > 0)
+                    Badge(
+                      label: Text('$newCards New'),
+                      backgroundColor: theme.colorScheme.tertiary,
+                    ),
+                ],
               ),
             ),
             trailing: Row(
@@ -589,7 +590,7 @@ class LessonListView extends StatelessWidget {
     final availableTotal = availableDue + availableNew;
     final isDailyLimitReached =
         availableTotal == 0 && (totalDue > 0 || totalNew > 0);
-    final studyLabel = availableTotal > 0 ? 'Study $availableTotal' : 'Study';
+    final studyLabel = availableTotal > 0 ? 'Study ($availableTotal)' : 'Study';
 
     final dueNoticeParts = <String>[];
     if (provider.reviewsInLast24Hours > 0) {

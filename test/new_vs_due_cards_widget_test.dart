@@ -154,10 +154,12 @@ void main() {
       await seedLesson(tester, provider, total: 5, due: 2);
       await pumpWith(tester, provider, const LessonListView());
 
-      expect(find.text('Study 5'), findsOneWidget);
+      expect(find.text('Study (5)'), findsOneWidget);
       expect(find.text('2 due • '), findsOneWidget);
       expect(find.text('3 new'), findsOneWidget);
-      expect(find.text('5 words · 2 due · 3 new'), findsOneWidget);
+      expect(find.text('5 words'), findsOneWidget);
+      expect(find.text('2 Due'), findsOneWidget);
+      expect(find.text('3 New'), findsOneWidget);
     });
 
     testWidgets('does not count new cards as due', (tester) async {
@@ -165,9 +167,11 @@ void main() {
       await seedLesson(tester, provider, total: 4);
       await pumpWith(tester, provider, const LessonListView());
 
-      expect(find.text('Study 4'), findsOneWidget);
+      expect(find.text('Study (4)'), findsOneWidget);
       expect(find.text('4 new'), findsOneWidget);
+      expect(find.text('4 New'), findsOneWidget);
       expect(find.textContaining('due'), findsNothing);
+      expect(find.textContaining('Due'), findsNothing);
     });
 
     testWidgets('caps the new count at the daily new-card limit', (
@@ -179,10 +183,11 @@ void main() {
       await seedLesson(tester, provider, total: 5);
       await pumpWith(tester, provider, const LessonListView());
 
-      expect(find.text('Study 2'), findsOneWidget);
+      expect(find.text('Study (2)'), findsOneWidget);
       expect(find.text('2 new'), findsOneWidget);
       // The lesson row still says what the lesson holds.
-      expect(find.text('5 words · 5 new'), findsOneWidget);
+      expect(find.text('5 words'), findsOneWidget);
+      expect(find.text('5 New'), findsOneWidget);
     });
 
     testWidgets('a used-up review limit does not block new cards', (
@@ -194,7 +199,7 @@ void main() {
       await seedLesson(tester, provider, total: 5, due: 3);
       await pumpWith(tester, provider, const LessonListView());
 
-      expect(find.text('Study 3'), findsOneWidget);
+      expect(find.text('Study (3)'), findsOneWidget);
       expect(find.text('1 due • '), findsOneWidget);
       expect(find.text('2 new • '), findsOneWidget);
       expect(find.text('3 remaining'), findsOneWidget);
@@ -216,9 +221,11 @@ void main() {
       await pumpWith(tester, provider, const LessonListView());
 
       expect(provider.remainingNewCards24h, 0);
-      expect(find.text('Study 2'), findsOneWidget);
+      expect(find.text('Study (2)'), findsOneWidget);
       expect(find.text('2 due'), findsOneWidget);
-      expect(find.text('4 words · 2 due · 1 new'), findsOneWidget);
+      expect(find.text('4 words'), findsOneWidget);
+      expect(find.text('2 Due'), findsOneWidget);
+      expect(find.text('1 New'), findsOneWidget);
     });
 
     testWidgets('says Daily Limit once both limits are used up', (
@@ -278,16 +285,47 @@ void main() {
   group('Lesson list on a phone', () {
     const phone = Size(400, 800);
 
-    testWidgets('a row is one summary line, without a Cards count', (
+    testWidgets('a row shows its words and Due/New badges, no Cards', (
       tester,
     ) async {
       final provider = await loadedProvider(tester);
       await seedLesson(tester, provider, total: 5, due: 2);
       await pumpWith(tester, provider, const LessonListView(), size: phone);
 
-      expect(find.text('5 words · 2 due · 3 new'), findsOneWidget);
+      expect(find.text('5 words'), findsOneWidget);
+      expect(find.text('2 Due'), findsOneWidget);
+      expect(find.text('3 New'), findsOneWidget);
       expect(find.textContaining('Cards'), findsNothing);
       expect(find.textContaining('Words'), findsNothing);
+    });
+
+    testWidgets('the Due badge is amber and the New badge is tertiary', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      await seedLesson(tester, provider, total: 5, due: 2);
+      await pumpWith(tester, provider, const LessonListView(), size: phone);
+
+      final due = tester.widget<Badge>(find.widgetWithText(Badge, '2 Due'));
+      final fresh = tester.widget<Badge>(find.widgetWithText(Badge, '3 New'));
+      final theme = Theme.of(tester.element(find.byType(LessonListView)));
+      expect(due.backgroundColor, Colors.amber.shade800);
+      expect(fresh.backgroundColor, theme.colorScheme.tertiary);
+    });
+
+    testWidgets('a lesson with nothing waiting has no badges', (tester) async {
+      final provider = await loadedProvider(tester);
+      await seedLesson(tester, provider, total: 2, introducedRecently: 2);
+      await pumpWith(tester, provider, const LessonListView(), size: phone);
+
+      expect(find.text('2 words'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(ListTile),
+          matching: find.byType(Badge),
+        ),
+        findsNothing,
+      );
     });
 
     testWidgets('a row has a study icon but no arrow button', (tester) async {
@@ -413,7 +451,7 @@ void main() {
       );
 
       expect(tester.takeException(), isNull);
-      expect(find.text('Study 8'), findsOneWidget);
+      expect(find.text('Study (8)'), findsOneWidget);
     });
   });
 
@@ -425,7 +463,7 @@ void main() {
       final lesson = await seedLesson(tester, provider, total: 3, due: 1);
       await pumpWith(tester, provider, LessonDetailView(lessonId: lesson.id));
 
-      expect(find.text('Study 3'), findsOneWidget);
+      expect(find.text('Study (3)'), findsOneWidget);
     });
 
     testWidgets('Study button counts only the new cards still allowed', (
@@ -437,7 +475,7 @@ void main() {
       final lesson = await seedLesson(tester, provider, total: 3);
       await pumpWith(tester, provider, LessonDetailView(lessonId: lesson.id));
 
-      expect(find.text('Study 1'), findsOneWidget);
+      expect(find.text('Study (1)'), findsOneWidget);
     });
 
     testWidgets('Study button is just Study when nothing is waiting', (
@@ -479,11 +517,13 @@ void main() {
       WidgetTester tester, {
       int due = 0,
       int total = 1,
+      bool revealAnswer = true,
       bool revealWithButton = true,
     }) async {
       final provider = await loadedProvider(tester);
       final lesson = await seedLesson(tester, provider, total: total, due: due);
       await pumpWith(tester, provider, StudyView(lessonId: lesson.id));
+      if (!revealAnswer) return provider;
       if (revealWithButton) {
         await reveal(tester);
       } else {
@@ -500,6 +540,34 @@ void main() {
       expect(find.textContaining('Good'), findsOneWidget);
       expect(find.text('Hard'), findsNothing);
       expect(find.text('Easy'), findsNothing);
+    });
+
+    testWidgets('a fresh card is marked NEW, before and after the reveal', (
+      tester,
+    ) async {
+      await openStudy(tester, revealAnswer: false);
+      expect(find.text('NEW'), findsOneWidget);
+
+      await reveal(tester);
+      expect(find.text('NEW'), findsOneWidget);
+    });
+
+    testWidgets('the NEW mark uses the tertiary colour of the list badge', (
+      tester,
+    ) async {
+      await openStudy(tester, revealAnswer: false);
+
+      final chip = tester.widget<Chip>(find.widgetWithText(Chip, 'NEW'));
+      final theme = Theme.of(tester.element(find.byType(StudyView)));
+      expect(chip.backgroundColor, theme.colorScheme.tertiary);
+    });
+
+    testWidgets('a card seen before is not marked NEW', (tester) async {
+      await openStudy(tester, due: 1, revealAnswer: false);
+      expect(find.text('NEW'), findsNothing);
+
+      await reveal(tester);
+      expect(find.text('NEW'), findsNothing);
     });
 
     testWidgets('a fresh card previews when Again and Good come back', (

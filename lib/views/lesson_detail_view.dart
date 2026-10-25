@@ -27,7 +27,7 @@ String lessonStudyLabel({
   required int remainingNewCards,
 }) {
   final fresh = newCards < remainingNewCards ? newCards : remainingNewCards;
-  return due + fresh > 0 ? 'Study ${due + fresh}' : 'Study';
+  return due + fresh > 0 ? 'Study (${due + fresh})' : 'Study';
 }
 
 class LessonDetailView extends StatefulWidget {
