@@ -13,6 +13,19 @@ import 'settings_dialog.dart';
 import 'vocab_merge_dialogs.dart';
 import 'yaml_import_view.dart';
 
+/// One muted line under a lesson title: its size, then what is waiting.
+String lessonSummary({
+  required int words,
+  required int due,
+  required int newCards,
+}) {
+  return [
+    '$words ${words == 1 ? 'word' : 'words'}',
+    if (due > 0) '$due due',
+    if (newCards > 0) '$newCards new',
+  ].join(' · ');
+}
+
 class LessonListView extends StatelessWidget {
   final VoidCallback? onToggleTheme;
   final bool isDarkMode;
@@ -316,6 +329,10 @@ class LessonListView extends StatelessWidget {
       context,
       MaterialPageRoute(builder: (_) => StudyView(lessonId: lesson.id)),
     );
+    void openLesson() => Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => LessonDetailView(lessonId: lesson.id)),
+    );
     return LayoutBuilder(
       builder: (context, constraints) {
         // On narrow screens the leading/trailing widgets would squeeze the title.
@@ -357,34 +374,24 @@ class LessonListView extends StatelessWidget {
             ),
             subtitle: Padding(
               padding: const EdgeInsets.only(top: 4),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                children: [
-                  Text('${lesson.vocabularies.length} Words • $active Cards'),
-                  if (due > 0)
-                    Badge(
-                      label: Text('$due Due'),
-                      backgroundColor: Colors.amber.shade800,
-                    ),
-                  if (newCards > 0)
-                    Badge(
-                      label: Text('$newCards New'),
-                      backgroundColor: theme.colorScheme.tertiary,
-                    ),
-                  if (compact && active > 0)
-                    FilledButton.tonalIcon(
-                      icon: const Icon(Icons.play_arrow, size: 18),
-                      label: const Text('Study'),
-                      onPressed: openStudy,
-                    ),
-                ],
+              child: Text(
+                lessonSummary(
+                  words: lesson.vocabularies.length,
+                  due: due,
+                  newCards: newCards,
+                ),
               ),
             ),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (!compact && active > 0) ...[
+                if (active > 0 && compact)
+                  IconButton.filledTonal(
+                    icon: const Icon(Icons.play_arrow),
+                    tooltip: 'Study',
+                    onPressed: openStudy,
+                  ),
+                if (active > 0 && !compact) ...[
                   FilledButton.tonalIcon(
                     icon: const Icon(Icons.play_arrow, size: 18),
                     label: const Text('Study'),
@@ -392,19 +399,17 @@ class LessonListView extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                 ],
-                IconButton(
-                  icon: const Icon(Icons.arrow_forward_ios, size: 16),
-                  tooltip: 'View Vocabulary',
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => LessonDetailView(lessonId: lesson.id),
-                    ),
+                if (!compact)
+                  IconButton(
+                    icon: const Icon(Icons.arrow_forward_ios, size: 16),
+                    tooltip: 'View Vocabulary',
+                    onPressed: openLesson,
                   ),
-                ),
                 PopupMenuButton<String>(
                   onSelected: (value) {
-                    if (value == 'move_up') {
+                    if (value == 'vocabulary') {
+                      openLesson();
+                    } else if (value == 'move_up') {
                       orderActions.moveUp();
                     } else if (value == 'move_down') {
                       orderActions.moveDown();
@@ -417,6 +422,25 @@ class LessonListView extends StatelessWidget {
                     }
                   },
                   itemBuilder: (context) => [
+                    if (compact) ...[
+                      const PopupMenuItem(
+                        value: 'vocabulary',
+                        child: Row(
+                          children: [
+                            Icon(Icons.list_alt, size: 18),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'View Vocabulary',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuDivider(),
+                    ],
                     PopupMenuItem(
                       value: 'move_up',
                       enabled: orderActions.canMoveUp,
@@ -424,7 +448,13 @@ class LessonListView extends StatelessWidget {
                         children: [
                           Icon(Icons.arrow_upward, size: 18),
                           SizedBox(width: 8),
-                          Text('Move up'),
+                          Expanded(
+                            child: Text(
+                              'Move up',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -435,7 +465,13 @@ class LessonListView extends StatelessWidget {
                         children: [
                           Icon(Icons.arrow_downward, size: 18),
                           SizedBox(width: 8),
-                          Text('Move down'),
+                          Expanded(
+                            child: Text(
+                              'Move down',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -466,7 +502,13 @@ class LessonListView extends StatelessWidget {
                         children: [
                           Icon(Icons.drive_file_move_outline, size: 18),
                           SizedBox(width: 8),
-                          Text('Move to Folder...'),
+                          Expanded(
+                            child: Text(
+                              'Move to Folder...',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -476,9 +518,13 @@ class LessonListView extends StatelessWidget {
                         children: [
                           Icon(Icons.delete, color: Colors.red, size: 18),
                           SizedBox(width: 8),
-                          Text(
-                            'Delete Lesson',
-                            style: TextStyle(color: Colors.red),
+                          Expanded(
+                            child: Text(
+                              'Delete Lesson',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(color: Colors.red),
+                            ),
                           ),
                         ],
                       ),
@@ -543,10 +589,7 @@ class LessonListView extends StatelessWidget {
     final availableTotal = availableDue + availableNew;
     final isDailyLimitReached =
         availableTotal == 0 && (totalDue > 0 || totalNew > 0);
-    final studyLabelParts = [
-      if (availableDue > 0) '$availableDue due',
-      if (availableNew > 0) '$availableNew new',
-    ];
+    final studyLabel = availableTotal > 0 ? 'Study $availableTotal' : 'Study';
 
     final dueNoticeParts = <String>[];
     if (provider.reviewsInLast24Hours > 0) {
@@ -555,11 +598,18 @@ class LessonListView extends StatelessWidget {
     if (totalRecentMistakes > 1) {
       dueNoticeParts.add('$totalRecentMistakes forgotten');
     }
+    if (availableDue > 0) dueNoticeParts.add('$availableDue due');
     if (availableNew > 0) dueNoticeParts.add('$availableNew new');
     if (availableTotal == 0) dueNoticeParts.add('$dueTomorrow due tomorrow');
     if (totalDue > availableDue && totalDue > 0) {
       dueNoticeParts.add('$totalDue remaining');
     }
+
+    // On a phone the two halves of the banner would each get ~150px, too
+    // narrow for the buttons, so the text sits above them instead.
+    final narrowBanner = MediaQuery.sizeOf(context).width < 560;
+    Widget bannerSlot(Widget child) =>
+        narrowBanner ? child : Expanded(child: child);
 
     return Scaffold(
       appBar: AppBar(
@@ -637,10 +687,16 @@ class LessonListView extends StatelessWidget {
                       color: theme.colorScheme.primaryContainer,
                       child: Padding(
                         padding: const EdgeInsets.all(20),
-                        child: Row(
+                        child: Flex(
+                          direction: narrowBanner
+                              ? Axis.vertical
+                              : Axis.horizontal,
+                          crossAxisAlignment: narrowBanner
+                              ? CrossAxisAlignment.stretch
+                              : CrossAxisAlignment.center,
                           children: [
-                            Expanded(
-                              child: Column(
+                            bannerSlot(
+                              Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
@@ -678,12 +734,14 @@ class LessonListView extends StatelessWidget {
                                 ],
                               ),
                             ),
-                            Expanded(
-                              flex: 1,
-                              child: Wrap(
+                            if (narrowBanner) const SizedBox(height: 14),
+                            bannerSlot(
+                              Wrap(
                                 spacing: 10,
                                 runSpacing: 8,
-                                alignment: WrapAlignment.end,
+                                alignment: narrowBanner
+                                    ? WrapAlignment.start
+                                    : WrapAlignment.end,
                                 crossAxisAlignment: WrapCrossAlignment.center,
                                 children: [
                                   if (totalRecentMistakes > 0)
@@ -732,7 +790,7 @@ class LessonListView extends StatelessWidget {
                                     label: Text(
                                       isDailyLimitReached
                                           ? 'Daily Limit'
-                                          : 'Study (${studyLabelParts.isEmpty ? '0 due' : studyLabelParts.join(' + ')})',
+                                          : studyLabel,
                                     ),
                                     onPressed: availableTotal == 0
                                         ? (isDailyLimitReached

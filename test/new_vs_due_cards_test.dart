@@ -9,6 +9,7 @@ import 'package:lingua_srs/providers/app_provider.dart';
 import 'package:lingua_srs/services/srs_service.dart';
 import 'package:lingua_srs/services/storage_service.dart';
 import 'package:lingua_srs/views/lesson_detail_view.dart';
+import 'package:lingua_srs/views/lesson_list_view.dart';
 import 'package:lingua_srs/views/study_view.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -496,21 +497,29 @@ void main() {
       expect(cardStatusLabel(scheduled), '6d');
     });
 
-    test('the lesson Study button counts only the new cards still allowed', () {
-      String label(int due, int fresh, int remaining, {bool compact = false}) =>
-          lessonStudyLabel(
-            due: due,
-            newCards: fresh,
-            remainingNewCards: remaining,
-            compact: compact,
-          );
+    test('the lesson Study button counts the cards the session will hold', () {
+      String label(int due, int fresh, int remaining) => lessonStudyLabel(
+        due: due,
+        newCards: fresh,
+        remainingNewCards: remaining,
+      );
 
-      expect(label(3, 20, 10), 'Study (3 Due + 10 New)');
-      expect(label(3, 4, 10), 'Study (3 Due + 4 New)');
-      expect(label(3, 20, 0), 'Study (3 Due)');
-      expect(label(0, 0, 10), 'Study (0 Due)');
-      expect(label(3, 20, 10, compact: true), 'Study 13');
-      expect(label(0, 0, 10, compact: true), 'Study');
+      expect(label(3, 20, 10), 'Study 13');
+      expect(label(3, 4, 10), 'Study 7');
+      expect(label(3, 20, 0), 'Study 3');
+      expect(label(0, 5, 0), 'Study');
+      expect(label(0, 0, 10), 'Study');
+    });
+
+    test('a lesson row summary gives its size, then what is waiting', () {
+      String summary(int words, int due, int fresh) =>
+          lessonSummary(words: words, due: due, newCards: fresh);
+
+      expect(summary(12, 2, 3), '12 words · 2 due · 3 new');
+      expect(summary(5, 2, 0), '5 words · 2 due');
+      expect(summary(5, 0, 3), '5 words · 3 new');
+      expect(summary(5, 0, 0), '5 words');
+      expect(summary(1, 0, 0), '1 word');
     });
   });
 }

@@ -258,6 +258,22 @@ class _StudyViewState extends State<StudyView> {
     return _sessionRatedCardIds.contains(_queue[_currentIndex].card.id);
   }
 
+  // The very first review of a never-seen card has nothing to judge Hard or
+  // Easy against, so it only offers Again/Good (still with their next-review
+  // hints, unlike repeat cards).
+  bool get _isFreshCard {
+    if (_isPracticeOnly || _currentIndex >= _queue.length) return false;
+    if (_isReviewingPast) {
+      final r = _recordAt(_currentIndex);
+      return r != null &&
+          r.wasFirstSessionRating &&
+          r.oldStatus == SrsStatus.isNew;
+    }
+    return _queue[_currentIndex].card.isNewCard;
+  }
+
+  bool get _offersOnlyAgainAndGood => _isRepeatCard || _isFreshCard;
+
   @override
   void initState() {
     super.initState();
@@ -408,8 +424,8 @@ class _StudyViewState extends State<StudyView> {
       _reRatePast(rating);
       return;
     }
-    final isRepeat = _isRepeatCard;
-    if (isRepeat && (rating == SrsRating.hard || rating == SrsRating.easy)) {
+    if (_offersOnlyAgainAndGood &&
+        (rating == SrsRating.hard || rating == SrsRating.easy)) {
       return;
     }
     context.read<AudioService>().stop();
@@ -501,7 +517,7 @@ class _StudyViewState extends State<StudyView> {
       _navigateForward();
       return;
     }
-    if (_isRepeatCard &&
+    if (_offersOnlyAgainAndGood &&
         (rating == SrsRating.hard || rating == SrsRating.easy)) {
       return;
     }
@@ -1577,7 +1593,7 @@ class _StudyViewState extends State<StudyView> {
                                   ),
                                 ),
                               ),
-                              if (!_isRepeatCard) ...[
+                              if (!_offersOnlyAgainAndGood) ...[
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: FilledButton.tonal(
@@ -1640,7 +1656,7 @@ class _StudyViewState extends State<StudyView> {
                                   ),
                                 ),
                               ),
-                              if (!_isRepeatCard) ...[
+                              if (!_offersOnlyAgainAndGood) ...[
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: FilledButton.tonal(
@@ -1678,7 +1694,7 @@ class _StudyViewState extends State<StudyView> {
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Text(
-                                  _isRepeatCard
+                                  _offersOnlyAgainAndGood
                                       ? 'Shortcuts: [Space] Flip • [1 / ⌫] Again • [3 / Enter] Good • [← / →] Back/Fwd • [Z] Undo'
                                       : 'Shortcuts: [Space] Flip • [1] Again • [2] Hard • [3 / Enter] Good • [4] Easy • [⌫] Again • [← / →] Back/Fwd • [Z] Undo',
                                   style: theme.textTheme.bodySmall?.copyWith(

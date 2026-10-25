@@ -19,17 +19,15 @@ String cardStatusLabel(SrsCard card) {
   return '${card.interval}d';
 }
 
-/// Label of a lesson's Study button. Only as many new cards as the daily
-/// limit still allows are counted, because that is all the session will hold.
+/// Label of a lesson's Study button: how many cards the session will hold.
+/// Only as many new cards as the daily limit still allows are counted.
 String lessonStudyLabel({
   required int due,
   required int newCards,
   required int remainingNewCards,
-  required bool compact,
 }) {
   final fresh = newCards < remainingNewCards ? newCards : remainingNewCards;
-  if (compact) return due + fresh > 0 ? 'Study ${due + fresh}' : 'Study';
-  return fresh > 0 ? 'Study ($due Due + $fresh New)' : 'Study ($due Due)';
+  return due + fresh > 0 ? 'Study ${due + fresh}' : 'Study';
 }
 
 class LessonDetailView extends StatefulWidget {
@@ -488,7 +486,6 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                 remainingNewCards: context
                     .watch<AppProvider>()
                     .remainingNewCards24h,
-                compact: compact,
               ),
             ),
             onPressed: lesson.activeCardsCount == 0

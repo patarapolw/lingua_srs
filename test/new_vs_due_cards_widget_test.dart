@@ -11,6 +11,7 @@ import 'package:lingua_srs/services/storage_service.dart';
 import 'package:lingua_srs/views/lesson_detail_view.dart';
 import 'package:lingua_srs/views/lesson_list_view.dart';
 import 'package:lingua_srs/views/settings_dialog.dart';
+import 'package:lingua_srs/views/study_view.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -115,9 +116,10 @@ void main() {
   Future<void> pumpWith(
     WidgetTester tester,
     AppProvider provider,
-    Widget home,
-  ) async {
-    tester.view.physicalSize = const Size(1200, 2400);
+    Widget home, {
+    Size size = const Size(1200, 2400),
+  }) async {
+    tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -136,16 +138,26 @@ void main() {
     await tester.pump();
   }
 
+  // The Study button of the dashboard banner (the bolt icon one).
+  Finder bannerStudyButton() => find.ancestor(
+    of: find.byIcon(Icons.bolt_rounded),
+    matching: find.byWidgetPredicate((widget) => widget is FilledButton),
+  );
+  Finder bannerLimitButton() => find.ancestor(
+    of: find.byIcon(Icons.check_circle_outline),
+    matching: find.byWidgetPredicate((widget) => widget is FilledButton),
+  );
+
   group('Dashboard', () {
     testWidgets('shows due and new cards separately', (tester) async {
       final provider = await loadedProvider(tester);
       await seedLesson(tester, provider, total: 5, due: 2);
       await pumpWith(tester, provider, const LessonListView());
 
-      expect(find.text('Study (2 due + 3 new)'), findsOneWidget);
+      expect(find.text('Study 5'), findsOneWidget);
+      expect(find.text('2 due • '), findsOneWidget);
       expect(find.text('3 new'), findsOneWidget);
-      expect(find.text('2 Due'), findsOneWidget);
-      expect(find.text('3 New'), findsOneWidget);
+      expect(find.text('5 words · 2 due · 3 new'), findsOneWidget);
     });
 
     testWidgets('does not count new cards as due', (tester) async {
@@ -153,9 +165,9 @@ void main() {
       await seedLesson(tester, provider, total: 4);
       await pumpWith(tester, provider, const LessonListView());
 
-      expect(find.text('Study (4 new)'), findsOneWidget);
-      expect(find.textContaining('due)'), findsNothing);
-      expect(find.text('4 Due'), findsNothing);
+      expect(find.text('Study 4'), findsOneWidget);
+      expect(find.text('4 new'), findsOneWidget);
+      expect(find.textContaining('due'), findsNothing);
     });
 
     testWidgets('caps the new count at the daily new-card limit', (
@@ -167,8 +179,10 @@ void main() {
       await seedLesson(tester, provider, total: 5);
       await pumpWith(tester, provider, const LessonListView());
 
-      expect(find.text('Study (2 new)'), findsOneWidget);
-      expect(find.text('Study (5 new)'), findsNothing);
+      expect(find.text('Study 2'), findsOneWidget);
+      expect(find.text('2 new'), findsOneWidget);
+      // The lesson row still says what the lesson holds.
+      expect(find.text('5 words · 5 new'), findsOneWidget);
     });
 
     testWidgets('a used-up review limit does not block new cards', (
@@ -180,7 +194,9 @@ void main() {
       await seedLesson(tester, provider, total: 5, due: 3);
       await pumpWith(tester, provider, const LessonListView());
 
-      expect(find.text('Study (1 due + 2 new)'), findsOneWidget);
+      expect(find.text('Study 3'), findsOneWidget);
+      expect(find.text('1 due • '), findsOneWidget);
+      expect(find.text('2 new • '), findsOneWidget);
       expect(find.text('3 remaining'), findsOneWidget);
     });
 
@@ -200,7 +216,9 @@ void main() {
       await pumpWith(tester, provider, const LessonListView());
 
       expect(provider.remainingNewCards24h, 0);
-      expect(find.text('Study (2 due)'), findsOneWidget);
+      expect(find.text('Study 2'), findsOneWidget);
+      expect(find.text('2 due'), findsOneWidget);
+      expect(find.text('4 words · 2 due · 1 new'), findsOneWidget);
     });
 
     testWidgets('says Daily Limit once both limits are used up', (
@@ -213,7 +231,7 @@ void main() {
       await pumpWith(tester, provider, const LessonListView());
 
       expect(find.text('Daily Limit'), findsOneWidget);
-      expect(find.textContaining('Study ('), findsNothing);
+      expect(bannerStudyButton(), findsNothing);
 
       await tester.tap(find.text('Daily Limit'));
       await tester.pumpAndSettle();
@@ -247,18 +265,167 @@ void main() {
       await seedLesson(tester, provider, total: 2, introducedRecently: 2);
       await pumpWith(tester, provider, const LessonListView());
 
-      expect(find.text('Study (0 due)'), findsOneWidget);
+      expect(bannerStudyButton(), findsOneWidget);
+      expect(
+        tester.widget<FilledButton>(bannerStudyButton()).onPressed,
+        isNull,
+      );
+      expect(bannerLimitButton(), findsNothing);
       expect(find.text('Daily Limit'), findsNothing);
     });
   });
 
+  group('Lesson list on a phone', () {
+    const phone = Size(400, 800);
+
+    testWidgets('a row is one summary line, without a Cards count', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      await seedLesson(tester, provider, total: 5, due: 2);
+      await pumpWith(tester, provider, const LessonListView(), size: phone);
+
+      expect(find.text('5 words · 2 due · 3 new'), findsOneWidget);
+      expect(find.textContaining('Cards'), findsNothing);
+      expect(find.textContaining('Words'), findsNothing);
+    });
+
+    testWidgets('a row has a study icon but no arrow button', (tester) async {
+      final provider = await loadedProvider(tester);
+      await seedLesson(tester, provider, total: 3, due: 1);
+      await pumpWith(tester, provider, const LessonListView(), size: phone);
+
+      expect(find.byTooltip('Study'), findsOneWidget);
+      expect(find.byTooltip('View Vocabulary'), findsNothing);
+    });
+
+    testWidgets('a lesson with nothing active has no study icon', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      final lesson = await seedLesson(tester, provider, total: 2);
+      for (final vocab in lesson.vocabularies) {
+        vocab.cardTargetToNative.isEnabled = false;
+      }
+      await pumpWith(tester, provider, const LessonListView(), size: phone);
+
+      expect(find.byTooltip('Study'), findsNothing);
+    });
+
+    testWidgets('a row keeps its tap, which opens the lesson reader', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      await seedLesson(tester, provider, total: 2, title: 'Tap me');
+      await pumpWith(tester, provider, const LessonListView(), size: phone);
+
+      // Not tapped: the reader embeds a WebView, which has no platform
+      // implementation under flutter test.
+      final tile = tester.widget<ListTile>(
+        find.widgetWithText(ListTile, 'Tap me'),
+      );
+      expect(tile.onTap, isNotNull);
+    });
+
+    testWidgets('the row menu gives phones the vocabulary view', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      await seedLesson(tester, provider, total: 2);
+      await pumpWith(tester, provider, const LessonListView(), size: phone);
+
+      await tester.tap(find.byType(PopupMenuButton<String>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('View Vocabulary'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(LessonDetailView), findsOneWidget);
+    });
+
+    testWidgets('on a desktop the arrow opens it and the menu does not', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      await seedLesson(tester, provider, total: 2);
+      await pumpWith(tester, provider, const LessonListView());
+
+      await tester.tap(find.byType(PopupMenuButton<String>));
+      await tester.pumpAndSettle();
+      expect(find.text('View Vocabulary'), findsNothing);
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('View Vocabulary'));
+      await tester.pumpAndSettle();
+      expect(find.byType(LessonDetailView), findsOneWidget);
+    });
+
+    testWidgets('the study icon starts a lesson session', (tester) async {
+      final provider = await loadedProvider(tester);
+      await seedLesson(tester, provider, total: 2, due: 1);
+      await pumpWith(tester, provider, const LessonListView(), size: phone);
+
+      await tester.tap(find.byTooltip('Study'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(StudyView), findsOneWidget);
+    });
+
+    testWidgets('the banner puts its buttons below the text', (tester) async {
+      final provider = await loadedProvider(tester);
+      await seedLesson(tester, provider, total: 3, due: 1);
+      await pumpWith(tester, provider, const LessonListView(), size: phone);
+
+      final title = tester.getBottomLeft(find.text('Daily Review Queue'));
+      final button = tester.getTopLeft(bannerStudyButton());
+      expect(button.dy, greaterThan(title.dy));
+      expect(button.dx, lessThan(title.dx + 100));
+    });
+
+    testWidgets('the banner keeps text and buttons side by side on a desktop', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      await seedLesson(tester, provider, total: 3, due: 1);
+      await pumpWith(tester, provider, const LessonListView());
+
+      final title = tester.getTopLeft(find.text('Daily Review Queue'));
+      final button = tester.getTopLeft(bannerStudyButton());
+      expect(button.dx, greaterThan(title.dx + 300));
+    });
+
+    testWidgets('nothing overflows on a small phone with a long title', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      await seedLesson(
+        tester,
+        provider,
+        total: 8,
+        due: 3,
+        title: 'A rather long lesson title that has to wrap somewhere',
+      );
+      await pumpWith(
+        tester,
+        provider,
+        const LessonListView(),
+        size: const Size(320, 640),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Study 8'), findsOneWidget);
+    });
+  });
+
   group('Lesson detail', () {
-    testWidgets('Study button counts due and new cards', (tester) async {
+    testWidgets('Study button counts due and new cards together', (
+      tester,
+    ) async {
       final provider = await loadedProvider(tester);
       final lesson = await seedLesson(tester, provider, total: 3, due: 1);
       await pumpWith(tester, provider, LessonDetailView(lessonId: lesson.id));
 
-      expect(find.text('Study (1 Due + 2 New)'), findsOneWidget);
+      expect(find.text('Study 3'), findsOneWidget);
     });
 
     testWidgets('Study button counts only the new cards still allowed', (
@@ -270,17 +437,22 @@ void main() {
       final lesson = await seedLesson(tester, provider, total: 3);
       await pumpWith(tester, provider, LessonDetailView(lessonId: lesson.id));
 
-      expect(find.text('Study (0 Due + 1 New)'), findsOneWidget);
+      expect(find.text('Study 1'), findsOneWidget);
     });
 
-    testWidgets('Study button omits New when none are left to start', (
+    testWidgets('Study button is just Study when nothing is waiting', (
       tester,
     ) async {
       final provider = await loadedProvider(tester);
-      final lesson = await seedLesson(tester, provider, total: 2, due: 2);
+      final lesson = await seedLesson(
+        tester,
+        provider,
+        total: 2,
+        introducedRecently: 2,
+      );
       await pumpWith(tester, provider, LessonDetailView(lessonId: lesson.id));
 
-      expect(find.text('Study (2 Due)'), findsOneWidget);
+      expect(find.text('Study'), findsOneWidget);
     });
 
     testWidgets('card chips say New for unseen cards and Due for due ones', (
@@ -292,6 +464,108 @@ void main() {
 
       expect(find.text('KO ➔ EN (New)', skipOffstage: false), findsNWidgets(2));
       expect(find.text('KO ➔ EN (Due)', skipOffstage: false), findsOneWidget);
+    });
+  });
+
+  group('Study ratings', () {
+    Future<void> reveal(WidgetTester tester) async {
+      await tester.tap(find.textContaining('Show Answer'));
+      await tester.pumpAndSettle();
+    }
+
+    // Keyboard tests reveal with Enter instead, so no button tap takes focus
+    // away from the study view's key listener.
+    Future<AppProvider> openStudy(
+      WidgetTester tester, {
+      int due = 0,
+      int total = 1,
+      bool revealWithButton = true,
+    }) async {
+      final provider = await loadedProvider(tester);
+      final lesson = await seedLesson(tester, provider, total: total, due: due);
+      await pumpWith(tester, provider, StudyView(lessonId: lesson.id));
+      if (revealWithButton) {
+        await reveal(tester);
+      } else {
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+      }
+      return provider;
+    }
+
+    testWidgets('a fresh card offers only Again and Good', (tester) async {
+      await openStudy(tester);
+
+      expect(find.textContaining('Again'), findsOneWidget);
+      expect(find.textContaining('Good'), findsOneWidget);
+      expect(find.text('Hard'), findsNothing);
+      expect(find.text('Easy'), findsNothing);
+    });
+
+    testWidgets('a fresh card previews when Again and Good come back', (
+      tester,
+    ) async {
+      await openStudy(tester);
+
+      expect(find.text('1h'), findsOneWidget);
+      expect(find.text('1d'), findsOneWidget);
+    });
+
+    testWidgets('a card that was seen before offers all four ratings', (
+      tester,
+    ) async {
+      await openStudy(tester, due: 1);
+
+      expect(find.textContaining('Again'), findsOneWidget);
+      expect(find.text('Hard'), findsOneWidget);
+      expect(find.textContaining('Good'), findsOneWidget);
+      expect(find.text('Easy'), findsOneWidget);
+    });
+
+    testWidgets('Good on a fresh card introduces it', (tester) async {
+      final provider = await openStudy(tester);
+
+      await tester.tap(find.textContaining('Good'));
+      await tester.pumpAndSettle();
+
+      expect(provider.newCardsIntroducedLast24h, 1);
+      expect(provider.remainingNewCards24h, 9);
+    });
+
+    testWidgets('the 2 and 4 keys do nothing on a fresh card', (tester) async {
+      final provider = await openStudy(tester, revealWithButton: false);
+      expect(find.textContaining('Good'), findsOneWidget);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.digit2);
+      await tester.sendKeyEvent(LogicalKeyboardKey.digit4);
+      await tester.pumpAndSettle();
+
+      expect(provider.newCardsIntroducedLast24h, 0);
+      expect(find.textContaining('Good'), findsOneWidget);
+    });
+
+    testWidgets('the 3 key still rates a fresh card Good', (tester) async {
+      final provider = await openStudy(tester, revealWithButton: false);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.digit3);
+      await tester.pumpAndSettle();
+
+      expect(provider.newCardsIntroducedLast24h, 1);
+    });
+
+    testWidgets('the 2 and 4 keys still work on a card seen before', (
+      tester,
+    ) async {
+      final provider = await openStudy(tester, due: 1, revealWithButton: false);
+      final card =
+          provider.lessons.single.vocabularies.single.cardTargetToNative;
+      final before = card.interval;
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.digit4);
+      await tester.pumpAndSettle();
+
+      expect(card.lastRating, SrsRating.easy);
+      expect(card.interval, greaterThan(before));
     });
   });
 
