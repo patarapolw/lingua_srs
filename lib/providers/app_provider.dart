@@ -12,6 +12,7 @@ import '../models/shared_vocab.dart';
 import '../models/srs_card.dart';
 import '../models/vocab_item.dart';
 import '../models/vocab_merge_record.dart';
+import '../services/ai_discussion_search.dart';
 import '../services/deepseek_service.dart';
 import '../services/srs_service.dart';
 import '../services/storage_service.dart';
@@ -339,6 +340,60 @@ class AppProvider extends ChangeNotifier {
     if (_aiDiscussions.remove(discussionId) == null) return;
     await StorageService.saveAiDiscussions(_aiDiscussions);
     notifyListeners();
+  }
+
+  /// Every saved discussion with the lesson, vocabulary and sentence it is
+  /// about, for listing and searching.
+  List<AiDiscussionSummary> get aiDiscussionSummaries => [
+    for (final entry in _aiDiscussions.entries)
+      AiDiscussionSummary.resolve(
+        id: entry.key,
+        messages: entry.value,
+        lessons: _lessons,
+        sentenceById: getSentenceById,
+      ),
+  ];
+
+  /// Earlier discussions worth showing when [discussionId] is opened: other
+  /// sentences of the same word first, then related words.
+  List<AiDiscussionSuggestion> relatedAiDiscussions(
+    String discussionId, {
+    int limit = 6,
+  }) => AiDiscussionSuggestions.forDiscussion(
+    discussionId: discussionId,
+    groups: vocabGroups,
+    discussions: aiDiscussionSummaries,
+    limit: limit,
+  );
+
+  /// Moves the saved discussions of [absorbedIds] to [survivorId], because
+  /// merged words share one id afterwards and the old ids would be orphaned.
+  /// Threads about the same sentence are joined, oldest message first.
+  bool _moveAiDiscussions(Set<String> absorbedIds, String survivorId) {
+    var changed = false;
+    for (final key in List<String>.of(_aiDiscussions.keys)) {
+      final vocabId = AiDiscussionIds.vocabIdFrom(key);
+      if (vocabId == null || !absorbedIds.contains(vocabId)) continue;
+      final moved = _aiDiscussions.remove(key)!;
+      final newKey = AiDiscussionIds.forVocab(
+        survivorId,
+        AiDiscussionIds.sentenceIdFrom(key),
+      );
+      final merged = [...?_aiDiscussions[newKey], ...moved];
+      if (merged.every((message) => message.createdAt != null)) {
+        final indexed = [for (var i = 0; i < merged.length; i++) (i, merged[i])]
+          ..sort((a, b) {
+            final byTime = a.$2.createdAt!.compareTo(b.$2.createdAt!);
+            return byTime != 0 ? byTime : a.$1.compareTo(b.$1);
+          });
+        merged
+          ..clear()
+          ..addAll(indexed.map((entry) => entry.$2));
+      }
+      _aiDiscussions[newKey] = merged;
+      changed = true;
+    }
+    return changed;
   }
 
   // Sentence Pool lookup
@@ -1086,6 +1141,10 @@ class AppProvider extends ChangeNotifier {
         ..id = survivor.id
         ..idIsExplicit = true
         ..shared = shared;
+    }
+
+    if (_moveAiDiscussions(absorbed, survivor.id)) {
+      await StorageService.saveAiDiscussions(_aiDiscussions);
     }
 
     final record = VocabMergeRecord(

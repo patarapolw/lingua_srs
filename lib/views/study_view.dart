@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 
 import '../models/srs_card.dart';
 import '../providers/app_provider.dart';
+import '../services/ai_discussion_search.dart';
 import '../services/audio_service.dart';
 import '../services/srs_service.dart';
 import '../widgets/audio_button.dart';
@@ -717,7 +718,7 @@ class _StudyViewState extends State<StudyView> {
     showDialog<void>(
       context: context,
       builder: (_) => AiDiscussionDialog(
-        discussionId: '${item.vocab.id}:${sentence?.id ?? 'no-sentence'}',
+        discussionId: AiDiscussionIds.forVocab(item.vocab.id, sentence?.id),
         targetWord: item.vocab.targetWord,
         translation: item.vocab.translation,
         targetLanguage: item.lesson.targetLanguage,

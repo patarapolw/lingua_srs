@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../models/ai_discussion_message.dart';
 import '../models/lesson.dart';
 import '../providers/app_provider.dart';
+import '../services/ai_discussion_search.dart';
 import '../services/deepseek_service.dart';
 import '../services/lesson_ai_prompt.dart';
 import '../widgets/markdown_content.dart';
@@ -44,9 +45,17 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
   String _streamingAnswer = '';
   bool _wasAtBottom = true;
 
+  /// Earlier discussions about this word or related ones. Only looked up for a
+  /// discussion that has no messages yet, and once, when it opens.
+  List<AiDiscussionSuggestion> _earlier = const [];
+
   @override
   void initState() {
     super.initState();
+    final provider = context.read<AppProvider>();
+    if (provider.getAiDiscussion(widget.discussionId).isEmpty) {
+      _earlier = provider.relatedAiDiscussions(widget.discussionId);
+    }
     _messagesController.addListener(() {
       final position = _messagesController.position;
       _wasAtBottom = position.maxScrollExtent - position.pixels < 80;
@@ -66,6 +75,14 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
       builder: (_) => const SettingsDialog(),
     );
     if (mounted) setState(() {});
+  }
+
+  void _openEarlier(AiDiscussionSuggestion suggestion) {
+    final dialog = aiDiscussionDialogFor(suggestion.discussion);
+    if (dialog == null) return;
+    Navigator.of(context).pushReplacement(
+      DialogRoute<void>(context: context, builder: (_) => dialog),
+    );
   }
 
   Future<void> _deleteDiscussion() async {
@@ -335,6 +352,24 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                                   textAlign: TextAlign.center,
                                 ),
                                 const SizedBox(height: 12),
+                                if (_earlier.isNotEmpty) ...[
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      'Earlier discussions',
+                                      style: theme.textTheme.labelMedium,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  for (final suggestion in _earlier)
+                                    _EarlierDiscussionTile(
+                                      suggestion: suggestion,
+                                      onTap: _sending
+                                          ? null
+                                          : () => _openEarlier(suggestion),
+                                    ),
+                                  const SizedBox(height: 12),
+                                ],
                                 Align(
                                   alignment: Alignment.centerLeft,
                                   child: Text(
@@ -502,6 +537,91 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// The Ask AI dialog for a saved discussion, or null when the lesson it was
+/// about has been deleted.
+AiDiscussionDialog? aiDiscussionDialogFor(AiDiscussionSummary discussion) {
+  if (discussion.isLesson && discussion.lesson == null) return null;
+  return AiDiscussionDialog(
+    discussionId: discussion.id,
+    targetWord:
+        discussion.vocab?.targetWord ??
+        (discussion.isLesson ? discussion.lesson!.displayTitle : discussion.id),
+    translation: discussion.vocab?.translation ?? '',
+    targetLanguage: discussion.lesson?.targetLanguage ?? 'ko',
+    nativeLanguage: discussion.lesson?.nativeLanguage ?? 'en',
+    sentenceTarget: discussion.sentence?.targetText,
+    sentenceTranslation: discussion.sentence?.translationText,
+    lesson: discussion.isLesson ? discussion.lesson : null,
+  );
+}
+
+/// Opens a saved discussion; does nothing when its lesson is gone.
+Future<void> showAiDiscussion(
+  BuildContext context,
+  AiDiscussionSummary discussion,
+) async {
+  final dialog = aiDiscussionDialogFor(discussion);
+  if (dialog == null) return;
+  await showDialog<void>(context: context, builder: (_) => dialog);
+}
+
+class _EarlierDiscussionTile extends StatelessWidget {
+  const _EarlierDiscussionTile({required this.suggestion, required this.onTap});
+
+  final AiDiscussionSuggestion suggestion;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final discussion = suggestion.discussion;
+    final vocab = discussion.vocab;
+    final sentence = discussion.sentence?.targetText.trim() ?? '';
+    return Card(
+      margin: const EdgeInsets.only(bottom: 6),
+      child: ListTile(
+        dense: true,
+        leading: Icon(
+          suggestion.sameWord ? Icons.forum_outlined : Icons.link,
+          size: 20,
+        ),
+        title: Text(
+          vocab == null || vocab.translation.trim().isEmpty
+              ? discussion.title
+              : '${vocab.targetWord} — ${vocab.translation}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              suggestion.label,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.primary,
+              ),
+            ),
+            if (suggestion.sameWord && sentence.isNotEmpty)
+              Text(
+                sentence,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontStyle: FontStyle.italic),
+              ),
+            Text(
+              discussion.preview,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+        onTap: onTap,
       ),
     );
   }
