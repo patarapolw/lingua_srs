@@ -472,6 +472,100 @@ void main() {
     });
   });
 
+  group('AiDiscussionRelated', () {
+    final apple = _word('v1', '사과', 'apple');
+    final appleForm = _word('v5', '사과를', 'apple');
+    final appleTwin = _word('v2', '애플', 'apple');
+    final school = _word('v3', '학교', 'school');
+    final groups = [apple, appleForm, appleTwin, school].map(_group).toList();
+
+    AiDiscussionSummary talk(
+      String id,
+      int minutes, {
+      VocabItem? vocab,
+      String? said,
+    }) => _talk(id, [
+      _msg('user', said ?? 'Question for $id', minutes: minutes),
+    ], vocab: vocab);
+
+    final same = talk('v1:s1', 10, vocab: apple);
+    final twin = talk('v2:s1', 30, vocab: appleTwin);
+    final schoolTalk = talk('v3:s1', 40, vocab: school);
+    final mention = talk('v3:s2', 3, vocab: school, said: 'Compare it with 사과');
+    final empty = _talk('v1:s9', const [], vocab: apple);
+    final lessonTalk = _talk(LessonAiPrompt.discussionId('L1'), [
+      _msg('user', 'Summarise', minutes: 50),
+    ]);
+    final all = [same, twin, schoolTalk, mention, empty, lessonTalk];
+
+    List<AiDiscussionSuggestion> panel(
+      String query, {
+      String id = 'v1:s3',
+      int limit = 30,
+    }) => AiDiscussionRelated.forPanel(
+      discussionId: id,
+      query: query,
+      suggestedQuery: '사과',
+      groups: groups,
+      discussions: all,
+      limit: limit,
+    );
+
+    List<String> idsOf(List<AiDiscussionSuggestion> list) => [
+      for (final suggestion in list) suggestion.discussion.id,
+    ];
+
+    test('starts with the suggestions, then others that mention the word', () {
+      final result = panel('사과');
+
+      expect(idsOf(result), ['v1:s1', 'v2:s1', 'v3:s2']);
+      expect(result.map((s) => s.label), ['Same word', 'Same meaning', null]);
+    });
+
+    test('lists a discussion once even when it is also a search hit', () {
+      final ids = idsOf(panel('사과'));
+
+      expect(ids.toSet(), hasLength(ids.length));
+    });
+
+    test('once the box is edited it is a plain search', () {
+      final result = panel('school');
+
+      expect(idsOf(result), ['v3:s1', 'v3:s2']);
+      expect(result.every((s) => s.label == null), isTrue);
+    });
+
+    test('an emptied box lists everything else, newest first', () {
+      expect(idsOf(panel('')), [
+        lessonTalk.id,
+        'v3:s1',
+        'v2:s1',
+        'v1:s1',
+        'v3:s2',
+      ]);
+    });
+
+    test('spaces around the suggested word do not count as an edit', () {
+      expect(idsOf(panel('  사과 ')), idsOf(panel('사과')));
+    });
+
+    test('never lists the discussion being viewed or an empty one', () {
+      final ids = idsOf(panel('', id: 'v1:s1'));
+
+      expect(ids, isNot(contains('v1:s1')));
+      expect(ids, isNot(contains('v1:s9')));
+    });
+
+    test('keeps the limit', () {
+      expect(panel('', limit: 2), hasLength(2));
+      expect(panel('사과', limit: 1), hasLength(1));
+    });
+
+    test('says nothing when nothing matches', () {
+      expect(panel('zebra'), isEmpty);
+    });
+  });
+
   group('merging vocabulary', () {
     final t1 = _base.add(const Duration(minutes: 1));
     final t2 = _base.add(const Duration(minutes: 2));

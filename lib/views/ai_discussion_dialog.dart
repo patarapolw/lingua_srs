@@ -8,7 +8,9 @@ import '../providers/app_provider.dart';
 import '../services/ai_discussion_search.dart';
 import '../services/deepseek_service.dart';
 import '../services/lesson_ai_prompt.dart';
+import '../widgets/ai_discussion_suggestion_tile.dart';
 import '../widgets/markdown_content.dart';
+import 'related_ai_discussions_sheet.dart';
 import 'settings_dialog.dart';
 
 class AiDiscussionDialog extends StatefulWidget {
@@ -83,6 +85,18 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
     Navigator.of(context).pushReplacement(
       DialogRoute<void>(context: context, builder: (_) => dialog),
     );
+  }
+
+  /// Opens a related discussion on top of this one, so closing it comes back
+  /// to this chat.
+  Future<void> _openRelated() async {
+    final chosen = await showRelatedAiDiscussions(
+      context,
+      discussionId: widget.discussionId,
+      suggestedQuery: widget.targetWord,
+    );
+    if (chosen == null || !mounted) return;
+    await showAiDiscussion(context, chosen);
   }
 
   Future<void> _deleteDiscussion() async {
@@ -303,6 +317,13 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                         ],
                       ),
                     ),
+                    // A lesson chat is about no single word to relate.
+                    if (widget.lesson == null)
+                      IconButton(
+                        tooltip: 'Related discussions',
+                        onPressed: _sending ? null : _openRelated,
+                        icon: const Icon(Icons.manage_search),
+                      ),
                     IconButton(
                       tooltip: 'DeepSeek settings',
                       onPressed: _openSettings,
@@ -362,7 +383,7 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                                   ),
                                   const SizedBox(height: 4),
                                   for (final suggestion in _earlier)
-                                    _EarlierDiscussionTile(
+                                    AiDiscussionSuggestionTile(
                                       suggestion: suggestion,
                                       onTap: _sending
                                           ? null
@@ -568,61 +589,4 @@ Future<void> showAiDiscussion(
   final dialog = aiDiscussionDialogFor(discussion);
   if (dialog == null) return;
   await showDialog<void>(context: context, builder: (_) => dialog);
-}
-
-class _EarlierDiscussionTile extends StatelessWidget {
-  const _EarlierDiscussionTile({required this.suggestion, required this.onTap});
-
-  final AiDiscussionSuggestion suggestion;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final discussion = suggestion.discussion;
-    final vocab = discussion.vocab;
-    final sentence = discussion.sentence?.targetText.trim() ?? '';
-    return Card(
-      margin: const EdgeInsets.only(bottom: 6),
-      child: ListTile(
-        dense: true,
-        leading: Icon(
-          suggestion.sameWord ? Icons.forum_outlined : Icons.link,
-          size: 20,
-        ),
-        title: Text(
-          vocab == null || vocab.translation.trim().isEmpty
-              ? discussion.title
-              : '${vocab.targetWord} — ${vocab.translation}',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              suggestion.label,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: theme.colorScheme.primary,
-              ),
-            ),
-            if (suggestion.sameWord && sentence.isNotEmpty)
-              Text(
-                sentence,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontStyle: FontStyle.italic),
-              ),
-            Text(
-              discussion.preview,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
-        onTap: onTap,
-      ),
-    );
-  }
 }

@@ -32,10 +32,12 @@ lingua_srs/
 │   │   ├── yaml_import_view.dart      # File/folder import, editor, validator & preview
 │   │   ├── vocab_edit_dialog.dart     # On-the-go editor for any field
 │   │   ├── ai_discussion_dialog.dart  # AI-assisted quiz discussion chat
-│   │   ├── recent_ai_discussions_view.dart # Recent Discussions tab
+│   │   ├── recent_ai_discussions_view.dart # Recent Discussions tab, with search
+│   │   ├── related_ai_discussions_sheet.dart # Related discussions panel of an AI chat
 │   │   └── deepseek_settings_dialog.dart # DeepSeek API key settings
 │   └── widgets/
 │       ├── adaptive_scaffold.dart     # Responsive layout (Rail vs BottomNav)
+│       ├── ai_discussion_suggestion_tile.dart # One suggested AI discussion and why
 │       ├── audio_button.dart          # Audio play/stop indicator
 │       ├── lesson_hierarchy_view.dart # Lesson folder tree with reordering
 │       ├── lesson_html_view.dart      # Lesson Markdown reader (WebView document)

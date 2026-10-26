@@ -460,4 +460,211 @@ void main() {
       expect(find.byType(AiDiscussionDialog), findsNothing);
     });
   });
+
+  group('Related discussions panel', () {
+    final current = [_msg('user', 'Current question', 1)];
+    final older = [
+      _msg('user', 'Why 사과 and not 능금?', 2),
+      _msg('assistant', 'Because it is the common word.', 3),
+    ];
+    final twin = [_msg('user', 'Is 애플 a loanword?', 4)];
+    final school = [_msg('user', 'How is 학교 used?', 5)];
+    final mention = [_msg('user', 'Compare with 사과 please', 6)];
+    final saved = {
+      'v-apple:cur': current,
+      'v-apple:old': older,
+      'v-twin:old': twin,
+      'v-school:old': school,
+      'v-school:mention': mention,
+    };
+
+    Future<void> openChat(
+      WidgetTester tester,
+      AppProvider provider,
+      String discussionId, {
+      Lesson? lesson,
+    }) async {
+      await pumpWith(
+        tester,
+        provider,
+        Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) => AiDiscussionDialog(
+                  discussionId: discussionId,
+                  targetWord: lesson?.displayTitle ?? '사과',
+                  translation: lesson == null ? 'apple' : '',
+                  targetLanguage: 'ko',
+                  nativeLanguage: 'en',
+                  lesson: lesson,
+                ),
+              ),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+    }
+
+    Finder inSheet(Finder finder) =>
+        find.descendant(of: find.byType(BottomSheet), matching: finder);
+
+    Future<void> openPanel(WidgetTester tester) async {
+      await tester.tap(find.byTooltip('Related discussions'));
+      await tester.pumpAndSettle();
+    }
+
+    Future<AppProvider> chatWithPanel(
+      WidgetTester tester, {
+      Map<String, List<AiDiscussionMessage>>? discussions,
+      String id = 'v-apple:cur',
+    }) async {
+      final (provider, _) = await loadedProvider(
+        tester,
+        discussions: discussions ?? saved,
+      );
+      await openChat(tester, provider, id);
+      await openPanel(tester);
+      return provider;
+    }
+
+    testWidgets('an empty chat has the button', (tester) async {
+      final (provider, _) = await loadedProvider(tester);
+      await openChat(tester, provider, 'v-apple:new');
+
+      expect(find.byTooltip('Related discussions'), findsOneWidget);
+    });
+
+    testWidgets('a chat with messages has it too', (tester) async {
+      final (provider, _) = await loadedProvider(tester, discussions: saved);
+      await openChat(tester, provider, 'v-apple:cur');
+
+      expect(find.byTooltip('Related discussions'), findsOneWidget);
+    });
+
+    testWidgets('a lesson chat has none', (tester) async {
+      final (provider, lesson) = await loadedProvider(tester);
+      await openChat(
+        tester,
+        provider,
+        LessonAiPrompt.discussionId(lesson.id),
+        lesson: lesson,
+      );
+
+      expect(find.byTooltip('Related discussions'), findsNothing);
+    });
+
+    testWidgets('opens with the search box showing the word', (tester) async {
+      await chatWithPanel(tester);
+
+      expect(inSheet(find.text('Related discussions')), findsOneWidget);
+      final field = tester.widget<TextField>(inSheet(find.byType(TextField)));
+      expect(field.controller!.text, '사과');
+    });
+
+    testWidgets('lists the suggestions without typing anything', (
+      tester,
+    ) async {
+      await chatWithPanel(tester);
+
+      expect(inSheet(find.text('Same word')), findsOneWidget);
+      expect(inSheet(find.text('Why 사과 and not 능금?')), findsOneWidget);
+      expect(inSheet(find.text('Same meaning')), findsOneWidget);
+      expect(inSheet(find.text('애플 — apple')), findsOneWidget);
+      // Another word that only mentions it comes after, unlabelled.
+      expect(inSheet(find.text('Compare with 사과 please')), findsOneWidget);
+      // Neither an unrelated word nor the chat being viewed.
+      expect(inSheet(find.text('How is 학교 used?')), findsNothing);
+      expect(inSheet(find.text('Current question')), findsNothing);
+    });
+
+    testWidgets('editing the search turns it into a plain search', (
+      tester,
+    ) async {
+      await chatWithPanel(tester);
+
+      await tester.enterText(inSheet(find.byType(TextField)), 'school');
+      await tester.pump();
+
+      expect(inSheet(find.text('How is 학교 used?')), findsOneWidget);
+      expect(inSheet(find.text('Compare with 사과 please')), findsOneWidget);
+      expect(inSheet(find.text('Is 애플 a loanword?')), findsNothing);
+      expect(inSheet(find.text('Same word')), findsNothing);
+    });
+
+    testWidgets('clearing the search lists every other discussion', (
+      tester,
+    ) async {
+      await chatWithPanel(tester);
+
+      await tester.tap(
+        find.descendant(
+          of: find.byType(BottomSheet),
+          matching: find.byTooltip('Clear search'),
+        ),
+      );
+      await tester.pump();
+
+      for (final preview in [
+        'Why 사과 and not 능금?',
+        'Is 애플 a loanword?',
+        'How is 학교 used?',
+        'Compare with 사과 please',
+      ]) {
+        expect(inSheet(find.text(preview)), findsOneWidget, reason: preview);
+      }
+      expect(inSheet(find.text('Current question')), findsNothing);
+      final field = tester.widget<TextField>(inSheet(find.byType(TextField)));
+      expect(field.controller!.text, isEmpty);
+    });
+
+    testWidgets('says when nothing is related yet', (tester) async {
+      await chatWithPanel(tester, discussions: {'v-apple:cur': current});
+
+      expect(
+        inSheet(find.textContaining('No related discussions yet')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('says when a search finds nothing', (tester) async {
+      await chatWithPanel(tester);
+
+      await tester.enterText(inSheet(find.byType(TextField)), 'zebra');
+      await tester.pump();
+
+      expect(
+        inSheet(find.text('No discussions match "zebra".')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('picking one opens it on top of this chat', (tester) async {
+      await chatWithPanel(tester);
+
+      await tester.tap(inSheet(find.text('Is 애플 a loanword?')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(BottomSheet), findsNothing);
+      expect(find.byType(AiDiscussionDialog), findsNWidgets(2));
+    });
+
+    testWidgets('closing the opened one comes back to this chat', (
+      tester,
+    ) async {
+      await chatWithPanel(tester);
+      await tester.tap(inSheet(find.text('Is 애플 a loanword?')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Close').last);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AiDiscussionDialog), findsOneWidget);
+      expect(find.text('Current question'), findsOneWidget);
+    });
+  });
 }

@@ -264,13 +264,14 @@ class AiDiscussionSuggestion {
   final Set<PickerMatch> matches;
   final int score;
 
-  String get label {
+  /// Why this discussion is shown; null for a plain search hit.
+  String? get label {
     if (sameWord) return 'Same word';
     if (matches.contains(PickerMatch.sameKorean)) return 'Same spelling';
     if (matches.contains(PickerMatch.similarKorean)) return 'Similar word';
     if (matches.contains(PickerMatch.sameMeaning)) return 'Same meaning';
     if (matches.contains(PickerMatch.similarMeaning)) return 'Similar meaning';
-    return 'Related';
+    return null;
   }
 }
 
@@ -333,5 +334,47 @@ class AiDiscussionSuggestions {
       result.addAll(related);
     }
     return result.length > limit ? result.sublist(0, limit) : result;
+  }
+}
+
+/// What the Related discussions panel lists.
+class AiDiscussionRelated {
+  /// While [query] is still [suggestedQuery] (the learner has not edited the
+  /// box) the list starts with the suggestions for [discussionId], then adds
+  /// whatever else the search finds. Any other query is a plain search, and an
+  /// empty one lists everything, newest first. The discussion being viewed and
+  /// empty ones are never listed.
+  static List<AiDiscussionSuggestion> forPanel({
+    required String discussionId,
+    required String query,
+    required String suggestedQuery,
+    required List<VocabGroup> groups,
+    required Iterable<AiDiscussionSummary> discussions,
+    int limit = 30,
+  }) {
+    final others = [
+      for (final discussion in discussions)
+        if (discussion.id != discussionId && discussion.messages.isNotEmpty)
+          discussion,
+    ];
+    final result = <AiDiscussionSuggestion>[];
+    final seen = <String>{};
+    if (query.trim() == suggestedQuery.trim()) {
+      for (final suggestion in AiDiscussionSuggestions.forDiscussion(
+        discussionId: discussionId,
+        groups: groups,
+        discussions: others,
+        limit: limit,
+      )) {
+        if (seen.add(suggestion.discussion.id)) result.add(suggestion);
+      }
+    }
+    for (final discussion in AiDiscussionSearch.search(query, others)) {
+      if (result.length >= limit) break;
+      if (seen.add(discussion.id)) {
+        result.add(AiDiscussionSuggestion(discussion, sameWord: false));
+      }
+    }
+    return result;
   }
 }
