@@ -28,14 +28,25 @@ void main() {
     await storageDirectory.delete(recursive: true);
   });
 
-  SrsCard dueCard({int interval = 6, SrsStatus status = SrsStatus.review}) =>
-      SrsCard(
-        direction: CardDirection.targetToNative,
-        status: status,
-        interval: interval,
-        repetitions: 3,
-        dueDate: DateTime.now().subtract(const Duration(minutes: 5)),
-      );
+  /// A card that is due now, last scheduled [gap] after its previous review.
+  SrsCard dueCard({
+    Duration gap = const Duration(days: 6),
+    SrsStatus status = SrsStatus.review,
+  }) {
+    final due = DateTime.now().subtract(const Duration(minutes: 5));
+    return SrsCard(
+      direction: CardDirection.targetToNative,
+      status: status,
+      interval: gap.inDays,
+      repetitions: 3,
+      lastReviewed: due.subtract(gap),
+      dueDate: due,
+    );
+  }
+
+  /// A learning card that was last scheduled 1 h out (rated Again).
+  SrsCard retryCard() =>
+      dueCard(gap: const Duration(hours: 1), status: SrsStatus.learning);
 
   group('SrsCard.isShortInterval', () {
     test('a new card is not a short-interval card', () {
@@ -54,22 +65,45 @@ void main() {
     });
 
     test('Hard on a young card schedules a 12 h interval', () {
-      final card = dueCard(interval: 1);
+      final card = dueCard(gap: const Duration(days: 1));
       SrsService.processReview(card, SrsRating.hard);
 
       expect(card.dueDate.difference(card.lastReviewed!).inHours, 12);
       expect(card.isShortInterval, isTrue);
     });
 
+    test('a reviewed card with no recorded review date is not short', () {
+      // e.g. data from before lastReviewed was tracked.
+      final card = SrsCard(
+        direction: CardDirection.targetToNative,
+        status: SrsStatus.review,
+        dueDate: DateTime.now().subtract(const Duration(days: 1)),
+      );
+
+      expect(card.isShortInterval, isFalse);
+    });
+
+    test('exactly 24 h is not a sub-24h interval', () {
+      final reviewed = DateTime.now().subtract(const Duration(days: 1));
+      final card = SrsCard(
+        direction: CardDirection.targetToNative,
+        status: SrsStatus.review,
+        lastReviewed: reviewed,
+        dueDate: reviewed.add(const Duration(hours: 24)),
+      );
+
+      expect(card.isShortInterval, isFalse);
+    });
+
     test('a card with a 1 day or longer interval is not short', () {
-      final card = dueCard(interval: 6);
+      final card = dueCard();
       SrsService.processReview(card, SrsRating.good);
 
       expect(card.isShortInterval, isFalse);
     });
 
     test('Hard on a mature card stays on a multi-day interval', () {
-      final card = dueCard(interval: 10);
+      final card = dueCard(gap: const Duration(days: 10));
       SrsService.processReview(card, SrsRating.hard);
 
       expect(card.isShortInterval, isFalse);
@@ -109,7 +143,7 @@ void main() {
 
     test('reviewing a 1 h card does not use the review quota', () async {
       final provider = await newProvider(maxReviews: 5);
-      final card = dueCard(status: SrsStatus.learning, interval: 0);
+      final card = retryCard();
       addCards(provider, [card]);
 
       await provider.recordCardReview(card, SrsRating.good);
@@ -120,7 +154,7 @@ void main() {
 
     test('reviewing a 12 h card does not use the review quota', () async {
       final provider = await newProvider(maxReviews: 5);
-      final card = dueCard(interval: 0);
+      final card = dueCard(gap: const Duration(hours: 12));
       addCards(provider, [card]);
 
       await provider.recordCardReview(card, SrsRating.good);
@@ -131,7 +165,7 @@ void main() {
 
     test('reviewing a card with a 1 day+ interval still counts', () async {
       final provider = await newProvider(maxReviews: 5);
-      final card = dueCard(interval: 6);
+      final card = dueCard();
       addCards(provider, [card]);
 
       await provider.recordCardReview(card, SrsRating.good);
@@ -142,7 +176,7 @@ void main() {
 
     test('Again counts once; the 1 h retry does not count again', () async {
       final provider = await newProvider(maxReviews: 5);
-      final card = dueCard(interval: 6);
+      final card = dueCard();
       addCards(provider, [card]);
 
       await provider.recordCardReview(card, SrsRating.again);
@@ -157,9 +191,9 @@ void main() {
 
     test('short-interval cards are queued past the limit', () async {
       final provider = await newProvider(maxReviews: 1);
-      final used = dueCard(interval: 6);
-      final retry = dueCard(status: SrsStatus.learning, interval: 0);
-      final blocked = dueCard(interval: 6);
+      final used = dueCard();
+      final retry = retryCard();
+      final blocked = dueCard();
       addCards(provider, [used, retry, blocked]);
 
       await provider.recordCardReview(used, SrsRating.good);
@@ -172,8 +206,8 @@ void main() {
 
     test('short-interval cards do not take a slot from the limit', () async {
       final provider = await newProvider(maxReviews: 2);
-      final shortCard = dueCard(status: SrsStatus.learning, interval: 0);
-      final normal = [for (var i = 0; i < 3; i++) dueCard(interval: 6)];
+      final shortCard = retryCard();
+      final normal = [for (var i = 0; i < 3; i++) dueCard()];
       addCards(provider, [shortCard, ...normal]);
 
       final queue = provider.getStudyQueue(dueOnly: true);

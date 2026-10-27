@@ -67,11 +67,17 @@ class SrsCard {
   /// Can be studied now: due, or new.
   bool get isAvailable => isNewCard || isDue;
 
-  /// Scheduled less than a day out (1 h after Again, 12 h after an early
-  /// Hard). These cards are being re-learned within the same day, so they are
-  /// exempt from the rolling 24 h review limit. New cards are not included:
-  /// they have their own limit.
-  bool get isShortInterval => status != SrsStatus.isNew && interval < 1;
+  /// Last scheduled less than 24 h after its review (1 h after Again, 12 h
+  /// after an early Hard). These cards are being re-learned within the same
+  /// day, so they are exempt from the rolling 24 h review limit. Uses the real
+  /// scheduled gap rather than [interval], which is 0 for any card that was
+  /// never given a day-based interval. New and never-reviewed cards are not
+  /// included: new cards have their own limit.
+  bool get isShortInterval {
+    final reviewed = lastReviewed;
+    if (status == SrsStatus.isNew || reviewed == null) return false;
+    return dueDate.difference(reviewed) < const Duration(hours: 24);
+  }
 
   bool get hasRecentMistake {
     if (!isEnabled) return false;
