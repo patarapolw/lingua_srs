@@ -366,6 +366,46 @@ class AppProvider extends ChangeNotifier {
     limit: limit,
   );
 
+  /// The id of every vocabulary right now, to tell afterwards which words got
+  /// a new one.
+  Map<VocabItem, String> _currentVocabIds() =>
+      HashMap<VocabItem, String>.identity()..addEntries(
+        _lessons
+            .expand((lesson) => lesson.vocabularies)
+            .map((vocab) => MapEntry(vocab, vocab.id)),
+      );
+
+  /// Moves saved AI discussions along with words whose id changed since
+  /// [before] (from [_currentVocabIds]). An id changes when the word is
+  /// re-imported after an edit, when its id is edited, or when it adopts the id
+  /// of the same word in another lesson. Discussions are saved under the id, so
+  /// without this they would be orphaned.
+  ///
+  /// Only a word that moved to another id follows its chats. If anything else
+  /// still has the old id the word was split off, and the old id keeps them. If
+  /// one old id became several, or the new id is itself being renamed away,
+  /// nothing is moved, because it is not clear which chats belong where.
+  Future<void> _followVocabIdChanges(Map<VocabItem, String> before) async {
+    final renamedTo = <String, Set<String>>{};
+    final inUse = <String>{};
+    for (final vocab in _lessons.expand((lesson) => lesson.vocabularies)) {
+      inUse.add(vocab.id);
+      final previous = before[vocab];
+      if (previous != null && previous != vocab.id) {
+        renamedTo.putIfAbsent(previous, () => <String>{}).add(vocab.id);
+      }
+    }
+    var moved = false;
+    for (final entry in renamedTo.entries) {
+      final oldId = entry.key;
+      if (inUse.contains(oldId) || entry.value.length != 1) continue;
+      final newId = entry.value.single;
+      if (renamedTo.containsKey(newId)) continue;
+      if (_moveAiDiscussions({oldId}, newId)) moved = true;
+    }
+    if (moved) await StorageService.saveAiDiscussions(_aiDiscussions);
+  }
+
   /// Moves the saved discussions of [absorbedIds] to [survivorId], because
   /// merged words share one id afterwards and the old ids would be orphaned.
   /// Threads about the same sentence are joined, oldest message first.
@@ -543,8 +583,10 @@ class AppProvider extends ChangeNotifier {
       defaultTitle: defaultTitle,
       defaultUnitTitle: defaultUnitTitle,
     );
+    final before = _currentVocabIds();
     final lesson = _applyParsedLesson(parsed);
     _linkSharedVocabProgress();
+    await _followVocabIdChanges(before);
     await _saveImportedLessons();
     notifyListeners();
     return lesson;
@@ -562,6 +604,7 @@ class AppProvider extends ChangeNotifier {
           .add(sentence);
     }
     final vocabIndex = _newVocabProgressIndex();
+    final idsBefore = _currentVocabIds();
     _importSentenceSet = HashSet<Sentence>.identity()..addAll(_sentences);
     try {
       for (var index = 0; index < parsedLessons.length; index++) {
@@ -580,6 +623,7 @@ class AppProvider extends ChangeNotifier {
     }
     if (parsedLessons.isNotEmpty) {
       _linkSharedVocabProgress();
+      await _followVocabIdChanges(idsBefore);
       await _saveImportedLessons();
       notifyListeners();
     }
@@ -1026,6 +1070,8 @@ class AppProvider extends ChangeNotifier {
 
   // Update vocabulary fields
   Future<void> updateVocab(VocabItem vocab, {String? previousId}) async {
+    final idsBefore = _currentVocabIds();
+    if (previousId != null) idsBefore[vocab] = previousId;
     final existing = _findExistingVocab(
       vocab,
       _lessons
@@ -1044,6 +1090,7 @@ class AppProvider extends ChangeNotifier {
     } else {
       _linkSharedVocabProgress();
     }
+    await _followVocabIdChanges(idsBefore);
     await saveState();
   }
 

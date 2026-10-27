@@ -123,10 +123,23 @@ class _DiscussionCard extends StatelessWidget {
     return Card(
       child: ListTile(
         leading: const CircleAvatar(child: Icon(Icons.forum_outlined)),
-        title: Text(
-          discussion.title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+        // The date sits beside the title: ListTile limits its trailing widget
+        // to 56px, which a date that wraps plus a button would exceed.
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                discussion.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              _formatUpdatedAt(discussion.updatedAt),
+              style: Theme.of(context).textTheme.labelSmall,
+            ),
+          ],
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -151,24 +164,49 @@ class _DiscussionCard extends StatelessWidget {
             ),
           ],
         ),
-        trailing: SizedBox(
-          width: 78,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                _formatUpdatedAt(discussion.updatedAt),
-                style: Theme.of(context).textTheme.labelSmall,
-                textAlign: TextAlign.end,
-              ),
-              const Icon(Icons.chevron_right),
-            ],
-          ),
+        trailing: IconButton(
+          tooltip: 'Delete discussion',
+          icon: const Icon(Icons.delete_outline),
+          onPressed: () => _confirmDelete(context),
         ),
         onTap: () => showAiDiscussion(context, discussion),
       ),
     );
+  }
+
+  /// What the confirmation says is about to be deleted.
+  String get _deleteMessage {
+    final what = discussion.isLesson
+        ? (discussion.isOrphaned
+              ? 'a lesson that no longer exists'
+              : 'the lesson "${discussion.title}"')
+        : (discussion.isOrphaned
+              ? 'a word that no longer exists'
+              : '"${discussion.title}"');
+    return 'The saved AI conversation about $what will be permanently deleted.';
+  }
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    final provider = context.read<AppProvider>();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete this discussion?'),
+        content: Text(_deleteMessage),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await provider.deleteAiDiscussion(discussion.id);
   }
 
   String _formatUpdatedAt(DateTime? updatedAt) {

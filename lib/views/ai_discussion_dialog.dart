@@ -23,6 +23,10 @@ class AiDiscussionDialog extends StatefulWidget {
   final String? sentenceTranslation;
   final Lesson? lesson;
 
+  /// The word or lesson this chat was about no longer exists. The chat opens
+  /// read-only, and can be continued without it.
+  final bool orphaned;
+
   const AiDiscussionDialog({
     super.key,
     required this.discussionId,
@@ -33,6 +37,7 @@ class AiDiscussionDialog extends StatefulWidget {
     this.sentenceTarget,
     this.sentenceTranslation,
     this.lesson,
+    this.orphaned = false,
   });
 
   @override
@@ -46,6 +51,12 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
   String? _error;
   String _streamingAnswer = '';
   bool _wasAtBottom = true;
+
+  /// An orphaned chat is only read until the learner chooses to continue.
+  late bool _readOnly = widget.orphaned;
+
+  bool get _isLessonChat =>
+      LessonAiPrompt.isLessonDiscussion(widget.discussionId);
 
   /// Earlier discussions about this word or related ones. Only looked up for a
   /// discussion that has no messages yet, and once, when it opens.
@@ -81,7 +92,6 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
 
   void _openEarlier(AiDiscussionSuggestion suggestion) {
     final dialog = aiDiscussionDialogFor(suggestion.discussion);
-    if (dialog == null) return;
     Navigator.of(context).pushReplacement(
       DialogRoute<void>(context: context, builder: (_) => dialog),
     );
@@ -123,7 +133,11 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
 
     try {
       await context.read<AppProvider>().deleteAiDiscussion(widget.discussionId);
-      if (mounted) {
+      if (!mounted) return;
+      // Nothing is left to read or continue about a word or lesson that is gone.
+      if (widget.orphaned) {
+        Navigator.of(context).pop();
+      } else {
         setState(() => _error = null);
       }
     } catch (error) {
@@ -136,6 +150,17 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
   String _systemPrompt() {
     if (widget.lesson case final lesson?) {
       return LessonAiPrompt.systemPrompt(lesson);
+    }
+    if (widget.orphaned) {
+      return _isLessonChat
+          ? OrphanedAiPrompt.forLesson(
+              targetLanguage: widget.targetLanguage,
+              nativeLanguage: widget.nativeLanguage,
+            )
+          : OrphanedAiPrompt.forWord(
+              targetLanguage: widget.targetLanguage,
+              nativeLanguage: widget.nativeLanguage,
+            );
     }
     final sentence = widget.sentenceTarget?.trim();
     final sentenceTranslation = widget.sentenceTranslation?.trim();
@@ -151,6 +176,8 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
   }
 
   List<String> _suggestedQuestions(bool hasMessages) {
+    // The questions are about a word or lesson that is not there to ask about.
+    if (widget.orphaned) return const [];
     if (widget.lesson != null) {
       return LessonAiPrompt.suggestedQuestions(hasMessages);
     }
@@ -317,8 +344,9 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                         ],
                       ),
                     ),
-                    // A lesson chat is about no single word to relate.
-                    if (widget.lesson == null)
+                    // A lesson chat is about no single word to relate, and a word
+                    // that is gone has nothing to relate by.
+                    if (!_isLessonChat && !widget.orphaned)
                       IconButton(
                         tooltip: 'Related discussions',
                         onPressed: _sending ? null : _openRelated,
@@ -481,7 +509,7 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                           },
                         ),
                 ),
-                if (messages.isNotEmpty)
+                if (messages.isNotEmpty && _suggestedQuestions(true).isNotEmpty)
                   ExpansionTile(
                     title: Text(
                       'Suggested next questions',
@@ -516,44 +544,65 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                     ),
                   ),
                 const SizedBox(height: 10),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Expanded(
-                      child: Focus(
-                        onKeyEvent: _handleComposerKeyEvent,
-                        child: TextField(
-                          controller: _questionController,
-                          minLines: 1,
-                          maxLines: 4,
-                          textCapitalization: TextCapitalization.sentences,
-                          textInputAction: TextInputAction.send,
-                          decoration: InputDecoration(
-                            hintText: widget.lesson != null
-                                ? 'Ask about this lesson…'
-                                : 'Ask about the vocabulary or sentence…',
-                          ),
-                          onSubmitted: (_) => _sendQuestion(),
+                if (_readOnly)
+                  _OrphanedNotice(
+                    isLesson: _isLessonChat,
+                    onContinue: () => setState(() => _readOnly = false),
+                  )
+                else ...[
+                  if (widget.orphaned)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Text(
+                        _isLessonChat
+                            ? 'The AI cannot see the deleted lesson, so it only has this conversation to go on.'
+                            : 'The AI cannot see the deleted word, so it only has this conversation to go on.',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    IconButton.filled(
-                      tooltip: 'Send question',
-                      onPressed: _sending ? null : _sendQuestion,
-                      icon: const Icon(Icons.send),
-                    ),
-                  ],
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    'Enter to send · Shift/Ctrl+Enter for a new line',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Expanded(
+                        child: Focus(
+                          onKeyEvent: _handleComposerKeyEvent,
+                          child: TextField(
+                            controller: _questionController,
+                            minLines: 1,
+                            maxLines: 4,
+                            textCapitalization: TextCapitalization.sentences,
+                            textInputAction: TextInputAction.send,
+                            decoration: InputDecoration(
+                              hintText: widget.orphaned
+                                  ? 'Ask a follow-up…'
+                                  : widget.lesson != null
+                                  ? 'Ask about this lesson…'
+                                  : 'Ask about the vocabulary or sentence…',
+                            ),
+                            onSubmitted: (_) => _sendQuestion(),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton.filled(
+                        tooltip: 'Send question',
+                        onPressed: _sending ? null : _sendQuestion,
+                        icon: const Icon(Icons.send),
+                      ),
+                    ],
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      'Enter to send · Shift/Ctrl+Enter for a new line',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
@@ -563,30 +612,66 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
   }
 }
 
-/// The Ask AI dialog for a saved discussion, or null when the lesson it was
-/// about has been deleted.
-AiDiscussionDialog? aiDiscussionDialogFor(AiDiscussionSummary discussion) {
-  if (discussion.isLesson && discussion.lesson == null) return null;
+/// The Ask AI dialog for a saved discussion. When its word or lesson is gone
+/// it opens read-only.
+AiDiscussionDialog aiDiscussionDialogFor(AiDiscussionSummary discussion) {
   return AiDiscussionDialog(
     discussionId: discussion.id,
-    targetWord:
-        discussion.vocab?.targetWord ??
-        (discussion.isLesson ? discussion.lesson!.displayTitle : discussion.id),
+    targetWord: discussion.title,
     translation: discussion.vocab?.translation ?? '',
     targetLanguage: discussion.lesson?.targetLanguage ?? 'ko',
     nativeLanguage: discussion.lesson?.nativeLanguage ?? 'en',
     sentenceTarget: discussion.sentence?.targetText,
     sentenceTranslation: discussion.sentence?.translationText,
     lesson: discussion.isLesson ? discussion.lesson : null,
+    orphaned: discussion.isOrphaned,
   );
 }
 
-/// Opens a saved discussion; does nothing when its lesson is gone.
+/// Opens a saved discussion.
 Future<void> showAiDiscussion(
   BuildContext context,
   AiDiscussionSummary discussion,
 ) async {
   final dialog = aiDiscussionDialogFor(discussion);
-  if (dialog == null) return;
   await showDialog<void>(context: context, builder: (_) => dialog);
+}
+
+/// Shown instead of the message box while a chat about a word or lesson that is
+/// gone is only being read.
+class _OrphanedNotice extends StatelessWidget {
+  const _OrphanedNotice({required this.isLesson, required this.onContinue});
+
+  final bool isLesson;
+  final VoidCallback onContinue;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final what = isLesson ? 'lesson' : 'word';
+    return Card(
+      margin: EdgeInsets.zero,
+      color: theme.colorScheme.surfaceContainerHighest,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'This $what no longer exists, so this chat is read-only. You can still search for it or delete it.',
+              style: theme.textTheme.bodySmall,
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton.tonal(
+                onPressed: onContinue,
+                child: Text('Continue without the $what'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

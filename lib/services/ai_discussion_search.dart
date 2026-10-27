@@ -97,8 +97,14 @@ class AiDiscussionSummary {
 
   String? get vocabId => AiDiscussionIds.vocabIdFrom(id);
 
+  /// The word or lesson was deleted, merged away or renamed before ids were
+  /// followed, so only the conversation is left.
+  bool get isOrphaned => isLesson ? lesson == null : vocab == null;
+
   String get title =>
-      vocab?.targetWord ?? lesson?.displayTitle ?? 'AI discussion';
+      vocab?.targetWord ??
+      lesson?.displayTitle ??
+      (isLesson ? 'Lesson not found' : 'Word not found');
 
   DateTime? get updatedAt {
     for (final message in messages.reversed) {

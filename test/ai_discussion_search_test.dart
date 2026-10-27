@@ -180,8 +180,29 @@ void main() {
       );
 
       expect(gone.vocab, isNull);
-      expect(gone.title, 'AI discussion');
+      expect(gone.title, 'Word not found');
       expect(goneLesson.lesson, isNull);
+      expect(goneLesson.title, 'Lesson not found');
+    });
+
+    test('knows which discussions have lost their word or lesson', () {
+      AiDiscussionSummary resolve(String id) => AiDiscussionSummary.resolve(
+        id: id,
+        messages: [_msg('user', 'Why?')],
+        lessons: [lesson],
+        sentenceById: (_) => null,
+      );
+
+      expect(resolve('v1:s1').isOrphaned, isFalse);
+      expect(resolve('missing:s1').isOrphaned, isTrue);
+      expect(
+        resolve(LessonAiPrompt.discussionId(lesson.id)).isOrphaned,
+        isFalse,
+      );
+      expect(
+        resolve(LessonAiPrompt.discussionId('missing')).isOrphaned,
+        isTrue,
+      );
     });
 
     test('previews the last question and dates the last timed message', () {
@@ -472,6 +493,31 @@ void main() {
     });
   });
 
+  group('OrphanedAiPrompt', () {
+    test('tells the AI the lesson is gone and not to guess at it', () {
+      final prompt = OrphanedAiPrompt.forLesson(
+        targetLanguage: 'ko',
+        nativeLanguage: 'en',
+      );
+
+      expect(prompt, contains('studying ko with en support'));
+      expect(prompt, contains('lesson that is no longer available'));
+      expect(prompt, contains('instead of guessing'));
+      expect(prompt, contains('Markdown'));
+    });
+
+    test('tells the AI the word is gone', () {
+      final prompt = OrphanedAiPrompt.forWord(
+        targetLanguage: 'ko',
+        nativeLanguage: 'en',
+      );
+
+      expect(prompt, contains('vocabulary word that is no longer available'));
+      expect(prompt, contains('instead of guessing'));
+      expect(prompt, isNot(contains('lesson that is no longer')));
+    });
+  });
+
   group('AiDiscussionRelated', () {
     final apple = _word('v1', '사과', 'apple');
     final appleForm = _word('v5', '사과를', 'apple');
@@ -703,6 +749,332 @@ void main() {
       await merge(provider);
 
       expect(provider.aiDiscussions.keys, ['c:s1']);
+    });
+  });
+
+  group('a word that gets a new id', () {
+    final t1 = _base.add(const Duration(minutes: 1));
+    final t2 = _base.add(const Duration(minutes: 2));
+    final t3 = _base.add(const Duration(minutes: 3));
+
+    AiDiscussionMessage at(String text, DateTime? time) =>
+        AiDiscussionMessage(role: 'user', content: text, createdAt: time);
+
+    Future<AppProvider> providerWith(
+      Map<String, List<AiDiscussionMessage>> discussions,
+      List<Lesson> lessons,
+    ) async {
+      SharedPreferences.setMockInitialValues({
+        'lingua_srs_windows_legacy_migration_complete': true,
+        'lingua_srs_lessons': '[]',
+        'lingua_srs_sentences': '[]',
+      });
+      await StorageService.saveAiDiscussions(discussions);
+      final provider = AppProvider();
+      while (provider.isLoading) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      provider.lessons
+        ..clear()
+        ..addAll(lessons);
+      return provider;
+    }
+
+    const fruitYaml =
+        '---\nvocabulary:\n  nouns:\n    - ko: 사과\n      en: apple\n---\n# Fruit\n';
+    const editedYaml =
+        '---\nvocabulary:\n  nouns:\n    - ko: 사과\n      en: apple fruit\n---\n# Fruit\n';
+    const headwordYaml =
+        '---\nvocabulary:\n  nouns:\n    - ko: 능금\n      en: apple\n---\n# Fruit\n';
+    const bothYaml =
+        '---\nvocabulary:\n  nouns:\n    - ko: 능금\n      en: crab apple\n---\n# Fruit\n';
+
+    test('editing the id of a word moves its discussions', () async {
+      final apple = _word('a', '사과', 'apple');
+      final provider = await providerWith(
+        {
+          'a:s1': [at('about a', t1)],
+          'a:no-sentence': [at('no sentence', t2)],
+        },
+        [
+          Lesson(title: 'Fruit', vocabularies: [apple]),
+        ],
+      );
+
+      apple
+        ..id = 'fruit-apple'
+        ..idIsExplicit = true;
+      await provider.updateVocab(apple, previousId: 'a');
+
+      expect(
+        provider.aiDiscussions.keys,
+        unorderedEquals(['fruit-apple:s1', 'fruit-apple:no-sentence']),
+      );
+      expect(
+        provider.aiDiscussions['fruit-apple:s1']!.single.content,
+        'about a',
+      );
+    });
+
+    test('saves the moved discussions', () async {
+      final apple = _word('a', '사과', 'apple');
+      final provider = await providerWith(
+        {
+          'a:s1': [at('about a', t1)],
+        },
+        [
+          Lesson(title: 'Fruit', vocabularies: [apple]),
+        ],
+      );
+
+      apple.id = 'renamed';
+      await provider.updateVocab(apple, previousId: 'a');
+
+      expect((await StorageService.loadAiDiscussions()).keys, ['renamed:s1']);
+    });
+
+    test('a found word still resolves from its moved discussion', () async {
+      final apple = _word('a', '사과', 'apple');
+      final provider = await providerWith(
+        {
+          'a:s1': [at('about a', t1)],
+        },
+        [
+          Lesson(title: 'Fruit', vocabularies: [apple]),
+        ],
+      );
+
+      apple.id = 'renamed';
+      await provider.updateVocab(apple, previousId: 'a');
+
+      final summary = provider.aiDiscussionSummaries.single;
+      expect(summary.vocab, same(apple));
+      expect(AiDiscussionSearch.search('사과', [summary]), hasLength(1));
+    });
+
+    test('the same word in another lesson keeps the old id and its chats', () async {
+      final here = _word('a', '사과', 'apple');
+      final there = _word('a', '사과', 'apple');
+      final provider = await providerWith(
+        {
+          'a:s1': [at('about a', t1)],
+        },
+        [
+          Lesson(title: 'One', vocabularies: [here]),
+          Lesson(title: 'Two', vocabularies: [there]),
+        ],
+      );
+
+      // An explicit id is kept, so this word really is split off from `there`.
+      here
+        ..id = 'split-off'
+        ..idIsExplicit = true;
+      await provider.updateVocab(here, previousId: 'a');
+      expect(here.id, 'split-off');
+
+      expect(provider.aiDiscussions.keys, ['a:s1']);
+    });
+
+    test('adopting the id of another word joins their chats', () async {
+      final a = _word('a', '사과', 'apple');
+      final b = _word('b', '애플', 'apple');
+      final provider = await providerWith(
+        {
+          'a:s1': [at('first', t1), at('third', t3)],
+          'b:s1': [at('second', t2)],
+        },
+        [
+          Lesson(title: 'Fruit', vocabularies: [a, b]),
+        ],
+      );
+
+      b.id = 'a';
+      await provider.updateVocab(b, previousId: 'b');
+
+      expect(provider.aiDiscussions.keys, ['a:s1']);
+      expect(provider.aiDiscussions['a:s1']!.map((m) => m.content), [
+        'first',
+        'second',
+        'third',
+      ]);
+    });
+
+    test('does not move chats when another word took the old id', () async {
+      final a = _word('a', '사과', 'apple');
+      final b = _word('b', '애플', 'apple');
+      final provider = await providerWith(
+        {
+          'a:s1': [at('about a', t1)],
+          'b:s1': [at('about b', t2)],
+        },
+        [
+          Lesson(title: 'Fruit', vocabularies: [a, b]),
+        ],
+      );
+
+      a.id = 'b';
+      b.id = 'a';
+      await provider.updateVocab(a, previousId: 'a');
+
+      expect(provider.aiDiscussions['a:s1']!.single.content, 'about a');
+      expect(provider.aiDiscussions['b:s1']!.single.content, 'about b');
+    });
+
+    test('leaves other words and lesson chats alone', () async {
+      final a = _word('a', '사과', 'apple');
+      final c = _word('c', '학교', 'school');
+      final provider = await providerWith(
+        {
+          'a:s1': [at('about a', t1)],
+          'c:s1': [at('about c', t2)],
+          'lesson:a': [at('lesson whose id starts like a', t3)],
+        },
+        [
+          Lesson(title: 'Fruit', vocabularies: [a, c]),
+        ],
+      );
+
+      a.id = 'renamed';
+      await provider.updateVocab(a, previousId: 'a');
+
+      expect(
+        provider.aiDiscussions.keys,
+        unorderedEquals(['renamed:s1', 'c:s1', 'lesson:a']),
+      );
+    });
+
+    test(
+      'editing a word then re-importing the lesson keeps its chats',
+      () async {
+        final provider = await providerWith(const {}, const []);
+        final lesson = await provider.importYaml(fruitYaml);
+        final vocab = lesson.vocabularies.single;
+        final oldId = vocab.id;
+        await provider.addAiDiscussionMessage(
+          AiDiscussionIds.forVocab(oldId, null),
+          at('about apple', t1),
+        );
+
+        // Editing in the dialog leaves the id alone...
+        vocab.translation = 'apple fruit';
+        await provider.updateVocab(vocab, previousId: oldId);
+        expect(vocab.id, oldId);
+        expect(provider.aiDiscussions.keys, [
+          AiDiscussionIds.forVocab(oldId, null),
+        ]);
+
+        // ...but importing the same text again matches it by meaning and gives
+        // it the id of the edited text.
+        await provider.importYaml(editedYaml);
+
+        final newId = provider.lessons.single.vocabularies.single.id;
+        expect(newId, isNot(oldId));
+        expect(provider.aiDiscussions.keys, [
+          AiDiscussionIds.forVocab(newId, null),
+        ]);
+        final summary = provider.aiDiscussionSummaries.single;
+        expect(summary.vocab?.translation, 'apple fruit');
+      },
+    );
+
+    test(
+      'editing the Korean headword then re-importing keeps the chats',
+      () async {
+        final provider = await providerWith(const {}, const []);
+        final lesson = await provider.importYaml(fruitYaml);
+        final vocab = lesson.vocabularies.single;
+        final oldId = vocab.id;
+        await provider.addAiDiscussionMessage(
+          AiDiscussionIds.forVocab(oldId, null),
+          at('about apple', t1),
+        );
+
+        vocab.targetWord = '능금';
+        await provider.updateVocab(vocab, previousId: oldId);
+        // Like the translation, the headword does not change the id by itself.
+        expect(vocab.id, oldId);
+        expect(provider.aiDiscussions.keys, [
+          AiDiscussionIds.forVocab(oldId, null),
+        ]);
+
+        await provider.importYaml(headwordYaml);
+
+        final newId = provider.lessons.single.vocabularies.single.id;
+        expect(newId, isNot(oldId));
+        expect(provider.aiDiscussions.keys, [
+          AiDiscussionIds.forVocab(newId, null),
+        ]);
+        final summary = provider.aiDiscussionSummaries.single;
+        expect(summary.vocab?.targetWord, '능금');
+        // ...and the chat is found by the new headword, not the old one.
+        expect(AiDiscussionSearch.search('능금', [summary]), hasLength(1));
+        expect(AiDiscussionSearch.search('사과', [summary]), isEmpty);
+      },
+    );
+
+    test(
+      'editing the headword and the translation together keeps the chats',
+      () async {
+        final provider = await providerWith(const {}, const []);
+        final lesson = await provider.importYaml(fruitYaml);
+        final vocab = lesson.vocabularies.single;
+        final oldId = vocab.id;
+        await provider.addAiDiscussionMessage(
+          AiDiscussionIds.forVocab(oldId, 's1'),
+          at('about apple', t1),
+        );
+
+        vocab
+          ..targetWord = '능금'
+          ..translation = 'crab apple';
+        await provider.updateVocab(vocab, previousId: oldId);
+        await provider.importYaml(bothYaml);
+
+        final newId = provider.lessons.single.vocabularies.single.id;
+        expect(newId, isNot(oldId));
+        expect(provider.aiDiscussions.keys, [
+          AiDiscussionIds.forVocab(newId, 's1'),
+        ]);
+        final summary = provider.aiDiscussionSummaries.single;
+        expect(summary.vocab?.targetWord, '능금');
+        expect(summary.vocab?.translation, 'crab apple');
+      },
+    );
+
+    test(
+      'a headword edited in the dialog keeps its chats with no re-import',
+      () async {
+        final provider = await providerWith(const {}, const []);
+        final lesson = await provider.importYaml(fruitYaml);
+        final vocab = lesson.vocabularies.single;
+        await provider.addAiDiscussionMessage(
+          AiDiscussionIds.forVocab(vocab.id, null),
+          at('about apple', t1),
+        );
+
+        vocab
+          ..targetWord = '능금'
+          ..translation = 'crab apple';
+        await provider.updateVocab(vocab, previousId: vocab.id);
+
+        final summary = provider.aiDiscussionSummaries.single;
+        expect(summary.isOrphaned, isFalse);
+        expect(summary.title, '능금');
+      },
+    );
+
+    test('importing unchanged text again changes nothing', () async {
+      final provider = await providerWith(const {}, const []);
+      final lesson = await provider.importYaml(fruitYaml);
+      final id = lesson.vocabularies.single.id;
+      await provider.addAiDiscussionMessage(
+        AiDiscussionIds.forVocab(id, 's1'),
+        at('about apple', t1),
+      );
+
+      await provider.importYaml(fruitYaml);
+
+      expect(provider.aiDiscussions.keys, [AiDiscussionIds.forVocab(id, 's1')]);
     });
   });
 

@@ -113,9 +113,10 @@ void main() {
   Future<void> pumpWith(
     WidgetTester tester,
     AppProvider provider,
-    Widget home,
-  ) async {
-    tester.view.physicalSize = const Size(1200, 2400);
+    Widget home, {
+    Size size = const Size(1200, 2400),
+  }) async {
+    tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -240,6 +241,27 @@ void main() {
       expect(field.controller!.text, isEmpty);
     });
 
+    testWidgets('a row with an old date does not overflow on a phone', (
+      tester,
+    ) async {
+      // Old dates print as 1/10/2026, which the test font draws wider than a
+      // narrow trailing slot; the date must not have to fit there.
+      final (provider, _) = await loadedProvider(
+        tester,
+        discussions: discussions,
+      );
+      await pumpWith(
+        tester,
+        provider,
+        const RecentAiDiscussionsView(),
+        size: const Size(320, 640),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(title('사과'), findsOneWidget);
+      expect(find.text('1/10/2026'), findsNWidgets(3));
+    });
+
     testWidgets('has no clear button while the box is empty', (tester) async {
       await open(tester);
 
@@ -266,10 +288,10 @@ void main() {
       );
       await pumpWith(tester, provider, const RecentAiDiscussionsView());
 
-      expect(find.text('AI discussion'), findsOneWidget);
+      expect(find.text('Word not found'), findsOneWidget);
 
       await search(tester, 'remember');
-      expect(find.text('AI discussion'), findsOneWidget);
+      expect(find.text('Word not found'), findsOneWidget);
     });
 
     testWidgets('with nothing saved there is no search box', (tester) async {
@@ -665,6 +687,332 @@ void main() {
 
       expect(find.byType(AiDiscussionDialog), findsOneWidget);
       expect(find.text('Current question'), findsOneWidget);
+    });
+  });
+
+  group('Deleting from the list', () {
+    final discussions = {
+      'v-apple:no-sentence': [_msg('user', 'About the apple', 11)],
+      'v-eat:no-sentence': [_msg('user', 'About eating', 30)],
+    };
+
+    Finder deleteButtonOf(String word) => find.descendant(
+      of: find.ancestor(
+        of: find.descendant(
+          of: find.byType(ListTile),
+          matching: find.text(word),
+        ),
+        matching: find.byType(ListTile),
+      ),
+      matching: find.byTooltip('Delete discussion'),
+    );
+
+    Future<AppProvider> open(
+      WidgetTester tester, [
+      Map<String, List<AiDiscussionMessage>>? saved,
+    ]) async {
+      final (provider, _) = await loadedProvider(
+        tester,
+        discussions: saved ?? discussions,
+      );
+      await pumpWith(tester, provider, const RecentAiDiscussionsView());
+      return provider;
+    }
+
+    Future<void> confirm(WidgetTester tester) async {
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('every discussion has a delete button', (tester) async {
+      await open(tester);
+
+      expect(find.byTooltip('Delete discussion'), findsNWidgets(2));
+      expect(deleteButtonOf('사과'), findsOneWidget);
+    });
+
+    testWidgets('asks first, and Cancel keeps the discussion', (tester) async {
+      final provider = await open(tester);
+
+      await tester.tap(deleteButtonOf('사과'));
+      await tester.pumpAndSettle();
+      expect(find.text('Delete this discussion?'), findsOneWidget);
+      expect(find.textContaining('"사과"'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(provider.aiDiscussions.keys, hasLength(2));
+      expect(find.text('사과'), findsOneWidget);
+    });
+
+    testWidgets('deleting removes it from the list and from storage', (
+      tester,
+    ) async {
+      final provider = await open(tester);
+
+      await tester.tap(deleteButtonOf('사과'));
+      await tester.pumpAndSettle();
+      await confirm(tester);
+
+      expect(find.text('사과'), findsNothing);
+      expect(find.text('먹다'), findsOneWidget);
+      expect(provider.aiDiscussions.keys, ['v-eat:no-sentence']);
+      final stored = await tester.runAsync(StorageService.loadAiDiscussions);
+      expect(stored!.keys, ['v-eat:no-sentence']);
+    });
+
+    testWidgets('tapping the button does not open the discussion', (
+      tester,
+    ) async {
+      await open(tester);
+
+      await tester.tap(deleteButtonOf('사과'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AiDiscussionDialog), findsNothing);
+    });
+
+    testWidgets('deleting the last one shows the empty state', (tester) async {
+      await open(tester, {
+        'v-apple:no-sentence': [_msg('user', 'About the apple', 11)],
+      });
+
+      await tester.tap(deleteButtonOf('사과'));
+      await tester.pumpAndSettle();
+      await confirm(tester);
+
+      expect(find.text('No discussions yet'), findsOneWidget);
+    });
+
+    testWidgets('deleting while searching keeps the search', (tester) async {
+      await open(tester);
+      await tester.enterText(find.byType(TextField), '사과');
+      await tester.pump();
+
+      await tester.tap(deleteButtonOf('사과'));
+      await tester.pumpAndSettle();
+      await confirm(tester);
+
+      expect(find.text('No discussions match "사과".'), findsOneWidget);
+      expect(find.text('먹다'), findsNothing);
+    });
+
+    testWidgets('a word that is gone is labelled and can be deleted', (
+      tester,
+    ) async {
+      final provider = await open(tester, {
+        'gone:no-sentence': [_msg('user', 'Remember this?', 1)],
+      });
+
+      expect(find.text('Word not found'), findsOneWidget);
+      await tester.tap(deleteButtonOf('Word not found'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('a word that no longer exists'),
+        findsOneWidget,
+      );
+      await confirm(tester);
+
+      expect(provider.aiDiscussions, isEmpty);
+    });
+
+    testWidgets('a lesson that is gone is labelled and can be deleted', (
+      tester,
+    ) async {
+      final provider = await open(tester, {
+        LessonAiPrompt.discussionId('missing'): [
+          _msg('user', 'Summarise it', 1),
+        ],
+      });
+
+      expect(find.text('Lesson not found'), findsOneWidget);
+      await tester.tap(deleteButtonOf('Lesson not found'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('a lesson that no longer exists'),
+        findsOneWidget,
+      );
+      await confirm(tester);
+
+      expect(provider.aiDiscussions, isEmpty);
+    });
+
+    testWidgets('a word that is gone still opens, with a clear title', (
+      tester,
+    ) async {
+      await open(tester, {
+        'gone:no-sentence': [_msg('user', 'Remember this?', 1)],
+      });
+
+      await tester.tap(find.text('Word not found'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AiDiscussionDialog), findsOneWidget);
+      expect(find.text('gone:no-sentence'), findsNothing);
+    });
+
+    testWidgets('deleting a lesson or word does not delete its chats', (
+      tester,
+    ) async {
+      final (provider, lesson) = await loadedProvider(
+        tester,
+        discussions: {
+          'v-apple:no-sentence': [_msg('user', 'About the apple', 11)],
+          LessonAiPrompt.discussionId('lesson-1'): [
+            _msg('user', 'Summarise it', 12),
+          ],
+        },
+      );
+
+      await tester.runAsync(() => provider.deleteLesson(lesson.id));
+
+      expect(provider.aiDiscussions.keys, hasLength(2));
+    });
+  });
+
+  group('Orphaned chats', () {
+    final lessonGone = {
+      LessonAiPrompt.discussionId('missing'): [
+        _msg('user', 'Summarise it', 1),
+        _msg('assistant', 'It is about fruit.', 2),
+      ],
+    };
+    final wordGone = {
+      'gone:no-sentence': [_msg('user', 'Remember this?', 1)],
+    };
+
+    Finder inDialog(Finder finder) =>
+        find.descendant(of: find.byType(AiDiscussionDialog), matching: finder);
+
+    Future<AppProvider> openFromList(
+      WidgetTester tester,
+      Map<String, List<AiDiscussionMessage>> saved,
+      String title,
+    ) async {
+      final (provider, _) = await loadedProvider(tester, discussions: saved);
+      await pumpWith(tester, provider, const RecentAiDiscussionsView());
+      await tester.tap(find.text(title));
+      await tester.pumpAndSettle();
+      return provider;
+    }
+
+    testWidgets('a lesson that is gone opens its conversation read-only', (
+      tester,
+    ) async {
+      await openFromList(tester, lessonGone, 'Lesson not found');
+
+      expect(find.byType(AiDiscussionDialog), findsOneWidget);
+      expect(inDialog(find.text('Summarise it')), findsOneWidget);
+      expect(
+        inDialog(
+          find.textContaining(
+            'This lesson no longer exists, so this chat is read-only',
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(inDialog(find.byType(TextField)), findsNothing);
+      expect(inDialog(find.byTooltip('Send question')), findsNothing);
+    });
+
+    testWidgets('a word that is gone opens read-only too', (tester) async {
+      await openFromList(tester, wordGone, 'Word not found');
+
+      expect(
+        inDialog(
+          find.textContaining(
+            'This word no longer exists, so this chat is read-only',
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        inDialog(
+          find.widgetWithText(FilledButton, 'Continue without the word'),
+        ),
+        findsOneWidget,
+      );
+      expect(inDialog(find.byType(TextField)), findsNothing);
+    });
+
+    testWidgets('offers neither suggestions nor related discussions', (
+      tester,
+    ) async {
+      await openFromList(tester, lessonGone, 'Lesson not found');
+
+      expect(inDialog(find.text('Suggested next questions')), findsNothing);
+      expect(inDialog(find.byTooltip('Related discussions')), findsNothing);
+    });
+
+    testWidgets('can be continued without the lesson', (tester) async {
+      await openFromList(tester, lessonGone, 'Lesson not found');
+
+      await tester.tap(
+        inDialog(
+          find.widgetWithText(FilledButton, 'Continue without the lesson'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(inDialog(find.byType(TextField)), findsOneWidget);
+      expect(inDialog(find.byTooltip('Send question')), findsOneWidget);
+      expect(inDialog(find.textContaining('read-only')), findsNothing);
+      expect(
+        inDialog(find.textContaining('cannot see the deleted lesson')),
+        findsOneWidget,
+      );
+      expect(inDialog(find.text('Suggested next questions')), findsNothing);
+    });
+
+    testWidgets('a continued chat can send a question', (tester) async {
+      await openFromList(tester, lessonGone, 'Lesson not found');
+      await tester.tap(
+        inDialog(
+          find.widgetWithText(FilledButton, 'Continue without the lesson'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(inDialog(find.byType(TextField)), 'And the rest?');
+      await tester.tap(inDialog(find.byTooltip('Send question')));
+      await tester.pumpAndSettle();
+
+      // No API key is set in tests, so it stops at asking for one.
+      expect(
+        find.text('Add your DeepSeek API key in settings first.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('can still be deleted from inside, which closes it', (
+      tester,
+    ) async {
+      final provider = await openFromList(
+        tester,
+        lessonGone,
+        'Lesson not found',
+      );
+
+      await tester.tap(inDialog(find.byTooltip('Delete saved discussion')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+      await tester.pumpAndSettle();
+
+      expect(provider.aiDiscussions, isEmpty);
+      expect(find.byType(AiDiscussionDialog), findsNothing);
+    });
+
+    testWidgets('a chat whose word still exists is not read-only', (
+      tester,
+    ) async {
+      await openFromList(tester, {
+        'v-apple:no-sentence': [_msg('user', 'About the apple', 1)],
+      }, '사과');
+
+      expect(inDialog(find.textContaining('read-only')), findsNothing);
+      expect(inDialog(find.byType(TextField)), findsOneWidget);
+      expect(inDialog(find.byTooltip('Related discussions')), findsOneWidget);
     });
   });
 }
