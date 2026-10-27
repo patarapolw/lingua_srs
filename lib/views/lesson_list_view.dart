@@ -552,6 +552,7 @@ class LessonListView extends StatelessWidget {
     final theme = Theme.of(context);
 
     int totalDue = 0;
+    int totalShortDue = 0;
     int totalNew = 0;
     final dueCardIds = <String>{};
     final newCardIds = <String>{};
@@ -572,7 +573,10 @@ class LessonListView extends StatelessWidget {
           if (card.isNewCard) {
             if (newCardIds.add(card.id)) totalNew++;
           } else if (card.isDue) {
-            if (dueCardIds.add(card.id)) totalDue++;
+            if (dueCardIds.add(card.id)) {
+              totalDue++;
+              if (card.isShortInterval) totalShortDue++;
+            }
           } else if (!card.dueDate.isBefore(tomorrowStart) &&
               card.dueDate.isBefore(dayAfterTomorrowStart) &&
               tomorrowCardIds.add(card.id)) {
@@ -585,7 +589,10 @@ class LessonListView extends StatelessWidget {
       }
     }
 
-    final availableDue = min(totalDue, provider.remainingReviews24h);
+    // Sub-24h (1 h / 12 h) cards ignore the review limit.
+    final availableDue =
+        totalShortDue +
+        min(totalDue - totalShortDue, provider.remainingReviews24h);
     final availableNew = min(totalNew, provider.remainingNewCards24h);
     final availableTotal = availableDue + availableNew;
     final isDailyLimitReached =

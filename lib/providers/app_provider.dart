@@ -1740,10 +1740,19 @@ class AppProvider extends ChangeNotifier {
       for (final item in queue) {
         (item.card.isNewCard ? newCards : due).add(item);
       }
-      return [
-        ...due.take(remainingReviews24h),
-        ...newCards.take(remainingNewCards24h),
-      ];
+      // Sub-24h intervals (1 h / 12 h) ignore the review limit and do not use
+      // up any of its quota.
+      var reviewBudget = remainingReviews24h;
+      final reviews = <StudyCardItem>[];
+      for (final item in due) {
+        if (item.card.isShortInterval) {
+          reviews.add(item);
+        } else if (reviewBudget > 0) {
+          reviews.add(item);
+          reviewBudget--;
+        }
+      }
+      return [...reviews, ...newCards.take(remainingNewCards24h)];
     }
 
     return queue;
@@ -1759,11 +1768,16 @@ class AppProvider extends ChangeNotifier {
 
   // Answer SRS review
   Future<void> recordCardReview(SrsCard card, SrsRating rating) async {
+    // Decide before processReview reschedules the card: reviewing a card that
+    // was on a sub-24h interval does not count toward the 24 h review limit.
+    final countsTowardLimit = !card.isShortInterval;
     SrsService.processReview(card, rating);
-    final now = DateTime.now();
-    _reviewTimestamps24h.removeWhere((t) => now.difference(t).inHours >= 24);
-    _reviewTimestamps24h.add(now);
-    await StorageService.saveReviewTimestamps(_reviewTimestamps24h);
+    if (countsTowardLimit) {
+      final now = DateTime.now();
+      _reviewTimestamps24h.removeWhere((t) => now.difference(t).inHours >= 24);
+      _reviewTimestamps24h.add(now);
+      await StorageService.saveReviewTimestamps(_reviewTimestamps24h);
+    }
     await saveState();
   }
 
