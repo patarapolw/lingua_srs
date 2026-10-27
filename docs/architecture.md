@@ -20,6 +20,7 @@ lingua_srs/
 │   │   ├── audio_service.dart         # Audio playback, TTS and offline caching
 │   │   ├── deepseek_service.dart      # DeepSeek chat client for quiz discussions
 │   │   ├── lesson_ai_prompt.dart      # Prompt, ids and suggestions for lesson AI chats
+│   │   ├── ai_discussion_search.dart  # Ids, search and related-word suggestions for saved AI chats
 │   │   ├── korean_text_search.dart    # Korean-aware sentence search tokenizer
 │   │   └── storage_service.dart       # Local persistence and debug seed data
 │   ├── views/
@@ -31,10 +32,12 @@ lingua_srs/
 │   │   ├── yaml_import_view.dart      # File/folder import, editor, validator & preview
 │   │   ├── vocab_edit_dialog.dart     # On-the-go editor for any field
 │   │   ├── ai_discussion_dialog.dart  # AI-assisted quiz discussion chat
-│   │   ├── recent_ai_discussions_view.dart # Recent Discussions tab
+│   │   ├── recent_ai_discussions_view.dart # Recent Discussions tab, with search
+│   │   ├── related_ai_discussions_sheet.dart # Related discussions panel of an AI chat
 │   │   └── deepseek_settings_dialog.dart # DeepSeek API key settings
 │   └── widgets/
 │       ├── adaptive_scaffold.dart     # Responsive layout (Rail vs BottomNav)
+│       ├── ai_discussion_suggestion_tile.dart # One suggested AI discussion and why
 │       ├── audio_button.dart          # Audio play/stop indicator
 │       ├── lesson_hierarchy_view.dart # Lesson folder tree with reordering
 │       ├── lesson_html_view.dart      # Lesson Markdown reader (WebView document)

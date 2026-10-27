@@ -12,6 +12,7 @@ import '../models/shared_vocab.dart';
 import '../models/srs_card.dart';
 import '../models/vocab_item.dart';
 import '../models/vocab_merge_record.dart';
+import '../services/ai_discussion_search.dart';
 import '../services/deepseek_service.dart';
 import '../services/srs_service.dart';
 import '../services/storage_service.dart';
@@ -341,6 +342,100 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Every saved discussion with the lesson, vocabulary and sentence it is
+  /// about, for listing and searching.
+  List<AiDiscussionSummary> get aiDiscussionSummaries => [
+    for (final entry in _aiDiscussions.entries)
+      AiDiscussionSummary.resolve(
+        id: entry.key,
+        messages: entry.value,
+        lessons: _lessons,
+        sentenceById: getSentenceById,
+      ),
+  ];
+
+  /// Earlier discussions worth showing when [discussionId] is opened: other
+  /// sentences of the same word first, then related words.
+  List<AiDiscussionSuggestion> relatedAiDiscussions(
+    String discussionId, {
+    int limit = 6,
+  }) => AiDiscussionSuggestions.forDiscussion(
+    discussionId: discussionId,
+    groups: vocabGroups,
+    discussions: aiDiscussionSummaries,
+    limit: limit,
+  );
+
+  /// The id of every vocabulary right now, to tell afterwards which words got
+  /// a new one.
+  Map<VocabItem, String> _currentVocabIds() =>
+      HashMap<VocabItem, String>.identity()..addEntries(
+        _lessons
+            .expand((lesson) => lesson.vocabularies)
+            .map((vocab) => MapEntry(vocab, vocab.id)),
+      );
+
+  /// Moves saved AI discussions along with words whose id changed since
+  /// [before] (from [_currentVocabIds]). An id changes when the word is
+  /// re-imported after an edit, when its id is edited, or when it adopts the id
+  /// of the same word in another lesson. Discussions are saved under the id, so
+  /// without this they would be orphaned.
+  ///
+  /// Only a word that moved to another id follows its chats. If anything else
+  /// still has the old id the word was split off, and the old id keeps them. If
+  /// one old id became several, or the new id is itself being renamed away,
+  /// nothing is moved, because it is not clear which chats belong where.
+  Future<void> _followVocabIdChanges(Map<VocabItem, String> before) async {
+    final renamedTo = <String, Set<String>>{};
+    final inUse = <String>{};
+    for (final vocab in _lessons.expand((lesson) => lesson.vocabularies)) {
+      inUse.add(vocab.id);
+      final previous = before[vocab];
+      if (previous != null && previous != vocab.id) {
+        renamedTo.putIfAbsent(previous, () => <String>{}).add(vocab.id);
+      }
+    }
+    var moved = false;
+    for (final entry in renamedTo.entries) {
+      final oldId = entry.key;
+      if (inUse.contains(oldId) || entry.value.length != 1) continue;
+      final newId = entry.value.single;
+      if (renamedTo.containsKey(newId)) continue;
+      if (_moveAiDiscussions({oldId}, newId)) moved = true;
+    }
+    if (moved) await StorageService.saveAiDiscussions(_aiDiscussions);
+  }
+
+  /// Moves the saved discussions of [absorbedIds] to [survivorId], because
+  /// merged words share one id afterwards and the old ids would be orphaned.
+  /// Threads about the same sentence are joined, oldest message first.
+  bool _moveAiDiscussions(Set<String> absorbedIds, String survivorId) {
+    var changed = false;
+    for (final key in List<String>.of(_aiDiscussions.keys)) {
+      final vocabId = AiDiscussionIds.vocabIdFrom(key);
+      if (vocabId == null || !absorbedIds.contains(vocabId)) continue;
+      final moved = _aiDiscussions.remove(key)!;
+      final newKey = AiDiscussionIds.forVocab(
+        survivorId,
+        AiDiscussionIds.sentenceIdFrom(key),
+      );
+      final merged = [...?_aiDiscussions[newKey], ...moved];
+      if (merged.every((message) => message.createdAt != null)) {
+        final indexed = [for (var i = 0; i < merged.length; i++) (i, merged[i])]
+          ..sort((a, b) {
+            final byTime = a.$2.createdAt!.compareTo(b.$2.createdAt!);
+            return byTime != 0 ? byTime : a.$1.compareTo(b.$1);
+          });
+        merged
+          ..clear()
+          ..addAll(indexed.map((entry) => entry.$2));
+      }
+      _aiDiscussions[newKey] = merged;
+      changed = true;
+    }
+    return changed;
+  }
+
   // Sentence Pool lookup
   Sentence? getSentenceById(String id) {
     try {
@@ -488,8 +583,10 @@ class AppProvider extends ChangeNotifier {
       defaultTitle: defaultTitle,
       defaultUnitTitle: defaultUnitTitle,
     );
+    final before = _currentVocabIds();
     final lesson = _applyParsedLesson(parsed);
     _linkSharedVocabProgress();
+    await _followVocabIdChanges(before);
     await _saveImportedLessons();
     notifyListeners();
     return lesson;
@@ -507,6 +604,7 @@ class AppProvider extends ChangeNotifier {
           .add(sentence);
     }
     final vocabIndex = _newVocabProgressIndex();
+    final idsBefore = _currentVocabIds();
     _importSentenceSet = HashSet<Sentence>.identity()..addAll(_sentences);
     try {
       for (var index = 0; index < parsedLessons.length; index++) {
@@ -525,6 +623,7 @@ class AppProvider extends ChangeNotifier {
     }
     if (parsedLessons.isNotEmpty) {
       _linkSharedVocabProgress();
+      await _followVocabIdChanges(idsBefore);
       await _saveImportedLessons();
       notifyListeners();
     }
@@ -971,6 +1070,8 @@ class AppProvider extends ChangeNotifier {
 
   // Update vocabulary fields
   Future<void> updateVocab(VocabItem vocab, {String? previousId}) async {
+    final idsBefore = _currentVocabIds();
+    if (previousId != null) idsBefore[vocab] = previousId;
     final existing = _findExistingVocab(
       vocab,
       _lessons
@@ -989,6 +1090,7 @@ class AppProvider extends ChangeNotifier {
     } else {
       _linkSharedVocabProgress();
     }
+    await _followVocabIdChanges(idsBefore);
     await saveState();
   }
 
@@ -1086,6 +1188,10 @@ class AppProvider extends ChangeNotifier {
         ..id = survivor.id
         ..idIsExplicit = true
         ..shared = shared;
+    }
+
+    if (_moveAiDiscussions(absorbed, survivor.id)) {
+      await StorageService.saveAiDiscussions(_aiDiscussions);
     }
 
     final record = VocabMergeRecord(

@@ -62,3 +62,31 @@ class LessonAiPrompt {
           'Give me practice sentences using this lesson.',
         ];
 }
+
+/// System prompts for continuing a chat whose lesson or word is gone. The saved
+/// conversation is then all the AI has to go on, and it is told so, so that it
+/// asks for the text instead of guessing at it.
+class OrphanedAiPrompt {
+  static String forLesson({
+    required String targetLanguage,
+    required String nativeLanguage,
+  }) => _build(targetLanguage, nativeLanguage, 'lesson', 'text or vocabulary');
+
+  static String forWord({
+    required String targetLanguage,
+    required String nativeLanguage,
+  }) => _build(targetLanguage, nativeLanguage, 'vocabulary word', 'meaning');
+
+  static String _build(
+    String targetLanguage,
+    String nativeLanguage,
+    String what,
+    String detail,
+  ) => [
+    'You are a helpful language-learning tutor.',
+    'The learner is studying $targetLanguage with $nativeLanguage support.',
+    'This conversation was about a $what that is no longer available, so you cannot see its $detail.',
+    'Continue from the conversation so far. If you need the $what itself to answer, say so instead of guessing.',
+    'Format your answer using Markdown.',
+  ].join('\n');
+}
