@@ -67,6 +67,12 @@ class SrsCard {
   /// Can be studied now: due, or new.
   bool get isAvailable => isNewCard || isDue;
 
+  /// Scheduled less than a day out (1 h after Again, 12 h after an early
+  /// Hard). These cards are being re-learned within the same day, so they are
+  /// exempt from the rolling 24 h review limit. New cards are not included:
+  /// they have their own limit.
+  bool get isShortInterval => status != SrsStatus.isNew && interval < 1;
+
   bool get hasRecentMistake {
     if (!isEnabled) return false;
     bool counts(DateTime d) =>
