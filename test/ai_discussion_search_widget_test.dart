@@ -438,7 +438,7 @@ void main() {
       await openDialog(tester, provider, 'v-apple:old');
 
       expect(find.text('Earlier discussions'), findsNothing);
-      expect(find.byTooltip('Delete saved discussion'), findsOneWidget);
+      expect(find.byTooltip('More'), findsOneWidget);
     });
 
     testWidgets('a lesson discussion offers none', (tester) async {
@@ -472,7 +472,7 @@ void main() {
       // Replaced, not stacked on top of the empty one.
       expect(find.byType(AiDiscussionDialog), findsOneWidget);
       expect(find.text('Earlier discussions'), findsNothing);
-      expect(find.byTooltip('Delete saved discussion'), findsOneWidget);
+      expect(find.byTooltip('More'), findsOneWidget);
     });
 
     testWidgets('the replaced dialog closes with one tap', (tester) async {
@@ -698,22 +698,166 @@ void main() {
     });
   });
 
-  group('Deleting from the list', () {
+  group('Dialog header buttons', () {
+    final saved = [
+      _msg('user', 'About the apple', 1),
+      _msg('assistant', 'It is a fruit.', 2),
+    ];
+
+    Future<void> openChat(
+      WidgetTester tester,
+      AppProvider provider,
+      String discussionId, {
+      Lesson? lesson,
+    }) async {
+      await pumpWith(
+        tester,
+        provider,
+        Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) => AiDiscussionDialog(
+                  discussionId: discussionId,
+                  targetWord: lesson?.displayTitle ?? '사과',
+                  translation: lesson == null ? 'apple' : '',
+                  targetLanguage: 'ko',
+                  nativeLanguage: 'en',
+                  lesson: lesson,
+                ),
+              ),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> chooseDelete(WidgetTester tester) async {
+      await tester.tap(find.byTooltip('More'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete discussion'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('has no key button, which opened all of the settings', (
+      tester,
+    ) async {
+      final (provider, _) = await loadedProvider(
+        tester,
+        discussions: {'v-apple:cur': saved},
+      );
+      await openChat(tester, provider, 'v-apple:cur');
+
+      expect(find.byTooltip('DeepSeek settings'), findsNothing);
+      expect(find.byIcon(Icons.key_outlined), findsNothing);
+    });
+
+    testWidgets('an empty chat has nothing to delete, so no More button', (
+      tester,
+    ) async {
+      final (provider, _) = await loadedProvider(tester);
+      await openChat(tester, provider, 'v-apple:new');
+
+      expect(find.byTooltip('Related discussions'), findsOneWidget);
+      expect(find.byTooltip('Close'), findsOneWidget);
+      expect(find.byTooltip('More'), findsNothing);
+    });
+
+    testWidgets('delete is hidden in More, not a header button', (
+      tester,
+    ) async {
+      final (provider, _) = await loadedProvider(
+        tester,
+        discussions: {'v-apple:cur': saved},
+      );
+      await openChat(tester, provider, 'v-apple:cur');
+
+      expect(find.byTooltip('More'), findsOneWidget);
+      expect(find.byTooltip('Delete saved discussion'), findsNothing);
+      expect(find.byIcon(Icons.delete_outline), findsNothing);
+      expect(find.text('Delete discussion'), findsNothing);
+
+      await tester.tap(find.byTooltip('More'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Delete discussion'), findsOneWidget);
+    });
+
+    testWidgets('Cancel keeps the discussion', (tester) async {
+      final (provider, _) = await loadedProvider(
+        tester,
+        discussions: {'v-apple:cur': saved},
+      );
+      await openChat(tester, provider, 'v-apple:cur');
+
+      await chooseDelete(tester);
+      expect(find.text('Delete this discussion?'), findsOneWidget);
+      expect(
+        find.text(
+          'The saved AI conversation about "사과" will be permanently deleted.',
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(provider.getAiDiscussion('v-apple:cur'), hasLength(2));
+      expect(find.byTooltip('More'), findsOneWidget);
+    });
+
+    testWidgets('deleting empties the chat and keeps the dialog open', (
+      tester,
+    ) async {
+      final (provider, _) = await loadedProvider(
+        tester,
+        discussions: {'v-apple:cur': saved},
+      );
+      await openChat(tester, provider, 'v-apple:cur');
+
+      await chooseDelete(tester);
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+      await tester.pumpAndSettle();
+
+      expect(provider.getAiDiscussion('v-apple:cur'), isEmpty);
+      expect(find.byType(AiDiscussionDialog), findsOneWidget);
+      expect(find.byTooltip('More'), findsNothing);
+      expect(
+        find.text('Ask a question about this word or sentence.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a lesson chat names the lesson in the confirmation', (
+      tester,
+    ) async {
+      final (provider, lesson) = await loadedProvider(tester);
+      final id = LessonAiPrompt.discussionId(lesson.id);
+      await tester.runAsync(
+        () => provider.addAiDiscussionMessage(id, _msg('user', 'Summarise', 1)),
+      );
+      await openChat(tester, provider, id, lesson: lesson);
+
+      await chooseDelete(tester);
+
+      expect(
+        find.text(
+          'The saved AI conversation about the lesson '
+          '"${lesson.displayTitle}" will be permanently deleted.',
+        ),
+        findsOneWidget,
+      );
+    });
+  });
+
+  group('Deleting a discussion', () {
     final discussions = {
       'v-apple:no-sentence': [_msg('user', 'About the apple', 11)],
       'v-eat:no-sentence': [_msg('user', 'About eating', 30)],
     };
-
-    Finder deleteButtonOf(String word) => find.descendant(
-      of: find.ancestor(
-        of: find.descendant(
-          of: find.byType(ListTile),
-          matching: find.text(word),
-        ),
-        matching: find.byType(ListTile),
-      ),
-      matching: find.byTooltip('Delete discussion'),
-    );
 
     Future<AppProvider> open(
       WidgetTester tester, [
@@ -727,58 +871,58 @@ void main() {
       return provider;
     }
 
+    /// Opens a discussion from the list, and deletes it from its More menu.
+    Future<void> deleteFromInside(WidgetTester tester, String word) async {
+      await tester.tap(title(word));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('More'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete discussion'));
+      await tester.pumpAndSettle();
+    }
+
     Future<void> confirm(WidgetTester tester) async {
       await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
       await tester.pumpAndSettle();
     }
 
-    testWidgets('every discussion has a delete button', (tester) async {
+    Future<void> closeDialog(WidgetTester tester) async {
+      await tester.tap(find.byTooltip('Close'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('the list has no delete buttons', (tester) async {
       await open(tester);
 
-      expect(find.byTooltip('Delete discussion'), findsNWidgets(2));
-      expect(deleteButtonOf('사과'), findsOneWidget);
+      expect(find.byTooltip('Delete discussion'), findsNothing);
+      expect(find.byIcon(Icons.delete_outline), findsNothing);
     });
 
-    testWidgets('asks first, and Cancel keeps the discussion', (tester) async {
+    testWidgets('a discussion is deleted from inside it', (tester) async {
       final provider = await open(tester);
 
-      await tester.tap(deleteButtonOf('사과'));
-      await tester.pumpAndSettle();
+      await deleteFromInside(tester, '사과');
       expect(find.text('Delete this discussion?'), findsOneWidget);
-      expect(find.textContaining('"사과"'), findsOneWidget);
-
-      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
-      await tester.pumpAndSettle();
-
-      expect(provider.aiDiscussions.keys, hasLength(2));
-      expect(find.text('사과'), findsOneWidget);
-    });
-
-    testWidgets('deleting removes it from the list and from storage', (
-      tester,
-    ) async {
-      final provider = await open(tester);
-
-      await tester.tap(deleteButtonOf('사과'));
-      await tester.pumpAndSettle();
       await confirm(tester);
+      await closeDialog(tester);
 
-      expect(find.text('사과'), findsNothing);
-      expect(find.text('먹다'), findsOneWidget);
+      expect(title('사과'), findsNothing);
+      expect(title('먹다'), findsOneWidget);
       expect(provider.aiDiscussions.keys, ['v-eat:no-sentence']);
       final stored = await tester.runAsync(StorageService.loadAiDiscussions);
       expect(stored!.keys, ['v-eat:no-sentence']);
     });
 
-    testWidgets('tapping the button does not open the discussion', (
-      tester,
-    ) async {
-      await open(tester);
+    testWidgets('Cancel keeps the discussion', (tester) async {
+      final provider = await open(tester);
 
-      await tester.tap(deleteButtonOf('사과'));
+      await deleteFromInside(tester, '사과');
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
       await tester.pumpAndSettle();
+      await closeDialog(tester);
 
-      expect(find.byType(AiDiscussionDialog), findsNothing);
+      expect(provider.aiDiscussions.keys, hasLength(2));
+      expect(title('사과'), findsOneWidget);
     });
 
     testWidgets('deleting the last one shows the empty state', (tester) async {
@@ -786,9 +930,9 @@ void main() {
         'v-apple:no-sentence': [_msg('user', 'About the apple', 11)],
       });
 
-      await tester.tap(deleteButtonOf('사과'));
-      await tester.pumpAndSettle();
+      await deleteFromInside(tester, '사과');
       await confirm(tester);
+      await closeDialog(tester);
 
       expect(find.text('No discussions yet'), findsOneWidget);
     });
@@ -798,9 +942,9 @@ void main() {
       await tester.enterText(find.byType(TextField), '사과');
       await tester.pump();
 
-      await tester.tap(deleteButtonOf('사과'));
-      await tester.pumpAndSettle();
+      await deleteFromInside(tester, '사과');
       await confirm(tester);
+      await closeDialog(tester);
 
       expect(find.text('No discussions match "사과".'), findsOneWidget);
       expect(find.text('먹다'), findsNothing);
@@ -814,15 +958,17 @@ void main() {
       });
 
       expect(find.text('Word not found'), findsOneWidget);
-      await tester.tap(deleteButtonOf('Word not found'));
-      await tester.pumpAndSettle();
+      await deleteFromInside(tester, 'Word not found');
       expect(
         find.textContaining('a word that no longer exists'),
         findsOneWidget,
       );
       await confirm(tester);
 
+      // Nothing is left to read about a word that is gone, so it closes.
       expect(provider.aiDiscussions, isEmpty);
+      expect(find.byType(AiDiscussionDialog), findsNothing);
+      expect(find.text('No discussions yet'), findsOneWidget);
     });
 
     testWidgets('a lesson that is gone is labelled and can be deleted', (
@@ -835,8 +981,7 @@ void main() {
       });
 
       expect(find.text('Lesson not found'), findsOneWidget);
-      await tester.tap(deleteButtonOf('Lesson not found'));
-      await tester.pumpAndSettle();
+      await deleteFromInside(tester, 'Lesson not found');
       expect(
         find.textContaining('a lesson that no longer exists'),
         findsOneWidget,
@@ -844,6 +989,7 @@ void main() {
       await confirm(tester);
 
       expect(provider.aiDiscussions, isEmpty);
+      expect(find.byType(AiDiscussionDialog), findsNothing);
     });
 
     testWidgets('a word that is gone still opens, with a clear title', (
@@ -1002,7 +1148,9 @@ void main() {
         'Lesson not found',
       );
 
-      await tester.tap(inDialog(find.byTooltip('Delete saved discussion')));
+      await tester.tap(inDialog(find.byTooltip('More')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete discussion'));
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
       await tester.pumpAndSettle();
