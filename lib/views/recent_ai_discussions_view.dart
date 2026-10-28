@@ -124,7 +124,8 @@ class _DiscussionCard extends StatelessWidget {
       child: ListTile(
         leading: const CircleAvatar(child: Icon(Icons.forum_outlined)),
         // The date sits beside the title: ListTile limits its trailing widget
-        // to 56px, which a date that wraps plus a button would exceed.
+        // to 56px, which a date that wraps would exceed. Deleting is done
+        // inside the discussion, not from the list.
         title: Row(
           children: [
             Expanded(
@@ -164,49 +165,9 @@ class _DiscussionCard extends StatelessWidget {
             ),
           ],
         ),
-        trailing: IconButton(
-          tooltip: 'Delete discussion',
-          icon: const Icon(Icons.delete_outline),
-          onPressed: () => _confirmDelete(context),
-        ),
         onTap: () => showAiDiscussion(context, discussion),
       ),
     );
-  }
-
-  /// What the confirmation says is about to be deleted.
-  String get _deleteMessage {
-    final what = discussion.isLesson
-        ? (discussion.isOrphaned
-              ? 'a lesson that no longer exists'
-              : 'the lesson "${discussion.title}"')
-        : (discussion.isOrphaned
-              ? 'a word that no longer exists'
-              : '"${discussion.title}"');
-    return 'The saved AI conversation about $what will be permanently deleted.';
-  }
-
-  Future<void> _confirmDelete(BuildContext context) async {
-    final provider = context.read<AppProvider>();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete this discussion?'),
-        content: Text(_deleteMessage),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    await provider.deleteAiDiscussion(discussion.id);
   }
 
   String _formatUpdatedAt(DateTime? updatedAt) {

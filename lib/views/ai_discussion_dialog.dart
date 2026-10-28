@@ -12,7 +12,9 @@ import '../widgets/ai_discussion_suggestion_tile.dart';
 import '../widgets/emphasis_text.dart';
 import '../widgets/markdown_content.dart';
 import 'related_ai_discussions_sheet.dart';
-import 'settings_dialog.dart';
+
+/// What the dialog header's More menu offers.
+enum _DialogMenuAction { delete }
 
 class AiDiscussionDialog extends StatefulWidget {
   final String discussionId;
@@ -83,14 +85,6 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
     super.dispose();
   }
 
-  Future<void> _openSettings() async {
-    await showDialog<void>(
-      context: context,
-      builder: (_) => const SettingsDialog(),
-    );
-    if (mounted) setState(() {});
-  }
-
   void _openEarlier(AiDiscussionSuggestion suggestion) {
     final dialog = aiDiscussionDialogFor(suggestion.discussion);
     Navigator.of(context).pushReplacement(
@@ -110,14 +104,24 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
     await showAiDiscussion(context, chosen);
   }
 
+  /// What the confirmation says is about to be deleted.
+  String get _deleteMessage {
+    final what = _isLessonChat
+        ? (widget.orphaned
+              ? 'a lesson that no longer exists'
+              : 'the lesson "${widget.targetWord}"')
+        : (widget.orphaned
+              ? 'a word that no longer exists'
+              : '"${widget.targetWord}"');
+    return 'The saved AI conversation about $what will be permanently deleted.';
+  }
+
   Future<void> _deleteDiscussion() async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Delete this discussion?'),
-        content: const Text(
-          'The saved AI conversation for this vocabulary will be permanently deleted.',
-        ),
+        content: Text(_deleteMessage),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
@@ -354,16 +358,36 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                         onPressed: _sending ? null : _openRelated,
                         icon: const Icon(Icons.manage_search),
                       ),
-                    IconButton(
-                      tooltip: 'DeepSeek settings',
-                      onPressed: _openSettings,
-                      icon: const Icon(Icons.key_outlined),
-                    ),
+                    // Deleting is rare and permanent, so it lives in a menu. An
+                    // empty chat has nothing to delete, hence nothing to show.
                     if (messages.isNotEmpty)
-                      IconButton(
-                        tooltip: 'Delete saved discussion',
-                        onPressed: _sending ? null : _deleteDiscussion,
-                        icon: const Icon(Icons.delete_outline),
+                      PopupMenuButton<_DialogMenuAction>(
+                        tooltip: 'More',
+                        enabled: !_sending,
+                        onSelected: (action) {
+                          switch (action) {
+                            case _DialogMenuAction.delete:
+                              _deleteDiscussion();
+                          }
+                        },
+                        itemBuilder: (_) => const [
+                          PopupMenuItem(
+                            value: _DialogMenuAction.delete,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.delete_outline),
+                                SizedBox(width: 12),
+                                Flexible(
+                                  child: Text(
+                                    'Delete discussion',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     IconButton(
                       tooltip: 'Close',
