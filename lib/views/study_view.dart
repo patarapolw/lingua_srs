@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../models/srs_card.dart';
+import '../models/vocab_item.dart';
 import '../providers/app_provider.dart';
 import '../services/ai_discussion_search.dart';
 import '../services/audio_service.dart';
@@ -233,6 +234,30 @@ void forgetCardInSession({
   for (var i = queue.length - 1; i > currentIndex; i--) {
     if (queue[i].card.id == card.id) queue.removeAt(i);
   }
+}
+
+/// Re-picks the sentence of every card in [queue] from [fromIndex] on that
+/// shows [vocab], when its sentence was deselected from the vocab (or the vocab
+/// had none and now has some). Earlier cards are left as they were answered.
+/// Returns whether any card changed.
+bool refreshStaleSentences({
+  required AppProvider provider,
+  required List<StudyCardItem> queue,
+  required int fromIndex,
+  required VocabItem vocab,
+}) {
+  var changed = false;
+  for (var i = max(fromIndex, 0); i < queue.length; i++) {
+    final item = queue[i];
+    if (!identical(item.vocab, vocab)) continue;
+    final before = item.sentence;
+    final after = provider.refreshSentenceForVocab(vocab, before);
+    if (!identical(before, after)) {
+      item.sentence = after;
+      changed = true;
+    }
+  }
+  return changed;
 }
 
 class StudyView extends StatefulWidget {
@@ -766,7 +791,16 @@ class _StudyViewState extends State<StudyView> {
     VocabEditDialog.show(context, item.vocab, lessonId: item.lesson.id).then((
       _,
     ) {
+      if (!mounted) return;
+      // The edit may have deselected the sentence on screen.
+      final changed = refreshStaleSentences(
+        provider: context.read<AppProvider>(),
+        queue: _queue,
+        fromIndex: _currentIndex,
+        vocab: item.vocab,
+      );
       setState(() {});
+      if (changed) _triggerPreload(_currentIndex);
     });
   }
 
