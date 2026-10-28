@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:lingua_srs/models/lesson.dart';
@@ -437,18 +438,43 @@ void main() {
       return lesson;
     }
 
+    // Test fonts (Ahem) draw every glyph one em wide, about twice as wide as
+    // a real font, so halve the text scale to get realistic text widths.
     Future<void> useWidth(WidgetTester tester, double width) async {
       tester.view.physicalSize = Size(width, 2400);
+      tester.platformDispatcher.textScaleFactorTestValue = 0.5;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
       await tester.pump();
+    }
+
+    // Nothing in the app bar may be cut off or overflow. A Text that is
+    // truncated (ellipsis or fade) is laid out narrower than its natural
+    // width.
+    void expectAppBarFits(WidgetTester tester) {
+      expect(tester.takeException(), isNull);
+      final paragraphs = tester.renderObjectList<RenderParagraph>(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byType(RichText),
+        ),
+      );
+      expect(paragraphs, isNotEmpty);
+      for (final p in paragraphs) {
+        expect(
+          p.getMaxIntrinsicWidth(double.infinity),
+          lessThanOrEqualTo(p.size.width + 0.5),
+          reason: 'App bar text is cut off: "${p.text.toPlainText()}"',
+        );
+      }
     }
 
     testWidgets('Mistakes progress label, narrow', (tester) async {
       await openStudy(tester, mistakes: true);
-      await useWidth(tester, 400);
+      await useWidth(tester, 360);
 
       expect(find.text('1 / 1'), findsOneWidget);
       expect(find.textContaining('Card 1 of 1'), findsNothing);
-      expect(find.text('Recent Mistakes Review'), findsOneWidget);
+      expectAppBarFits(tester);
     });
 
     testWidgets('Mistakes progress label, wide', (tester) async {
@@ -458,6 +484,7 @@ void main() {
       expect(find.text('${lesson.displayTitle} (1/1)'), findsOneWidget);
       expect(find.textContaining('Card 1 of 1'), findsNothing);
       expect(find.text('Recent Mistakes Review'), findsOneWidget);
+      expectAppBarFits(tester);
     });
 
     testWidgets('Study progress label is unchanged', (tester) async {
@@ -466,9 +493,11 @@ void main() {
       await useWidth(tester, 1200);
       expect(find.text('${lesson.displayTitle} (1/1)'), findsOneWidget);
       expect(find.text('Recent Mistakes Review'), findsNothing);
+      expectAppBarFits(tester);
 
-      await useWidth(tester, 400);
+      await useWidth(tester, 360);
       expect(find.text('1 / 1'), findsOneWidget);
+      expectAppBarFits(tester);
     });
   });
 

@@ -1011,9 +1011,10 @@ class _StudyViewState extends State<StudyView> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Same progress text in Study and Mistakes review;
-                    // mistakes only adds a small mode label on top.
-                    if (widget.recentMistakesOnly)
+                    // Same progress text in Study and Mistakes review. Wide
+                    // screens add a small line above (mistakes label or unit
+                    // title); narrow screens have no room for it.
+                    if (!isNarrow && widget.recentMistakesOnly)
                       Text(
                         'Recent Mistakes Review',
                         style: Theme.of(context).textTheme.labelSmall,
