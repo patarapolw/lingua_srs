@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../models/lesson.dart';
 import '../providers/app_provider.dart';
+import '../widgets/folder_picker_dialog.dart';
 import '../widgets/lesson_hierarchy_view.dart';
 import 'lesson_detail_view.dart';
 import 'lesson_reader_view.dart';
@@ -193,51 +194,15 @@ class LessonListView extends StatelessWidget {
     return pathsByKey.values.toList();
   }
 
-  Future<List<String>?> _chooseFolderPath(
-    BuildContext context,
-    String title,
-    List<List<String>> folderPaths,
-  ) => showDialog<List<String>>(
-    context: context,
-    builder: (dialogContext) => AlertDialog(
-      title: Text(title),
-      content: SizedBox(
-        width: 400,
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.home_outlined),
-              title: const Text('Root (no folder)'),
-              onTap: () => Navigator.pop(dialogContext, <String>[]),
-            ),
-            for (final path in folderPaths)
-              ListTile(
-                leading: const Icon(Icons.folder_outlined),
-                title: Text(formatHierarchyPath(path)),
-                onTap: () => Navigator.pop(dialogContext, path),
-              ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(dialogContext),
-          child: const Text('Cancel'),
-        ),
-      ],
-    ),
-  );
-
   Future<void> _moveLessonToFolder(
     BuildContext context,
     AppProvider provider,
     Lesson lesson,
   ) async {
-    final destination = await _chooseFolderPath(
+    final destination = await showFolderPickerDialog(
       context,
-      'Move "${lesson.displayTitle}" to folder',
-      _folderPaths(provider),
+      title: 'Move "${lesson.displayTitle}" to folder',
+      folderPaths: _folderPaths(provider),
     );
     if (destination == null || !context.mounted) return;
     try {
@@ -258,10 +223,10 @@ class LessonListView extends StatelessWidget {
     final destinations = _folderPaths(provider)
         .where((path) => !isHierarchyPathWithin(path, folderPath))
         .toList();
-    final destinationParent = await _chooseFolderPath(
+    final destinationParent = await showFolderPickerDialog(
       context,
-      'Move "${formatHierarchyPath(folderPath)}" under folder',
-      destinations,
+      title: 'Move "${formatHierarchyPath(folderPath)}" under folder',
+      folderPaths: destinations,
     );
     if (destinationParent == null || !context.mounted) return;
     try {

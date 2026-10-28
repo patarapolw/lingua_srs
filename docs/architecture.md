@@ -40,6 +40,7 @@ lingua_srs/
 │       ├── ai_discussion_suggestion_tile.dart # One suggested AI discussion and why
 │       ├── audio_button.dart          # Audio play/stop indicator
 │       ├── emphasis_text.dart         # Sentence text with **bold** segments, no Markdown
+│       ├── folder_picker_dialog.dart  # Pick an existing or new folder to move a lesson/folder into
 │       ├── lesson_hierarchy_view.dart # Lesson folder tree with reordering
 │       ├── lesson_html_view.dart      # Lesson Markdown reader (WebView document)
 │       ├── markdown_content.dart      # Markdown renderer for notes and chat

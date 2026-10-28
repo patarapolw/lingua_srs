@@ -1192,6 +1192,54 @@ vocabulary:
       },
     );
 
+    test(
+      'Moving into a not-yet-existing folder creates it, nested or not',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'lingua_srs_windows_legacy_migration_complete': true,
+          'lingua_srs_lessons': '[]',
+          'lingua_srs_sentences': '[]',
+        });
+        final provider = AppProvider();
+        while (provider.isLoading) {
+          await Future<void>.delayed(Duration.zero);
+        }
+
+        final lesson = await provider.importYaml('Lesson: Lesson A\nnouns: []');
+        final grouped = await provider.importYaml(
+          'Lesson: Lesson B\nnouns: []',
+          defaultUnitTitle: 'Old',
+        );
+        expect(lesson.folderPath, isEmpty);
+
+        await provider.moveLessonToFolder(lesson.id, ['Unit 3', 'Grammar']);
+        expect(lesson.folderPath, ['Unit 3', 'Grammar']);
+        expect(lesson.displayTitle, 'Lesson A');
+
+        await provider.moveLessonGroup(['Old'], ['Brand New', 'Parent']);
+        expect(grouped.folderPath, ['Brand New', 'Parent', 'Old']);
+
+        final reloadedProvider = AppProvider();
+        while (reloadedProvider.isLoading) {
+          await Future<void>.delayed(Duration.zero);
+        }
+        expect(
+          reloadedProvider.lessons
+              .singleWhere((candidate) => candidate.id == lesson.id)
+              .folderPath,
+          ['Unit 3', 'Grammar'],
+        );
+        expect(
+          reloadedProvider.lessons
+              .singleWhere((candidate) => candidate.id == grouped.id)
+              .folderPath,
+          ['Brand New', 'Parent', 'Old'],
+        );
+        provider.dispose();
+        reloadedProvider.dispose();
+      },
+    );
+
     test('Markdown imports require and read only vocabulary frontmatter', () {
       expect(
         YamlParserService.hasVocabularyFrontmatter(
