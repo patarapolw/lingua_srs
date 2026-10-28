@@ -1599,6 +1599,13 @@ class AppProvider extends ChangeNotifier {
     await saveState();
   }
 
+  // Reset SRS learning state for a single card (one direction of a vocabulary
+  // item); the other direction keeps its progress.
+  Future<void> resetCardSrs(SrsCard card) async {
+    card.resetProgress();
+    await saveState();
+  }
+
   // Reset SRS learning state for all vocabulary items in a lesson
   Future<void> resetLessonSrs(String lessonId) async {
     final lesson = _lessons.firstWhere((l) => l.id == lessonId);

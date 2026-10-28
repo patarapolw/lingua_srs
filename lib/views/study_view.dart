@@ -185,6 +185,24 @@ void reRateRecord({
   record.ratingGiven = rating;
 }
 
+/// Makes the session treat [card] as never seen, after it was reset to New.
+/// Its next rating then counts as a first review. Also drops any copy of the
+/// card still queued after [currentIndex]. Mutates [queue], [againCardIds]
+/// and [sessionRatedCardIds].
+void forgetCardInSession({
+  required SrsCard card,
+  required List<StudyCardItem> queue,
+  required int currentIndex,
+  required Set<String> againCardIds,
+  required Set<String> sessionRatedCardIds,
+}) {
+  againCardIds.remove(card.id);
+  sessionRatedCardIds.remove(card.id);
+  for (var i = queue.length - 1; i > currentIndex; i--) {
+    if (queue[i].card.id == card.id) queue.removeAt(i);
+  }
+}
+
 class StudyView extends StatefulWidget {
   final String? lessonId;
   final bool dueOnly;
@@ -713,6 +731,66 @@ class _StudyViewState extends State<StudyView> {
     });
   }
 
+  // Only the card being answered can be reset: a card already rated this
+  // position has history (undo, re-rate) that a reset would leave stale. A
+  // card that is still New has nothing to reset.
+  bool get _canResetCurrentCard =>
+      _isAnswerRevealed &&
+      _currentIndex < _queue.length &&
+      !_isReviewingPast &&
+      _queue[_currentIndex].card.status != SrsStatus.isNew;
+
+  Future<void> _confirmResetCurrentCard() async {
+    if (!_canResetCurrentCard) return;
+    final item = _queue[_currentIndex];
+    final direction = item.isTargetToNative
+        ? '${item.lesson.targetLanguage.toUpperCase()} ➔ ${item.lesson.nativeLanguage.toUpperCase()}'
+        : '${item.lesson.nativeLanguage.toUpperCase()} ➔ ${item.lesson.targetLanguage.toUpperCase()}';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Reset this card for "${item.vocab.targetWord}"?'),
+        content: Text(
+          'This resets the $direction card\'s repetitions, interval, and '
+          'review dates back to New. The other direction is not affected.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Reset to New'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    // The card may have moved on while the dialog was open.
+    if (_currentIndex >= _queue.length || _queue[_currentIndex] != item) return;
+
+    final provider = context.read<AppProvider>();
+    final saved = provider.resetCardSrs(item.card);
+    setState(() {
+      forgetCardInSession(
+        card: item.card,
+        queue: _queue,
+        currentIndex: _currentIndex,
+        againCardIds: _againCardIds,
+        sessionRatedCardIds: _sessionRatedCardIds,
+      );
+    });
+    await saved;
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Reset "${item.vocab.targetWord}" ($direction) to New.'),
+        duration: const Duration(milliseconds: 1400),
+      ),
+    );
+  }
+
   void _openAiDiscussion(StudyCardItem item) {
     final sentence = item.sentence;
     showDialog<void>(
@@ -1005,6 +1083,8 @@ class _StudyViewState extends State<StudyView> {
                     _openEditCurrentCard();
                   case 'ai':
                     _openAiDiscussion(item);
+                  case 'reset':
+                    _confirmResetCurrentCard();
                 }
               },
               itemBuilder: (context) => [
@@ -1036,6 +1116,13 @@ class _StudyViewState extends State<StudyView> {
                   Icons.forum_outlined,
                   'Ask AI',
                   enabled: _isAnswerRevealed,
+                ),
+                const PopupMenuDivider(),
+                moreItem(
+                  'reset',
+                  Icons.restart_alt,
+                  'Reset card to New',
+                  enabled: _canResetCurrentCard,
                 ),
                 if (item.lesson.targetLanguage == 'ko') ...[
                   const PopupMenuDivider(),
