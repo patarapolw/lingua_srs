@@ -81,7 +81,6 @@ void main() {
       'lingua_srs_lessons': '[]',
       'lingua_srs_sentences': '[]',
     });
-    await tester.runAsync(() => StorageService.saveAiDiscussions(discussions));
     final provider = AppProvider();
     addTearDown(provider.dispose);
     for (var i = 0; i < 100 && provider.isLoading; i++) {
@@ -95,6 +94,15 @@ void main() {
       isFalse,
       reason: 'provider never finished loading',
     );
+    // Added after loading: discussions in storage are joined into one per
+    // word on load, but these tests need several about the same word.
+    await tester.runAsync(() async {
+      for (final entry in discussions.entries) {
+        for (final message in entry.value) {
+          await provider.addAiDiscussionMessage(entry.key, message);
+        }
+      }
+    });
     final lesson = Lesson(
       title: 'Words',
       vocabularies: [

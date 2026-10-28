@@ -72,9 +72,23 @@ void main() {
   });
 
   group('AiDiscussionIds', () {
-    test('builds a vocabulary discussion id', () {
-      expect(AiDiscussionIds.forVocab('v1', 's1'), 'v1:s1');
-      expect(AiDiscussionIds.forVocab('v1', null), 'v1:no-sentence');
+    test('builds one vocabulary discussion id, whatever the sentence', () {
+      expect(AiDiscussionIds.forVocab('v1'), 'v1:no-sentence');
+    });
+
+    test('canonical maps a per-sentence id onto the vocabulary one', () {
+      expect(AiDiscussionIds.canonical('v1:s1'), 'v1:no-sentence');
+      expect(AiDiscussionIds.canonical('v1:no-sentence'), 'v1:no-sentence');
+      expect(AiDiscussionIds.canonical('book:3:s9'), 'book:3:no-sentence');
+      expect(
+        AiDiscussionIds.canonical('book:3:no-sentence'),
+        'book:3:no-sentence',
+      );
+    });
+
+    test('canonical leaves a lesson discussion alone', () {
+      final id = LessonAiPrompt.discussionId('L1');
+      expect(AiDiscussionIds.canonical(id), id);
     });
 
     test('reads the vocabulary and sentence back', () {
@@ -88,10 +102,10 @@ void main() {
     });
 
     test('splits at the last colon, so explicit ids may hold one', () {
-      final id = AiDiscussionIds.forVocab('book:3', 's9');
-      expect(id, 'book:3:s9');
+      const id = 'book:3:s9';
       expect(AiDiscussionIds.vocabIdFrom(id), 'book:3');
       expect(AiDiscussionIds.sentenceIdFrom(id), 's9');
+      expect(AiDiscussionIds.forVocab('book:3'), 'book:3:no-sentence');
     });
 
     test('an id without a colon is a vocabulary with no sentence', () {
@@ -103,6 +117,44 @@ void main() {
       final id = LessonAiPrompt.discussionId('L1');
       expect(AiDiscussionIds.vocabIdFrom(id), isNull);
       expect(AiDiscussionIds.sentenceIdFrom(id), isNull);
+    });
+  });
+
+  group('AiDiscussionMessages.join', () {
+    final base = DateTime.utc(2026, 1, 1);
+    AiDiscussionMessage at(String content, int minutes) => AiDiscussionMessage(
+      role: 'user',
+      content: content,
+      createdAt: base.add(Duration(minutes: minutes)),
+    );
+
+    test('puts dated messages oldest first across threads', () {
+      final joined = AiDiscussionMessages.join([
+        [at('b', 2), at('d', 4)],
+        [at('a', 1), at('c', 3)],
+      ]);
+      expect(joined.map((m) => m.content), ['a', 'b', 'c', 'd']);
+    });
+
+    test('keeps the given order for equal times', () {
+      final joined = AiDiscussionMessages.join([
+        [at('first', 1)],
+        [at('second', 1)],
+      ]);
+      expect(joined.map((m) => m.content), ['first', 'second']);
+    });
+
+    test('keeps threads whole when a message has no time', () {
+      const untimed = AiDiscussionMessage(role: 'user', content: 'untimed');
+      final joined = AiDiscussionMessages.join([
+        [at('late', 9)],
+        [untimed, at('early', 1)],
+      ]);
+      expect(joined.map((m) => m.content), ['late', 'untimed', 'early']);
+    });
+
+    test('joining nothing gives an empty conversation', () {
+      expect(AiDiscussionMessages.join(const []), isEmpty);
     });
   });
 
@@ -653,46 +705,41 @@ void main() {
 
     test('moves the discussions of a merged word to the survivor', () async {
       final provider = await providerWith({
-        'b:s1': [at('about b', t1)],
-        'b:no-sentence': [at('no sentence', t2)],
+        'b:no-sentence': [at('about b', t1)],
       });
 
       await merge(provider);
 
       final saved = provider.aiDiscussions;
-      expect(saved.keys, unorderedEquals(['a:s1', 'a:no-sentence']));
-      expect(saved['a:s1']!.single.content, 'about b');
-      expect(saved['a:no-sentence']!.single.content, 'no sentence');
+      expect(saved.keys, ['a:no-sentence']);
+      expect(saved['a:no-sentence']!.single.content, 'about b');
     });
 
-    test(
-      'joins threads about the same sentence, oldest message first',
-      () async {
-        final provider = await providerWith({
-          'a:s1': [at('first', t1), at('third', t3)],
-          'b:s1': [at('second', t2)],
-        });
-
-        await merge(provider);
-
-        expect(provider.aiDiscussions.keys, ['a:s1']);
-        expect(provider.aiDiscussions['a:s1']!.map((m) => m.content), [
-          'first',
-          'second',
-          'third',
-        ]);
-      },
-    );
-
-    test('appends instead of sorting when a message has no time', () async {
+    test('joins the threads of both words, oldest message first', () async {
       final provider = await providerWith({
-        'a:s1': [at('kept', null)],
-        'b:s1': [at('moved', t1)],
+        'a:no-sentence': [at('first', t1), at('third', t3)],
+        'b:no-sentence': [at('second', t2)],
       });
 
       await merge(provider);
 
-      expect(provider.aiDiscussions['a:s1']!.map((m) => m.content), [
+      expect(provider.aiDiscussions.keys, ['a:no-sentence']);
+      expect(provider.aiDiscussions['a:no-sentence']!.map((m) => m.content), [
+        'first',
+        'second',
+        'third',
+      ]);
+    });
+
+    test('appends instead of sorting when a message has no time', () async {
+      final provider = await providerWith({
+        'a:no-sentence': [at('kept', null)],
+        'b:no-sentence': [at('moved', t1)],
+      });
+
+      await merge(provider);
+
+      expect(provider.aiDiscussions['a:no-sentence']!.map((m) => m.content), [
         'kept',
         'moved',
       ]);
@@ -700,8 +747,8 @@ void main() {
 
     test('leaves other words and lesson discussions alone', () async {
       final provider = await providerWith({
-        'b:s1': [at('about b', t1)],
-        'c:s1': [at('about c', t1)],
+        'b:no-sentence': [at('about b', t1)],
+        'c:no-sentence': [at('about c', t1)],
         'lesson:b': [at('lesson whose id starts like b', t1)],
       });
 
@@ -709,31 +756,31 @@ void main() {
 
       expect(
         provider.aiDiscussions.keys,
-        unorderedEquals(['a:s1', 'c:s1', 'lesson:b']),
+        unorderedEquals(['a:no-sentence', 'c:no-sentence', 'lesson:b']),
       );
     });
 
     test('saves the moved discussions', () async {
       final provider = await providerWith({
-        'b:s1': [at('about b', t1)],
+        'b:no-sentence': [at('about b', t1)],
       });
 
       await merge(provider);
 
       final stored = await StorageService.loadAiDiscussions();
-      expect(stored.keys, ['a:s1']);
+      expect(stored.keys, ['a:no-sentence']);
     });
 
     test('merged discussions find their word again', () async {
       final provider = await providerWith({
-        'b:s1': [at('about b', t1)],
+        'b:no-sentence': [at('about b', t1)],
       });
       expect(provider.aiDiscussionSummaries.single.vocab, isNotNull);
 
       await merge(provider);
 
       final summary = provider.aiDiscussionSummaries.single;
-      expect(summary.id, 'a:s1');
+      expect(summary.id, 'a:no-sentence');
       expect(summary.vocab?.id, 'a');
       expect(
         AiDiscussionSearch.search('사과', provider.aiDiscussionSummaries),
@@ -743,12 +790,12 @@ void main() {
 
     test('merging words without discussions changes none', () async {
       final provider = await providerWith({
-        'c:s1': [at('about c', t1)],
+        'c:no-sentence': [at('about c', t1)],
       });
 
       await merge(provider);
 
-      expect(provider.aiDiscussions.keys, ['c:s1']);
+      expect(provider.aiDiscussions.keys, ['c:no-sentence']);
     });
   });
 
@@ -793,8 +840,7 @@ void main() {
       final apple = _word('a', '사과', 'apple');
       final provider = await providerWith(
         {
-          'a:s1': [at('about a', t1)],
-          'a:no-sentence': [at('no sentence', t2)],
+          'a:no-sentence': [at('about a', t1)],
         },
         [
           Lesson(title: 'Fruit', vocabularies: [apple]),
@@ -806,12 +852,9 @@ void main() {
         ..idIsExplicit = true;
       await provider.updateVocab(apple, previousId: 'a');
 
+      expect(provider.aiDiscussions.keys, ['fruit-apple:no-sentence']);
       expect(
-        provider.aiDiscussions.keys,
-        unorderedEquals(['fruit-apple:s1', 'fruit-apple:no-sentence']),
-      );
-      expect(
-        provider.aiDiscussions['fruit-apple:s1']!.single.content,
+        provider.aiDiscussions['fruit-apple:no-sentence']!.single.content,
         'about a',
       );
     });
@@ -820,7 +863,7 @@ void main() {
       final apple = _word('a', '사과', 'apple');
       final provider = await providerWith(
         {
-          'a:s1': [at('about a', t1)],
+          'a:no-sentence': [at('about a', t1)],
         },
         [
           Lesson(title: 'Fruit', vocabularies: [apple]),
@@ -830,14 +873,16 @@ void main() {
       apple.id = 'renamed';
       await provider.updateVocab(apple, previousId: 'a');
 
-      expect((await StorageService.loadAiDiscussions()).keys, ['renamed:s1']);
+      expect((await StorageService.loadAiDiscussions()).keys, [
+        'renamed:no-sentence',
+      ]);
     });
 
     test('a found word still resolves from its moved discussion', () async {
       final apple = _word('a', '사과', 'apple');
       final provider = await providerWith(
         {
-          'a:s1': [at('about a', t1)],
+          'a:no-sentence': [at('about a', t1)],
         },
         [
           Lesson(title: 'Fruit', vocabularies: [apple]),
@@ -857,7 +902,7 @@ void main() {
       final there = _word('a', '사과', 'apple');
       final provider = await providerWith(
         {
-          'a:s1': [at('about a', t1)],
+          'a:no-sentence': [at('about a', t1)],
         },
         [
           Lesson(title: 'One', vocabularies: [here]),
@@ -872,7 +917,7 @@ void main() {
       await provider.updateVocab(here, previousId: 'a');
       expect(here.id, 'split-off');
 
-      expect(provider.aiDiscussions.keys, ['a:s1']);
+      expect(provider.aiDiscussions.keys, ['a:no-sentence']);
     });
 
     test('adopting the id of another word joins their chats', () async {
@@ -880,8 +925,8 @@ void main() {
       final b = _word('b', '애플', 'apple');
       final provider = await providerWith(
         {
-          'a:s1': [at('first', t1), at('third', t3)],
-          'b:s1': [at('second', t2)],
+          'a:no-sentence': [at('first', t1), at('third', t3)],
+          'b:no-sentence': [at('second', t2)],
         },
         [
           Lesson(title: 'Fruit', vocabularies: [a, b]),
@@ -891,8 +936,8 @@ void main() {
       b.id = 'a';
       await provider.updateVocab(b, previousId: 'b');
 
-      expect(provider.aiDiscussions.keys, ['a:s1']);
-      expect(provider.aiDiscussions['a:s1']!.map((m) => m.content), [
+      expect(provider.aiDiscussions.keys, ['a:no-sentence']);
+      expect(provider.aiDiscussions['a:no-sentence']!.map((m) => m.content), [
         'first',
         'second',
         'third',
@@ -904,8 +949,8 @@ void main() {
       final b = _word('b', '애플', 'apple');
       final provider = await providerWith(
         {
-          'a:s1': [at('about a', t1)],
-          'b:s1': [at('about b', t2)],
+          'a:no-sentence': [at('about a', t1)],
+          'b:no-sentence': [at('about b', t2)],
         },
         [
           Lesson(title: 'Fruit', vocabularies: [a, b]),
@@ -916,8 +961,14 @@ void main() {
       b.id = 'a';
       await provider.updateVocab(a, previousId: 'a');
 
-      expect(provider.aiDiscussions['a:s1']!.single.content, 'about a');
-      expect(provider.aiDiscussions['b:s1']!.single.content, 'about b');
+      expect(
+        provider.aiDiscussions['a:no-sentence']!.single.content,
+        'about a',
+      );
+      expect(
+        provider.aiDiscussions['b:no-sentence']!.single.content,
+        'about b',
+      );
     });
 
     test('leaves other words and lesson chats alone', () async {
@@ -925,8 +976,8 @@ void main() {
       final c = _word('c', '학교', 'school');
       final provider = await providerWith(
         {
-          'a:s1': [at('about a', t1)],
-          'c:s1': [at('about c', t2)],
+          'a:no-sentence': [at('about a', t1)],
+          'c:no-sentence': [at('about c', t2)],
           'lesson:a': [at('lesson whose id starts like a', t3)],
         },
         [
@@ -939,7 +990,7 @@ void main() {
 
       expect(
         provider.aiDiscussions.keys,
-        unorderedEquals(['renamed:s1', 'c:s1', 'lesson:a']),
+        unorderedEquals(['renamed:no-sentence', 'c:no-sentence', 'lesson:a']),
       );
     });
 
@@ -951,7 +1002,7 @@ void main() {
         final vocab = lesson.vocabularies.single;
         final oldId = vocab.id;
         await provider.addAiDiscussionMessage(
-          AiDiscussionIds.forVocab(oldId, null),
+          AiDiscussionIds.forVocab(oldId),
           at('about apple', t1),
         );
 
@@ -959,9 +1010,7 @@ void main() {
         vocab.translation = 'apple fruit';
         await provider.updateVocab(vocab, previousId: oldId);
         expect(vocab.id, oldId);
-        expect(provider.aiDiscussions.keys, [
-          AiDiscussionIds.forVocab(oldId, null),
-        ]);
+        expect(provider.aiDiscussions.keys, [AiDiscussionIds.forVocab(oldId)]);
 
         // ...but importing the same text again matches it by meaning and gives
         // it the id of the edited text.
@@ -969,9 +1018,7 @@ void main() {
 
         final newId = provider.lessons.single.vocabularies.single.id;
         expect(newId, isNot(oldId));
-        expect(provider.aiDiscussions.keys, [
-          AiDiscussionIds.forVocab(newId, null),
-        ]);
+        expect(provider.aiDiscussions.keys, [AiDiscussionIds.forVocab(newId)]);
         final summary = provider.aiDiscussionSummaries.single;
         expect(summary.vocab?.translation, 'apple fruit');
       },
@@ -985,7 +1032,7 @@ void main() {
         final vocab = lesson.vocabularies.single;
         final oldId = vocab.id;
         await provider.addAiDiscussionMessage(
-          AiDiscussionIds.forVocab(oldId, null),
+          AiDiscussionIds.forVocab(oldId),
           at('about apple', t1),
         );
 
@@ -993,17 +1040,13 @@ void main() {
         await provider.updateVocab(vocab, previousId: oldId);
         // Like the translation, the headword does not change the id by itself.
         expect(vocab.id, oldId);
-        expect(provider.aiDiscussions.keys, [
-          AiDiscussionIds.forVocab(oldId, null),
-        ]);
+        expect(provider.aiDiscussions.keys, [AiDiscussionIds.forVocab(oldId)]);
 
         await provider.importYaml(headwordYaml);
 
         final newId = provider.lessons.single.vocabularies.single.id;
         expect(newId, isNot(oldId));
-        expect(provider.aiDiscussions.keys, [
-          AiDiscussionIds.forVocab(newId, null),
-        ]);
+        expect(provider.aiDiscussions.keys, [AiDiscussionIds.forVocab(newId)]);
         final summary = provider.aiDiscussionSummaries.single;
         expect(summary.vocab?.targetWord, '능금');
         // ...and the chat is found by the new headword, not the old one.
@@ -1020,7 +1063,7 @@ void main() {
         final vocab = lesson.vocabularies.single;
         final oldId = vocab.id;
         await provider.addAiDiscussionMessage(
-          AiDiscussionIds.forVocab(oldId, 's1'),
+          AiDiscussionIds.forVocab(oldId),
           at('about apple', t1),
         );
 
@@ -1032,9 +1075,7 @@ void main() {
 
         final newId = provider.lessons.single.vocabularies.single.id;
         expect(newId, isNot(oldId));
-        expect(provider.aiDiscussions.keys, [
-          AiDiscussionIds.forVocab(newId, 's1'),
-        ]);
+        expect(provider.aiDiscussions.keys, [AiDiscussionIds.forVocab(newId)]);
         final summary = provider.aiDiscussionSummaries.single;
         expect(summary.vocab?.targetWord, '능금');
         expect(summary.vocab?.translation, 'crab apple');
@@ -1048,7 +1089,7 @@ void main() {
         final lesson = await provider.importYaml(fruitYaml);
         final vocab = lesson.vocabularies.single;
         await provider.addAiDiscussionMessage(
-          AiDiscussionIds.forVocab(vocab.id, null),
+          AiDiscussionIds.forVocab(vocab.id),
           at('about apple', t1),
         );
 
@@ -1068,13 +1109,141 @@ void main() {
       final lesson = await provider.importYaml(fruitYaml);
       final id = lesson.vocabularies.single.id;
       await provider.addAiDiscussionMessage(
-        AiDiscussionIds.forVocab(id, 's1'),
+        AiDiscussionIds.forVocab(id),
         at('about apple', t1),
       );
 
       await provider.importYaml(fruitYaml);
 
-      expect(provider.aiDiscussions.keys, [AiDiscussionIds.forVocab(id, 's1')]);
+      expect(provider.aiDiscussions.keys, [AiDiscussionIds.forVocab(id)]);
+    });
+  });
+
+  group('discussions saved per sentence', () {
+    final t1 = _base.add(const Duration(minutes: 1));
+    final t2 = _base.add(const Duration(minutes: 2));
+    final t3 = _base.add(const Duration(minutes: 3));
+
+    AiDiscussionMessage at(String text, DateTime? time) =>
+        AiDiscussionMessage(role: 'user', content: text, createdAt: time);
+
+    Future<AppProvider> providerWith(
+      Map<String, List<AiDiscussionMessage>> discussions,
+    ) async {
+      SharedPreferences.setMockInitialValues({
+        'lingua_srs_windows_legacy_migration_complete': true,
+        'lingua_srs_lessons': '[]',
+        'lingua_srs_sentences': '[]',
+      });
+      await StorageService.saveAiDiscussions(discussions);
+      final provider = AppProvider();
+      while (provider.isLoading) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      return provider;
+    }
+
+    test('are joined into one discussion per word on load', () async {
+      final provider = await providerWith({
+        'a:s1': [at('first', t1), at('third', t3)],
+        'a:s2': [at('second', t2)],
+        'b:s1': [at('about b', t1)],
+      });
+
+      expect(
+        provider.aiDiscussions.keys,
+        unorderedEquals(['a:no-sentence', 'b:no-sentence']),
+      );
+      expect(provider.aiDiscussions['a:no-sentence']!.map((m) => m.content), [
+        'first',
+        'second',
+        'third',
+      ]);
+      expect(
+        provider.aiDiscussions['b:no-sentence']!.single.content,
+        'about b',
+      );
+    });
+
+    test('join the discussion that had no sentence', () async {
+      final provider = await providerWith({
+        'a:no-sentence': [at('first', t1)],
+        'a:s1': [at('second', t2)],
+      });
+
+      expect(provider.aiDiscussions.keys, ['a:no-sentence']);
+      expect(provider.aiDiscussions['a:no-sentence']!.map((m) => m.content), [
+        'first',
+        'second',
+      ]);
+    });
+
+    test('are saved joined, so the next start has nothing to join', () async {
+      await providerWith({
+        'a:s1': [at('first', t1)],
+        'a:s2': [at('second', t2)],
+      });
+
+      final stored = await StorageService.loadAiDiscussions();
+      expect(stored.keys, ['a:no-sentence']);
+      expect(stored['a:no-sentence']!.map((m) => m.content), [
+        'first',
+        'second',
+      ]);
+    });
+
+    test('keep a word whose id holds a colon', () async {
+      final provider = await providerWith({
+        'book:3:s1': [at('first', t1)],
+        'book:3:s2': [at('second', t2)],
+      });
+
+      expect(provider.aiDiscussions.keys, ['book:3:no-sentence']);
+    });
+
+    test('leave lesson discussions and joined ones alone', () async {
+      final provider = await providerWith({
+        'lesson:L1': [at('about the lesson', t1)],
+        'a:no-sentence': [at('about a', t2)],
+      });
+
+      expect(
+        provider.aiDiscussions.keys,
+        unorderedEquals(['lesson:L1', 'a:no-sentence']),
+      );
+    });
+
+    test('are one discussion to the list and the search', () async {
+      final provider = await providerWith({
+        'a:s1': [at('about 사과 here', t1)],
+        'a:s2': [at('about 사과 there', t2)],
+      });
+      provider.lessons.add(
+        Lesson(title: 'Fruit', vocabularies: [_word('a', '사과', 'apple')]),
+      );
+
+      final summaries = provider.aiDiscussionSummaries;
+
+      expect(summaries, hasLength(1));
+      expect(summaries.single.vocab?.id, 'a');
+      expect(summaries.single.messages, hasLength(2));
+    });
+
+    test('a new message goes to the shared discussion of the word', () async {
+      final provider = await providerWith({
+        'a:s1': [at('earlier', t1)],
+      });
+
+      await provider.addAiDiscussionMessage(
+        AiDiscussionIds.forVocab('a'),
+        at('later', t2),
+      );
+
+      expect(provider.aiDiscussions.keys, ['a:no-sentence']);
+      expect(provider.aiDiscussions['a:no-sentence']!.map((m) => m.content), [
+        'earlier',
+        'later',
+      ]);
     });
   });
 
@@ -1086,9 +1255,9 @@ void main() {
         'lingua_srs_sentences': '[]',
       });
       await StorageService.saveAiDiscussions({
-        'a:old': [_msg('user', 'Earlier about a', minutes: 1)],
-        'b:old': [_msg('user', 'Earlier about b', minutes: 2)],
-        'c:old': [_msg('user', 'Earlier about c', minutes: 3)],
+        'a:no-sentence': [_msg('user', 'Earlier about a', minutes: 1)],
+        'b:no-sentence': [_msg('user', 'Earlier about b', minutes: 2)],
+        'c:no-sentence': [_msg('user', 'Earlier about c', minutes: 3)],
       });
       final provider = AppProvider();
       while (provider.isLoading) {
@@ -1109,7 +1278,10 @@ void main() {
 
       final result = provider.relatedAiDiscussions('a:new');
 
-      expect(result.map((s) => s.discussion.id), ['a:old', 'b:old']);
+      expect(result.map((s) => s.discussion.id), [
+        'a:no-sentence',
+        'b:no-sentence',
+      ]);
       expect(result.map((s) => s.label), ['Same word', 'Same meaning']);
     });
   });
