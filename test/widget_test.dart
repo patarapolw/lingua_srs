@@ -404,6 +404,74 @@ void main() {
     expect(find.text('Suggest merges with AI'), findsOneWidget);
   });
 
+  group('Study progress label', () {
+    Future<Lesson> openStudy(
+      WidgetTester tester, {
+      required bool mistakes,
+    }) async {
+      final provider = await loadedProvider(tester);
+      final lesson = await seed(
+        tester,
+        provider,
+        'Progress',
+        'nouns',
+        '배',
+        'pear',
+      );
+      final vocab = only(lesson);
+      vocab.cardNativeToTarget.isEnabled = false;
+      final card = vocab.cardTargetToNative;
+      card.status = SrsStatus.learning;
+      card.lastRating = SrsRating.again;
+      card.lastMistakeDate = DateTime.now();
+      card.lastReviewed = DateTime.now();
+      await pumpWith(
+        tester,
+        provider,
+        StudyView(
+          lessonId: lesson.id,
+          dueOnly: false,
+          recentMistakesOnly: mistakes,
+        ),
+      );
+      return lesson;
+    }
+
+    Future<void> useWidth(WidgetTester tester, double width) async {
+      tester.view.physicalSize = Size(width, 2400);
+      await tester.pump();
+    }
+
+    testWidgets('Mistakes progress label, narrow', (tester) async {
+      await openStudy(tester, mistakes: true);
+      await useWidth(tester, 400);
+
+      expect(find.text('1 / 1'), findsOneWidget);
+      expect(find.textContaining('Card 1 of 1'), findsNothing);
+      expect(find.text('Recent Mistakes Review'), findsOneWidget);
+    });
+
+    testWidgets('Mistakes progress label, wide', (tester) async {
+      final lesson = await openStudy(tester, mistakes: true);
+      await useWidth(tester, 1200);
+
+      expect(find.text('${lesson.displayTitle} (1/1)'), findsOneWidget);
+      expect(find.textContaining('Card 1 of 1'), findsNothing);
+      expect(find.text('Recent Mistakes Review'), findsOneWidget);
+    });
+
+    testWidgets('Study progress label is unchanged', (tester) async {
+      final lesson = await openStudy(tester, mistakes: false);
+
+      await useWidth(tester, 1200);
+      expect(find.text('${lesson.displayTitle} (1/1)'), findsOneWidget);
+      expect(find.text('Recent Mistakes Review'), findsNothing);
+
+      await useWidth(tester, 400);
+      expect(find.text('1 / 1'), findsOneWidget);
+    });
+  });
+
   group('Study card front hints', () {
     Future<VocabItem> openStudy(
       WidgetTester tester, {

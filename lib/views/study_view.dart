@@ -99,15 +99,47 @@ class ReviewHistoryRecord {
   }
 }
 
-/// Cards marked something other than Again on their FIRST pass.
+/// Cards marked Good or Easy on their FIRST pass. Second-pass answers don't
+/// count.
 int firstPassRightCount(Iterable<ReviewHistoryRecord> history) => history
-    .where((r) => r.wasFirstSessionRating && r.ratingGiven != SrsRating.again)
+    .where(
+      (r) =>
+          r.wasFirstSessionRating &&
+          (r.ratingGiven == SrsRating.good || r.ratingGiven == SrsRating.easy),
+    )
     .length;
 
-/// Cards marked Again on their FIRST pass. Second-pass answers don't count.
+/// Cards marked Again or Hard on their FIRST pass. Second-pass answers don't
+/// count.
 int firstPassWrongCount(Iterable<ReviewHistoryRecord> history) => history
-    .where((r) => r.wasFirstSessionRating && r.ratingGiven == SrsRating.again)
+    .where(
+      (r) =>
+          r.wasFirstSessionRating &&
+          (r.ratingGiven == SrsRating.again || r.ratingGiven == SrsRating.hard),
+    )
     .length;
+
+/// The rating that currently decides each card, keyed by card id: the answer
+/// at the latest queue position, so a re-queued repeat overrides the first
+/// pass, and re-rating an earlier position never overrides a later one.
+Map<String, SrsRating> latestRatings(Iterable<ReviewHistoryRecord> history) {
+  final latest = <String, ReviewHistoryRecord>{};
+  for (final r in history) {
+    final current = latest[r.card.id];
+    if (current == null || r.queueIndex >= current.queueIndex) {
+      latest[r.card.id] = r;
+    }
+  }
+  return {for (final e in latest.entries) e.key: e.value.ratingGiven};
+}
+
+/// Cards whose latest answer is not Again (mistakes practice completion).
+int lastAnswerRightCount(Iterable<ReviewHistoryRecord> history) =>
+    latestRatings(history).values.where((r) => r != SrsRating.again).length;
+
+/// Cards whose latest answer is Again, i.e. still to be cleared.
+int lastAnswerWrongCount(Iterable<ReviewHistoryRecord> history) =>
+    latestRatings(history).values.where((r) => r == SrsRating.again).length;
 
 /// Number of different cards in the queue. A card that was re-queued after
 /// Again appears twice in the queue but is still one card.
@@ -237,8 +269,15 @@ class _StudyViewState extends State<StudyView> {
     TargetPlatform.fuchsia => false,
     _ => true,
   };
-  int get rightCount => firstPassRightCount(_history);
-  int get wrongCount => firstPassWrongCount(_history);
+  // Study review judges a card by its first pass (Again/Hard = wrong).
+  // Mistakes practice judges it by its latest answer, so a mistake that is
+  // answered correctly on retry counts as complete.
+  int get rightCount => _isPracticeOnly
+      ? lastAnswerRightCount(_history)
+      : firstPassRightCount(_history);
+  int get wrongCount => _isPracticeOnly
+      ? lastAnswerWrongCount(_history)
+      : firstPassWrongCount(_history);
 
   bool get _isReviewingPast => _currentIndex < _answeredCount;
 
@@ -942,6 +981,7 @@ class _StudyViewState extends State<StudyView> {
     final canUndo = _history.isNotEmpty;
 
     const overflowWidthCutoff = 700;
+    final isNarrow = MediaQuery.sizeOf(context).width < overflowWidthCutoff;
 
     PopupMenuItem<String> moreItem(
       String value,
@@ -971,30 +1011,30 @@ class _StudyViewState extends State<StudyView> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (widget.recentMistakesOnly) ...[
-                      const Text('Recent Mistakes Review'),
+                    // Same progress text in Study and Mistakes review;
+                    // mistakes only adds a small mode label on top.
+                    if (widget.recentMistakesOnly)
                       Text(
-                        'Card $currentNumber of $total',
+                        'Recent Mistakes Review',
+                        style: Theme.of(context).textTheme.labelSmall,
+                      )
+                    else if (!isNarrow &&
+                        item.lesson.effectiveUnitTitle != null)
+                      Text(
+                        item.lesson.effectiveUnitTitle!,
                         style: Theme.of(context).textTheme.labelSmall,
                       ),
-                    ] else if (MediaQuery.sizeOf(context).width <
-                        overflowWidthCutoff)
+                    if (isNarrow)
                       Text(
                         '$currentNumber / $total',
                         maxLines: 1,
                         softWrap: false,
                         overflow: TextOverflow.fade,
                       )
-                    else ...[
-                      if (item.lesson.effectiveUnitTitle != null)
-                        Text(
-                          item.lesson.effectiveUnitTitle!,
-                          style: Theme.of(context).textTheme.labelSmall,
-                        ),
+                    else
                       Text(
                         '${item.lesson.displayTitle} ($currentNumber/$total)',
                       ),
-                    ],
                   ],
                 ),
               ),
