@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../providers/app_provider.dart';
 import '../services/ai_discussion_search.dart';
-import '../widgets/markdown_content.dart';
+import '../widgets/emphasis_text.dart';
 import 'ai_discussion_dialog.dart';
 
 class RecentAiDiscussionsView extends StatefulWidget {
@@ -152,8 +152,8 @@ class _DiscussionCard extends StatelessWidget {
                 when s.isNotEmpty)
               Padding(
                 padding: const EdgeInsetsGeometry.only(top: 2, bottom: 2),
-                child: MarkdownContent(
-                  content: s,
+                child: EmphasisText(
+                  s,
                   style: const TextStyle(fontStyle: FontStyle.italic),
                 ),
               ),

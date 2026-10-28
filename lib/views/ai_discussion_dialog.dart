@@ -9,6 +9,7 @@ import '../services/ai_discussion_search.dart';
 import '../services/deepseek_service.dart';
 import '../services/lesson_ai_prompt.dart';
 import '../widgets/ai_discussion_suggestion_tile.dart';
+import '../widgets/emphasis_text.dart';
 import '../widgets/markdown_content.dart';
 import 'related_ai_discussions_sheet.dart';
 import 'settings_dialog.dart';
@@ -380,8 +381,8 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                           .withValues(alpha: 0.55),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: MarkdownContent(
-                      content: widget.sentenceTarget!,
+                    child: EmphasisText(
+                      widget.sentenceTarget!,
                       style: theme.textTheme.bodyMedium,
                     ),
                   ),

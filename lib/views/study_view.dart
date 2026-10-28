@@ -8,11 +8,13 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../models/srs_card.dart';
+import '../models/vocab_item.dart';
 import '../providers/app_provider.dart';
 import '../services/ai_discussion_search.dart';
 import '../services/audio_service.dart';
 import '../services/srs_service.dart';
 import '../widgets/audio_button.dart';
+import '../widgets/emphasis_text.dart';
 import '../widgets/markdown_content.dart';
 import '../widgets/pronunciation_line.dart';
 import '../widgets/pronunciation_toggle.dart';
@@ -233,6 +235,30 @@ void forgetCardInSession({
   for (var i = queue.length - 1; i > currentIndex; i--) {
     if (queue[i].card.id == card.id) queue.removeAt(i);
   }
+}
+
+/// Re-picks the sentence of every card in [queue] from [fromIndex] on that
+/// shows [vocab], when its sentence was deselected from the vocab (or the vocab
+/// had none and now has some). Earlier cards are left as they were answered.
+/// Returns whether any card changed.
+bool refreshStaleSentences({
+  required AppProvider provider,
+  required List<StudyCardItem> queue,
+  required int fromIndex,
+  required VocabItem vocab,
+}) {
+  var changed = false;
+  for (var i = max(fromIndex, 0); i < queue.length; i++) {
+    final item = queue[i];
+    if (!identical(item.vocab, vocab)) continue;
+    final before = item.sentence;
+    final after = provider.refreshSentenceForVocab(vocab, before);
+    if (!identical(before, after)) {
+      item.sentence = after;
+      changed = true;
+    }
+  }
+  return changed;
 }
 
 class StudyView extends StatefulWidget {
@@ -766,7 +792,16 @@ class _StudyViewState extends State<StudyView> {
     VocabEditDialog.show(context, item.vocab, lessonId: item.lesson.id).then((
       _,
     ) {
+      if (!mounted) return;
+      // The edit may have deselected the sentence on screen.
+      final changed = refreshStaleSentences(
+        provider: context.read<AppProvider>(),
+        queue: _queue,
+        fromIndex: _currentIndex,
+        vocab: item.vocab,
+      );
       setState(() {});
+      if (changed) _triggerPreload(_currentIndex);
     });
   }
 
@@ -1373,9 +1408,8 @@ class _StudyViewState extends State<StudyView> {
                                           crossAxisAlignment:
                                               CrossAxisAlignment.center,
                                           children: [
-                                            MarkdownContent(
-                                              content:
-                                                  item.sentence!.targetText,
+                                            EmphasisText(
+                                              item.sentence!.targetText,
                                               style: theme.textTheme.titleMedium
                                                   ?.copyWith(height: 1.4),
                                             ),
@@ -1425,8 +1459,8 @@ class _StudyViewState extends State<StudyView> {
                                               CrossAxisAlignment.center,
                                           children: [
                                             const SizedBox(height: 10),
-                                            MarkdownContent(
-                                              content: item.sentence!.toCloze(
+                                            EmphasisText(
+                                              item.sentence!.toCloze(
                                                 targetWord:
                                                     item.vocab.targetWord,
                                               ),
@@ -1541,9 +1575,8 @@ class _StudyViewState extends State<StudyView> {
                                                 MainAxisAlignment.spaceBetween,
                                             children: [
                                               Expanded(
-                                                child: MarkdownContent(
-                                                  content:
-                                                      item.sentence!.targetText,
+                                                child: EmphasisText(
+                                                  item.sentence!.targetText,
                                                   style: theme
                                                       .textTheme
                                                       .titleMedium
@@ -1577,10 +1610,8 @@ class _StudyViewState extends State<StudyView> {
                                             key: ValueKey(
                                               '$_currentIndex-${item.sentence!.id}',
                                             ),
-                                            child: MarkdownContent(
-                                              content: item
-                                                  .sentence!
-                                                  .translationText,
+                                            child: EmphasisText(
+                                              item.sentence!.translationText,
                                               style: theme.textTheme.bodyMedium
                                                   ?.copyWith(
                                                     color: theme

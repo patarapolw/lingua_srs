@@ -1630,24 +1630,34 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
+  /// Sentences a review of [vocab] may show: the ones linked to it, or else any
+  /// pool sentence containing the word.
+  List<Sentence> _sentenceCandidatesForVocab(VocabItem vocab) {
+    final linked = getSentencesForVocab(vocab);
+    if (linked.isNotEmpty) return linked;
+    // Fallback: look in global sentence pool for any sentence matching targetWord
+    if (vocab.targetWord.isEmpty) return const [];
+    return _sentences
+        .where((s) => s.targetText.contains(vocab.targetWord))
+        .toList();
+  }
+
   /// Picks one random sentence linked to the vocab, or falls back to any pool sentence containing the word.
   Sentence? getRandomSentenceForVocab(VocabItem vocab) {
-    final sentences = getSentencesForVocab(vocab);
-    if (sentences.isNotEmpty) {
-      final rand = Random();
-      return sentences[rand.nextInt(sentences.length)];
+    final candidates = _sentenceCandidatesForVocab(vocab);
+    if (candidates.isEmpty) return null;
+    return candidates[Random().nextInt(candidates.length)];
+  }
+
+  /// The sentence a review card for [vocab] should show after the vocab was
+  /// edited: [current] while it is still one of the vocab's sentences, else a
+  /// new random pick, so deselecting the sentence on screen swaps it out.
+  Sentence? refreshSentenceForVocab(VocabItem vocab, Sentence? current) {
+    if (current != null &&
+        _sentenceCandidatesForVocab(vocab).any((s) => s.id == current.id)) {
+      return current;
     }
-    // Fallback: look in global sentence pool for any sentence matching targetWord
-    if (vocab.targetWord.isNotEmpty) {
-      final matches = _sentences
-          .where((s) => s.targetText.contains(vocab.targetWord))
-          .toList();
-      if (matches.isNotEmpty) {
-        final rand = Random();
-        return matches[rand.nextInt(matches.length)];
-      }
-    }
-    return null;
+    return getRandomSentenceForVocab(vocab);
   }
 
   // Generate study queue for a lesson (or all)
