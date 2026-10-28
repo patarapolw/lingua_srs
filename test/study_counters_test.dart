@@ -53,15 +53,36 @@ void main() {
       expect(firstPassWrongCount(history), 1);
     });
 
-    test('Hard, Good and Easy all count as right on the first pass', () {
+    test('Good and Easy count as right on the first pass', () {
       final history = [
-        record(itemFor('a'), SrsRating.hard, index: 0),
-        record(itemFor('b'), SrsRating.good, index: 1),
-        record(itemFor('c'), SrsRating.easy, index: 2),
+        record(itemFor('a'), SrsRating.good, index: 0),
+        record(itemFor('b'), SrsRating.easy, index: 1),
       ];
 
-      expect(firstPassRightCount(history), 3);
+      expect(firstPassRightCount(history), 2);
       expect(firstPassWrongCount(history), 0);
+    });
+
+    test('Again and Hard both count as wrong on the first pass', () {
+      final history = [
+        record(itemFor('a'), SrsRating.again, index: 0),
+        record(itemFor('b'), SrsRating.hard, index: 1),
+        record(itemFor('c'), SrsRating.good, index: 2),
+      ];
+
+      expect(firstPassRightCount(history), 1); // c
+      expect(firstPassWrongCount(history), 2); // a, b
+    });
+
+    test('a Hard card answered Good on a repeat is still one wrong', () {
+      final a = itemFor('a');
+      final history = [
+        record(a, SrsRating.hard, index: 0),
+        record(a, SrsRating.good, index: 3, firstSession: false),
+      ];
+
+      expect(firstPassRightCount(history), 0);
+      expect(firstPassWrongCount(history), 1);
     });
 
     test('mixed session', () {
@@ -126,6 +147,87 @@ void main() {
     test('an index past the end is clamped', () {
       final queue = [itemFor('a'), itemFor('b')];
       expect(distinctProgress(queue, 99), 2);
+    });
+  });
+
+  group('last-answer counters (mistakes practice)', () {
+    test('empty history is 0 / 0', () {
+      expect(lastAnswerRightCount([]), 0);
+      expect(lastAnswerWrongCount([]), 0);
+    });
+
+    test('Again is wrong until the card is answered Good later', () {
+      final a = itemFor('a');
+      final afterAgain = [record(a, SrsRating.again, index: 0)];
+      expect(lastAnswerRightCount(afterAgain), 0);
+      expect(lastAnswerWrongCount(afterAgain), 1);
+
+      final afterGood = [
+        ...afterAgain,
+        record(a, SrsRating.good, index: 3, firstSession: false),
+      ];
+      expect(lastAnswerRightCount(afterGood), 1);
+      expect(lastAnswerWrongCount(afterGood), 0);
+    });
+
+    test('a later Again undoes an earlier Good', () {
+      final a = itemFor('a');
+      final history = [
+        record(a, SrsRating.good, index: 0),
+        record(a, SrsRating.again, index: 3, firstSession: false),
+      ];
+
+      expect(lastAnswerRightCount(history), 0);
+      expect(lastAnswerWrongCount(history), 1);
+    });
+
+    test('counts every card once, even when repeated', () {
+      final a = itemFor('a');
+      final b = itemFor('b');
+      final history = [
+        record(a, SrsRating.again, index: 0),
+        record(b, SrsRating.good, index: 1),
+        record(a, SrsRating.again, index: 4, firstSession: false),
+        record(a, SrsRating.good, index: 6, firstSession: false),
+      ];
+
+      expect(lastAnswerRightCount(history), 2);
+      expect(lastAnswerWrongCount(history), 0);
+    });
+
+    test('re-rating an earlier position does not override a later answer', () {
+      final a = itemFor('a');
+      final first = record(a, SrsRating.again, index: 0);
+      final repeat = record(a, SrsRating.again, index: 5, firstSession: false);
+      final history = [first, repeat];
+
+      // Going back to position 0 and changing it to Good ...
+      first.ratingGiven = SrsRating.good;
+
+      // ... the repeat at position 5 is still the latest answer.
+      expect(lastAnswerRightCount(history), 0);
+      expect(lastAnswerWrongCount(history), 1);
+    });
+
+    test('history order does not matter, only queue position', () {
+      final a = itemFor('a');
+      final late = record(a, SrsRating.good, index: 5, firstSession: false);
+      final early = record(a, SrsRating.again, index: 0);
+
+      expect(lastAnswerRightCount([late, early]), 1);
+      expect(lastAnswerWrongCount([late, early]), 0);
+    });
+
+    test('latestRatings maps card id to its latest rating', () {
+      final a = itemFor('a');
+      final b = itemFor('b');
+      final ratings = latestRatings([
+        record(a, SrsRating.again, index: 0),
+        record(b, SrsRating.good, index: 1),
+        record(a, SrsRating.good, index: 4, firstSession: false),
+      ]);
+
+      expect(ratings, {a.card.id: SrsRating.good, b.card.id: SrsRating.good});
     });
   });
 }
