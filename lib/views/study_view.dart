@@ -870,7 +870,7 @@ class _StudyViewState extends State<StudyView> {
     showDialog<void>(
       context: context,
       builder: (_) => AiDiscussionDialog(
-        discussionId: AiDiscussionIds.forVocab(item.vocab.id, sentence?.id),
+        discussionId: AiDiscussionIds.forVocab(item.vocab.id),
         targetWord: item.vocab.targetWord,
         translation: item.vocab.translation,
         targetLanguage: item.lesson.targetLanguage,

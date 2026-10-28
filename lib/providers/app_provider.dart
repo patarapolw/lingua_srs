@@ -222,6 +222,9 @@ class AppProvider extends ChangeNotifier {
       await StorageService.saveLessons(_lessons);
     }
     _linkSharedVocabProgress();
+    if (_canonicalizeAiDiscussions()) {
+      await StorageService.saveAiDiscussions(_aiDiscussions);
+    }
 
     if (_lessons.isNotEmpty) {
       _selectedLessonId = _lessons.first.id;
@@ -355,7 +358,7 @@ class AppProvider extends ChangeNotifier {
   ];
 
   /// Earlier discussions worth showing when [discussionId] is opened: other
-  /// sentences of the same word first, then related words.
+  /// discussions of the same word first, then related words.
   List<AiDiscussionSuggestion> relatedAiDiscussions(
     String discussionId, {
     int limit = 6,
@@ -408,29 +411,38 @@ class AppProvider extends ChangeNotifier {
 
   /// Moves the saved discussions of [absorbedIds] to [survivorId], because
   /// merged words share one id afterwards and the old ids would be orphaned.
-  /// Threads about the same sentence are joined, oldest message first.
+  /// Both words' conversations are joined, oldest message first.
   bool _moveAiDiscussions(Set<String> absorbedIds, String survivorId) {
     var changed = false;
     for (final key in List<String>.of(_aiDiscussions.keys)) {
       final vocabId = AiDiscussionIds.vocabIdFrom(key);
       if (vocabId == null || !absorbedIds.contains(vocabId)) continue;
-      final moved = _aiDiscussions.remove(key)!;
-      final newKey = AiDiscussionIds.forVocab(
-        survivorId,
-        AiDiscussionIds.sentenceIdFrom(key),
+      _joinAiDiscussion(
+        AiDiscussionIds.forVocab(survivorId),
+        _aiDiscussions.remove(key)!,
       );
-      final merged = [...?_aiDiscussions[newKey], ...moved];
-      if (merged.every((message) => message.createdAt != null)) {
-        final indexed = [for (var i = 0; i < merged.length; i++) (i, merged[i])]
-          ..sort((a, b) {
-            final byTime = a.$2.createdAt!.compareTo(b.$2.createdAt!);
-            return byTime != 0 ? byTime : a.$1.compareTo(b.$1);
-          });
-        merged
-          ..clear()
-          ..addAll(indexed.map((entry) => entry.$2));
-      }
-      _aiDiscussions[newKey] = merged;
+      changed = true;
+    }
+    return changed;
+  }
+
+  /// Appends [messages] to the conversation saved under [key].
+  void _joinAiDiscussion(String key, List<AiDiscussionMessage> messages) {
+    _aiDiscussions[key] = AiDiscussionMessages.join([
+      _aiDiscussions[key] ?? const [],
+      messages,
+    ]);
+  }
+
+  /// Folds the per-sentence discussions of a word, saved before its sentences
+  /// shared one, into the word's single discussion. Returns whether anything
+  /// moved.
+  bool _canonicalizeAiDiscussions() {
+    var changed = false;
+    for (final key in List<String>.of(_aiDiscussions.keys)) {
+      final canonical = AiDiscussionIds.canonical(key);
+      if (canonical == key) continue;
+      _joinAiDiscussion(canonical, _aiDiscussions.remove(key)!);
       changed = true;
     }
     return changed;

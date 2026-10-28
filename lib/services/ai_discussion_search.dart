@@ -9,17 +9,29 @@ import 'lesson_ai_prompt.dart';
 import 'vocab_ai_service.dart';
 import 'vocab_picker_search.dart';
 
-/// Ids of saved AI discussions about one vocabulary word and one sentence.
+/// Ids of saved AI discussions.
 ///
-/// A vocabulary discussion is `<vocabId>:<sentenceId>`, or
-/// `<vocabId>:no-sentence`. A whole-lesson discussion is `lesson:<lessonId>`
-/// (see [LessonAiPrompt]). Explicit vocabulary ids are free text and may hold
-/// a colon, while sentence ids never do, so the id is split at the last colon.
+/// A vocabulary word has one discussion, shared by all of its example
+/// sentences, saved as `<vocabId>:no-sentence`. A whole-lesson discussion is
+/// `lesson:<lessonId>` (see [LessonAiPrompt]).
+///
+/// Before the sentences shared a thread, every sentence had its own
+/// `<vocabId>:<sentenceId>` discussion. Those ids are still understood, and
+/// [canonical] maps them onto the shared one. Explicit vocabulary ids are free
+/// text and may hold a colon, while sentence ids never do, so an id is split at
+/// the last colon.
 class AiDiscussionIds {
   static const noSentence = 'no-sentence';
 
-  static String forVocab(String vocabId, String? sentenceId) =>
-      '$vocabId:${sentenceId ?? noSentence}';
+  /// The discussion shared by every sentence of [vocabId].
+  static String forVocab(String vocabId) => '$vocabId:$noSentence';
+
+  /// The id the discussion [discussionId] is saved under now: the shared
+  /// vocabulary discussion for a per-sentence one, and any other id unchanged.
+  static String canonical(String discussionId) {
+    final vocabId = vocabIdFrom(discussionId);
+    return vocabId == null ? discussionId : forVocab(vocabId);
+  }
 
   /// The vocabulary a discussion is about; null for a whole-lesson one.
   static String? vocabIdFrom(String discussionId) {
@@ -35,6 +47,26 @@ class AiDiscussionIds {
     if (colon < 0) return null;
     final sentenceId = discussionId.substring(colon + 1);
     return sentenceId.isEmpty || sentenceId == noSentence ? null : sentenceId;
+  }
+}
+
+/// Joins saved conversations into one.
+class AiDiscussionMessages {
+  /// The messages of [threads] as one conversation. When every message has a
+  /// time they are put oldest first, keeping the given order for equal times.
+  /// Otherwise the threads are kept whole, one after the other, because there
+  /// is no telling how an untimed message fits between the others.
+  static List<AiDiscussionMessage> join(
+    Iterable<List<AiDiscussionMessage>> threads,
+  ) {
+    final merged = [for (final thread in threads) ...thread];
+    if (!merged.every((message) => message.createdAt != null)) return merged;
+    final indexed = [for (var i = 0; i < merged.length; i++) (i, merged[i])]
+      ..sort((a, b) {
+        final byTime = a.$2.createdAt!.compareTo(b.$2.createdAt!);
+        return byTime != 0 ? byTime : a.$1.compareTo(b.$1);
+      });
+    return [for (final entry in indexed) entry.$2];
   }
 }
 
@@ -263,7 +295,7 @@ class AiDiscussionSuggestion {
 
   final AiDiscussionSummary discussion;
 
-  /// About the very same vocabulary, but another sentence.
+  /// About the very same vocabulary, but saved as another discussion.
   final bool sameWord;
 
   /// How a different word relates to the current one.
@@ -283,10 +315,8 @@ class AiDiscussionSuggestion {
 
 /// Which earlier discussions to offer when a new one is opened.
 class AiDiscussionSuggestions {
-  /// Other discussions about the same word first (a word shows a random
-  /// sentence each time, so earlier chats usually sit under another sentence),
-  /// then the latest one for each related word. Lesson discussions and empty
-  /// ones are never suggested.
+  /// Other discussions about the same word first, then the latest one for each
+  /// related word. Lesson discussions and empty ones are never suggested.
   static List<AiDiscussionSuggestion> forDiscussion({
     required String discussionId,
     required List<VocabGroup> groups,

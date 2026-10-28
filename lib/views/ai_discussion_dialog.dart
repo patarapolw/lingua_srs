@@ -116,7 +116,7 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Delete this discussion?'),
         content: const Text(
-          'The saved AI conversation for this vocabulary and sentence will be permanently deleted.',
+          'The saved AI conversation for this vocabulary will be permanently deleted.',
         ),
         actions: [
           TextButton(
@@ -171,6 +171,7 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
       'Vocabulary: "${widget.targetWord}" means "${widget.translation}".',
       if (sentence?.isNotEmpty == true)
         'Example sentence: "$sentence"${sentenceTranslation?.isNotEmpty == true ? ' (translation: "$sentenceTranslation")' : ''}.',
+      if (sentence?.isNotEmpty == true) 'Earlier messages in this conversation may be about other example sentences of this vocabulary. "This sentence" means the one above.',
       'Answer questions about this vocabulary and example sentence clearly. Explain nuances and usage when useful.',
       'Format your answer using Markdown.',
     ].join('\n');
