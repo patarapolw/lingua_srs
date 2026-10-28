@@ -6,6 +6,7 @@ import '../models/vocab_item.dart';
 import '../models/srs_card.dart';
 import '../providers/app_provider.dart';
 import '../widgets/audio_button.dart';
+import '../widgets/emphasis_text.dart';
 import '../widgets/markdown_content.dart';
 import 'vocab_edit_dialog.dart';
 import 'study_view.dart';
@@ -854,11 +855,9 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                                               crossAxisAlignment:
                                                   CrossAxisAlignment.start,
                                               children: [
-                                                MarkdownContent(
-                                                  content: s.targetText,
-                                                ),
-                                                MarkdownContent(
-                                                  content: s.translationText,
+                                                EmphasisText(s.targetText),
+                                                EmphasisText(
+                                                  s.translationText,
                                                   style: theme
                                                       .textTheme
                                                       .bodySmall

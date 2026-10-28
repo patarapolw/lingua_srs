@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/sentence.dart';
 import '../providers/app_provider.dart';
 import '../widgets/audio_button.dart';
+import '../widgets/emphasis_text.dart';
 import '../widgets/markdown_content.dart';
 import '../widgets/markdown_text_field.dart';
 
@@ -261,8 +262,8 @@ class _SentencePoolViewState extends State<SentencePoolView> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Expanded(
-                                      child: MarkdownContent(
-                                        content: item.targetText,
+                                      child: EmphasisText(
+                                        item.targetText,
                                         style: theme.textTheme.titleMedium
                                             ?.copyWith(
                                               fontWeight: FontWeight.w600,
@@ -286,8 +287,8 @@ class _SentencePoolViewState extends State<SentencePoolView> {
                                   ],
                                 ),
                                 const SizedBox(height: 6),
-                                MarkdownContent(
-                                  content: item.translationText,
+                                EmphasisText(
+                                  item.translationText,
                                   style: theme.textTheme.bodyMedium?.copyWith(
                                     color: theme.colorScheme.onSurfaceVariant,
                                   ),

@@ -10,6 +10,7 @@ import '../models/vocab_item.dart';
 import '../providers/app_provider.dart';
 import '../services/korean_text_search.dart';
 import '../widgets/audio_button.dart';
+import '../widgets/emphasis_text.dart';
 import '../widgets/markdown_content.dart';
 import '../widgets/markdown_notes_field.dart';
 import '../widgets/markdown_text_field.dart';
@@ -530,15 +531,12 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                             margin: const EdgeInsets.symmetric(vertical: 4),
                             child: ListTile(
                               onTap: () => _editLinkedSentence(sentence),
-                              title: MarkdownContent(
-                                content:
-                                    _pendingEmphasis[sentence.id]?.target ??
+                              title: EmphasisText(
+                                _pendingEmphasis[sentence.id]?.target ??
                                     sentence.targetText,
                               ),
-                              subtitle: MarkdownContent(
-                                content:
-                                    _pendingEmphasis[sentence.id]
-                                        ?.translation ??
+                              subtitle: EmphasisText(
+                                _pendingEmphasis[sentence.id]?.translation ??
                                     sentence.translationText,
                               ),
                               trailing: Row(
@@ -971,8 +969,8 @@ class _VocabEditDialogState extends State<VocabEditDialog>
           controlAffinity: ListTileControlAffinity.leading,
           value: false,
           onChanged: (_) => setState(() => _sentenceIds.add(sentence.id)),
-          title: MarkdownContent(content: sentence.targetText),
-          subtitle: MarkdownContent(content: sentence.translationText),
+          title: EmphasisText(sentence.targetText),
+          subtitle: EmphasisText(sentence.translationText),
         ),
       const SizedBox(height: 8),
     ];
@@ -984,8 +982,8 @@ class _VocabEditDialogState extends State<VocabEditDialog>
       margin: const EdgeInsets.symmetric(vertical: 4),
       child: ListTile(
         onTap: () => _editDraftSentence(index),
-        title: MarkdownContent(content: sentence.targetText),
-        subtitle: MarkdownContent(content: sentence.translationText),
+        title: EmphasisText(sentence.targetText),
+        subtitle: EmphasisText(sentence.translationText),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1224,12 +1222,8 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                           return Card(
                             margin: const EdgeInsets.symmetric(vertical: 4),
                             child: ListTile(
-                              title: MarkdownContent(
-                                content: sentence.targetText,
-                              ),
-                              subtitle: MarkdownContent(
-                                content: sentence.translationText,
-                              ),
+                              title: EmphasisText(sentence.targetText),
+                              subtitle: EmphasisText(sentence.translationText),
                               trailing: Checkbox(
                                 value: isAttached,
                                 onChanged: (val) {

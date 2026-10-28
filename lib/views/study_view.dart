@@ -14,6 +14,7 @@ import '../services/ai_discussion_search.dart';
 import '../services/audio_service.dart';
 import '../services/srs_service.dart';
 import '../widgets/audio_button.dart';
+import '../widgets/emphasis_text.dart';
 import '../widgets/markdown_content.dart';
 import '../widgets/pronunciation_line.dart';
 import '../widgets/pronunciation_toggle.dart';
@@ -1407,9 +1408,8 @@ class _StudyViewState extends State<StudyView> {
                                           crossAxisAlignment:
                                               CrossAxisAlignment.center,
                                           children: [
-                                            MarkdownContent(
-                                              content:
-                                                  item.sentence!.targetText,
+                                            EmphasisText(
+                                              item.sentence!.targetText,
                                               style: theme.textTheme.titleMedium
                                                   ?.copyWith(height: 1.4),
                                             ),
@@ -1459,8 +1459,8 @@ class _StudyViewState extends State<StudyView> {
                                               CrossAxisAlignment.center,
                                           children: [
                                             const SizedBox(height: 10),
-                                            MarkdownContent(
-                                              content: item.sentence!.toCloze(
+                                            EmphasisText(
+                                              item.sentence!.toCloze(
                                                 targetWord:
                                                     item.vocab.targetWord,
                                               ),
@@ -1575,9 +1575,8 @@ class _StudyViewState extends State<StudyView> {
                                                 MainAxisAlignment.spaceBetween,
                                             children: [
                                               Expanded(
-                                                child: MarkdownContent(
-                                                  content:
-                                                      item.sentence!.targetText,
+                                                child: EmphasisText(
+                                                  item.sentence!.targetText,
                                                   style: theme
                                                       .textTheme
                                                       .titleMedium
@@ -1611,10 +1610,8 @@ class _StudyViewState extends State<StudyView> {
                                             key: ValueKey(
                                               '$_currentIndex-${item.sentence!.id}',
                                             ),
-                                            child: MarkdownContent(
-                                              content: item
-                                                  .sentence!
-                                                  .translationText,
+                                            child: EmphasisText(
+                                              item.sentence!.translationText,
                                               style: theme.textTheme.bodyMedium
                                                   ?.copyWith(
                                                     color: theme

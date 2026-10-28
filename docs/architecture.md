@@ -39,6 +39,7 @@ lingua_srs/
 │       ├── adaptive_scaffold.dart     # Responsive layout (Rail vs BottomNav)
 │       ├── ai_discussion_suggestion_tile.dart # One suggested AI discussion and why
 │       ├── audio_button.dart          # Audio play/stop indicator
+│       ├── emphasis_text.dart         # Sentence text with **bold** segments, no Markdown
 │       ├── lesson_hierarchy_view.dart # Lesson folder tree with reordering
 │       ├── lesson_html_view.dart      # Lesson Markdown reader (WebView document)
 │       ├── markdown_content.dart      # Markdown renderer for notes and chat
