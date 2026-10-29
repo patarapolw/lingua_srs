@@ -115,7 +115,7 @@ class _VocabPoolViewState extends State<VocabPoolView> {
                     Padding(
                       padding: const EdgeInsets.only(right: 8),
                       child: FilterChip(
-                        label: Text(pos),
+                        label: Text(VocabPoolSearch.posLabel(pos)),
                         selected: selectedPos == pos,
                         onSelected: (_) => setState(() => _pos = pos),
                       ),
@@ -191,7 +191,9 @@ class _VocabPoolViewState extends State<VocabPoolView> {
                                   children: [
                                     if (entry.pos.trim().isNotEmpty)
                                       Badge(
-                                        label: Text(entry.pos),
+                                        label: Text(
+                                          VocabPoolSearch.posLabel(entry.pos),
+                                        ),
                                         backgroundColor: theme
                                             .colorScheme
                                             .secondaryContainer,

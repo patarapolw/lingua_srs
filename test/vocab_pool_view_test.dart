@@ -220,6 +220,46 @@ void main() {
       expect(find.text('4 words'), findsOneWidget);
     });
 
+    testWidgets('shows underscores in a part of speech as spaces', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      await importLesson(tester, provider, 'Places', [
+        ('proper_nouns', '서울', 'Seoul'),
+      ]);
+      await pumpWith(tester, provider, const VocabPoolView());
+
+      expect(find.widgetWithText(FilterChip, 'proper nouns'), findsOneWidget);
+      expect(find.text('proper_nouns'), findsNothing);
+      expect(find.text('proper nouns'), findsNWidgets(2)); // chip and badge
+
+      // Filtering still works on the stored spelling.
+      await tester.tap(find.widgetWithText(FilterChip, 'proper nouns'));
+      await tester.pump();
+      expect(find.text('서울'), findsOneWidget);
+    });
+
+    testWidgets('lists the part of speech with the most words first', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      await importLesson(tester, provider, 'Mixed', [
+        ('verbs', '먹다', 'to eat'),
+        ('nouns', '사과', 'apple'),
+        ('nouns', '공항', 'airport'),
+        ('nouns', '학교', 'school'),
+        ('proper_nouns', '서울', 'Seoul'),
+        ('proper_nouns', '부산', 'Busan'),
+      ]);
+      await pumpWith(tester, provider, const VocabPoolView());
+
+      double left(String label) =>
+          tester.getTopLeft(find.widgetWithText(FilterChip, label)).dx;
+      expect(left('All'), lessThan(left('nouns')));
+      expect(left('nouns'), lessThan(left('proper nouns')));
+      expect(left('proper nouns'), lessThan(left('verbs')));
+    });
+
     testWidgets('tapping a word opens its editor', (tester) async {
       final provider = await seeded(tester);
       await pumpWith(tester, provider, const VocabPoolView());

@@ -139,13 +139,45 @@ void main() {
     });
   });
 
+  group('VocabPoolSearch.posLabel', () {
+    test('shows underscores as spaces', () {
+      expect(VocabPoolSearch.posLabel('proper_nouns'), 'proper nouns');
+      expect(VocabPoolSearch.posLabel(' a__b '), 'a b');
+    });
+
+    test('leaves other parts of speech as they are', () {
+      expect(VocabPoolSearch.posLabel('verbs'), 'verbs');
+      expect(VocabPoolSearch.posLabel(''), '');
+    });
+  });
+
   group('VocabPoolSearch.posOptions', () {
-    test('lists each part of speech once, sorted', () {
+    test('lists the part of speech with the most words first', () {
+      // verbs: 2, nouns: 2, adjectives: 1. Equal counts go alphabetically.
       expect(VocabPoolSearch.posOptions(pool), [
+        'nouns',
+        'verbs',
+        'adjectives',
+      ]);
+      final more = [
+        ...pool,
+        vg('a', '크다', 'big', pos: 'adjectives'),
+        vg('b', '작다', 'small', pos: 'adjectives'),
+      ];
+      expect(VocabPoolSearch.posOptions(more), [
         'adjectives',
         'nouns',
         'verbs',
       ]);
+    });
+
+    test('counts spellings that differ in case or spaces together', () {
+      final more = [
+        vg('a', '집', 'house', pos: ' Nouns '),
+        vg('b', '물', 'water', pos: 'nouns'),
+        vg('c', '크다', 'big', pos: 'adjectives'),
+      ];
+      expect(VocabPoolSearch.posOptions(more), ['Nouns', 'adjectives']);
     });
 
     test('merges spellings that differ in case or spaces', () {

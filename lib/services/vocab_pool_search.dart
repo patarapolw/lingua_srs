@@ -5,16 +5,29 @@ import 'vocab_picker_search.dart';
 class VocabPoolSearch {
   static String _posKey(String pos) => pos.trim().toLowerCase();
 
-  /// The parts of speech in [groups], one per spelling, sorted. Words without
-  /// one are left out.
+  /// A part of speech as shown to people: `proper_nouns` becomes
+  /// `proper nouns`. Matching and filtering still use the stored spelling.
+  static String posLabel(String pos) =>
+      pos.trim().replaceAll('_', ' ').replaceAll(RegExp(r' {2,}'), ' ');
+
+  /// The parts of speech in [groups], one per spelling, the one with the most
+  /// words first, and alphabetically among equals. Words without one are left
+  /// out.
   static List<String> posOptions(List<VocabGroup> groups) {
-    final byKey = <String, String>{};
+    final names = <String, String>{};
+    final counts = <String, int>{};
     for (final g in groups) {
       final key = _posKey(g.entry.pos);
-      if (key.isNotEmpty) byKey.putIfAbsent(key, () => g.entry.pos.trim());
+      if (key.isEmpty) continue;
+      names.putIfAbsent(key, () => g.entry.pos.trim());
+      counts[key] = (counts[key] ?? 0) + 1;
     }
-    final keys = byKey.keys.toList()..sort();
-    return [for (final k in keys) byKey[k]!];
+    final keys = counts.keys.toList()
+      ..sort((a, b) {
+        final byCount = counts[b]!.compareTo(counts[a]!);
+        return byCount != 0 ? byCount : a.compareTo(b);
+      });
+    return [for (final k in keys) names[k]!];
   }
 
   /// Without a [query], every word sorted by its target form. With one, the
