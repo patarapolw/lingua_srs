@@ -15,6 +15,7 @@ Add screenshots here once captured, e.g.:
 - **Lessons as Markdown + YAML**: import files, folders or ZIPs; nested lesson hierarchy with `::`. See [lesson format](docs/lesson-format.md).
 - **Smart cards**: direction defaults by part of speech, per-item overrides, random example sentence on the front, cloze deletion for EN ➔ KO.
 - **Sentence pool**: browse, edit and link sentences across lessons.
+- **Vocab pool**: browse and search every word across lessons, in Korean or English.
 - **Audio**: stream-on-first-play with offline caching; offline system TTS on Android.
 - **Adaptive review**: recent-mistakes queue, re-queuing of *Again* cards, rolling 24-hour review limit.
 - **AI discussions**: ask DeepSeek about the current card or a whole lesson; chats are saved locally.

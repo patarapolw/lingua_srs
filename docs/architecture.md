@@ -22,6 +22,8 @@ lingua_srs/
 │   │   ├── lesson_ai_prompt.dart      # Prompt, ids and suggestions for lesson AI chats
 │   │   ├── ai_discussion_search.dart  # Ids, search and related-word suggestions for saved AI chats
 │   │   ├── korean_text_search.dart    # Korean-aware sentence search tokenizer
+│   │   ├── vocab_picker_search.dart   # Ranks vocabulary for the merge picker; scores a typed query
+│   │   ├── vocab_pool_search.dart     # Browse, search and POS filter for the Vocab Pool
 │   │   └── storage_service.dart       # Local persistence and debug seed data
 │   ├── views/
 │   │   ├── study_view.dart            # Flashcard study view with cloze & shortcuts
@@ -29,6 +31,7 @@ lingua_srs/
 │   │   ├── lesson_reader_view.dart    # Lesson Markdown reader & editor
 │   │   ├── lesson_detail_view.dart    # Vocab list, POS filters, direction toggles
 │   │   ├── sentence_pool_view.dart    # Global & lesson sentence pool browser
+│   │   ├── vocab_pool_view.dart       # Vocab Pool tab: all distinct words, search, POS filter
 │   │   ├── yaml_import_view.dart      # File/folder import, editor, validator & preview
 │   │   ├── vocab_edit_dialog.dart     # On-the-go editor for any field
 │   │   ├── ai_discussion_dialog.dart  # AI-assisted quiz discussion chat

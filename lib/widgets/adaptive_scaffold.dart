@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../views/recent_ai_discussions_view.dart';
 import '../views/lesson_list_view.dart';
 import '../views/sentence_pool_view.dart';
+import '../views/vocab_pool_view.dart';
 
 class AdaptiveScaffold extends StatefulWidget {
   final VoidCallback? onToggleTheme;
@@ -31,6 +32,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
         onToggleTheme: widget.onToggleTheme,
         isDarkMode: widget.isDarkMode,
       ),
+      const VocabPoolView(),
       const SentencePoolView(),
       const RecentAiDiscussionsView(),
     ];
@@ -100,6 +102,11 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
                   label: Text('Lessons'),
                 ),
                 NavigationRailDestination(
+                  icon: Icon(Icons.translate_outlined),
+                  selectedIcon: Icon(Icons.translate),
+                  label: Text('Vocab Pool'),
+                ),
+                NavigationRailDestination(
                   icon: Icon(Icons.format_quote_outlined),
                   selectedIcon: Icon(Icons.format_quote),
                   label: Text('Sentence Pool'),
@@ -129,6 +136,11 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
             icon: Icon(Icons.library_books_outlined),
             selectedIcon: Icon(Icons.library_books),
             label: 'Lessons',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.translate_outlined),
+            selectedIcon: Icon(Icons.translate),
+            label: 'Vocab',
           ),
           NavigationDestination(
             icon: Icon(Icons.format_quote_outlined),

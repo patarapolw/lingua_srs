@@ -36,6 +36,7 @@ Full feature reference. For a short overview see the [README](../README.md).
    - Browse, search, edit notes on, and link any sentence from the pool to any vocabulary item.
    - The sentence picker opens with the selected vocabulary as its search query. Korean-aware local tokenization handles Hangul subwords, common particles, and frequent verb/adjective endings without downloading a large model.
    - Create new sentences directly in the pool or while editing a vocabulary item.
+   - A matching **Vocab Pool** tab lists every distinct word once, even when several lessons share it, with the lessons it appears in. Search in Korean (Hangul finds the word, its conjugated forms and its meaning) or in English (meanings and notes, best match first), narrow by part of speech, and tap a word to edit it.
 
 6. **Instant Audio Streaming with Offline Caching**:
    - **Stream-on-First-Play**: Audio starts streaming immediately on the very first play with zero wait time.
