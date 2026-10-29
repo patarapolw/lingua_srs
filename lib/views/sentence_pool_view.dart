@@ -135,7 +135,9 @@ class _SentencePoolViewState extends State<SentencePoolView> {
     }).toList();
 
     // On a narrow screen the search box takes the whole width, so its hint is
-    // never cut, and the count moves into the app bar.
+    // never cut, and the count becomes a caption line under it.
+    final count = provider.sentences.length;
+    final countLabel = '$count ${count == 1 ? 'sentence' : 'sentences'}';
     final narrow = MediaQuery.sizeOf(context).width < 700;
     final searchField = TextField(
       controller: _searchCtrl,
@@ -162,23 +164,12 @@ class _SentencePoolViewState extends State<SentencePoolView> {
     );
     final countChip = Chip(
       avatar: const Icon(Icons.format_quote_rounded, size: 18),
-      label: Text('${provider.sentences.length} sentences'),
+      label: Text(countLabel),
     );
 
     return Scaffold(
       appBar: AppBar(
-        title: narrow
-            ? Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Sentence Pool'),
-                  Text(
-                    '${provider.sentences.length} sentences',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                ],
-              )
-            : const Text('Sentence Pool'),
+        title: const Text('Sentence Pool'),
         actions: [
           if (MediaQuery.sizeOf(context).width < 700)
             IconButton(
@@ -201,7 +192,21 @@ class _SentencePoolViewState extends State<SentencePoolView> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: narrow
-                ? searchField
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      searchField,
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6, left: 4),
+                        child: Text(
+                          countLabel,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.outline,
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
                 : Row(
                     children: [
                       Expanded(child: searchField),
@@ -290,15 +295,6 @@ class _SentencePoolViewState extends State<SentencePoolView> {
                                       audioUrl: item.audioUrl,
                                       fallbackText: item.speechText,
                                       compact: true,
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(
-                                        Icons.edit_outlined,
-                                        size: 20,
-                                      ),
-                                      tooltip: 'Edit Sentence',
-                                      onPressed: () =>
-                                          _showAddEditDialog(sentence: item),
                                     ),
                                   ],
                                 ),

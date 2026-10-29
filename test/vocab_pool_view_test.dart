@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lingua_srs/models/sentence.dart';
 import 'package:lingua_srs/providers/app_provider.dart';
 import 'package:lingua_srs/services/audio_service.dart';
 import 'package:lingua_srs/views/sentence_pool_view.dart';
@@ -286,35 +287,50 @@ void main() {
       }
     });
 
-    testWidgets('Vocab Pool puts the count and part-of-speech chips on a line', (
+    testWidgets(
+      'Vocab Pool puts the count and part-of-speech chips on a line',
+      (tester) async {
+        final provider = await seeded(tester);
+        await pumpWith(
+          tester,
+          provider,
+          const VocabPoolView(),
+          size: const Size(360, 800),
+        );
+
+        final field = find.byType(TextField);
+        final count = find.byType(Chip);
+        final all = find.widgetWithText(FilterChip, 'All');
+        expect(
+          tester.getTopLeft(count).dy,
+          greaterThanOrEqualTo(tester.getBottomLeft(field).dy),
+        );
+        expect(
+          tester.getCenter(count).dy,
+          closeTo(tester.getCenter(all).dy, 1),
+        );
+        expect(
+          tester.getTopLeft(all).dx,
+          greaterThanOrEqualTo(tester.getTopRight(count).dx),
+        );
+      },
+    );
+
+    testWidgets('Sentence Pool shows its count as a line under the box', (
       tester,
     ) async {
       final provider = await seeded(tester);
-      await pumpWith(
-        tester,
-        provider,
-        const VocabPoolView(),
-        size: const Size(360, 800),
-      );
-
-      final field = find.byType(TextField);
-      final count = find.byType(Chip);
-      final all = find.widgetWithText(FilterChip, 'All');
-      expect(
-        tester.getTopLeft(count).dy,
-        greaterThanOrEqualTo(tester.getBottomLeft(field).dy),
-      );
-      expect(tester.getCenter(count).dy, closeTo(tester.getCenter(all).dy, 1));
-      expect(
-        tester.getTopLeft(all).dx,
-        greaterThanOrEqualTo(tester.getTopRight(count).dx),
-      );
-    });
-
-    testWidgets('Sentence Pool shows its count in the app bar when narrow', (
-      tester,
-    ) async {
-      final provider = await seeded(tester);
+      await tester.runAsync(() async {
+        await provider.addSentenceToPool(
+          Sentence(targetText: '사과를 먹어요', translationText: 'I eat an apple'),
+        );
+        await provider.addSentenceToPool(
+          Sentence(
+            targetText: '공항에 가요',
+            translationText: 'I go to the airport',
+          ),
+        );
+      });
       await pumpWith(
         tester,
         provider,
@@ -323,13 +339,38 @@ void main() {
       );
 
       expect(find.byType(Chip), findsNothing);
+      expect(hint(tester), 'Search sentences');
+      expect(find.text('2 sentences'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('2 sentences')).dy,
+        greaterThanOrEqualTo(tester.getBottomLeft(find.byType(TextField)).dy),
+      );
       expect(
         find.descendant(
           of: find.byType(AppBar),
-          matching: find.text('0 sentences'),
+          matching: find.text('2 sentences'),
         ),
-        findsOneWidget,
+        findsNothing,
       );
+    });
+
+    testWidgets('Sentence Pool says "1 sentence" for a single one', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      await tester.runAsync(
+        () => provider.addSentenceToPool(
+          Sentence(targetText: '사과를 먹어요', translationText: 'I eat an apple'),
+        ),
+      );
+      await pumpWith(
+        tester,
+        provider,
+        const SentencePoolView(),
+        size: const Size(360, 800),
+      );
+
+      expect(find.text('1 sentence'), findsOneWidget);
     });
 
     testWidgets('shares the row with the count on a wide screen', (
@@ -359,6 +400,28 @@ void main() {
 
       await pumpWith(tester, provider, const SentencePoolView());
       expect(hint(tester), 'Search sentences');
+    });
+  });
+
+  group('Sentence Pool rows', () {
+    testWidgets('have no edit button, but tapping one edits it', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      await tester.runAsync(
+        () => provider.addSentenceToPool(
+          Sentence(targetText: '사과를 먹어요', translationText: 'I eat an apple'),
+        ),
+      );
+      await pumpWith(tester, provider, const SentencePoolView());
+
+      expect(find.byTooltip('Edit Sentence'), findsNothing);
+      expect(find.byIcon(Icons.edit_outlined), findsNothing);
+
+      await tester.tap(find.text('I eat an apple'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Edit Sentence'), findsOneWidget); // the dialog title
     });
   });
 
