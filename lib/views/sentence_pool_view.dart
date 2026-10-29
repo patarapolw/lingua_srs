@@ -134,6 +134,36 @@ class _SentencePoolViewState extends State<SentencePoolView> {
           s.notes.toLowerCase().contains(query);
     }).toList();
 
+    // On a narrow screen the count goes under the search box, so the box
+    // keeps room for its whole hint.
+    final narrow = MediaQuery.sizeOf(context).width < 700;
+    final searchField = TextField(
+      controller: _searchCtrl,
+      decoration: InputDecoration(
+        prefixIcon: const Icon(Icons.search),
+        hintText: 'Search sentences',
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 10,
+        ),
+        suffixIcon: _filter.isNotEmpty
+            ? IconButton(
+                icon: const Icon(Icons.clear),
+                onPressed: () {
+                  _searchCtrl.clear();
+                  setState(() => _filter = '');
+                },
+              )
+            : null,
+      ),
+      onChanged: (val) => setState(() => _filter = val.trim()),
+    );
+    final countChip = Chip(
+      avatar: const Icon(Icons.format_quote_rounded, size: 18),
+      label: Text('${provider.sentences.length} sentences'),
+    );
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Sentence Pool'),
@@ -158,41 +188,22 @@ class _SentencePoolViewState extends State<SentencePoolView> {
           // Search & stats header
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _searchCtrl,
-                    decoration: InputDecoration(
-                      prefixIcon: const Icon(Icons.search),
-                      hintText: 'Search...',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 10,
-                      ),
-                      suffixIcon: _filter.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear),
-                              onPressed: () {
-                                _searchCtrl.clear();
-                                setState(() => _filter = '');
-                              },
-                            )
-                          : null,
-                    ),
-                    onChanged: (val) => setState(() => _filter = val.trim()),
+            child: narrow
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      searchField,
+                      const SizedBox(height: 8),
+                      countChip,
+                    ],
+                  )
+                : Row(
+                    children: [
+                      Expanded(child: searchField),
+                      const SizedBox(width: 16),
+                      countChip,
+                    ],
                   ),
-                ),
-                const SizedBox(width: 16),
-                Chip(
-                  avatar: const Icon(Icons.format_quote_rounded, size: 18),
-                  label: Text('${provider.sentences.length} sentences'),
-                ),
-              ],
-            ),
           ),
           const Divider(),
 

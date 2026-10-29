@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lingua_srs/providers/app_provider.dart';
 import 'package:lingua_srs/services/audio_service.dart';
+import 'package:lingua_srs/views/sentence_pool_view.dart';
 import 'package:lingua_srs/views/vocab_edit_dialog.dart';
 import 'package:lingua_srs/views/vocab_pool_view.dart';
 import 'package:lingua_srs/widgets/adaptive_scaffold.dart';
@@ -268,6 +269,58 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(VocabEditDialog), findsOneWidget);
+    });
+  });
+
+  group('Search box', () {
+    String? hint(WidgetTester tester) =>
+        tester.widget<TextField>(find.byType(TextField)).decoration?.hintText;
+
+    testWidgets('has the whole width on a narrow screen, count underneath', (
+      tester,
+    ) async {
+      final provider = await seeded(tester);
+      for (final home in [const VocabPoolView(), const SentencePoolView()]) {
+        await pumpWith(tester, provider, home, size: const Size(360, 800));
+
+        final field = find.byType(TextField);
+        final chip = find.byType(Chip);
+        // Full width minus the 16 padding on each side, so no hint collapses.
+        expect(tester.getSize(field).width, 360 - 32);
+        expect(
+          tester.getTopLeft(chip).dy,
+          greaterThanOrEqualTo(tester.getBottomLeft(field).dy),
+        );
+      }
+    });
+
+    testWidgets('shares the row with the count on a wide screen', (
+      tester,
+    ) async {
+      final provider = await seeded(tester);
+      for (final home in [const VocabPoolView(), const SentencePoolView()]) {
+        await pumpWith(tester, provider, home);
+
+        final field = find.byType(TextField);
+        final chip = find.byType(Chip);
+        expect(
+          tester.getTopLeft(chip).dx,
+          greaterThanOrEqualTo(tester.getTopRight(field).dx),
+        );
+        expect(
+          tester.getCenter(chip).dy,
+          closeTo(tester.getCenter(field).dy, 1),
+        );
+      }
+    });
+
+    testWidgets('hints say what is searched', (tester) async {
+      final provider = await seeded(tester);
+      await pumpWith(tester, provider, const VocabPoolView());
+      expect(hint(tester), 'Search Korean or English');
+
+      await pumpWith(tester, provider, const SentencePoolView());
+      expect(hint(tester), 'Search sentences');
     });
   });
 

@@ -49,52 +49,63 @@ class _VocabPoolViewState extends State<VocabPoolView> {
     final filtered = VocabPoolSearch.search(_filter, groups, pos: selectedPos);
     final isFiltered = _filter.isNotEmpty || selectedPos != null;
 
+    // On a narrow screen the count goes under the search box, so the box
+    // keeps room for its whole hint.
+    final narrow = MediaQuery.sizeOf(context).width < 700;
+    final searchField = TextField(
+      controller: _searchCtrl,
+      decoration: InputDecoration(
+        prefixIcon: const Icon(Icons.search),
+        hintText: 'Search Korean or English',
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 10,
+        ),
+        suffixIcon: _filter.isNotEmpty
+            ? IconButton(
+                icon: const Icon(Icons.clear),
+                tooltip: 'Clear search',
+                onPressed: () {
+                  _searchCtrl.clear();
+                  setState(() => _filter = '');
+                },
+              )
+            : null,
+      ),
+      onChanged: (val) => setState(() => _filter = val.trim()),
+    );
+    final countChip = Chip(
+      avatar: const Icon(Icons.translate, size: 18),
+      label: Text(
+        isFiltered
+            ? '${filtered.length} of ${groups.length} words'
+            : '${groups.length} words',
+      ),
+    );
+
     return Scaffold(
       appBar: AppBar(title: const Text('Vocab Pool')),
       body: Column(
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _searchCtrl,
-                    decoration: InputDecoration(
-                      prefixIcon: const Icon(Icons.search),
-                      hintText: 'Search in Korean or English...',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 10,
-                      ),
-                      suffixIcon: _filter.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear),
-                              tooltip: 'Clear search',
-                              onPressed: () {
-                                _searchCtrl.clear();
-                                setState(() => _filter = '');
-                              },
-                            )
-                          : null,
-                    ),
-                    onChanged: (val) => setState(() => _filter = val.trim()),
+            child: narrow
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      searchField,
+                      const SizedBox(height: 8),
+                      countChip,
+                    ],
+                  )
+                : Row(
+                    children: [
+                      Expanded(child: searchField),
+                      const SizedBox(width: 16),
+                      countChip,
+                    ],
                   ),
-                ),
-                const SizedBox(width: 16),
-                Chip(
-                  avatar: const Icon(Icons.translate, size: 18),
-                  label: Text(
-                    isFiltered
-                        ? '${filtered.length} of ${groups.length} words'
-                        : '${groups.length} words',
-                  ),
-                ),
-              ],
-            ),
           ),
           if (posOptions.isNotEmpty)
             SizedBox(
