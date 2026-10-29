@@ -192,6 +192,17 @@ void main() {
       expect(find.byIcon(Icons.search), findsOneWidget);
     });
 
+    testWidgets('looks like the search boxes of the pool tabs', (tester) async {
+      await open(tester);
+
+      final decoration = tester
+          .widget<TextField>(find.byType(TextField))
+          .decoration!;
+      expect(decoration.hintText, 'Search vocab, sentences or answers');
+      final border = decoration.border! as OutlineInputBorder;
+      expect(border.borderRadius, BorderRadius.circular(12));
+    });
+
     testWidgets('filters by the Korean word', (tester) async {
       await open(tester);
 

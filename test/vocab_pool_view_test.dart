@@ -276,22 +276,60 @@ void main() {
     String? hint(WidgetTester tester) =>
         tester.widget<TextField>(find.byType(TextField)).decoration?.hintText;
 
-    testWidgets('has the whole width on a narrow screen, count underneath', (
-      tester,
-    ) async {
+    testWidgets('has the whole width on a narrow screen', (tester) async {
       final provider = await seeded(tester);
       for (final home in [const VocabPoolView(), const SentencePoolView()]) {
         await pumpWith(tester, provider, home, size: const Size(360, 800));
 
-        final field = find.byType(TextField);
-        final chip = find.byType(Chip);
         // Full width minus the 16 padding on each side, so no hint collapses.
-        expect(tester.getSize(field).width, 360 - 32);
-        expect(
-          tester.getTopLeft(chip).dy,
-          greaterThanOrEqualTo(tester.getBottomLeft(field).dy),
-        );
+        expect(tester.getSize(find.byType(TextField)).width, 360 - 32);
       }
+    });
+
+    testWidgets('Vocab Pool puts the count and part-of-speech chips on a line', (
+      tester,
+    ) async {
+      final provider = await seeded(tester);
+      await pumpWith(
+        tester,
+        provider,
+        const VocabPoolView(),
+        size: const Size(360, 800),
+      );
+
+      final field = find.byType(TextField);
+      final count = find.byType(Chip);
+      final all = find.widgetWithText(FilterChip, 'All');
+      expect(
+        tester.getTopLeft(count).dy,
+        greaterThanOrEqualTo(tester.getBottomLeft(field).dy),
+      );
+      expect(tester.getCenter(count).dy, closeTo(tester.getCenter(all).dy, 1));
+      expect(
+        tester.getTopLeft(all).dx,
+        greaterThanOrEqualTo(tester.getTopRight(count).dx),
+      );
+    });
+
+    testWidgets('Sentence Pool shows its count in the app bar when narrow', (
+      tester,
+    ) async {
+      final provider = await seeded(tester);
+      await pumpWith(
+        tester,
+        provider,
+        const SentencePoolView(),
+        size: const Size(360, 800),
+      );
+
+      expect(find.byType(Chip), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.text('0 sentences'),
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('shares the row with the count on a wide screen', (

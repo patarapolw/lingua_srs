@@ -134,8 +134,8 @@ class _SentencePoolViewState extends State<SentencePoolView> {
           s.notes.toLowerCase().contains(query);
     }).toList();
 
-    // On a narrow screen the count goes under the search box, so the box
-    // keeps room for its whole hint.
+    // On a narrow screen the search box takes the whole width, so its hint is
+    // never cut, and the count moves into the app bar.
     final narrow = MediaQuery.sizeOf(context).width < 700;
     final searchField = TextField(
       controller: _searchCtrl,
@@ -150,6 +150,7 @@ class _SentencePoolViewState extends State<SentencePoolView> {
         suffixIcon: _filter.isNotEmpty
             ? IconButton(
                 icon: const Icon(Icons.clear),
+                tooltip: 'Clear search',
                 onPressed: () {
                   _searchCtrl.clear();
                   setState(() => _filter = '');
@@ -166,7 +167,18 @@ class _SentencePoolViewState extends State<SentencePoolView> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Sentence Pool'),
+        title: narrow
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Sentence Pool'),
+                  Text(
+                    '${provider.sentences.length} sentences',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
+              )
+            : const Text('Sentence Pool'),
         actions: [
           if (MediaQuery.sizeOf(context).width < 700)
             IconButton(
@@ -189,14 +201,7 @@ class _SentencePoolViewState extends State<SentencePoolView> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: narrow
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      searchField,
-                      const SizedBox(height: 8),
-                      countChip,
-                    ],
-                  )
+                ? searchField
                 : Row(
                     children: [
                       Expanded(child: searchField),
