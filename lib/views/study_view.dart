@@ -1,3 +1,4 @@
+import 'dart:async' show scheduleMicrotask, unawaited;
 import 'dart:math';
 
 import 'package:flutter/foundation.dart'
@@ -286,6 +287,8 @@ class _StudyViewState extends State<StudyView> {
   final Set<String> _againCardIds = {};
   final Set<String> _sessionRatedCardIds = {};
   final FocusNode _keyboardFocusNode = FocusNode();
+  // Held so dispose() can stop audio without a BuildContext lookup.
+  late final AudioService _audio;
 
   // Keyboard hints are noise on touch platforms; the handlers still work for
   // attached keyboards.
@@ -361,6 +364,7 @@ class _StudyViewState extends State<StudyView> {
   @override
   void initState() {
     super.initState();
+    _audio = context.read<AudioService>();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadQueue();
     });
@@ -368,6 +372,11 @@ class _StudyViewState extends State<StudyView> {
 
   @override
   void dispose() {
+    // Safety net for ways out of the review that do not go through
+    // PopScope. Deferred: stop() notifies listeners, which must not happen
+    // while the widget tree is being torn down.
+    final audio = _audio;
+    scheduleMicrotask(() => unawaited(audio.stop()));
     _keyboardFocusNode.dispose();
     super.dispose();
   }
@@ -883,6 +892,18 @@ class _StudyViewState extends State<StudyView> {
 
   @override
   Widget build(BuildContext context) {
+    // Stop audio the moment the review is left, not when the exit animation
+    // ends and dispose() runs. This is tied to the route being popped, never
+    // to layout, so rotating the device does not cut audio off.
+    return PopScope(
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) unawaited(_audio.stop());
+      },
+      child: _buildScreen(context),
+    );
+  }
+
+  Widget _buildScreen(BuildContext context) {
     final theme = Theme.of(context);
     final provider = context.watch<AppProvider>();
 
