@@ -134,6 +134,39 @@ class _SentencePoolViewState extends State<SentencePoolView> {
           s.notes.toLowerCase().contains(query);
     }).toList();
 
+    // On a narrow screen the search box takes the whole width, so its hint is
+    // never cut, and the count becomes a caption line under it.
+    final count = provider.sentences.length;
+    final countLabel = '$count ${count == 1 ? 'sentence' : 'sentences'}';
+    final narrow = MediaQuery.sizeOf(context).width < 700;
+    final searchField = TextField(
+      controller: _searchCtrl,
+      decoration: InputDecoration(
+        prefixIcon: const Icon(Icons.search),
+        hintText: 'Search sentences',
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 10,
+        ),
+        suffixIcon: _filter.isNotEmpty
+            ? IconButton(
+                icon: const Icon(Icons.clear),
+                tooltip: 'Clear search',
+                onPressed: () {
+                  _searchCtrl.clear();
+                  setState(() => _filter = '');
+                },
+              )
+            : null,
+      ),
+      onChanged: (val) => setState(() => _filter = val.trim()),
+    );
+    final countChip = Chip(
+      avatar: const Icon(Icons.format_quote_rounded, size: 18),
+      label: Text(countLabel),
+    );
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Sentence Pool'),
@@ -158,41 +191,29 @@ class _SentencePoolViewState extends State<SentencePoolView> {
           // Search & stats header
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _searchCtrl,
-                    decoration: InputDecoration(
-                      prefixIcon: const Icon(Icons.search),
-                      hintText: 'Search...',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+            child: narrow
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      searchField,
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6, left: 4),
+                        child: Text(
+                          countLabel,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.outline,
+                          ),
+                        ),
                       ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 10,
-                      ),
-                      suffixIcon: _filter.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear),
-                              onPressed: () {
-                                _searchCtrl.clear();
-                                setState(() => _filter = '');
-                              },
-                            )
-                          : null,
-                    ),
-                    onChanged: (val) => setState(() => _filter = val.trim()),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      Expanded(child: searchField),
+                      const SizedBox(width: 16),
+                      countChip,
+                    ],
                   ),
-                ),
-                const SizedBox(width: 16),
-                Chip(
-                  avatar: const Icon(Icons.format_quote_rounded, size: 18),
-                  label: Text('${provider.sentences.length} sentences'),
-                ),
-              ],
-            ),
           ),
           const Divider(),
 
@@ -274,15 +295,6 @@ class _SentencePoolViewState extends State<SentencePoolView> {
                                       audioUrl: item.audioUrl,
                                       fallbackText: item.speechText,
                                       compact: true,
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(
-                                        Icons.edit_outlined,
-                                        size: 20,
-                                      ),
-                                      tooltip: 'Edit Sentence',
-                                      onPressed: () =>
-                                          _showAddEditDialog(sentence: item),
                                     ),
                                   ],
                                 ),

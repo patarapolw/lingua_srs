@@ -65,26 +65,31 @@ class _RecentAiDiscussionsViewState extends State<RecentAiDiscussionsView> {
           : Column(
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                   child: TextField(
                     controller: _searchController,
                     onChanged: _setQuery,
                     textInputAction: TextInputAction.search,
                     decoration: InputDecoration(
-                      hintText: 'Search words, sentences and answers',
+                      hintText: 'Search vocab, sentences or answers',
                       prefixIcon: const Icon(Icons.search),
                       suffixIcon: _query.isEmpty
                           ? null
                           : IconButton(
                               tooltip: 'Clear search',
-                              icon: const Icon(Icons.close),
+                              icon: const Icon(Icons.clear),
                               onPressed: () {
                                 _searchController.clear();
                                 _setQuery('');
                               },
                             ),
-                      border: const OutlineInputBorder(),
-                      isDense: true,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
                     ),
                   ),
                 ),

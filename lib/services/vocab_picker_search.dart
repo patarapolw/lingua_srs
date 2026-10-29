@@ -85,9 +85,61 @@ class VocabPickerSearch {
     return hits.length > limit ? hits.sublist(0, limit) : hits;
   }
 
-  /// Korean and English at once. Hangul in the query searches the Korean side;
-  /// anything without Hangul searches meanings. The old label-substring match
-  /// stays as a last resort.
+  /// How well [g] matches a typed [query] by its own text, ignoring any
+  /// relation to another word; 0 means no match. Hangul in the query searches
+  /// the Korean side; anything without Hangul searches meanings. The old
+  /// label-substring match stays as a last resort.
+  static int textScore(String query, VocabGroup g) {
+    final q = query.trim();
+    if (q.isEmpty) return 0;
+    final nq = VocabSimilarity.normalizeTarget(q);
+    final korean = hasHangul(q);
+    final latin = RegExp(r'[A-Za-z]').hasMatch(q);
+    var score = 0;
+    if (korean) {
+      final target = VocabSimilarity.normalizeTarget(g.entry.targetWord);
+      if (target == nq) {
+        score = 1000;
+      } else if (target.startsWith(nq)) {
+        score = 800;
+      } else if (target.contains(nq)) {
+        score = 600;
+      } else if (KoreanTextSearch.areVariants(q, g.entry.targetWord)) {
+        score = 500;
+      } else if (KoreanTextSearch.matches(
+        query: q,
+        targetText: g.entry.targetWord,
+        translationText: g.entry.translation,
+      )) {
+        score = 300;
+      }
+    }
+    if (latin || !korean) {
+      final en = EnglishTextSearch.score(
+        q,
+        translation: g.entry.translation,
+        notes: g.entry.notes,
+      );
+      final enScore = en == 100
+          ? 900
+          : en >= 60
+          ? 700
+          : en >= 40
+          ? 450
+          : en >= 20
+          ? 200
+          : en > 0
+          ? 50
+          : 0;
+      if (enScore > score) score = enScore;
+    }
+    if (score == 0 && g.label.toLowerCase().contains(q.toLowerCase())) {
+      score = 100;
+    }
+    return score;
+  }
+
+  /// Korean and English at once, for the "Merge with another word" picker.
   static List<PickerHit> search(
     String query,
     VocabGroup current,
@@ -96,53 +148,10 @@ class VocabPickerSearch {
   }) {
     final q = query.trim();
     if (q.isEmpty) return const [];
-    final nq = VocabSimilarity.normalizeTarget(q);
-    final korean = hasHangul(q);
-    final latin = RegExp(r'[A-Za-z]').hasMatch(q);
     final hits = <PickerHit>[];
     for (final g in groups) {
       if (g.id == current.id) continue;
-      var score = 0;
-      if (korean) {
-        final target = VocabSimilarity.normalizeTarget(g.entry.targetWord);
-        if (target == nq) {
-          score = 1000;
-        } else if (target.startsWith(nq)) {
-          score = 800;
-        } else if (target.contains(nq)) {
-          score = 600;
-        } else if (KoreanTextSearch.areVariants(q, g.entry.targetWord)) {
-          score = 500;
-        } else if (KoreanTextSearch.matches(
-          query: q,
-          targetText: g.entry.targetWord,
-          translationText: g.entry.translation,
-        )) {
-          score = 300;
-        }
-      }
-      if (latin || !korean) {
-        final en = EnglishTextSearch.score(
-          q,
-          translation: g.entry.translation,
-          notes: g.entry.notes,
-        );
-        final enScore = en == 100
-            ? 900
-            : en >= 60
-            ? 700
-            : en >= 40
-            ? 450
-            : en >= 20
-            ? 200
-            : en > 0
-            ? 50
-            : 0;
-        if (enScore > score) score = enScore;
-      }
-      if (score == 0 && g.label.toLowerCase().contains(q.toLowerCase())) {
-        score = 100;
-      }
+      final score = textScore(q, g);
       if (score == 0) continue;
       // Among equal text matches, prefer words close to the one being edited.
       final related = _relation(current, g);
