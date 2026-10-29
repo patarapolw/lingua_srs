@@ -50,7 +50,7 @@ class _VocabPoolViewState extends State<VocabPoolView> {
     final isFiltered = _filter.isNotEmpty || selectedPos != null;
 
     // On a narrow screen the search box takes the whole width, so its hint is
-    // never cut, and the count moves down next to the part-of-speech chips.
+    // never cut, and the count becomes a caption line under it.
     final narrow = MediaQuery.sizeOf(context).width < 700;
     final searchField = TextField(
       controller: _searchCtrl,
@@ -75,13 +75,12 @@ class _VocabPoolViewState extends State<VocabPoolView> {
       ),
       onChanged: (val) => setState(() => _filter = val.trim()),
     );
+    final countLabel =
+        '${isFiltered ? '${filtered.length} of ' : ''}'
+        '${groups.length} ${groups.length == 1 ? 'word' : 'words'}';
     final countChip = Chip(
       avatar: const Icon(Icons.translate, size: 18),
-      label: Text(
-        isFiltered
-            ? '${filtered.length} of ${groups.length} words'
-            : '${groups.length} words',
-      ),
+      label: Text(countLabel),
     );
 
     final posChips = [
@@ -112,7 +111,21 @@ class _VocabPoolViewState extends State<VocabPoolView> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: narrow
-                ? searchField
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      searchField,
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6, left: 4),
+                        child: Text(
+                          countLabel,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.outline,
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
                 : Row(
                     children: [
                       Expanded(child: searchField),
@@ -121,27 +134,7 @@ class _VocabPoolViewState extends State<VocabPoolView> {
                     ],
                   ),
           ),
-          if (narrow)
-            // The count shares a line with the part-of-speech chips.
-            SizedBox(
-              height: 48,
-              child: Row(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(left: 16, right: 8),
-                    child: countChip,
-                  ),
-                  Expanded(
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.only(right: 16),
-                      children: posChips,
-                    ),
-                  ),
-                ],
-              ),
-            )
-          else if (posOptions.isNotEmpty)
+          if (posOptions.isNotEmpty)
             SizedBox(
               height: 48,
               child: ListView(

@@ -287,34 +287,47 @@ void main() {
       }
     });
 
-    testWidgets(
-      'Vocab Pool puts the count and part-of-speech chips on a line',
-      (tester) async {
-        final provider = await seeded(tester);
-        await pumpWith(
-          tester,
-          provider,
-          const VocabPoolView(),
-          size: const Size(360, 800),
-        );
+    testWidgets('Vocab Pool shows its count as a line under the box', (
+      tester,
+    ) async {
+      final provider = await seeded(tester);
+      await pumpWith(
+        tester,
+        provider,
+        const VocabPoolView(),
+        size: const Size(360, 800),
+      );
 
-        final field = find.byType(TextField);
-        final count = find.byType(Chip);
-        final all = find.widgetWithText(FilterChip, 'All');
-        expect(
-          tester.getTopLeft(count).dy,
-          greaterThanOrEqualTo(tester.getBottomLeft(field).dy),
-        );
-        expect(
-          tester.getCenter(count).dy,
-          closeTo(tester.getCenter(all).dy, 1),
-        );
-        expect(
-          tester.getTopLeft(all).dx,
-          greaterThanOrEqualTo(tester.getTopRight(count).dx),
-        );
-      },
-    );
+      final caption = find.text('4 words');
+      expect(find.byType(Chip), findsNothing);
+      expect(caption, findsOneWidget);
+      expect(
+        tester.getTopLeft(caption).dy,
+        greaterThanOrEqualTo(tester.getBottomLeft(find.byType(TextField)).dy),
+      );
+      // The part-of-speech chips come after the caption, on their own line.
+      expect(
+        tester.getTopLeft(find.widgetWithText(FilterChip, 'All')).dy,
+        greaterThanOrEqualTo(tester.getBottomLeft(caption).dy),
+      );
+
+      await tester.enterText(find.byType(TextField), '사과');
+      await tester.pump();
+      expect(find.text('1 of 4 words'), findsOneWidget);
+    });
+
+    testWidgets('Vocab Pool says "1 word" for a single one', (tester) async {
+      final provider = await loadedProvider(tester);
+      await importLesson(tester, provider, 'One', [('nouns', '사과', 'apple')]);
+      await pumpWith(
+        tester,
+        provider,
+        const VocabPoolView(),
+        size: const Size(360, 800),
+      );
+
+      expect(find.text('1 word'), findsOneWidget);
+    });
 
     testWidgets('Sentence Pool shows its count as a line under the box', (
       tester,
