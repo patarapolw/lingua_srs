@@ -44,6 +44,7 @@ Full feature reference. For a short overview see the [README](../README.md).
    - On Windows, the cache parent directory uses the app's company and product metadata (`%LOCALAPPDATA%\cc.polv\lingua.srs\audio_cache`).
    - **Instant Offline Playback**: Subsequent plays of that vocabulary or sentence play directly from the local disk file with **zero network latency** and 100% offline availability.
    - **Pre-buffering**: Automatically pre-buffers upcoming cards in the background so cards play instantaneously without delays.
+   - **Autoplay stops with the card**: In review, the autoplayed word and sentence (audio files and TTS alike, including the sentence still waiting to play) stop when you move to another card or leave the review. Rotating the device does not cut audio off.
 
 7. **Text-to-Speech**:
    - **Android** uses an installed offline system TTS voice. Install the desired language voice in Android text-to-speech settings; generated TTS is not sent to an online service or prefetched.
