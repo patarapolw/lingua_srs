@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:lingua_srs/services/audio_service.dart';
@@ -74,6 +76,31 @@ class _FakeTts implements FlutterTts {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  // AudioService opens its on-disk audio cache through path_provider.
+  const pathProviderChannel = MethodChannel('plugins.flutter.io/path_provider');
+  late Directory storageDirectory;
+
+  setUp(() {
+    storageDirectory = Directory.systemTemp.createTempSync(
+      'lingua_srs_audio_service_stop_test_',
+    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(pathProviderChannel, (call) async {
+          if (call.method == 'getApplicationSupportDirectory') {
+            return storageDirectory.path;
+          }
+          throw MissingPluginException('Unexpected method: ${call.method}');
+        });
+  });
+
+  tearDown(() async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(pathProviderChannel, null);
+    if (storageDirectory.existsSync()) {
+      await storageDirectory.delete(recursive: true);
+    }
+  });
 
   AudioService serviceFor(
     _FakePlayer player, {
