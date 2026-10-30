@@ -2012,7 +2012,7 @@ vocabulary:
 
       await tester.tap(find.byTooltip('Create new sentence'));
       await tester.pumpAndSettle();
-      await tester.enterText(inSentenceDialog('Korean sentence'), '**3개** 주세요');
+      await tester.enterText(inSentenceDialog('Sentence'), '**3개** 주세요');
       await tester.enterText(
         inSentenceDialog('Audio URL'),
         'https://e.com/3.mp3',
@@ -2121,7 +2121,7 @@ vocabulary:
 
       await tester.tap(find.byTooltip('Create new sentence'));
       await tester.pumpAndSettle();
-      await tester.enterText(inSentenceDialog('Korean sentence'), '**배**를 먹어요');
+      await tester.enterText(inSentenceDialog('Sentence'), '**배**를 먹어요');
       await tester.enterText(
         inSentenceDialog('English translation'),
         'I eat a pear',
@@ -2147,7 +2147,7 @@ vocabulary:
 
       await tester.tap(find.byTooltip('Create new sentence'));
       await tester.pumpAndSettle();
-      await tester.enterText(inSentenceDialog('Korean sentence'), '**3개** 주세요');
+      await tester.enterText(inSentenceDialog('Sentence'), '**3개** 주세요');
       await expandTts(tester, inDialog: true);
       await tester.enterText(
         inSentenceDialog('Korean TTS text (optional)'),
@@ -2183,7 +2183,7 @@ vocabulary:
 
       await tester.tap(find.byTooltip('Create new sentence'));
       await tester.pumpAndSettle();
-      await tester.enterText(inSentenceDialog('Korean sentence'), '**3개** 주세요');
+      await tester.enterText(inSentenceDialog('Sentence'), '**3개** 주세요');
       await tester.tap(find.widgetWithText(FilledButton, 'Add'));
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Remove example'));
@@ -2217,7 +2217,7 @@ vocabulary:
 
       await tester.tap(exampleTile());
       await tester.pumpAndSettle();
-      expect(find.text('Edit example'), findsOneWidget);
+      expect(find.text('Edit Example'), findsOneWidget);
       await tester.enterText(
         inSentenceDialog('Sentence'),
         '**배**와 **사과**를 먹어요',
@@ -2275,9 +2275,7 @@ vocabulary:
       await tester.pump(const Duration(seconds: 1));
     });
 
-    testWidgets('the example editor needs ** in the Korean sentence', (
-      tester,
-    ) async {
+    testWidgets('the example editor needs ** in the sentence', (tester) async {
       await openAdd(
         tester,
         pool: [
@@ -2329,7 +2327,7 @@ vocabulary:
       await tester.pump(const Duration(seconds: 1));
     });
 
-    testWidgets('the Add example notes can be previewed', (tester) async {
+    testWidgets('the Add Example notes can be previewed', (tester) async {
       await openAdd(tester);
 
       await tester.tap(find.byTooltip('Create new sentence'));
@@ -2350,7 +2348,7 @@ vocabulary:
 
       await tester.tap(find.byTooltip('Create new sentence'));
       await tester.pumpAndSettle();
-      await tester.enterText(inSentenceDialog('Korean sentence'), '3개 주세요');
+      await tester.enterText(inSentenceDialog('Sentence'), '3개 주세요');
       await tester.tap(find.widgetWithText(FilledButton, 'Add'));
       await tester.pumpAndSettle();
 

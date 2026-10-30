@@ -420,6 +420,21 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
     }
 
+    testWidgets('the edit dialog opens empty notes in Edit', (tester) async {
+      await openPool(tester, _RecordingAudio(), sentence: appleSentence());
+
+      await tester.tap(find.text('I eat an apple'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.text('Preview'),
+        ),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('rows have no audio button', (tester) async {
       await openPool(
         tester,
@@ -537,7 +552,7 @@ void main() {
       await tester.tap(find.widgetWithText(FilledButton, 'Add Sentence'));
       await tester.pumpAndSettle();
       await tester.enterText(
-        find.widgetWithText(TextField, 'Target sentence'),
+        find.widgetWithText(TextField, 'Target Sentence'),
         '3개 주세요',
       );
       await tester.tap(find.text('Text-to-speech'));

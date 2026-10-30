@@ -751,7 +751,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
           final targetOk = Sentence.hasEmphasis(targetCtrl.text);
           final theme = Theme.of(dialogContext);
           return AlertDialog(
-            title: const Text('Edit example'),
+            title: const Text('Edit Example'),
             content: SizedBox(
               width: 520,
               child: SingleChildScrollView(
@@ -1053,7 +1053,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(widget.isNew ? 'Add example' : 'Add New Sentence to Pool'),
+        title: Text(widget.isNew ? 'Add Example' : 'Add New Sentence to Pool'),
         content: StatefulBuilder(
           builder: (ctx, setDialogState) {
             refreshDialog = setDialogState;
@@ -1065,7 +1065,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                     controller: targetCtrl,
                     onChanged: (_) => setDialogState(() {}),
                     decoration: InputDecoration(
-                      labelText: 'Korean sentence',
+                      labelText: 'Sentence',
                       hintText: 'e.g. 저는 **배**를 먹어요',
                       helperText: 'Wrap the word being studied in **double asterisks**.',
                       helperMaxLines: 2,

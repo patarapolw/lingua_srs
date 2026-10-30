@@ -66,7 +66,7 @@ class _SentencePoolViewState extends State<SentencePoolView> {
                   controller: targetCtrl,
                   onChanged: (_) => setDialogState(() {}),
                   decoration: InputDecoration(
-                    labelText: 'Target sentence',
+                    labelText: 'Target Sentence',
                     hintText: 'e.g. 저는 아줌마를 위해 문을 열었어요',
                     errorText: targetCtrl.text.contains('**')
                         ? _emphasisError
@@ -106,7 +106,7 @@ class _SentencePoolViewState extends State<SentencePoolView> {
                 ),
                 const SizedBox(height: 8),
                 MarkdownNotesField(
-                  label: 'Sentence Notes (Markdown)',
+                  label: 'Sentence notes',
                   controller: notesCtrl,
                 ),
               ],
