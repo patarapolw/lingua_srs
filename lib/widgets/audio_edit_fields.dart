@@ -60,6 +60,59 @@ class AudioUrlField extends StatelessWidget {
   }
 }
 
+/// The audio fields of an edit dialog, together and always in this order: the
+/// recording (its URL with a preview, and the choice to skip it), then the
+/// text-to-speech that is spoken when there is no recording or it is skipped.
+/// The "use this recording" checkbox sits under the URL it belongs to, which
+/// puts it right above the TTS section it hands over to.
+class AudioEditFields extends StatelessWidget {
+  final TextEditingController audioUrl;
+  final bool useAudio;
+  final ValueChanged<bool> onUseAudioChanged;
+  final String audioUrlLabel;
+
+  final TextEditingController ttsText;
+
+  /// What TTS speaks while [ttsText] is blank: the word or the sentence.
+  final TextEditingController spokenFallback;
+  final String? ttsHintText;
+  final String? ttsHelperText;
+
+  const AudioEditFields({
+    super.key,
+    required this.audioUrl,
+    required this.useAudio,
+    required this.onUseAudioChanged,
+    required this.ttsText,
+    required this.spokenFallback,
+    this.audioUrlLabel = 'Audio URL',
+    this.ttsHintText,
+    this.ttsHelperText,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AudioUrlField(
+          controller: audioUrl,
+          labelText: audioUrlLabel,
+          useAudio: useAudio,
+          onUseAudioChanged: onUseAudioChanged,
+        ),
+        const SizedBox(height: 4),
+        TtsTextField(
+          controller: ttsText,
+          spokenFallback: spokenFallback,
+          hintText: ttsHintText,
+          helperText: ttsHelperText,
+        ),
+      ],
+    );
+  }
+}
+
 /// The optional text-to-speech override of an edit dialog.
 ///
 /// Collapsed unless a value is already set, so dialogs stay short, especially

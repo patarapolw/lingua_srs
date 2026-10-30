@@ -194,6 +194,65 @@ void main() {
     });
   });
 
+  group('AudioEditFields', () {
+    late TextEditingController url;
+    late TextEditingController tts;
+    late TextEditingController word;
+
+    setUp(() {
+      url = TextEditingController();
+      tts = TextEditingController();
+      word = TextEditingController(text: '배');
+    });
+    tearDown(() {
+      url.dispose();
+      tts.dispose();
+      word.dispose();
+    });
+
+    Future<void> pump(WidgetTester tester) => tester.pumpWidget(
+      harness(
+        _RecordingAudio(),
+        AudioEditFields(
+          audioUrl: url,
+          useAudio: true,
+          onUseAudioChanged: (_) {},
+          ttsText: tts,
+          spokenFallback: word,
+        ),
+      ),
+    );
+
+    double top(WidgetTester tester, Finder finder) =>
+        tester.getTopLeft(finder).dy;
+
+    testWidgets('puts the Audio URL directly above the TTS section', (
+      tester,
+    ) async {
+      await pump(tester);
+
+      expect(
+        top(tester, find.widgetWithText(TextField, 'Audio URL')),
+        lessThan(top(tester, find.text('Text-to-speech'))),
+      );
+    });
+
+    testWidgets('keeps the recording checkbox between the two', (tester) async {
+      await pump(tester);
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Audio URL'),
+        'https://example.com/a.mp3',
+      );
+      await tester.pump();
+
+      final urlTop = top(tester, find.widgetWithText(TextField, 'Audio URL'));
+      final checkboxTop = top(tester, find.byType(CheckboxListTile));
+      final ttsTop = top(tester, find.text('Text-to-speech'));
+      expect(urlTop, lessThan(checkboxTop));
+      expect(checkboxTop, lessThan(ttsTop));
+    });
+  });
+
   group('AudioUrlField', () {
     late TextEditingController url;
 

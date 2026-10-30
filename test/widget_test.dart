@@ -2037,6 +2037,24 @@ vocabulary:
       await tester.pump(const Duration(seconds: 1));
     });
 
+    testWidgets('the Audio URL and TTS sections sit together, URL first', (
+      tester,
+    ) async {
+      await openAdd(tester);
+
+      double top(Finder finder) => tester.getTopLeft(finder).dy;
+      final pos = top(find.widgetWithText(TextField, 'Part of speech *'));
+      final url = top(find.widgetWithText(TextField, 'Audio URL'));
+      final tts = top(find.text('Text-to-speech'));
+      expect(pos, lessThan(url));
+      expect(url, lessThan(tts));
+      expect(
+        top(find.widgetWithText(TextField, 'Korean *')),
+        lessThan(pos),
+        reason: 'TTS no longer sits under the Korean field',
+      );
+    });
+
     testWidgets('a recording can be switched off without losing its URL', (
       tester,
     ) async {
@@ -2362,6 +2380,29 @@ vocabulary:
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
     }
+
+    testWidgets('editing keeps the Audio URL and TTS sections together', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      final lesson = await seed(tester, provider, 'L1', 'nouns', '사과', 'apple');
+      await openEdit(tester, provider, lesson);
+
+      double top(Finder finder) => tester.getTopLeft(finder).dy;
+      final url = top(find.widgetWithText(TextField, 'Audio URL'));
+      final tts = top(find.text('Text-to-speech'));
+      expect(url, lessThan(tts));
+      // Hints, the ID and the other fields are outside the audio pair.
+      for (final other in [
+        find.text('Hints'),
+        find.widgetWithText(TextField, 'ID (optional)'),
+        find.widgetWithText(TextField, 'Part of speech'),
+        find.widgetWithText(TextField, 'Korean *'),
+      ]) {
+        final y = top(other);
+        expect(y < url || y > tts, isTrue, reason: 'between the audio panels');
+      }
+    });
 
     testWidgets('review notes are collapsed, with a preview for each', (
       tester,

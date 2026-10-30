@@ -193,13 +193,6 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
-                    TtsTextField(
-                      controller: _ttsCtrl,
-                      spokenFallback: _targetWordCtrl,
-                      hintText: 'e.g. 세 개 for 3개',
-                      helperText: 'Spoken instead of the Korean word when there is no recording.',
-                    ),
                     if (!widget.isNew) ...[
                       const SizedBox(height: 16),
                       _duplicateFrontWarning(
@@ -275,11 +268,15 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                       },
                     ),
                     const SizedBox(height: 16),
-                    AudioUrlField(
-                      controller: _audioCtrl,
+                    AudioEditFields(
+                      audioUrl: _audioCtrl,
                       useAudio: _useAudio,
                       onUseAudioChanged: (value) =>
                           setState(() => _useAudio = value),
+                      ttsText: _ttsCtrl,
+                      spokenFallback: _targetWordCtrl,
+                      ttsHintText: 'e.g. 세 개 for 3개',
+                      ttsHelperText: 'Spoken instead of the Korean word when there is no recording.',
                     ),
                     if (!widget.isNew) ...[
                       const SizedBox(height: 20),
@@ -1050,14 +1047,14 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                   ),
                 ),
                 const SizedBox(height: 12),
-                AudioUrlField(
-                  controller: audioCtrl,
+                AudioEditFields(
+                  audioUrl: audioCtrl,
                   useAudio: useAudio,
                   onUseAudioChanged: (value) =>
                       setDialogState(() => useAudio = value),
+                  ttsText: ttsCtrl,
+                  spokenFallback: targetCtrl,
                 ),
-                const SizedBox(height: 4),
-                TtsTextField(controller: ttsCtrl, spokenFallback: targetCtrl),
                 const SizedBox(height: 8),
                 MarkdownTextField(
                   controller: notesCtrl,

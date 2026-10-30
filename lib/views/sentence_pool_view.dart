@@ -62,15 +62,15 @@ class _SentencePoolViewState extends State<SentencePoolView> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                AudioUrlField(
-                  controller: audioCtrl,
-                  labelText: 'Audio URL (Optional)',
+                AudioEditFields(
+                  audioUrl: audioCtrl,
+                  audioUrlLabel: 'Audio URL (Optional)',
                   useAudio: useAudio,
                   onUseAudioChanged: (value) =>
                       setDialogState(() => useAudio = value),
+                  ttsText: ttsCtrl,
+                  spokenFallback: targetCtrl,
                 ),
-                const SizedBox(height: 4),
-                TtsTextField(controller: ttsCtrl, spokenFallback: targetCtrl),
                 const SizedBox(height: 8),
                 MarkdownTextField(
                   controller: notesCtrl,
