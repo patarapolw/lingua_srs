@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../models/sentence.dart';
 import '../providers/app_provider.dart';
-import '../widgets/audio_button.dart';
+import '../widgets/audio_edit_fields.dart';
 import '../widgets/emphasis_text.dart';
 import '../widgets/markdown_content.dart';
 import '../widgets/markdown_text_field.dart';
@@ -31,6 +31,8 @@ class _SentencePoolViewState extends State<SentencePoolView> {
       text: sentence?.translationText ?? '',
     );
     final audioCtrl = TextEditingController(text: sentence?.audioUrl ?? '');
+    final ttsCtrl = TextEditingController(text: sentence?.ttsText ?? '');
+    var useAudio = sentence?.useAudio ?? true;
     final notesCtrl = TextEditingController(text: sentence?.notes ?? '');
 
     showDialog(
@@ -39,42 +41,47 @@ class _SentencePoolViewState extends State<SentencePoolView> {
         title: Text(
           sentence == null ? 'Add Sentence to Pool' : 'Edit Sentence',
         ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: targetCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Target Sentence (Markdown)',
-                  hintText: 'e.g. 저는 **아줌마**를 위해 문을 열었어요',
+        content: StatefulBuilder(
+          builder: (ctx, setDialogState) => SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: targetCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Target Sentence (Markdown)',
+                    hintText: 'e.g. 저는 **아줌마**를 위해 문을 열었어요',
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: transCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Translation Sentence',
-                  hintText: 'e.g. I opened the door for **an older lady**',
+                const SizedBox(height: 12),
+                TextField(
+                  controller: transCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Translation Sentence',
+                    hintText: 'e.g. I opened the door for **an older lady**',
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: audioCtrl,
-                decoration: const InputDecoration(
+                const SizedBox(height: 12),
+                AudioUrlField(
+                  controller: audioCtrl,
                   labelText: 'Audio URL (Optional)',
+                  useAudio: useAudio,
+                  onUseAudioChanged: (value) =>
+                      setDialogState(() => useAudio = value),
                 ),
-              ),
-              const SizedBox(height: 12),
-              MarkdownTextField(
-                controller: notesCtrl,
-                minLines: 2,
-                maxLines: 5,
-                decoration: const InputDecoration(
-                  labelText: 'Sentence Notes (Markdown)',
+                const SizedBox(height: 4),
+                TtsTextField(controller: ttsCtrl, spokenFallback: targetCtrl),
+                const SizedBox(height: 8),
+                MarkdownTextField(
+                  controller: notesCtrl,
+                  minLines: 2,
+                  maxLines: 5,
+                  decoration: const InputDecoration(
+                    labelText: 'Sentence Notes (Markdown)',
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
         actions: [
@@ -93,6 +100,10 @@ class _SentencePoolViewState extends State<SentencePoolView> {
                     audioUrl: audioCtrl.text.trim().isEmpty
                         ? null
                         : audioCtrl.text.trim(),
+                    useAudio: useAudio,
+                    ttsText: ttsCtrl.text.trim().isEmpty
+                        ? null
+                        : ttsCtrl.text.trim(),
                     notes: notesCtrl.text.trim(),
                   );
                   await provider.addSentenceToPool(newSentence);
@@ -102,6 +113,10 @@ class _SentencePoolViewState extends State<SentencePoolView> {
                   sentence.audioUrl = audioCtrl.text.trim().isEmpty
                       ? null
                       : audioCtrl.text.trim();
+                  sentence.useAudio = useAudio;
+                  sentence.ttsText = ttsCtrl.text.trim().isEmpty
+                      ? null
+                      : ttsCtrl.text.trim();
                   sentence.notes = notesCtrl.text.trim();
                   await provider.updateSentenceInPool(sentence);
                 }
@@ -114,10 +129,15 @@ class _SentencePoolViewState extends State<SentencePoolView> {
         ],
       ),
     ).whenComplete(() {
-      targetCtrl.dispose();
-      transCtrl.dispose();
-      audioCtrl.dispose();
-      notesCtrl.dispose();
+      // The route's exit animation still rebuilds the fields after the future
+      // completes, so the controllers must outlive it.
+      Future<void>.delayed(const Duration(seconds: 1), () {
+        targetCtrl.dispose();
+        transCtrl.dispose();
+        audioCtrl.dispose();
+        ttsCtrl.dispose();
+        notesCtrl.dispose();
+      });
     });
   }
 
@@ -279,24 +299,11 @@ class _SentencePoolViewState extends State<SentencePoolView> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Expanded(
-                                      child: EmphasisText(
-                                        item.targetText,
-                                        style: theme.textTheme.titleMedium
-                                            ?.copyWith(
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                      ),
-                                    ),
-                                    AudioButton(
-                                      audioUrl: item.audioUrl,
-                                      fallbackText: item.speechText,
-                                      compact: true,
-                                    ),
-                                  ],
+                                EmphasisText(
+                                  item.targetText,
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                                 const SizedBox(height: 6),
                                 EmphasisText(

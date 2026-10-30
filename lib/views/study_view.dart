@@ -409,22 +409,22 @@ class _StudyViewState extends State<StudyView> {
 
     for (int i = startIndex; i < startIndex + 3 && i < _queue.length; i++) {
       final item = _queue[i];
-      if (item.vocab.audioUrl != null) {
-        urlsToPreload.add(item.vocab.audioUrl);
+      if (item.vocab.playableAudioUrl != null) {
+        urlsToPreload.add(item.vocab.playableAudioUrl);
       } else if (!audioService.usesOfflineTts) {
         urlsToPreload.add(
           audioService.getTtsUrl(
-            item.vocab.targetWord,
+            item.vocab.speechText,
             language: item.lesson.targetLanguage,
           ),
         );
       }
-      if (item.sentence?.audioUrl != null) {
-        urlsToPreload.add(item.sentence!.audioUrl);
+      if (item.sentence?.playableAudioUrl != null) {
+        urlsToPreload.add(item.sentence!.playableAudioUrl);
       } else if (item.sentence != null && !audioService.usesOfflineTts) {
         urlsToPreload.add(
           audioService.getTtsUrl(
-            item.sentence!.targetText,
+            item.sentence!.speechText,
             language: item.lesson.targetLanguage,
           ),
         );
@@ -502,10 +502,10 @@ class _StudyViewState extends State<StudyView> {
       final item = _queue[_currentIndex];
       final audioService = context.read<AudioService>();
       audioService.playAnswerSequence(
-        vocabAudio: item.vocab.audioUrl,
-        vocabText: item.vocab.targetWord,
-        sentenceAudio: item.sentence?.audioUrl,
-        sentenceText: item.sentence?.targetText,
+        vocabAudio: item.vocab.playableAudioUrl,
+        vocabText: item.vocab.speechText,
+        sentenceAudio: item.sentence?.playableAudioUrl,
+        sentenceText: item.sentence?.speechText,
         targetLanguage: item.lesson.targetLanguage,
       );
     }
@@ -764,9 +764,9 @@ class _StudyViewState extends State<StudyView> {
         _currentIndex < _queue.length) {
       final item = _queue[_currentIndex];
       final audioService = context.read<AudioService>();
-      if (item.vocab.audioUrl != null &&
-          item.vocab.audioUrl!.trim().isNotEmpty) {
-        audioService.playAudio(item.vocab.audioUrl);
+      final vocabAudio = item.vocab.playableAudioUrl;
+      if (vocabAudio != null) {
+        audioService.playAudio(vocabAudio);
       } else {
         audioService.speak(
           item.vocab.speechText,
@@ -778,9 +778,9 @@ class _StudyViewState extends State<StudyView> {
       final item = _queue[_currentIndex];
       if (item.sentence != null) {
         final audioService = context.read<AudioService>();
-        if (item.sentence!.audioUrl != null &&
-            item.sentence!.audioUrl!.trim().isNotEmpty) {
-          audioService.playAudio(item.sentence!.audioUrl);
+        final sentenceAudio = item.sentence!.playableAudioUrl;
+        if (sentenceAudio != null) {
+          audioService.playAudio(sentenceAudio);
         } else {
           audioService.speak(
             item.sentence!.speechText,
@@ -1545,7 +1545,8 @@ class _StudyViewState extends State<StudyView> {
                                               ),
                                             ),
                                             AudioButton(
-                                              audioUrl: item.vocab.audioUrl,
+                                              audioUrl:
+                                                  item.vocab.playableAudioUrl,
                                               fallbackText:
                                                   item.vocab.speechText,
                                               language:
@@ -1608,8 +1609,9 @@ class _StudyViewState extends State<StudyView> {
                                                 ),
                                               ),
                                               AudioButton(
-                                                audioUrl:
-                                                    item.sentence!.audioUrl,
+                                                audioUrl: item
+                                                    .sentence!
+                                                    .playableAudioUrl,
                                                 fallbackText:
                                                     item.sentence!.speechText,
                                                 language:

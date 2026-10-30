@@ -22,6 +22,7 @@ class VocabItem {
     required this.pos,
     List<String>? sectionPath,
     String? audioUrl,
+    bool useAudio = true,
     String? ttsText,
     String notes = '',
     String disambiguation = '',
@@ -33,6 +34,7 @@ class VocabItem {
        sentenceIds = sentenceIds ?? [],
        shared = SharedVocab(
          audioUrl: audioUrl,
+         useAudio: useAudio,
          ttsText: ttsText,
          notes: notes,
          disambiguation: disambiguation,
@@ -53,6 +55,15 @@ class VocabItem {
   String? get audioUrl => shared.audioUrl;
   set audioUrl(String? v) {
     shared.setManual(SharedVocab.audioField, v);
+  }
+
+  bool get useAudio => shared.useAudio;
+  set useAudio(bool v) => shared.useAudio = v;
+
+  /// The recording to play, or null when there is none or it is switched off.
+  String? get playableAudioUrl {
+    final url = audioUrl?.trim();
+    return useAudio && url != null && url.isNotEmpty ? url : null;
   }
 
   String? get ttsText => shared.ttsText;
@@ -109,6 +120,7 @@ class VocabItem {
     'pos': pos,
     'sectionPath': sectionPath,
     'audioUrl': audioUrl,
+    'useAudio': useAudio,
     'ttsText': ttsText,
     'notes': notes,
     'disambiguation': disambiguation,
@@ -127,6 +139,7 @@ class VocabItem {
         ?.map((e) => e.toString())
         .toList(),
     audioUrl: json['audioUrl'] as String?,
+    useAudio: json['useAudio'] as bool? ?? true,
     ttsText: json['ttsText'] as String?,
     notes: json['notes'] as String? ?? '',
     disambiguation: json['disambiguation'] as String? ?? '',

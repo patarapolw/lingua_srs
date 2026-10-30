@@ -1431,6 +1431,86 @@ vocabulary:
       expect(clean, '저는 아줌마를 위해  문을 열었어요');
     });
 
+    test('Clean text for speech skips bracketed asides', () {
+      expect(Sentence.cleanForSpeech('먹다 (to eat)'), '먹다');
+      expect(
+        Sentence.cleanForSpeech('저는 (I) **사과**(apple)를 먹어요'),
+        '저는 사과를 먹어요',
+      );
+      // Non-greedy: text between two groups of brackets is kept.
+      expect(Sentence.cleanForSpeech('(a) 가 (b) 나'), '가 나');
+      expect(Sentence.cleanForSpeech('(only a note)'), isEmpty);
+    });
+
+    test('Clean text for speech can keep brackets for display callers', () {
+      expect(
+        Sentence.cleanForSpeech('먹다 (to eat)', skipBrackets: false),
+        '먹다 (to eat)',
+      );
+      // Cloze blanks are never spoken, brackets or not.
+      expect(
+        Sentence.cleanForSpeech('밥을 (___) 먹어요', skipBrackets: false),
+        '밥을  먹어요',
+      );
+    });
+
+    test('A sentence recording can be switched off, keeping its URL', () {
+      final sentence = Sentence(
+        targetText: '사과',
+        translationText: 'apple',
+        audioUrl: '  https://example.com/a.mp3 ',
+      );
+      expect(sentence.useAudio, isTrue);
+      expect(sentence.playableAudioUrl, 'https://example.com/a.mp3');
+
+      sentence.useAudio = false;
+      expect(sentence.audioUrl, isNotNull);
+      expect(sentence.playableAudioUrl, isNull);
+
+      final copy = Sentence.fromJson(sentence.toJson());
+      expect(copy.useAudio, isFalse);
+      expect(copy.audioUrl, '  https://example.com/a.mp3 ');
+    });
+
+    test('Sentences saved before useAudio existed still play their audio', () {
+      final sentence = Sentence.fromJson({
+        'targetText': '사과',
+        'translationText': 'apple',
+        'audioUrl': 'https://example.com/a.mp3',
+      });
+      expect(sentence.useAudio, isTrue);
+      expect(sentence.playableAudioUrl, 'https://example.com/a.mp3');
+      expect(
+        Sentence(targetText: '사과', translationText: 'apple').playableAudioUrl,
+        isNull,
+      );
+    });
+
+    test('A vocab recording can be switched off, keeping its URL', () {
+      final vocab = VocabItem(
+        targetWord: '3개',
+        translation: 'three items',
+        pos: 'numbers',
+        audioUrl: 'https://example.com/three.mp3',
+        ttsText: '세 개',
+      );
+      expect(vocab.playableAudioUrl, 'https://example.com/three.mp3');
+
+      vocab.useAudio = false;
+      expect(vocab.playableAudioUrl, isNull);
+      expect(vocab.audioUrl, 'https://example.com/three.mp3');
+      expect(vocab.speechText, '세 개');
+
+      final copy = VocabItem.fromJson(vocab.toJson());
+      expect(copy.useAudio, isFalse);
+      expect(copy.shared.detachedCopy().useAudio, isFalse);
+      expect(
+        VocabItem.fromJson({'targetWord': '사과', 'translation': 'apple'})
+            .useAudio,
+        isTrue,
+      );
+    });
+
     test('SRS SM-2 calculations work properly', () {
       final card = SrsCard(direction: CardDirection.targetToNative);
       expect(card.status, SrsStatus.isNew);

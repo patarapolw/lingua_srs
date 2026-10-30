@@ -37,6 +37,9 @@ class SharedVocab {
 
   String? audioUrl;
 
+  /// False when the recorded [audioUrl] should be ignored in favour of TTS.
+  bool useAudio;
+
   /// Alternate text spoken by text-to-speech instead of the target word.
   String? ttsText;
   String notes;
@@ -48,6 +51,7 @@ class SharedVocab {
 
   SharedVocab({
     this.audioUrl,
+    this.useAudio = true,
     this.ttsText,
     this.notes = '',
     this.disambiguation = '',
@@ -168,6 +172,7 @@ class SharedVocab {
   /// Same details, fresh progress. Used when a vocab is split off by id change.
   SharedVocab detachedCopy() => SharedVocab(
     audioUrl: audioUrl,
+    useAudio: useAudio,
     ttsText: ttsText,
     notes: notes,
     disambiguation: disambiguation,
@@ -191,6 +196,7 @@ class SharedVocab {
 
   Map<String, dynamic> toJson() => {
     'audioUrl': audioUrl,
+    'useAudio': useAudio,
     'ttsText': ttsText,
     'notes': notes,
     'disambiguation': disambiguation,
@@ -202,6 +208,7 @@ class SharedVocab {
 
   factory SharedVocab.fromJson(Map<String, dynamic> json) => SharedVocab(
     audioUrl: json['audioUrl'] as String?,
+    useAudio: json['useAudio'] as bool? ?? true,
     ttsText: json['ttsText'] as String?,
     notes: json['notes'] as String? ?? '',
     disambiguation: json['disambiguation'] as String? ?? '',

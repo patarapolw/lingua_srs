@@ -19,7 +19,8 @@ class KoreanPronunciationService {
   static String toIpa(String text) => _convert(text, _ipaWord);
 
   static String _convert(String text, String Function(List<_Syllable>) render) {
-    final clean = Sentence.cleanForSpeech(text); // strips **bold**, cloze, etc.
+    // Strips **bold** and cloze blanks, but keeps bracketed text: it is shown.
+    final clean = Sentence.cleanForSpeech(text, skipBrackets: false);
     return clean.replaceAllMapped(_hangulRun, (m) => render(_phonemize(m[0]!)));
   }
 

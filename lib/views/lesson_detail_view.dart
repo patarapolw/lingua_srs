@@ -744,7 +744,8 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                                                     .secondaryContainer,
                                               ),
                                               AudioButton(
-                                                audioUrl: vocab.audioUrl,
+                                                audioUrl:
+                                                    vocab.playableAudioUrl,
                                                 fallbackText: vocab.speechText,
                                                 language: lesson.targetLanguage,
                                                 compact: true,
@@ -871,7 +872,7 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                                             ),
                                           ),
                                           AudioButton(
-                                            audioUrl: s.audioUrl,
+                                            audioUrl: s.playableAudioUrl,
                                             fallbackText: s.speechText,
                                             language: lesson.targetLanguage,
                                             compact: true,

@@ -532,6 +532,11 @@ class AppProvider extends ChangeNotifier {
       ..audioUrl = audioUrl
       ..ttsText = ttsText
       ..notes = notes
+      // An edit decides. An import always brings the default (on), so it must
+      // not switch a recording back on that was switched off.
+      ..useAudio = _importSentenceSet == null
+          ? incoming.useAudio
+          : candidates.every((sentence) => sentence.useAudio)
       ..lessonId ??= incoming.lessonId;
     final known = _importSentenceSet;
     if (known != null) {

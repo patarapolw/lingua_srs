@@ -10,6 +10,7 @@ import '../models/vocab_item.dart';
 import '../providers/app_provider.dart';
 import '../services/korean_text_search.dart';
 import '../widgets/audio_button.dart';
+import '../widgets/audio_edit_fields.dart';
 import '../widgets/emphasis_text.dart';
 import '../widgets/markdown_content.dart';
 import '../widgets/markdown_notes_field.dart';
@@ -57,6 +58,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
   late TextEditingController _translationCtrl;
   late TextEditingController _posCtrl;
   late TextEditingController _audioCtrl;
+  late bool _useAudio;
   late TextEditingController _ttsCtrl;
   late TextEditingController _notesCtrl;
   late TextEditingController _disambiguationCtrl;
@@ -188,15 +190,11 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                       ],
                     ),
                     const SizedBox(height: 16),
-                    TextField(
+                    TtsTextField(
                       controller: _ttsCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Korean TTS text (optional)',
-                        hintText: 'e.g. 세 개 for 3개',
-                        helperText: 'Spoken instead of the Korean word when there is no audio.',
-                        helperMaxLines: 2,
-                        border: OutlineInputBorder(),
-                      ),
+                      spokenFallback: _targetWordCtrl,
+                      hintText: 'e.g. 세 개 for 3개',
+                      helperText: 'Spoken instead of the Korean word when there is no recording.',
                     ),
                     if (!widget.isNew) ...[
                       const SizedBox(height: 16),
@@ -256,45 +254,28 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                     const SizedBox(height: 20),
 
                     // Part of speech / Category & Audio URL
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          flex: 4,
-                          child: TextField(
-                            controller: _posCtrl,
-                            decoration: InputDecoration(
-                              labelText: widget.isNew
-                                  ? 'Part of speech *'
-                                  : 'Part of speech',
-                              hintText: 'e.g. nouns, verbs',
-                              errorText: _posError,
-                              border: const OutlineInputBorder(),
-                            ),
-                            onChanged: (_) {
-                              if (_posError != null) {
-                                setState(() => _posError = null);
-                              }
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          flex: 6,
-                          child: TextField(
-                            controller: _audioCtrl,
-                            decoration: InputDecoration(
-                              labelText: 'Audio URL',
-                              border: const OutlineInputBorder(),
-                              suffixIcon: AudioButton(
-                                audioUrl: _audioCtrl.text,
-                                compact: true,
-                              ),
-                            ),
-                            onChanged: (_) => setState(() {}),
-                          ),
-                        ),
-                      ],
+                    TextField(
+                      controller: _posCtrl,
+                      decoration: InputDecoration(
+                        labelText: widget.isNew
+                            ? 'Part of speech *'
+                            : 'Part of speech',
+                        hintText: 'e.g. nouns, verbs',
+                        errorText: _posError,
+                        border: const OutlineInputBorder(),
+                      ),
+                      onChanged: (_) {
+                        if (_posError != null) {
+                          setState(() => _posError = null);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    AudioUrlField(
+                      controller: _audioCtrl,
+                      useAudio: _useAudio,
+                      onUseAudioChanged: (value) =>
+                          setState(() => _useAudio = value),
                     ),
                     if (!widget.isNew) ...[
                       const SizedBox(height: 20),
@@ -542,11 +523,11 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  if (sentence.audioUrl != null)
-                                    AudioButton(
-                                      audioUrl: sentence.audioUrl,
-                                      compact: true,
-                                    ),
+                                  AudioButton(
+                                    audioUrl: sentence.playableAudioUrl,
+                                    fallbackText: sentence.speechText,
+                                    compact: true,
+                                  ),
                                   IconButton(
                                     icon: const Icon(
                                       Icons.delete_outline,
@@ -616,6 +597,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     _translationCtrl = TextEditingController(text: widget.vocab.translation);
     _posCtrl = TextEditingController(text: widget.vocab.pos);
     _audioCtrl = TextEditingController(text: widget.vocab.audioUrl ?? '');
+    _useAudio = widget.vocab.useAudio;
     _ttsCtrl = TextEditingController(text: widget.vocab.ttsText ?? '');
     _notesCtrl = TextEditingController(text: widget.vocab.notes);
     _disambiguationCtrl = TextEditingController(
@@ -987,8 +969,11 @@ class _VocabEditDialogState extends State<VocabEditDialog>
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (sentence.audioUrl != null)
-              AudioButton(audioUrl: sentence.audioUrl, compact: true),
+            AudioButton(
+              audioUrl: sentence.playableAudioUrl,
+              fallbackText: sentence.speechText,
+              compact: true,
+            ),
             IconButton(
               icon: const Icon(Icons.delete_outline, color: Colors.red),
               tooltip: 'Remove example',
@@ -1006,51 +991,51 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     final transCtrl = TextEditingController();
     final audioCtrl = TextEditingController();
     final notesCtrl = TextEditingController();
+    var useAudio = true;
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(widget.isNew ? 'Add example' : 'Add New Sentence to Pool'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: targetCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Korean sentence',
-                  hintText: 'Use **word** for bold/cloze',
+        content: StatefulBuilder(
+          builder: (ctx, setDialogState) => SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: targetCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Korean sentence',
+                    hintText: 'Use **word** for bold/cloze',
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: ttsCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Korean TTS text (optional)',
+                const SizedBox(height: 12),
+                TextField(
+                  controller: transCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'English translation',
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: transCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'English translation',
+                const SizedBox(height: 12),
+                AudioUrlField(
+                  controller: audioCtrl,
+                  useAudio: useAudio,
+                  onUseAudioChanged: (value) =>
+                      setDialogState(() => useAudio = value),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: audioCtrl,
-                decoration: const InputDecoration(labelText: 'Audio URL'),
-              ),
-              const SizedBox(height: 12),
-              MarkdownTextField(
-                controller: notesCtrl,
-                minLines: 2,
-                maxLines: 5,
-                decoration: const InputDecoration(
-                  labelText: 'Notes (Markdown)',
+                const SizedBox(height: 4),
+                TtsTextField(controller: ttsCtrl, spokenFallback: targetCtrl),
+                const SizedBox(height: 8),
+                MarkdownTextField(
+                  controller: notesCtrl,
+                  minLines: 2,
+                  maxLines: 5,
+                  decoration: const InputDecoration(
+                    labelText: 'Notes (Markdown)',
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
         actions: [
@@ -1067,6 +1052,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                   audioUrl: audioCtrl.text.trim().isEmpty
                       ? null
                       : audioCtrl.text.trim(),
+                  useAudio: useAudio,
                   ttsText: ttsCtrl.text.trim().isEmpty
                       ? null
                       : ttsCtrl.text.trim(),
@@ -1374,6 +1360,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     widget.vocab.audioUrl = _audioCtrl.text.trim().isEmpty
         ? null
         : _audioCtrl.text.trim();
+    widget.vocab.useAudio = _useAudio;
     if ((widget.vocab.ttsText ?? '') != _ttsCtrl.text.trim()) {
       widget.vocab.ttsText = _ttsCtrl.text.trim().isEmpty
           ? null
