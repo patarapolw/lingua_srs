@@ -18,6 +18,7 @@ import 'package:lingua_srs/views/study_view.dart';
 import 'package:lingua_srs/views/vocab_edit_dialog.dart';
 import 'package:lingua_srs/views/vocab_merge_dialogs.dart';
 import 'package:lingua_srs/views/yaml_import_view.dart';
+import 'package:lingua_srs/widgets/emphasis_text.dart';
 import 'package:lingua_srs/widgets/markdown_content.dart';
 import 'package:lingua_srs/widgets/markdown_notes_field.dart';
 
@@ -106,8 +107,14 @@ void main() {
     });
     final provider = AppProvider();
     await tester.pumpWidget(
-      ChangeNotifierProvider(
-        create: (_) => provider,
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<AppProvider>(create: (_) => provider),
+          // main.dart provides the real one; the edit dialogs preview audio.
+          ChangeNotifierProvider<AudioService>(
+            create: (_) => _FakeAudioService(),
+          ),
+        ],
         child: const LinguaSrsApp(),
       ),
     );
@@ -1796,14 +1803,42 @@ vocabulary:
       await tester.pumpAndSettle();
     }
 
+    /// The row of an example (linked or picked from the pool). Other tiles in
+    /// the dialog, such as the collapsed TTS one, are ListTiles too.
+    Finder exampleTile() => find
+        .byWidgetPredicate((w) => w is ListTile && w.title is EmphasisText)
+        .first;
+
+    /// The TTS text is collapsed; opens the tile (inside the sentence dialog
+    /// when [inDialog] is set).
+    Future<void> expandTts(WidgetTester tester, {bool inDialog = false}) async {
+      final title = find.text('Text-to-speech');
+      await tester.tap(
+        inDialog
+            ? find.descendant(of: find.byType(AlertDialog), matching: title)
+            : title,
+      );
+      await tester.pumpAndSettle();
+    }
+
     testWidgets('has a title and only the schema fields', (tester) async {
       await openAdd(tester);
 
       expect(find.text('Add vocabulary'), findsOneWidget);
       // ko, ko_text, en, audio, notes, plus the required part of speech.
       expect(find.widgetWithText(TextField, 'Korean *'), findsOneWidget);
+      // ko_text is collapsed until opened, to keep the dialog short.
+      expect(find.text('Text-to-speech'), findsOneWidget);
       expect(
         find.widgetWithText(TextField, 'Korean TTS text (optional)'),
+        findsNothing,
+      );
+      expect(
+        find.widgetWithText(
+          TextField,
+          'Korean TTS text (optional)',
+          skipOffstage: false,
+        ),
         findsOneWidget,
       );
       expect(find.widgetWithText(TextField, 'English *'), findsOneWidget);
@@ -1870,6 +1905,7 @@ vocabulary:
     ) async {
       final (_, draft) = await openAdd(tester);
       await fill(tester, ko: '3개', en: 'three items', pos: 'numbers');
+      await expandTts(tester);
       await tester.enterText(
         find.widgetWithText(TextField, 'Korean TTS text (optional)'),
         '세 개',
@@ -1903,6 +1939,144 @@ vocabulary:
 
       expect(draft.ttsText, isNull);
       expect(draft.speechText, '배');
+    });
+
+    Sentence recordedSentence() => Sentence(
+      targetText: '배와 사과를 먹어요',
+      translationText: 'I eat a pear and an apple',
+      audioUrl: 'https://example.com/fruit.mp3',
+    );
+
+    testWidgets('each example can use its recording or TTS', (tester) async {
+      final pooled = recordedSentence();
+      final (provider, _) = await openAdd(tester, pool: [pooled]);
+      await fill(tester, ko: '배', en: 'pear', pos: 'nouns');
+      await tester.tap(find.byType(CheckboxListTile));
+      await tester.pump();
+
+      final useRecording = find.widgetWithText(FilterChip, 'Use recording');
+      expect(tester.widget<FilterChip>(useRecording).selected, isTrue);
+      await tester.tap(useRecording);
+      await tester.pump();
+      expect(tester.widget<FilterChip>(useRecording).selected, isFalse);
+      expect(pooled.useAudio, isTrue, reason: 'applied on Save, not before');
+
+      await saveAndWait(tester);
+
+      final saved = provider.sentences.firstWhere(
+        (s) => s.targetText == '배와 사과를 먹어요',
+      );
+      expect(saved.useAudio, isFalse);
+      expect(saved.audioUrl, 'https://example.com/fruit.mp3');
+      expect(saved.playableAudioUrl, isNull);
+      await tester.pump(const Duration(seconds: 1));
+    });
+
+    testWidgets('cancelling leaves an example on its recording', (
+      tester,
+    ) async {
+      final pooled = recordedSentence();
+      await openAdd(tester, pool: [pooled]);
+      await fill(tester, ko: '배', en: 'pear', pos: 'nouns');
+      await tester.tap(find.byType(CheckboxListTile));
+      await tester.pump();
+
+      await tester.tap(find.widgetWithText(FilterChip, 'Use recording'));
+      await tester.pump();
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(pooled.useAudio, isTrue);
+      await tester.pump(const Duration(seconds: 1));
+    });
+
+    testWidgets('an example without a recording has no choice', (tester) async {
+      await openAdd(
+        tester,
+        pool: [
+          Sentence(targetText: '배와 사과를 먹어요', translationText: 'I eat fruit'),
+        ],
+      );
+      await fill(tester, ko: '배', en: 'pear', pos: 'nouns');
+      await tester.tap(find.byType(CheckboxListTile));
+      await tester.pump();
+
+      expect(exampleTile(), findsOneWidget);
+      expect(find.widgetWithText(FilterChip, 'Use recording'), findsNothing);
+    });
+
+    testWidgets('a new example can be set to TTS before the word is saved', (
+      tester,
+    ) async {
+      final (provider, _) = await openAdd(tester);
+
+      await tester.tap(find.byTooltip('Create new sentence'));
+      await tester.pumpAndSettle();
+      await tester.enterText(inSentenceDialog('Korean sentence'), '3개 주세요');
+      await tester.enterText(
+        inSentenceDialog('Audio URL'),
+        'https://e.com/3.mp3',
+      );
+      await tester.enterText(
+        inSentenceDialog('English translation'),
+        'Three, please',
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Add'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(FilterChip, 'Use recording'));
+      await tester.pump();
+      await fill(tester, ko: '3개', en: 'three items', pos: 'numbers');
+      await saveAndWait(tester);
+
+      final added = provider.sentences.firstWhere(
+        (s) => s.targetText == '3개 주세요',
+      );
+      expect(added.useAudio, isFalse);
+      expect(added.audioUrl, 'https://e.com/3.mp3');
+      await tester.pump(const Duration(seconds: 1));
+    });
+
+    testWidgets('the Audio URL and TTS sections sit together, URL first', (
+      tester,
+    ) async {
+      await openAdd(tester);
+
+      double top(Finder finder) => tester.getTopLeft(finder).dy;
+      final pos = top(find.widgetWithText(TextField, 'Part of speech *'));
+      final url = top(find.widgetWithText(TextField, 'Audio URL'));
+      final tts = top(find.text('Text-to-speech'));
+      expect(pos, lessThan(url));
+      expect(url, lessThan(tts));
+      expect(
+        top(find.widgetWithText(TextField, 'Korean *')),
+        lessThan(pos),
+        reason: 'TTS no longer sits under the Korean field',
+      );
+    });
+
+    testWidgets('a recording can be switched off without losing its URL', (
+      tester,
+    ) async {
+      final (_, draft) = await openAdd(tester);
+      await fill(tester, ko: '배', en: 'pear', pos: 'nouns');
+      expect(find.text('Use this recording'), findsNothing);
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Audio URL'),
+        'https://example.com/pear.mp3',
+      );
+      await tester.pump();
+      final checkbox = find.byType(CheckboxListTile);
+      expect(tester.widget<CheckboxListTile>(checkbox).value, isTrue);
+
+      await tester.tap(checkbox);
+      await tester.pump();
+      await save(tester);
+
+      expect(draft.audioUrl, 'https://example.com/pear.mp3');
+      expect(draft.useAudio, isFalse);
+      expect(draft.playableAudioUrl, isNull);
     });
 
     testWidgets(
@@ -1974,6 +2148,7 @@ vocabulary:
       await tester.tap(find.byTooltip('Create new sentence'));
       await tester.pumpAndSettle();
       await tester.enterText(inSentenceDialog('Korean sentence'), '3개 주세요');
+      await expandTts(tester, inDialog: true);
       await tester.enterText(
         inSentenceDialog('Korean TTS text (optional)'),
         '세 개 주세요',
@@ -2040,7 +2215,7 @@ vocabulary:
       await tester.tap(find.byType(CheckboxListTile));
       await tester.pump();
 
-      await tester.tap(find.byType(ListTile).first);
+      await tester.tap(exampleTile());
       await tester.pumpAndSettle();
       expect(find.text('Edit emphasis'), findsOneWidget);
       await tester.enterText(
@@ -2082,7 +2257,7 @@ vocabulary:
       await tester.tap(find.byType(CheckboxListTile));
       await tester.pump();
 
-      await tester.tap(find.byType(ListTile).first);
+      await tester.tap(exampleTile());
       await tester.pumpAndSettle();
       await tester.enterText(
         inSentenceDialog('Korean sentence'),
@@ -2112,7 +2287,7 @@ vocabulary:
       await tester.tap(find.byType(CheckboxListTile));
       await tester.pump();
 
-      await tester.tap(find.byType(ListTile).first);
+      await tester.tap(exampleTile());
       await tester.pumpAndSettle();
       await tester.enterText(
         inSentenceDialog('Korean sentence'),
@@ -2205,6 +2380,29 @@ vocabulary:
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
     }
+
+    testWidgets('editing keeps the Audio URL and TTS sections together', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      final lesson = await seed(tester, provider, 'L1', 'nouns', '사과', 'apple');
+      await openEdit(tester, provider, lesson);
+
+      double top(Finder finder) => tester.getTopLeft(finder).dy;
+      final url = top(find.widgetWithText(TextField, 'Audio URL'));
+      final tts = top(find.text('Text-to-speech'));
+      expect(url, lessThan(tts));
+      // Hints, the ID and the other fields are outside the audio pair.
+      for (final other in [
+        find.text('Hints'),
+        find.widgetWithText(TextField, 'ID (optional)'),
+        find.widgetWithText(TextField, 'Part of speech'),
+        find.widgetWithText(TextField, 'Korean *'),
+      ]) {
+        final y = top(other);
+        expect(y < url || y > tts, isTrue, reason: 'between the audio panels');
+      }
+    });
 
     testWidgets('review notes are collapsed, with a preview for each', (
       tester,

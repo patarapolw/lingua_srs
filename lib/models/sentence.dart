@@ -6,6 +6,10 @@ class Sentence {
   String translationText;
   String? audioUrl;
 
+  /// False when the recorded [audioUrl] is not good enough: playback then uses
+  /// text-to-speech while the URL stays saved.
+  bool useAudio;
+
   /// Alternate text spoken by text-to-speech instead of [targetText].
   String? ttsText;
   String notes;
@@ -16,10 +20,20 @@ class Sentence {
     required this.targetText,
     required this.translationText,
     this.audioUrl,
+    this.useAudio = true,
     this.ttsText,
     this.notes = '',
     this.lessonId,
   }) : id = id ?? const Uuid().v4();
+
+  /// Whether a recording is saved, whether or not it is switched on.
+  bool get hasAudioUrl => audioUrl?.trim().isNotEmpty ?? false;
+
+  /// The recording to play, or null when there is none or it is switched off.
+  String? get playableAudioUrl {
+    final url = audioUrl?.trim();
+    return useAudio && url != null && url.isNotEmpty ? url : null;
+  }
 
   /// What text-to-speech should say: [ttsText] when set, else [targetText].
   String get speechText =>
@@ -140,13 +154,19 @@ class Sentence {
     return targetText;
   }
 
-  /// Strips markdown and cloze syntax for clean Text-to-Speech
-  static String cleanForSpeech(String text) {
+  /// Strips markdown and cloze syntax for clean Text-to-Speech.
+  ///
+  /// With [skipBrackets] (the default) text in round brackets is dropped too,
+  /// along with the space before it, or the voice would stutter over asides
+  /// such as `먹다 (to eat)`. Callers that need every character, like the
+  /// romanizer, pass `false`.
+  static String cleanForSpeech(String text, {bool skipBrackets = true}) {
     String clean = text.replaceAllMapped(
       RegExp(r'\*\*([^*]+)\*\*'),
       (m) => m[1] ?? '',
     );
     clean = clean.replaceAll(RegExp(r'\[___*\]|\(___*_*\)'), '');
+    if (skipBrackets) clean = clean.replaceAll(RegExp(r'\s*\(.+?\)'), '');
     clean = clean.replaceAll(RegExp(r'[#*_~`]'), '');
     return clean.trim();
   }
@@ -156,6 +176,7 @@ class Sentence {
     'targetText': targetText,
     'translationText': translationText,
     'audioUrl': audioUrl,
+    'useAudio': useAudio,
     'ttsText': ttsText,
     'notes': notes,
     'lessonId': lessonId,
@@ -166,6 +187,7 @@ class Sentence {
     targetText: json['targetText'] as String? ?? '',
     translationText: json['translationText'] as String? ?? '',
     audioUrl: json['audioUrl'] as String?,
+    useAudio: json['useAudio'] as bool? ?? true,
     ttsText: json['ttsText'] as String?,
     notes: json['notes'] as String? ?? '',
     lessonId: json['lessonId'] as String?,

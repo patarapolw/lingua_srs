@@ -77,6 +77,12 @@ void main() {
     });
   });
 
+  test('bracketed text is still pronounced, unlike in speech', () {
+    // Brackets are skipped when speaking, but the pronunciation line shows
+    // everything the sentence shows.
+    expect(rr('학교(한국어)'), 'hakgyo(hangugeo)');
+  });
+
   test('containsHangul', () {
     expect(KoreanPronunciationService.containsHangul('abc 123'), isFalse);
     expect(KoreanPronunciationService.containsHangul('a배'), isTrue);

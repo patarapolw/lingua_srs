@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:crypto/crypto.dart';
@@ -15,6 +16,7 @@ class AudioService extends ChangeNotifier {
   final AudioPlayer _player;
   final FlutterTts _tts;
   final bool _offlineTts;
+  final Random _random;
   Directory? _cacheDir;
 
   bool _isPlaying = false;
@@ -44,7 +46,9 @@ class AudioService extends ChangeNotifier {
     AudioPlayer? player,
     FlutterTts? tts,
     bool? offlineTts,
+    Random? random,
   }) : _player = player ?? AudioPlayer(),
+       _random = random ?? Random(),
        _tts = tts ?? FlutterTts(),
        _offlineTts = offlineTts ?? (!kIsWeb && Platform.isAndroid) {
     _initCacheDir();
@@ -256,6 +260,9 @@ class AudioService extends ChangeNotifier {
                 voice['network_required']?.toString() == '0';
           })
           .toList();
+      // A language can have several installed voices. Varying them keeps
+      // reviews from sounding monotonous; any that fails is skipped below.
+      offlineVoices.shuffle(_random);
 
       var voiceSelected = false;
       for (final voice in offlineVoices) {
