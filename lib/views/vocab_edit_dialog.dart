@@ -772,11 +772,11 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                     ],
                     TextField(
                       controller: targetCtrl,
-                      minLines: 2,
+                      minLines: 1,
                       maxLines: 5,
                       onChanged: (_) => setDialogState(() {}),
                       decoration: InputDecoration(
-                        labelText: 'Korean sentence',
+                        labelText: 'Sentence',
                         helperText: 'Wrap each part in **double asterisks**; use several for several words.',
                         helperMaxLines: 2,
                         errorText: targetOk ? null : _needsEmphasis,
@@ -794,7 +794,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                     const SizedBox(height: 12),
                     TextField(
                       controller: translationCtrl,
-                      minLines: 2,
+                      minLines: 1,
                       maxLines: 5,
                       onChanged: (_) => setDialogState(() {}),
                       decoration: const InputDecoration(
@@ -1093,13 +1093,9 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                     spokenFallback: targetCtrl,
                   ),
                   const SizedBox(height: 8),
-                  MarkdownTextField(
+                  MarkdownNotesField(
+                    label: 'Notes (Markdown)',
                     controller: notesCtrl,
-                    minLines: 2,
-                    maxLines: 5,
-                    decoration: const InputDecoration(
-                      labelText: 'Notes (Markdown)',
-                    ),
                   ),
                 ],
               ),

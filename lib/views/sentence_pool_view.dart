@@ -6,7 +6,7 @@ import '../providers/app_provider.dart';
 import '../widgets/audio_edit_fields.dart';
 import '../widgets/emphasis_text.dart';
 import '../widgets/markdown_content.dart';
-import '../widgets/markdown_text_field.dart';
+import '../widgets/markdown_notes_field.dart';
 
 const _emphasisError =
     'Emphasis is set per word. Mark it in the word\'s own editor.';
@@ -68,10 +68,6 @@ class _SentencePoolViewState extends State<SentencePoolView> {
                   decoration: InputDecoration(
                     labelText: 'Target sentence',
                     hintText: 'e.g. 저는 아줌마를 위해 문을 열었어요',
-                    helperText:
-                        'Plain text. Each word marks its own part with ** '
-                        'in its editor.',
-                    helperMaxLines: 2,
                     errorText: targetCtrl.text.contains('**')
                         ? _emphasisError
                         : null,
@@ -93,9 +89,7 @@ class _SentencePoolViewState extends State<SentencePoolView> {
                   const SizedBox(height: 8),
                   Text(
                     'Used by $usage ${usage == 1 ? 'word' : 'words'}. '
-                    'Changing the text changes it for all of them. A word '
-                    'keeps its ** emphasis where the text around it is '
-                    'unchanged; otherwise it is suggested again.',
+                    'Changing the text changes it for all of them.',
                     style: Theme.of(ctx).textTheme.bodySmall
                         ?.copyWith(color: Theme.of(ctx).colorScheme.error),
                   ),
@@ -111,13 +105,9 @@ class _SentencePoolViewState extends State<SentencePoolView> {
                   spokenFallback: targetCtrl,
                 ),
                 const SizedBox(height: 8),
-                MarkdownTextField(
+                MarkdownNotesField(
+                  label: 'Sentence Notes (Markdown)',
                   controller: notesCtrl,
-                  minLines: 2,
-                  maxLines: 5,
-                  decoration: const InputDecoration(
-                    labelText: 'Sentence Notes (Markdown)',
-                  ),
                 ),
               ],
             ),

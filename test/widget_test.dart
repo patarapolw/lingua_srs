@@ -2219,7 +2219,7 @@ vocabulary:
       await tester.pumpAndSettle();
       expect(find.text('Edit example'), findsOneWidget);
       await tester.enterText(
-        inSentenceDialog('Korean sentence'),
+        inSentenceDialog('Sentence'),
         '**배**와 **사과**를 먹어요',
       );
       await tester.pump();
@@ -2261,10 +2261,7 @@ vocabulary:
 
       await tester.tap(exampleTile());
       await tester.pumpAndSettle();
-      await tester.enterText(
-        inSentenceDialog('Korean sentence'),
-        '**배**와 사과를 먹었어요',
-      );
+      await tester.enterText(inSentenceDialog('Sentence'), '**배**와 사과를 먹었어요');
       await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
       await tester.pumpAndSettle();
       await save(tester);
@@ -2293,7 +2290,7 @@ vocabulary:
 
       await tester.tap(exampleTile());
       await tester.pumpAndSettle();
-      await tester.enterText(inSentenceDialog('Korean sentence'), '배와 사과를 먹어요');
+      await tester.enterText(inSentenceDialog('Sentence'), '배와 사과를 먹어요');
       await tester.pump();
 
       expect(
@@ -2304,6 +2301,47 @@ vocabulary:
         find.widgetWithText(FilledButton, 'Apply'),
       );
       expect(apply.onPressed, isNull);
+    });
+
+    testWidgets('the example editor fields start one line tall', (
+      tester,
+    ) async {
+      await openAdd(
+        tester,
+        pool: [
+          Sentence(targetText: '배와 사과를 먹어요', translationText: 'I eat fruit'),
+        ],
+      );
+      await fill(tester, ko: '배', en: 'pear', pos: 'nouns');
+      await tester.tap(find.byType(CheckboxListTile));
+      await tester.pump();
+
+      await tester.tap(exampleTile());
+      await tester.pumpAndSettle();
+
+      for (final label in ['Sentence', 'Translation']) {
+        final field = tester.widget<TextField>(inSentenceDialog(label));
+        expect(field.minLines, 1, reason: label);
+      }
+      expect(find.text('Korean sentence'), findsNothing);
+
+      // _disposeAfterRouteExit keeps a 1s timer for the closed dialog.
+      await tester.pump(const Duration(seconds: 1));
+    });
+
+    testWidgets('the Add example notes can be previewed', (tester) async {
+      await openAdd(tester);
+
+      await tester.tap(find.byTooltip('Create new sentence'));
+      await tester.pumpAndSettle();
+      final preview = find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.text('Preview'),
+      );
+      expect(preview, findsOneWidget);
+      await tester.tap(preview);
+      await tester.pumpAndSettle();
+      expect(find.text('No notes entered yet.'), findsOneWidget);
     });
 
     testWidgets('a new example without ** is not added', (tester) async {
@@ -2339,10 +2377,7 @@ vocabulary:
 
       await tester.tap(exampleTile());
       await tester.pumpAndSettle();
-      await tester.enterText(
-        inSentenceDialog('Korean sentence'),
-        '**배**와 사과를 먹었어요',
-      );
+      await tester.enterText(inSentenceDialog('Sentence'), '**배**와 사과를 먹었어요');
       await tester.tap(find.widgetWithText(FilledButton, 'Apply'));
       await tester.pumpAndSettle();
       await saveAndWait(tester);

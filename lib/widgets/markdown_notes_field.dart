@@ -9,11 +9,15 @@ class MarkdownNotesField extends StatefulWidget {
   final TextEditingController controller;
   final String hintText;
 
+  /// Opens in Preview when the field already has notes, instead of in Edit.
+  final bool previewWhenFilled;
+
   const MarkdownNotesField({
     super.key,
     required this.label,
     required this.controller,
     this.hintText = 'Markdown notes, e.g. **bold**, lists',
+    this.previewWhenFilled = false,
   });
 
   @override
@@ -21,7 +25,8 @@ class MarkdownNotesField extends StatefulWidget {
 }
 
 class _MarkdownNotesFieldState extends State<MarkdownNotesField> {
-  bool _preview = false;
+  late bool _preview =
+      widget.previewWhenFilled && widget.controller.text.trim().isNotEmpty;
 
   @override
   Widget build(BuildContext context) {
