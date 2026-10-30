@@ -1,4 +1,43 @@
+import 'dart:math' as math;
+
 import 'package:uuid/uuid.dart';
+
+/// One word's own `**` marking of a pool sentence.
+///
+/// A pool [Sentence] is plain text and may be shared by several words, but the
+/// part of it that matters is different for each word, so each word keeps its
+/// own marked copy of the target sentence and of its translation. Without the
+/// `**` markers each copy equals the sentence's own text; see
+/// [Sentence.carryEmphasis] for when the sentence has been edited since.
+class SentenceEmphasis {
+  final String target;
+  final String translation;
+
+  const SentenceEmphasis({required this.target, required this.translation});
+
+  Map<String, dynamic> toJson() => {
+    'target': target,
+    'translation': translation,
+  };
+
+  factory SentenceEmphasis.fromJson(Map<String, dynamic> json) =>
+      SentenceEmphasis(
+        target: json['target'] as String? ?? '',
+        translation: json['translation'] as String? ?? '',
+      );
+
+  @override
+  bool operator ==(Object other) =>
+      other is SentenceEmphasis &&
+      other.target == target &&
+      other.translation == translation;
+
+  @override
+  int get hashCode => Object.hash(target, translation);
+
+  @override
+  String toString() => 'SentenceEmphasis($target | $translation)';
+}
 
 class Sentence {
   final String id;
@@ -109,22 +148,104 @@ class Sentence {
     return out.toString();
   }
 
-  /// True when [edited] differs from [original] only by `**` emphasis. A
-  /// sentence is identified by its text without emphasis, so anything else
-  /// would turn it into a different sentence.
-  static bool sameExceptEmphasis(String original, String edited) =>
-      withoutEmphasis(original) == withoutEmphasis(edited);
+  static final RegExp _emphasisPattern = RegExp(r'\*\*([^*]+)\*\*');
+
+  /// Removes the `**` markers from [text] and keeps what they surround. Unlike
+  /// [withoutEmphasis] it leaves `__` alone: only `**` is emphasis.
+  static String stripEmphasis(String text) =>
+      text.replaceAllMapped(_emphasisPattern, (match) => match[1] ?? '');
+
+  /// Whether [text] has at least one complete `**emphasis**` segment.
+  static bool hasEmphasis(String text) => _emphasisPattern.hasMatch(text);
+
+  /// The emphasized ranges of [marked], counted in the characters of
+  /// [stripEmphasis] applied to it.
+  static List<({int start, int end})> emphasisRanges(String marked) {
+    final ranges = <({int start, int end})>[];
+    var removed = 0;
+    for (final match in _emphasisPattern.allMatches(marked)) {
+      final start = match.start - removed;
+      ranges.add((start: start, end: start + match[1]!.length));
+      removed += 4;
+    }
+    return ranges;
+  }
+
+  /// Wraps each of [ranges] (sorted, not overlapping) of [plain] in `**`.
+  static String markEmphasis(
+    String plain,
+    Iterable<({int start, int end})> ranges,
+  ) {
+    final out = StringBuffer();
+    var cursor = 0;
+    for (final range in ranges) {
+      out
+        ..write(plain.substring(cursor, range.start))
+        ..write('**')
+        ..write(plain.substring(range.start, range.end))
+        ..write('**');
+      cursor = range.end;
+    }
+    out.write(plain.substring(cursor));
+    return out.toString();
+  }
+
+  /// Moves the `**` emphasis of [marked] onto [newPlain], the same sentence
+  /// after an edit.
+  ///
+  /// Only the stretch that changed is treated as new: an emphasized segment
+  /// wholly before it or wholly after it stays where it was (shifted for the
+  /// text in front of it), and a segment the edit touched is dropped. Returns
+  /// null when no segment survives, so the caller can fall back to suggesting
+  /// emphasis again. A [newPlain] equal to the text of [marked] returns
+  /// [marked] unchanged.
+  static String? carryEmphasis(String marked, String newPlain) {
+    final oldPlain = stripEmphasis(marked);
+    if (oldPlain == newPlain) return marked;
+
+    final shortest = math.min(oldPlain.length, newPlain.length);
+    var prefix = 0;
+    while (prefix < shortest &&
+        oldPlain.codeUnitAt(prefix) == newPlain.codeUnitAt(prefix)) {
+      prefix++;
+    }
+    var suffix = 0;
+    while (suffix < shortest - prefix &&
+        oldPlain.codeUnitAt(oldPlain.length - 1 - suffix) ==
+            newPlain.codeUnitAt(newPlain.length - 1 - suffix)) {
+      suffix++;
+    }
+
+    final shift = newPlain.length - oldPlain.length;
+    final kept = <({int start, int end})>[];
+    for (final range in emphasisRanges(marked)) {
+      if (range.end <= prefix) {
+        kept.add(range);
+      } else if (range.start >= oldPlain.length - suffix) {
+        kept.add((start: range.start + shift, end: range.end + shift));
+      }
+    }
+    return kept.isEmpty ? null : markEmphasis(newPlain, kept);
+  }
 
   /// Generates cloze deletion sentence for target word.
   /// 1. If target word is wrapped in markdown bold (**word**), replaces **word** with (___).
   /// 2. If targetWord matches directly, replaces with (___).
   /// 3. If targetWord is a verb/adjective with a stem (e.g. 도착하다 -> stem 도착),
   ///    replaces the conjugated word with (___).
-  String toCloze({String? targetWord}) {
+  ///
+  /// This blanks the `**` of the sentence's own text. A pool sentence is plain,
+  /// so a review blanks a word's own marking instead: see
+  /// `VocabItem.clozeFor`.
+  String toCloze({String? targetWord}) =>
+      clozeOf(targetText, targetWord: targetWord);
+
+  /// The cloze of [text], as [toCloze] describes.
+  static String clozeOf(String text, {String? targetWord}) {
     // 1. If sentence has bold markdown like **word**, replace all bold segments
     final boldRegex = RegExp(r'\*\*([^*]+)\*\*');
-    if (boldRegex.hasMatch(targetText)) {
-      return targetText.replaceAllMapped(boldRegex, (match) {
+    if (boldRegex.hasMatch(text)) {
+      return text.replaceAllMapped(boldRegex, (match) {
         return '(___)';
       });
     }
@@ -132,8 +253,8 @@ class Sentence {
     // 2. Otherwise replace targetWord directly if available
     if (targetWord != null && targetWord.trim().isNotEmpty) {
       final cleanWord = targetWord.trim();
-      if (targetText.contains(cleanWord)) {
-        return targetText.replaceAll(cleanWord, '(___)');
+      if (text.contains(cleanWord)) {
+        return text.replaceAll(cleanWord, '(___)');
       }
 
       // 3. Korean verb/adjective stem matching (e.g. 도착하다 -> 도착, 복잡하다 -> 복잡)
@@ -144,14 +265,14 @@ class Sentence {
         stem = cleanWord.substring(0, cleanWord.length - 1);
       }
 
-      if (stem.isNotEmpty && targetText.contains(stem)) {
+      if (stem.isNotEmpty && text.contains(stem)) {
         // Replace stem + following Korean letters
         final stemRegex = RegExp('$stem[가-힣]*');
-        return targetText.replaceAll(stemRegex, '(___)');
+        return text.replaceAll(stemRegex, '(___)');
       }
     }
 
-    return targetText;
+    return text;
   }
 
   /// Strips markdown and cloze syntax for clean Text-to-Speech.

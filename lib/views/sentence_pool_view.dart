@@ -8,6 +8,9 @@ import '../widgets/emphasis_text.dart';
 import '../widgets/markdown_content.dart';
 import '../widgets/markdown_text_field.dart';
 
+const _emphasisError =
+    'Emphasis is set per word. Mark it in the word\'s own editor.';
+
 class SentencePoolView extends StatefulWidget {
   const SentencePoolView({super.key});
 
@@ -25,10 +28,21 @@ class _SentencePoolViewState extends State<SentencePoolView> {
     super.dispose();
   }
 
+  /// How many words list [sentence] as an example.
+  int _usageCount(AppProvider provider, Sentence sentence) => provider.lessons
+      .expand((lesson) => lesson.vocabularies)
+      .where((vocab) => vocab.sentenceIds.contains(sentence.id))
+      .length;
+
   void _showAddEditDialog({Sentence? sentence}) {
-    final targetCtrl = TextEditingController(text: sentence?.targetText ?? '');
+    final usage = sentence == null
+        ? 0
+        : _usageCount(context.read<AppProvider>(), sentence);
+    final targetCtrl = TextEditingController(
+      text: Sentence.stripEmphasis(sentence?.targetText ?? ''),
+    );
     final transCtrl = TextEditingController(
-      text: sentence?.translationText ?? '',
+      text: Sentence.stripEmphasis(sentence?.translationText ?? ''),
     );
     final audioCtrl = TextEditingController(text: sentence?.audioUrl ?? '');
     final ttsCtrl = TextEditingController(text: sentence?.ttsText ?? '');
@@ -46,21 +60,46 @@ class _SentencePoolViewState extends State<SentencePoolView> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // Plain text: the `**` emphasis belongs to each word that
+                // uses the sentence and is edited from that word.
                 TextField(
                   controller: targetCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Target Sentence (Markdown)',
-                    hintText: 'e.g. 저는 **아줌마**를 위해 문을 열었어요',
+                  onChanged: (_) => setDialogState(() {}),
+                  decoration: InputDecoration(
+                    labelText: 'Target sentence',
+                    hintText: 'e.g. 저는 아줌마를 위해 문을 열었어요',
+                    helperText:
+                        'Plain text. Each word marks its own part with ** '
+                        'in its editor.',
+                    helperMaxLines: 2,
+                    errorText: targetCtrl.text.contains('**')
+                        ? _emphasisError
+                        : null,
                   ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: transCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Translation Sentence',
-                    hintText: 'e.g. I opened the door for **an older lady**',
+                  onChanged: (_) => setDialogState(() {}),
+                  decoration: InputDecoration(
+                    labelText: 'Translation',
+                    hintText: 'e.g. I opened the door for an older lady',
+                    errorText: transCtrl.text.contains('**')
+                        ? _emphasisError
+                        : null,
                   ),
                 ),
+                if (usage > 0) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Used by $usage ${usage == 1 ? 'word' : 'words'}. '
+                    'Changing the text changes it for all of them. A word '
+                    'keeps its ** emphasis where the text around it is '
+                    'unchanged; otherwise it is suggested again.',
+                    style: Theme.of(ctx).textTheme.bodySmall
+                        ?.copyWith(color: Theme.of(ctx).colorScheme.error),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 AudioEditFields(
                   audioUrl: audioCtrl,
@@ -91,6 +130,10 @@ class _SentencePoolViewState extends State<SentencePoolView> {
           ),
           FilledButton(
             onPressed: () async {
+              if (targetCtrl.text.contains('**') ||
+                  transCtrl.text.contains('**')) {
+                return;
+              }
               if (targetCtrl.text.trim().isNotEmpty) {
                 final provider = context.read<AppProvider>();
                 if (sentence == null) {
@@ -276,15 +319,7 @@ class _SentencePoolViewState extends State<SentencePoolView> {
                     itemBuilder: (context, index) {
                       final item = filtered[index];
 
-                      // Calculate how many vocabs use this sentence
-                      int vocabUsageCount = 0;
-                      for (final lesson in provider.lessons) {
-                        for (final v in lesson.vocabularies) {
-                          if (v.sentenceIds.contains(item.id)) {
-                            vocabUsageCount++;
-                          }
-                        }
-                      }
+                      final vocabUsageCount = _usageCount(provider, item);
 
                       return Card(
                         elevation: 1,
@@ -344,14 +379,6 @@ class _SentencePoolViewState extends State<SentencePoolView> {
                                       textColor: theme
                                           .colorScheme
                                           .onSecondaryContainer,
-                                    ),
-                                    Text(
-                                      'Cloze Preview: ${item.toCloze()}',
-                                      style: theme.textTheme.bodySmall
-                                          ?.copyWith(
-                                            fontStyle: FontStyle.italic,
-                                            color: theme.colorScheme.outline,
-                                          ),
                                     ),
                                   ],
                                 ),

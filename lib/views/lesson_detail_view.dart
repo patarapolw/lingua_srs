@@ -856,9 +856,11 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                                               crossAxisAlignment:
                                                   CrossAxisAlignment.start,
                                               children: [
-                                                EmphasisText(s.targetText),
                                                 EmphasisText(
-                                                  s.translationText,
+                                                  vocab.targetTextFor(s),
+                                                ),
+                                                EmphasisText(
+                                                  vocab.translationTextFor(s),
                                                   style: theme
                                                       .textTheme
                                                       .bodySmall

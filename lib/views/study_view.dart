@@ -884,8 +884,12 @@ class _StudyViewState extends State<StudyView> {
         translation: item.vocab.translation,
         targetLanguage: item.lesson.targetLanguage,
         nativeLanguage: item.lesson.nativeLanguage,
-        sentenceTarget: sentence?.targetText,
-        sentenceTranslation: sentence?.translationText,
+        sentenceTarget: sentence == null
+            ? null
+            : item.vocab.targetTextFor(sentence),
+        sentenceTranslation: sentence == null
+            ? null
+            : item.vocab.translationTextFor(sentence),
       ),
     );
   }
@@ -1430,7 +1434,9 @@ class _StudyViewState extends State<StudyView> {
                                               CrossAxisAlignment.center,
                                           children: [
                                             EmphasisText(
-                                              item.sentence!.targetText,
+                                              item.vocab.targetTextFor(
+                                                item.sentence!,
+                                              ),
                                               style: theme.textTheme.titleMedium
                                                   ?.copyWith(height: 1.4),
                                             ),
@@ -1481,9 +1487,8 @@ class _StudyViewState extends State<StudyView> {
                                           children: [
                                             const SizedBox(height: 10),
                                             EmphasisText(
-                                              item.sentence!.toCloze(
-                                                targetWord:
-                                                    item.vocab.targetWord,
+                                              item.vocab.clozeFor(
+                                                item.sentence!,
                                               ),
                                               style: theme.textTheme.titleLarge
                                                   ?.copyWith(
@@ -1598,7 +1603,9 @@ class _StudyViewState extends State<StudyView> {
                                             children: [
                                               Expanded(
                                                 child: EmphasisText(
-                                                  item.sentence!.targetText,
+                                                  item.vocab.targetTextFor(
+                                                    item.sentence!,
+                                                  ),
                                                   style: theme
                                                       .textTheme
                                                       .titleMedium
@@ -1634,7 +1641,9 @@ class _StudyViewState extends State<StudyView> {
                                               '$_currentIndex-${item.sentence!.id}',
                                             ),
                                             child: EmphasisText(
-                                              item.sentence!.translationText,
+                                              item.vocab.translationTextFor(
+                                                item.sentence!,
+                                              ),
                                               style: theme.textTheme.bodyMedium
                                                   ?.copyWith(
                                                     color: theme

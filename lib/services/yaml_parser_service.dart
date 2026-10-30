@@ -129,6 +129,7 @@ class YamlParserService {
         String notes = '';
         String disambiguation = '';
         final List<String> itemSentenceIds = [];
+        final Map<String, SentenceEmphasis> itemEmphasis = {};
 
         for (final field in item.entries) {
           final key = field.key.toString().trim().toLowerCase();
@@ -199,15 +200,28 @@ class YamlParserService {
             }
 
             if (exTarget.isNotEmpty || exTrans.isNotEmpty) {
+              // The sentence is shared and kept plain; the `**` marking is
+              // this word's own.
+              if (exTarget.isNotEmpty && !Sentence.hasEmphasis(exTarget)) {
+                throw FormatException(
+                  'Example sentence "$exTarget" of "$targetWord" has no '
+                  '**emphasis**. Wrap the word being studied in ** **, '
+                  'for example: 저는 **배**를 먹어요.',
+                );
+              }
               final sentence = Sentence(
-                targetText: exTarget,
-                translationText: exTrans,
+                targetText: Sentence.stripEmphasis(exTarget),
+                translationText: Sentence.stripEmphasis(exTrans),
                 audioUrl: exAudio,
                 ttsText: exTts,
                 notes: exNotes,
               );
               allSentences.add(sentence);
               itemSentenceIds.add(sentence.id);
+              itemEmphasis[sentence.id] = SentenceEmphasis(
+                target: exTarget,
+                translation: exTrans,
+              );
             }
           }
         }
@@ -227,6 +241,7 @@ class YamlParserService {
             notes: notes,
             disambiguation: disambiguation,
             sentenceIds: itemSentenceIds,
+            sentenceEmphasis: itemEmphasis,
           );
           vocabList.add(vocab);
         }

@@ -1,5 +1,6 @@
 import 'package:uuid/uuid.dart';
 
+import 'sentence.dart';
 import 'shared_vocab.dart';
 import 'srs_card.dart';
 
@@ -11,6 +12,13 @@ class VocabItem {
   String pos; // Part of speech or category (e.g. nouns, verbs, adjectives)
   List<String> sectionPath;
   List<String> sentenceIds; // Reference to sentences in the pool
+
+  /// This word's own `**` marking of its pool sentences, by sentence id. The
+  /// pool keeps sentences as plain text because one sentence can serve several
+  /// words, each of which stresses a different part of it. A sentence with no
+  /// entry here is shown as the pool has it.
+  Map<String, SentenceEmphasis> sentenceEmphasis;
+
   /// Details and SRS cards shared by every VocabItem with the same [id].
   SharedVocab shared;
 
@@ -27,11 +35,13 @@ class VocabItem {
     String notes = '',
     String disambiguation = '',
     List<String>? sentenceIds,
+    Map<String, SentenceEmphasis>? sentenceEmphasis,
     SrsCard? cardTargetToNative,
     SrsCard? cardNativeToTarget,
   }) : id = id ?? const Uuid().v4(),
        sectionPath = sectionPath ?? (pos.isEmpty ? [] : [pos]),
        sentenceIds = sentenceIds ?? [],
+       sentenceEmphasis = sentenceEmphasis ?? {},
        shared = SharedVocab(
          audioUrl: audioUrl,
          useAudio: useAudio,
@@ -99,6 +109,25 @@ class VocabItem {
     return own.isNotEmpty ? own : disambiguation;
   }
 
+  /// [sentence] in the target language, with this word's `**` emphasis. When
+  /// the sentence was edited after the emphasis was set, the emphasis that
+  /// still fits is kept ([Sentence.carryEmphasis]); otherwise the plain text.
+  String targetTextFor(Sentence sentence) =>
+      _emphasized(sentence.targetText, sentenceEmphasis[sentence.id]?.target);
+
+  /// The translation of [sentence] with this word's `**` emphasis.
+  String translationTextFor(Sentence sentence) => _emphasized(
+    sentence.translationText,
+    sentenceEmphasis[sentence.id]?.translation,
+  );
+
+  /// [sentence] with this word's emphasis blanked out for a review card.
+  String clozeFor(Sentence sentence) =>
+      Sentence.clozeOf(targetTextFor(sentence), targetWord: targetWord);
+
+  static String _emphasized(String plain, String? marked) =>
+      (marked == null ? null : Sentence.carryEmphasis(marked, plain)) ?? plain;
+
   static bool isVerbOrAdjective(String category) {
     final lower = category.toLowerCase().trim();
     return lower == 'verb' ||
@@ -125,6 +154,10 @@ class VocabItem {
     'notes': notes,
     'disambiguation': disambiguation,
     'sentenceIds': sentenceIds,
+    'sentenceEmphasis': {
+      for (final entry in sentenceEmphasis.entries)
+        entry.key: entry.value.toJson(),
+    },
     'cardTargetToNative': cardTargetToNative.toJson(),
     'cardNativeToTarget': cardNativeToTarget.toJson(),
   };
@@ -148,6 +181,7 @@ class VocabItem {
             ?.map((e) => e.toString())
             .toList() ??
         [],
+    sentenceEmphasis: _emphasisFromJson(json['sentenceEmphasis']),
     cardTargetToNative: json['cardTargetToNative'] != null
         ? SrsCard.fromJson(
             Map<String, dynamic>.from(json['cardTargetToNative'] as Map),
@@ -159,4 +193,13 @@ class VocabItem {
           )
         : null,
   );
+
+  static Map<String, SentenceEmphasis> _emphasisFromJson(Object? json) => {
+    if (json is Map)
+      for (final entry in json.entries)
+        if (entry.value is Map)
+          entry.key.toString(): SentenceEmphasis.fromJson(
+            Map<String, dynamic>.from(entry.value as Map),
+          ),
+  };
 }

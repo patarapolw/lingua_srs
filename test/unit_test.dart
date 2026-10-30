@@ -95,7 +95,7 @@ vocabulary:
       ko_text: 세 개
       en: three items
       examples:
-        - ko: 3개 주세요
+        - ko: "**3개** 주세요"
           ko_text: 세 개 주세요
           en: Three, please
     - ko: 배
@@ -554,7 +554,7 @@ vocabulary:
     - ko: 배
       en: pear
       examples:
-        - ko: 배를 먹었어요.
+        - ko: "**배**를 먹었어요."
           en: I ate a pear.
 ''';
       final plainYaml = YamlParserService.parseLessonYaml(yaml);
@@ -1402,17 +1402,6 @@ vocabulary:
         Sentence.suggestEmphasis('우리는 정각에 도착했어요', '도착하다', korean: true),
         '우리는 정각에 **도착했어요**',
       );
-    });
-
-    test('sameExceptEmphasis only allows ** changes', () {
-      const original = '배와 사과를 먹어요';
-      expect(
-        Sentence.sameExceptEmphasis(original, '**배**와 **사과**를 먹어요'),
-        isTrue,
-      );
-      expect(Sentence.sameExceptEmphasis('**배**와 사과를 먹어요', original), isTrue);
-      expect(Sentence.sameExceptEmphasis(original, '배와 사과를 먹었어요'), isFalse);
-      expect(Sentence.sameExceptEmphasis(original, '**배와 사과를 먹어요'), isFalse);
     });
 
     test('Cloze deletion with conjugated verb stems', () {

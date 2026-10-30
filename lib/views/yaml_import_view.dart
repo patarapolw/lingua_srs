@@ -718,7 +718,7 @@ class _YamlImportViewState extends State<YamlImportView>
                                 '      examples:\n'
                                 '        - ko: "Sentence with **word**"\n'
                                 '          en: "Translated sentence with **meaning**"\n'
-                                '        - ko: "Another example sentence"\n'
+                                '        - ko: "Another **example** sentence"\n'
                                 '          audio: "https://example.com/sentence-audio.mp3"\n'
                                 '          en: "Another translation"\n'
                                 '---\n'

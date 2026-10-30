@@ -27,9 +27,9 @@ vocabulary:
        - ko: "저는 **예시 단어**를 배워요."
          en: "I learn an **example word**."
          notes: "Optional *Markdown* notes for this sentence."
-       - ko: "다른 문장입니다."
+       - ko: "**다른** 문장입니다."
          audio: "https://example.com/sentence-audio.mp3"
-         en: "This is another sentence."
+         en: "This is **another** sentence."
   verbs:
     - ko: "만들다"
       en: "to make"
@@ -46,7 +46,8 @@ Each entry needs a target-language field (such as `ko`) and a translation field 
 
 - **`ko_text`** (`<language>_text` for other languages) is alternate text for text-to-speech, used when there is no `audio` file (or its *Use this recording* box is unticked), for example to spell out a number. It also works on entries in `examples`.
 - **Notes** are Markdown (`**bold**`, `*italic*`), written as one string or a list of strings (one paragraph each). Notes on an example are imported as sentence notes, shown on the card back, and editable from the Sentence Pool. Per-card back notes are edited in the vocabulary editor. Every Markdown editor (notes fields and the lesson editor) converts copied HTML, such as a web page or a Google Docs selection, to Markdown when you paste. Copied text without formatting pastes as it is.
-- **Emphasis** in example sentences uses `**bold**`; the app uses it for cloze cards. A sentence can have several emphasized segments, and every one becomes a blank. Sentences and their translations are shown as plain text apart from `**bold**`, so other Markdown (such as `*italic*`) appears as typed; only notes are rendered as Markdown. In the app, tap an example in the vocabulary editor to change its emphasis; only the `**` markers can be changed there, because a sentence is identified by its text without emphasis, and it is shared by every word that links to it.
+- **Emphasis** is required in the target-language sentence of every example: wrap the word being studied in `**bold**`, or the import fails and names the sentence. The app uses it for cloze cards. A sentence can have several emphasized segments, and every one becomes a blank. The translation may be emphasized too, but need not be. Sentences and their translations are shown as plain text apart from `**bold**`, so other Markdown (such as `*italic*`) appears as typed; only notes are rendered as Markdown.
+- **Shared sentences.** The Sentence Pool holds each sentence once, as plain text, even when several words list it as an example. The `**` emphasis belongs to the word: two words can mark different parts of the same sentence. Edit the text from the Sentence Pool or from a word's example editor (which warns that the text changes for every word that uses the sentence, and requires `**` in the Korean sentence); edit the emphasis from the word. When the text of a shared sentence changes, each word keeps its emphasis wherever the surrounding text is unchanged, and otherwise it is suggested again from the word.
 - **`disambiguation`** shows an extra cue on the card front. Cards with the same front prompt are flagged even when their example sentences differ.
 - **`id`** makes entries explicitly share SRS progress (including across part-of-speech groups) or forces separate identities. Without an `id`, entries with the same target form and meaning share progress; different meanings get separate generated IDs.
 

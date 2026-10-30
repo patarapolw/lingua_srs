@@ -2012,7 +2012,7 @@ vocabulary:
 
       await tester.tap(find.byTooltip('Create new sentence'));
       await tester.pumpAndSettle();
-      await tester.enterText(inSentenceDialog('Korean sentence'), '3개 주세요');
+      await tester.enterText(inSentenceDialog('Korean sentence'), '**3개** 주세요');
       await tester.enterText(
         inSentenceDialog('Audio URL'),
         'https://e.com/3.mp3',
@@ -2121,7 +2121,7 @@ vocabulary:
 
       await tester.tap(find.byTooltip('Create new sentence'));
       await tester.pumpAndSettle();
-      await tester.enterText(inSentenceDialog('Korean sentence'), '배를 먹어요');
+      await tester.enterText(inSentenceDialog('Korean sentence'), '**배**를 먹어요');
       await tester.enterText(
         inSentenceDialog('English translation'),
         'I eat a pear',
@@ -2147,7 +2147,7 @@ vocabulary:
 
       await tester.tap(find.byTooltip('Create new sentence'));
       await tester.pumpAndSettle();
-      await tester.enterText(inSentenceDialog('Korean sentence'), '3개 주세요');
+      await tester.enterText(inSentenceDialog('Korean sentence'), '**3개** 주세요');
       await expandTts(tester, inDialog: true);
       await tester.enterText(
         inSentenceDialog('Korean TTS text (optional)'),
@@ -2183,7 +2183,7 @@ vocabulary:
 
       await tester.tap(find.byTooltip('Create new sentence'));
       await tester.pumpAndSettle();
-      await tester.enterText(inSentenceDialog('Korean sentence'), '3개 주세요');
+      await tester.enterText(inSentenceDialog('Korean sentence'), '**3개** 주세요');
       await tester.tap(find.widgetWithText(FilledButton, 'Add'));
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Remove example'));
@@ -2217,7 +2217,7 @@ vocabulary:
 
       await tester.tap(exampleTile());
       await tester.pumpAndSettle();
-      expect(find.text('Edit emphasis'), findsOneWidget);
+      expect(find.text('Edit example'), findsOneWidget);
       await tester.enterText(
         inSentenceDialog('Korean sentence'),
         '**배**와 **사과**를 먹어요',
@@ -2230,21 +2230,23 @@ vocabulary:
       final pooled = provider.sentences.firstWhere(
         (s) => s.translationText == 'I eat a pear and an apple',
       );
-      expect(pooled.targetText, '배와 사과를 먹어요', reason: 'applied on Save');
+      expect(draft.sentenceEmphasis, isEmpty, reason: 'applied on Save');
 
       await saveAndWait(tester);
-      // The translation also gets a suggested emphasis for the typed meaning.
-      final saved = provider.sentences.firstWhere((s) => s.id == pooled.id);
-      expect(saved.translationText, 'I eat a **pear** and an apple');
-      expect(saved.targetText, '**배**와 **사과**를 먹어요');
-      expect(saved.toCloze(), '(___)와 (___)를 먹어요');
-      expect(draft.sentenceIds, [saved.id]);
+      // The pool keeps the plain text; the marking is the word's own. The
+      // translation also gets a suggested emphasis for the typed meaning.
+      expect(pooled.targetText, '배와 사과를 먹어요');
+      expect(pooled.translationText, 'I eat a pear and an apple');
+      expect(draft.sentenceIds, [pooled.id]);
+      expect(draft.targetTextFor(pooled), '**배**와 **사과**를 먹어요');
+      expect(draft.translationTextFor(pooled), 'I eat a **pear** and an apple');
+      expect(draft.clozeFor(pooled), '(___)와 (___)를 먹어요');
 
       // _disposeAfterRouteExit keeps a 1s timer for the closed dialog.
       await tester.pump(const Duration(seconds: 1));
     });
 
-    testWidgets('cancelling the emphasis editor leaves the sentence alone', (
+    testWidgets('cancelling the example editor leaves the sentence alone', (
       tester,
     ) async {
       final (provider, _) = await openAdd(
@@ -2261,7 +2263,7 @@ vocabulary:
       await tester.pumpAndSettle();
       await tester.enterText(
         inSentenceDialog('Korean sentence'),
-        '**배**와 사과를 먹어요',
+        '**배**와 사과를 먹었어요',
       );
       await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
       await tester.pumpAndSettle();
@@ -2276,8 +2278,56 @@ vocabulary:
       await tester.pump(const Duration(seconds: 1));
     });
 
-    testWidgets('changing text other than ** is rejected', (tester) async {
+    testWidgets('the example editor needs ** in the Korean sentence', (
+      tester,
+    ) async {
       await openAdd(
+        tester,
+        pool: [
+          Sentence(targetText: '배와 사과를 먹어요', translationText: 'I eat fruit'),
+        ],
+      );
+      await fill(tester, ko: '배', en: 'pear', pos: 'nouns');
+      await tester.tap(find.byType(CheckboxListTile));
+      await tester.pump();
+
+      await tester.tap(exampleTile());
+      await tester.pumpAndSettle();
+      await tester.enterText(inSentenceDialog('Korean sentence'), '배와 사과를 먹어요');
+      await tester.pump();
+
+      expect(
+        find.textContaining('Wrap the word being studied in ** **'),
+        findsOneWidget,
+      );
+      final apply = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Apply'),
+      );
+      expect(apply.onPressed, isNull);
+    });
+
+    testWidgets('a new example without ** is not added', (tester) async {
+      final (provider, _) = await openAdd(tester);
+      final before = provider.sentences.length;
+
+      await tester.tap(find.byTooltip('Create new sentence'));
+      await tester.pumpAndSettle();
+      await tester.enterText(inSentenceDialog('Korean sentence'), '3개 주세요');
+      await tester.tap(find.widgetWithText(FilledButton, 'Add'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('Wrap the word being studied in ** **'),
+        findsOneWidget,
+      );
+      expect(find.text('Examples (0)'), findsOneWidget);
+      expect(provider.sentences.length, before);
+    });
+
+    testWidgets('editing the text of an example changes the shared sentence', (
+      tester,
+    ) async {
+      final (provider, draft) = await openAdd(
         tester,
         pool: [
           Sentence(targetText: '배와 사과를 먹어요', translationText: 'I eat fruit'),
@@ -2291,19 +2341,51 @@ vocabulary:
       await tester.pumpAndSettle();
       await tester.enterText(
         inSentenceDialog('Korean sentence'),
-        '배와 사과를 먹었어요',
+        '**배**와 사과를 먹었어요',
       );
-      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Apply'));
+      await tester.pumpAndSettle();
+      await saveAndWait(tester);
 
-      expect(
-        find.text('Only ** emphasis can be changed here.'),
-        findsOneWidget,
+      final pooled = provider.sentences.singleWhere(
+        (s) => s.translationText == 'I eat fruit',
       );
-      final apply = tester.widget<FilledButton>(
-        find.widgetWithText(FilledButton, 'Apply'),
-      );
-      expect(apply.onPressed, isNull);
+      expect(pooled.targetText, '배와 사과를 먹었어요');
+      expect(draft.targetTextFor(pooled), '**배**와 사과를 먹었어요');
+
+      // _disposeAfterRouteExit keeps a 1s timer for the closed dialog.
+      await tester.pump(const Duration(seconds: 1));
     });
+
+    testWidgets(
+      'the example editor warns when other words share the sentence',
+      (tester) async {
+        final (provider, _) = await openAdd(
+          tester,
+          pool: [
+            Sentence(targetText: '배와 사과를 먹어요', translationText: 'I eat fruit'),
+          ],
+        );
+        final sentence = provider.sentences.singleWhere(
+          (s) => s.translationText == 'I eat fruit',
+        );
+        provider.lessons.first.vocabularies.first.sentenceIds.add(sentence.id);
+        await fill(tester, ko: '배', en: 'pear', pos: 'nouns');
+        await tester.tap(find.byType(CheckboxListTile));
+        await tester.pump();
+
+        await tester.tap(exampleTile());
+        await tester.pumpAndSettle();
+
+        expect(
+          find.textContaining('also used by 1 other word'),
+          findsOneWidget,
+        );
+
+        // _disposeAfterRouteExit keeps a 1s timer for the closed dialog.
+        await tester.pump(const Duration(seconds: 1));
+      },
+    );
 
     testWidgets('verbs get the EN ➔ KO card by default', (tester) async {
       final (_, draft) = await openAdd(tester);

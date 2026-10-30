@@ -300,8 +300,8 @@ void main() {
       const yaml =
           '---\nvocabulary:\n  nouns:\n    - ko: 감귤\n      en: tangerine\n'
           '      examples:\n'
-          '        - ko: "감귤 하나"\n          en: "One tangerine"\n'
-          '        - ko: "감귤 둘"\n          en: "Two tangerines"\n'
+          '        - ko: "**감귤** 하나"\n          en: "One tangerine"\n'
+          '        - ko: "**감귤** 둘"\n          en: "Two tangerines"\n'
           '---\n# Lesson\n';
       final lesson = (await tester.runAsync(() => provider.importYaml(yaml)))!;
       final vocab = lesson.vocabularies.single;

@@ -537,7 +537,7 @@ void main() {
       await tester.tap(find.widgetWithText(FilledButton, 'Add Sentence'));
       await tester.pumpAndSettle();
       await tester.enterText(
-        find.widgetWithText(TextField, 'Target Sentence (Markdown)'),
+        find.widgetWithText(TextField, 'Target sentence'),
         '3개 주세요',
       );
       await tester.tap(find.text('Text-to-speech'));
