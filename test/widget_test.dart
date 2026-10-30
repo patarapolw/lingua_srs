@@ -1941,6 +1941,102 @@ vocabulary:
       expect(draft.speechText, '배');
     });
 
+    Sentence recordedSentence() => Sentence(
+      targetText: '배와 사과를 먹어요',
+      translationText: 'I eat a pear and an apple',
+      audioUrl: 'https://example.com/fruit.mp3',
+    );
+
+    testWidgets('each example can use its recording or TTS', (tester) async {
+      final pooled = recordedSentence();
+      final (provider, _) = await openAdd(tester, pool: [pooled]);
+      await fill(tester, ko: '배', en: 'pear', pos: 'nouns');
+      await tester.tap(find.byType(CheckboxListTile));
+      await tester.pump();
+
+      final useRecording = find.widgetWithText(FilterChip, 'Use recording');
+      expect(tester.widget<FilterChip>(useRecording).selected, isTrue);
+      await tester.tap(useRecording);
+      await tester.pump();
+      expect(tester.widget<FilterChip>(useRecording).selected, isFalse);
+      expect(pooled.useAudio, isTrue, reason: 'applied on Save, not before');
+
+      await saveAndWait(tester);
+
+      final saved = provider.sentences.firstWhere(
+        (s) => s.targetText == '배와 사과를 먹어요',
+      );
+      expect(saved.useAudio, isFalse);
+      expect(saved.audioUrl, 'https://example.com/fruit.mp3');
+      expect(saved.playableAudioUrl, isNull);
+      await tester.pump(const Duration(seconds: 1));
+    });
+
+    testWidgets('cancelling leaves an example on its recording', (
+      tester,
+    ) async {
+      final pooled = recordedSentence();
+      await openAdd(tester, pool: [pooled]);
+      await fill(tester, ko: '배', en: 'pear', pos: 'nouns');
+      await tester.tap(find.byType(CheckboxListTile));
+      await tester.pump();
+
+      await tester.tap(find.widgetWithText(FilterChip, 'Use recording'));
+      await tester.pump();
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(pooled.useAudio, isTrue);
+      await tester.pump(const Duration(seconds: 1));
+    });
+
+    testWidgets('an example without a recording has no choice', (tester) async {
+      await openAdd(
+        tester,
+        pool: [
+          Sentence(targetText: '배와 사과를 먹어요', translationText: 'I eat fruit'),
+        ],
+      );
+      await fill(tester, ko: '배', en: 'pear', pos: 'nouns');
+      await tester.tap(find.byType(CheckboxListTile));
+      await tester.pump();
+
+      expect(exampleTile(), findsOneWidget);
+      expect(find.widgetWithText(FilterChip, 'Use recording'), findsNothing);
+    });
+
+    testWidgets('a new example can be set to TTS before the word is saved', (
+      tester,
+    ) async {
+      final (provider, _) = await openAdd(tester);
+
+      await tester.tap(find.byTooltip('Create new sentence'));
+      await tester.pumpAndSettle();
+      await tester.enterText(inSentenceDialog('Korean sentence'), '3개 주세요');
+      await tester.enterText(
+        inSentenceDialog('Audio URL'),
+        'https://e.com/3.mp3',
+      );
+      await tester.enterText(
+        inSentenceDialog('English translation'),
+        'Three, please',
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Add'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(FilterChip, 'Use recording'));
+      await tester.pump();
+      await fill(tester, ko: '3개', en: 'three items', pos: 'numbers');
+      await saveAndWait(tester);
+
+      final added = provider.sentences.firstWhere(
+        (s) => s.targetText == '3개 주세요',
+      );
+      expect(added.useAudio, isFalse);
+      expect(added.audioUrl, 'https://e.com/3.mp3');
+      await tester.pump(const Duration(seconds: 1));
+    });
+
     testWidgets('a recording can be switched off without losing its URL', (
       tester,
     ) async {

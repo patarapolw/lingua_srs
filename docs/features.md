@@ -53,7 +53,8 @@ Full feature reference. For a short overview see the [README](../README.md).
    - **Voices vary**: when an Android language has several installed offline voices, each utterance picks one at random.
    - **Alternate TTS text** (`ko_text`) is used for review autoplay and replay as well as for the audio buttons.
    - **Recording or TTS**: every word and sentence with an audio URL has a *Use this recording* checkbox in its editor. Unticking it speaks with TTS instead, and keeps the URL.
-   - **Preview in the editors**: the vocabulary editor, the *Add example* dialog and the Sentence Pool editor all have a button on the Audio URL (plays the URL as typed) and one in the collapsible *Text-to-speech* section (speaks the TTS text, or the word or sentence while that is blank). The Sentence Pool list itself has no audio buttons.
+   - **Preview in the editors**: the vocabulary editor, the *Add example* dialog and the Sentence Pool editor all have a button on the Audio URL (plays the URL as typed) and one in the header of the collapsible *Text-to-speech* section (speaks the TTS text, or the word or sentence while that is blank), so TTS can be previewed without opening the section. The Sentence Pool list itself has no audio buttons.
+   - **Per example**: in the vocabulary editor each example that has a recording has a small *Use recording* chip (ticked plays the recording, unticked speaks with TTS). Choices on existing examples are applied when the word is saved.
 
 8. **Keyboard Navigation & Anki-Style Hotkeys**: see [hotkeys.md](hotkeys.md).
 

@@ -63,10 +63,11 @@ class AudioUrlField extends StatelessWidget {
 /// The optional text-to-speech override of an edit dialog.
 ///
 /// Collapsed unless a value is already set, so dialogs stay short, especially
-/// on a phone. The button previews what would be spoken: the override, or
+/// on a phone. The preview button sits in the tile's header, beside the arrow,
+/// so it works without opening the tile. It speaks the override, or
 /// [spokenFallback] (the word or sentence) while the override is blank. It
 /// always uses text-to-speech, so it can be compared with the recording.
-class TtsTextField extends StatelessWidget {
+class TtsTextField extends StatefulWidget {
   final TextEditingController controller;
 
   /// The text that is spoken when [controller] is blank.
@@ -87,12 +88,21 @@ class TtsTextField extends StatelessWidget {
   });
 
   @override
+  State<TtsTextField> createState() => _TtsTextFieldState();
+}
+
+class _TtsTextFieldState extends State<TtsTextField> {
+  late bool _expanded = widget.controller.text.trim().isNotEmpty;
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final controller = widget.controller;
     return Theme(
       data: theme.copyWith(dividerColor: Colors.transparent),
       child: ExpansionTile(
-        initiallyExpanded: controller.text.trim().isNotEmpty,
+        initiallyExpanded: _expanded,
+        onExpansionChanged: (expanded) => setState(() => _expanded = expanded),
         maintainState: true,
         tilePadding: EdgeInsets.zero,
         childrenPadding: const EdgeInsets.only(top: 4, bottom: 8),
@@ -113,31 +123,72 @@ class TtsTextField extends StatelessWidget {
             style: theme.textTheme.bodySmall,
           ),
         ),
-        children: [
-          ListenableBuilder(
-            listenable: Listenable.merge([controller, spokenFallback]),
-            builder: (context, _) {
-              final override = controller.text.trim();
-              return TextField(
-                controller: controller,
-                decoration: InputDecoration(
-                  labelText: labelText,
-                  hintText: hintText,
-                  helperText: helperText,
-                  helperMaxLines: 3,
-                  border: const OutlineInputBorder(),
-                  suffixIcon: AudioButton(
-                    fallbackText: override.isNotEmpty
-                        ? override
-                        : spokenFallback.text,
-                    language: language,
-                    compact: true,
-                  ),
+        trailing: ListenableBuilder(
+          listenable: Listenable.merge([controller, widget.spokenFallback]),
+          builder: (context, _) {
+            final override = controller.text.trim();
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AudioButton(
+                  fallbackText: override.isNotEmpty
+                      ? override
+                      : widget.spokenFallback.text,
+                  language: widget.language,
+                  compact: true,
                 ),
-              );
-            },
+                Icon(_expanded ? Icons.expand_less : Icons.expand_more),
+              ],
+            );
+          },
+        ),
+        children: [
+          TextField(
+            controller: controller,
+            decoration: InputDecoration(
+              labelText: widget.labelText,
+              hintText: widget.hintText,
+              helperText: widget.helperText,
+              helperMaxLines: 3,
+              border: const OutlineInputBorder(),
+            ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Whether a sentence plays its recording or text-to-speech, for a row in a
+/// list of examples. One small chip rather than a button pair, to keep the row
+/// compact on a phone: ticked plays the recording, unticked speaks with TTS.
+/// A sentence without a recording has no choice to make, so nothing is shown.
+class SentenceAudioChoice extends StatelessWidget {
+  final bool hasRecording;
+  final bool useAudio;
+  final ValueChanged<bool> onChanged;
+
+  const SentenceAudioChoice({
+    super.key,
+    required this.hasRecording,
+    required this.useAudio,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (!hasRecording) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: FilterChip(
+        label: const Text('Use recording'),
+        selected: useAudio,
+        onSelected: onChanged,
+        visualDensity: VisualDensity.compact,
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        tooltip: useAudio
+            ? 'Playing the recording. Tap to use text-to-speech.'
+            : 'Using text-to-speech. Tap to play the recording.',
       ),
     );
   }

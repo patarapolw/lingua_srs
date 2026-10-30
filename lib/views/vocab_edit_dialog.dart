@@ -87,6 +87,10 @@ class _VocabEditDialogState extends State<VocabEditDialog>
   final Map<String, ({String target, String translation})> _pendingEmphasis =
       {};
 
+  /// Recording-or-TTS choices for pool sentences, applied on Save like
+  /// [_pendingEmphasis]. Sentences without an entry keep their own setting.
+  final Map<String, bool> _pendingUseAudio = {};
+
   bool _showNotesPreview = false;
   String? _targetError;
   String? _translationError;
@@ -507,6 +511,9 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                             _sentenceIds[i],
                           );
                           if (sentence == null) return const SizedBox.shrink();
+                          final usesRecording =
+                              _pendingUseAudio[sentence.id] ??
+                              sentence.useAudio;
 
                           return Card(
                             margin: const EdgeInsets.symmetric(vertical: 4),
@@ -516,15 +523,31 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                                 _pendingEmphasis[sentence.id]?.target ??
                                     sentence.targetText,
                               ),
-                              subtitle: EmphasisText(
-                                _pendingEmphasis[sentence.id]?.translation ??
-                                    sentence.translationText,
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  EmphasisText(
+                                    _pendingEmphasis[sentence.id]
+                                            ?.translation ??
+                                        sentence.translationText,
+                                  ),
+                                  SentenceAudioChoice(
+                                    hasRecording: sentence.hasAudioUrl,
+                                    useAudio: usesRecording,
+                                    onChanged: (value) => setState(
+                                      () =>
+                                          _pendingUseAudio[sentence.id] = value,
+                                    ),
+                                  ),
+                                ],
                               ),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   AudioButton(
-                                    audioUrl: sentence.playableAudioUrl,
+                                    audioUrl: usesRecording
+                                        ? sentence.audioUrl
+                                        : null,
                                     fallbackText: sentence.speechText,
                                     compact: true,
                                   ),
@@ -965,7 +988,17 @@ class _VocabEditDialogState extends State<VocabEditDialog>
       child: ListTile(
         onTap: () => _editDraftSentence(index),
         title: EmphasisText(sentence.targetText),
-        subtitle: EmphasisText(sentence.translationText),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            EmphasisText(sentence.translationText),
+            SentenceAudioChoice(
+              hasRecording: sentence.hasAudioUrl,
+              useAudio: sentence.useAudio,
+              onChanged: (value) => setState(() => sentence.useAudio = value),
+            ),
+          ],
+        ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1328,6 +1361,15 @@ class _VocabEditDialogState extends State<VocabEditDialog>
       if (!mounted) return;
     }
     final sentencePool = context.read<AppProvider>();
+    // Before the emphasis edits: one of those may merge the sentence into a
+    // duplicate, which keeps the choice made here.
+    for (final entry in _pendingUseAudio.entries) {
+      if (!_sentenceIds.contains(entry.key)) continue;
+      final sentence = sentencePool.getSentenceById(entry.key);
+      if (sentence == null || sentence.useAudio == entry.value) continue;
+      sentence.useAudio = entry.value;
+      await sentencePool.updateSentenceInPool(sentence);
+    }
     for (final entry in _pendingEmphasis.entries) {
       if (!_sentenceIds.contains(entry.key)) continue;
       final sentence = sentencePool.getSentenceById(entry.key);

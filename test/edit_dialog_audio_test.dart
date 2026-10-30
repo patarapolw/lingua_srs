@@ -94,6 +94,19 @@ void main() {
       expect(find.text('Speaks: 세 개'), findsOneWidget);
     });
 
+    testWidgets('previews from the collapsed header, without opening it', (
+      tester,
+    ) async {
+      final audio = _RecordingAudio();
+      await pump(tester, audio);
+
+      await tester.tap(find.byTooltip('Play Text-to-Speech'));
+      await tester.pump();
+
+      expect(audio.spoken, ['배']);
+      expect(find.widgetWithText(TextField, _ttsLabel), findsNothing);
+    });
+
     testWidgets('previews the override, or the word while it is blank', (
       tester,
     ) async {
@@ -119,6 +132,65 @@ void main() {
       await tester.tap(find.byTooltip('Play Text-to-Speech'));
       await tester.pump();
       expect(audio.spoken, ['배', '세 개', '사과']);
+    });
+  });
+
+  group('SentenceAudioChoice', () {
+    Future<List<bool>> pump(
+      WidgetTester tester, {
+      required bool hasRecording,
+      bool useAudio = true,
+    }) async {
+      final choices = <bool>[];
+      var current = useAudio;
+      await tester.pumpWidget(
+        harness(
+          _RecordingAudio(),
+          StatefulBuilder(
+            builder: (context, setState) => SentenceAudioChoice(
+              hasRecording: hasRecording,
+              useAudio: current,
+              onChanged: (value) {
+                choices.add(value);
+                setState(() => current = value);
+              },
+            ),
+          ),
+        ),
+      );
+      return choices;
+    }
+
+    FilterChip chip(WidgetTester tester) =>
+        tester.widget<FilterChip>(find.byType(FilterChip));
+
+    testWidgets('has nothing to choose without a recording', (tester) async {
+      await pump(tester, hasRecording: false);
+
+      expect(find.byType(FilterChip), findsNothing);
+    });
+
+    testWidgets('is ticked while the recording is used, and toggles', (
+      tester,
+    ) async {
+      final choices = await pump(tester, hasRecording: true);
+      expect(find.text('Use recording'), findsOneWidget);
+      expect(chip(tester).selected, isTrue);
+
+      await tester.tap(find.byType(FilterChip));
+      await tester.pump();
+      expect(chip(tester).selected, isFalse);
+
+      await tester.tap(find.byType(FilterChip));
+      await tester.pump();
+      expect(chip(tester).selected, isTrue);
+      expect(choices, [false, true]);
+    });
+
+    testWidgets('starts unticked when the recording is off', (tester) async {
+      await pump(tester, hasRecording: true, useAudio: false);
+
+      expect(chip(tester).selected, isFalse);
     });
   });
 

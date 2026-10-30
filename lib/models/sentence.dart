@@ -26,6 +26,9 @@ class Sentence {
     this.lessonId,
   }) : id = id ?? const Uuid().v4();
 
+  /// Whether a recording is saved, whether or not it is switched on.
+  bool get hasAudioUrl => audioUrl?.trim().isNotEmpty ?? false;
+
   /// The recording to play, or null when there is none or it is switched off.
   String? get playableAudioUrl {
     final url = audioUrl?.trim();

@@ -1461,10 +1461,12 @@ vocabulary:
         audioUrl: '  https://example.com/a.mp3 ',
       );
       expect(sentence.useAudio, isTrue);
+      expect(sentence.hasAudioUrl, isTrue);
       expect(sentence.playableAudioUrl, 'https://example.com/a.mp3');
 
       sentence.useAudio = false;
       expect(sentence.audioUrl, isNotNull);
+      expect(sentence.hasAudioUrl, isTrue);
       expect(sentence.playableAudioUrl, isNull);
 
       final copy = Sentence.fromJson(sentence.toJson());
@@ -1483,6 +1485,14 @@ vocabulary:
       expect(
         Sentence(targetText: '사과', translationText: 'apple').playableAudioUrl,
         isNull,
+      );
+      expect(
+        Sentence(
+          targetText: '사과',
+          translationText: 'apple',
+          audioUrl: '  ',
+        ).hasAudioUrl,
+        isFalse,
       );
     });
 
