@@ -8,6 +8,7 @@ import '../providers/app_provider.dart';
 import '../services/ai_discussion_search.dart';
 import '../services/deepseek_service.dart';
 import '../services/lesson_ai_prompt.dart';
+import '../services/word_ai_prompt.dart';
 import '../widgets/ai_discussion_suggestion_tile.dart';
 import '../widgets/emphasis_text.dart';
 import '../widgets/markdown_content.dart';
@@ -167,18 +168,25 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
               nativeLanguage: widget.nativeLanguage,
             );
     }
-    final sentence = widget.sentenceTarget?.trim();
-    final sentenceTranslation = widget.sentenceTranslation?.trim();
-    return [
-      'You are a helpful language-learning tutor.',
-      'The learner is studying ${widget.targetLanguage} with ${widget.nativeLanguage} support.',
-      'Vocabulary: "${widget.targetWord}" means "${widget.translation}".',
-      if (sentence?.isNotEmpty == true)
-        'Example sentence: "$sentence"${sentenceTranslation?.isNotEmpty == true ? ' (translation: "$sentenceTranslation")' : ''}.',
-      if (sentence?.isNotEmpty == true) 'Earlier messages in this conversation may be about other example sentences of this vocabulary. "This sentence" means the one above.',
-      'Answer questions about this vocabulary and example sentence clearly. Explain nuances and usage when useful.',
-      'Format your answer using Markdown.',
-    ].join('\n');
+    return WordAiPrompt.systemPrompt(
+      targetLanguage: widget.targetLanguage,
+      nativeLanguage: widget.nativeLanguage,
+      targetWord: widget.targetWord,
+      translation: widget.translation,
+      sentenceTarget: widget.sentenceTarget,
+      sentenceTranslation: widget.sentenceTranslation,
+    );
+  }
+
+  /// The saved conversation as the AI should read it. In a word chat the
+  /// newest question carries the example sentence on the card.
+  List<AiDiscussionMessage> _history(List<AiDiscussionMessage> saved) {
+    if (widget.lesson != null || widget.orphaned) return saved;
+    return WordAiPrompt.withCurrentSentence(
+      saved,
+      sentenceTarget: widget.sentenceTarget,
+      sentenceTranslation: widget.sentenceTranslation,
+    );
   }
 
   List<String> _suggestedQuestions(bool hasMessages) {
@@ -256,7 +264,7 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
       );
       final messages = [
         AiDiscussionMessage(role: 'system', content: _systemPrompt()),
-        ...provider.getAiDiscussion(widget.discussionId),
+        ..._history(provider.getAiDiscussion(widget.discussionId)),
       ];
       final answer = StringBuffer();
       await for (final chunk in DeepSeekService.replyStream(
