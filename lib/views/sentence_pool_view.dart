@@ -107,6 +107,7 @@ class _SentencePoolViewState extends State<SentencePoolView> {
                 const SizedBox(height: 8),
                 MarkdownNotesField(
                   label: 'Sentence notes',
+                  addLabel: 'Add sentence note',
                   controller: notesCtrl,
                 ),
               ],

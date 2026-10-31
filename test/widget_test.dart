@@ -1843,7 +1843,7 @@ vocabulary:
       );
       expect(find.widgetWithText(TextField, 'English *'), findsOneWidget);
       expect(find.widgetWithText(TextField, 'Audio URL'), findsOneWidget);
-      expect(find.text('Vocab notes'), findsOneWidget);
+      expect(find.text('Add vocab note'), findsOneWidget);
       expect(find.text('Examples (0)'), findsOneWidget);
       expect(find.byTooltip('Add from pool'), findsOneWidget);
       expect(find.byTooltip('Create new sentence'), findsOneWidget);
@@ -1914,6 +1914,9 @@ vocabulary:
         find.widgetWithText(TextField, 'Audio URL'),
         'https://example.com/three.mp3',
       );
+      await tester.ensureVisible(find.text('Add vocab note'));
+      await tester.tap(find.text('Add vocab note'));
+      await tester.pumpAndSettle();
       await tester.enterText(
         find.byWidgetPredicate(
           (widget) =>
@@ -2327,20 +2330,48 @@ vocabulary:
       await tester.pump(const Duration(seconds: 1));
     });
 
-    testWidgets('the Add Example notes can be previewed', (tester) async {
-      await openAdd(tester);
+    testWidgets(
+      'the Add Example notes start as a button and can be previewed',
+      (tester) async {
+        await openAdd(tester);
 
-      await tester.tap(find.byTooltip('Create new sentence'));
-      await tester.pumpAndSettle();
-      final preview = find.descendant(
-        of: find.byType(AlertDialog),
-        matching: find.text('Preview'),
-      );
-      expect(preview, findsOneWidget);
-      await tester.tap(preview);
-      await tester.pumpAndSettle();
-      expect(find.text('No notes entered yet.'), findsOneWidget);
-    });
+        await tester.tap(find.byTooltip('Create new sentence'));
+        await tester.pumpAndSettle();
+        final inDialog = find.byType(AlertDialog);
+        expect(
+          find.descendant(of: inDialog, matching: find.text('Preview')),
+          findsNothing,
+        );
+        await tester.tap(
+          find.descendant(
+            of: inDialog,
+            matching: find.text('Add sentence note'),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.descendant(
+            of: inDialog,
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is TextField &&
+                  (widget.decoration?.hintText ?? '').startsWith(
+                    'Markdown notes',
+                  ),
+            ),
+          ),
+          'Eat **slowly**',
+        );
+        await tester.tap(
+          find.descendant(of: inDialog, matching: find.text('Preview')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.descendant(of: inDialog, matching: find.byType(MarkdownContent)),
+          findsOneWidget,
+        );
+      },
+    );
 
     testWidgets('a new example without ** is not added', (tester) async {
       final (provider, _) = await openAdd(tester);
@@ -2536,6 +2567,18 @@ vocabulary:
 
       final koEn = find.byKey(const ValueKey('review-notes-ko-en'));
       final enKo = find.byKey(const ValueKey('review-notes-en-ko'));
+      // Each field is a button until a note is started.
+      expect(
+        find.descendant(of: koEn, matching: find.byType(TextField)),
+        findsNothing,
+      );
+      await tester.tap(
+        find.descendant(
+          of: koEn,
+          matching: find.text('Add KO ➔ EN review note'),
+        ),
+      );
+      await tester.pumpAndSettle();
       await tester.enterText(
         find.descendant(of: koEn, matching: find.byType(TextField)),
         'Use **polite** form',
@@ -2552,9 +2595,12 @@ vocabulary:
         find.descendant(of: koEn, matching: find.byType(MarkdownContent)),
         findsOneWidget,
       );
-      // The other card's field is independent and still in edit mode.
+      // The other card's field is independent and still just a button.
       expect(
-        find.descendant(of: enKo, matching: find.byType(TextField)),
+        find.descendant(
+          of: enKo,
+          matching: find.text('Add EN ➔ KO review note'),
+        ),
         findsOneWidget,
       );
 

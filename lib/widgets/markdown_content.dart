@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
 import 'audio_button.dart';
+import 'cached_markdown_image.dart';
 import 'youtube_embed.dart';
 
 class MarkdownContent extends StatelessWidget {
@@ -122,11 +123,7 @@ class MarkdownContent extends StatelessWidget {
             compact: true,
           );
         }
-        return Image.network(
-          uri.toString(),
-          errorBuilder: (context, error, stackTrace) =>
-              const Icon(Icons.broken_image_outlined),
-        );
+        return CachedMarkdownImage(url: uri.toString());
       },
     );
   }

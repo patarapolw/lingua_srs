@@ -38,7 +38,7 @@ class _YamlImportViewState extends State<YamlImportView>
   String? _errorMessage;
   YamlParseResult? _previewResult;
   String? _defaultUnitTitle;
-  List<_MarkdownImportFile> _directoryFiles = [];
+  List<MarkdownImportFile> _directoryFiles = [];
   final Set<String> _selectedDirectoryPaths = {};
   List<String> _directoryErrors = [];
   int _directorySkipped = 0;
@@ -140,10 +140,10 @@ class _YamlImportViewState extends State<YamlImportView>
       );
       if (files.isEmpty) return;
 
-      final sources = <_PickedMarkdownSource>[];
+      final sources = <PickedMarkdownSource>[];
       for (final file in files) {
         sources.add(
-          _PickedMarkdownSource(
+          PickedMarkdownSource(
             name: file.name,
             sourceKey: file.uri.toString(),
             bytes: await file.readAsBytes(),
@@ -163,7 +163,7 @@ class _YamlImportViewState extends State<YamlImportView>
   }
 
   Future<void> _importPickedSources(
-    List<_PickedMarkdownSource> sources, {
+    List<PickedMarkdownSource> sources, {
     required String label,
   }) async {
     if (sources.isEmpty || !mounted) return;
@@ -213,8 +213,11 @@ class _YamlImportViewState extends State<YamlImportView>
                     ? 'No changed Markdown files found. '
                           '${parseResult.unchanged} unchanged files were skipped.'
                     : 'No Markdown files with vocabulary frontmatter were found.'
-              : 'No importable files found. ${parseResult.errors.length} files '
-                    'could not be parsed:\n${parseResult.errors.take(5).join('\n')}';
+              : describeImportErrors(
+                  'No importable files found. ${parseResult.errors.length} '
+                  'files could not be parsed:',
+                  parseResult.errors,
+                );
         }
       });
     } catch (error) {
@@ -229,7 +232,7 @@ class _YamlImportViewState extends State<YamlImportView>
   }
 
   Future<void> _handleDroppedFiles(DropDoneDetails details) async {
-    final sources = <_PickedMarkdownSource>[];
+    final sources = <PickedMarkdownSource>[];
     final errors = <String>[];
     const supportedExtensions = {'md', 'yaml', 'yml', 'txt', 'zip'};
 
@@ -258,7 +261,7 @@ class _YamlImportViewState extends State<YamlImportView>
 
         try {
           sources.add(
-            _PickedMarkdownSource(
+            PickedMarkdownSource(
               name: filename,
               sourceKey: File(item.path).uri.toString(),
               bytes: await item.readAsBytes(),
@@ -288,7 +291,10 @@ class _YamlImportViewState extends State<YamlImportView>
         _directoryErrors = errors;
         _errorMessage = errors.isEmpty
             ? 'No files were dropped.'
-            : 'No supported files could be imported:\n${errors.take(5).join('\n')}';
+            : describeImportErrors(
+                'No supported files could be imported:',
+                errors,
+              );
       });
     }
   }
@@ -325,14 +331,14 @@ class _YamlImportViewState extends State<YamlImportView>
       if (selectedPaths.isEmpty) return;
 
       final directoryPaths = <String>[];
-      final fileSources = <_PickedMarkdownSource>[];
+      final fileSources = <PickedMarkdownSource>[];
       for (final path in selectedPaths) {
         if (await Directory(path).exists()) {
           directoryPaths.add(path);
         } else if (await File(path).exists()) {
           final file = File(path);
           fileSources.add(
-            _PickedMarkdownSource(
+            PickedMarkdownSource(
               name: path.split(RegExp(r'[/\\]')).last,
               sourceKey: file.uri.toString(),
               bytes: await file.readAsBytes(),
@@ -359,7 +365,7 @@ class _YamlImportViewState extends State<YamlImportView>
 
   Future<void> _importFromDirectories(
     List<String> directoryPaths, {
-    List<_PickedMarkdownSource> files = const [],
+    List<PickedMarkdownSource> files = const [],
     required String label,
   }) async {
     _parseTimer?.cancel();
@@ -411,7 +417,7 @@ class _YamlImportViewState extends State<YamlImportView>
         _progressTotal = markdownPaths.length + files.length;
       });
     }
-    final results = <_MarkdownDirectoryResult>[
+    final results = <MarkdownDirectoryResult>[
       if (markdownPaths.isNotEmpty)
         await _parseMarkdownDirectoryInBackground(
           markdownPaths,
@@ -442,8 +448,11 @@ class _YamlImportViewState extends State<YamlImportView>
                   ? 'No changed Markdown files found. '
                         '${result.unchanged} unchanged files were skipped.'
                   : 'No Markdown files with a vocabulary frontmatter section were found.'
-            : 'No importable files found. ${result.errors.length} files '
-                  'could not be parsed:\n${result.errors.take(5).join('\n')}';
+            : describeImportErrors(
+                'No importable files found. ${result.errors.length} '
+                'files could not be parsed:',
+                result.errors,
+              );
       }
     });
   }
@@ -763,10 +772,15 @@ class _YamlImportViewState extends State<YamlImportView>
                             color: theme.colorScheme.errorContainer,
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: Text(
-                            _errorMessage!,
-                            style: TextStyle(
-                              color: theme.colorScheme.onErrorContainer,
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxHeight: 320),
+                            child: SingleChildScrollView(
+                              child: SelectableText(
+                                _errorMessage!,
+                                style: TextStyle(
+                                  color: theme.colorScheme.onErrorContainer,
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -838,13 +852,22 @@ class _YamlImportViewState extends State<YamlImportView>
                                     ),
                                   ),
                                   const SizedBox(height: 4),
-                                  Text(
-                                    _directoryErrors.take(3).join('\n'),
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      color: theme.colorScheme.error,
+                                  ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxHeight: 200,
                                     ),
-                                    maxLines: 5,
-                                    overflow: TextOverflow.ellipsis,
+                                    child: SingleChildScrollView(
+                                      child: SelectableText(
+                                        describeImportErrors(
+                                          '',
+                                          _directoryErrors,
+                                        ).trim(),
+                                        style: theme.textTheme.bodySmall
+                                            ?.copyWith(
+                                              color: theme.colorScheme.error,
+                                            ),
+                                      ),
+                                    ),
                                   ),
                                 ],
                               ],
@@ -1059,13 +1082,13 @@ class _YamlImportViewState extends State<YamlImportView>
       Platform.isWindows || Platform.isMacOS || Platform.isLinux;
 }
 
-class _MarkdownImportFile {
+class MarkdownImportFile {
   final String path;
   final String sourceKey;
   final String sourceHash;
   final YamlParseResult preview;
 
-  const _MarkdownImportFile({
+  const MarkdownImportFile({
     required this.path,
     required this.sourceKey,
     required this.sourceHash,
@@ -1073,25 +1096,25 @@ class _MarkdownImportFile {
   });
 }
 
-class _PickedMarkdownSource {
+class PickedMarkdownSource {
   final String name;
   final String sourceKey;
   final List<int> bytes;
 
-  const _PickedMarkdownSource({
+  const PickedMarkdownSource({
     required this.name,
     required this.sourceKey,
     required this.bytes,
   });
 }
 
-class _MarkdownDirectoryResult {
-  final List<_MarkdownImportFile> imports;
+class MarkdownDirectoryResult {
+  final List<MarkdownImportFile> imports;
   final List<String> errors;
   final int skipped;
   final int unchanged;
 
-  const _MarkdownDirectoryResult({
+  const MarkdownDirectoryResult({
     required this.imports,
     required this.errors,
     required this.skipped,
@@ -1111,24 +1134,24 @@ Future<YamlParseResult> _parseLessonInBackground(
   ),
 );
 
-Future<_MarkdownDirectoryResult> _parseMarkdownDirectoryInBackground(
+Future<MarkdownDirectoryResult> _parseMarkdownDirectoryInBackground(
   List<String> paths,
   List<String> directoryPaths,
   Map<String, String> importedSources,
 ) => Isolate.run(
-  () => _parseMarkdownFiles(paths, directoryPaths, importedSources),
+  () => parseMarkdownFiles(paths, directoryPaths, importedSources),
 );
 
-Future<_MarkdownDirectoryResult> _parsePickedMarkdownSourcesInBackground(
-  List<_PickedMarkdownSource> sources,
+Future<MarkdownDirectoryResult> _parsePickedMarkdownSourcesInBackground(
+  List<PickedMarkdownSource> sources,
   Map<String, String> importedSources,
-) => Isolate.run(() => _parsePickedMarkdownSources(sources, importedSources));
+) => Isolate.run(() => parsePickedMarkdownSources(sources, importedSources));
 
-_MarkdownDirectoryResult _parsePickedMarkdownSources(
-  List<_PickedMarkdownSource> sources,
+MarkdownDirectoryResult parsePickedMarkdownSources(
+  List<PickedMarkdownSource> sources,
   Map<String, String> importedSources,
 ) {
-  final imports = <_MarkdownImportFile>[];
+  final imports = <MarkdownImportFile>[];
   final errors = <String>[];
   var skipped = 0;
   var unchanged = 0;
@@ -1158,7 +1181,7 @@ _MarkdownDirectoryResult _parsePickedMarkdownSources(
         defaultUnitTitle: _unitTitleForPath(hierarchyPath ?? path),
       );
       imports.add(
-        _MarkdownImportFile(
+        MarkdownImportFile(
           path: path,
           sourceKey: sourceKey,
           sourceHash: sourceHash,
@@ -1166,7 +1189,7 @@ _MarkdownDirectoryResult _parsePickedMarkdownSources(
         ),
       );
     } catch (error) {
-      errors.add('$path: $error');
+      errors.add(describeImportError(path, error));
     }
   }
 
@@ -1204,7 +1227,7 @@ _MarkdownDirectoryResult _parsePickedMarkdownSources(
     }
   }
 
-  return _MarkdownDirectoryResult(
+  return MarkdownDirectoryResult(
     imports: imports,
     errors: errors,
     skipped: skipped,
@@ -1212,12 +1235,12 @@ _MarkdownDirectoryResult _parsePickedMarkdownSources(
   );
 }
 
-_MarkdownDirectoryResult _parseMarkdownFiles(
+MarkdownDirectoryResult parseMarkdownFiles(
   List<String> paths,
   List<String> directoryPaths,
   Map<String, String> importedSources,
 ) {
-  final imports = <_MarkdownImportFile>[];
+  final imports = <MarkdownImportFile>[];
   final errors = <String>[];
   var skipped = 0;
   var unchanged = 0;
@@ -1259,7 +1282,7 @@ _MarkdownDirectoryResult _parseMarkdownFiles(
         defaultUnitTitle: _unitTitleForPath(relativePath),
       );
       imports.add(
-        _MarkdownImportFile(
+        MarkdownImportFile(
           path: relativePath,
           sourceKey: _markdownSourceKey(path),
           sourceHash: sourceHash,
@@ -1267,10 +1290,10 @@ _MarkdownDirectoryResult _parseMarkdownFiles(
         ),
       );
     } catch (error) {
-      errors.add('$relativePath: $error');
+      errors.add(describeImportError(relativePath, error));
     }
   }
-  return _MarkdownDirectoryResult(
+  return MarkdownDirectoryResult(
     imports: imports,
     errors: errors,
     skipped: skipped,
@@ -1278,9 +1301,9 @@ _MarkdownDirectoryResult _parseMarkdownFiles(
   );
 }
 
-_MarkdownDirectoryResult _combineMarkdownDirectoryResults(
-  List<_MarkdownDirectoryResult> results,
-) => _MarkdownDirectoryResult(
+MarkdownDirectoryResult _combineMarkdownDirectoryResults(
+  List<MarkdownDirectoryResult> results,
+) => MarkdownDirectoryResult(
   imports: results.expand((result) => result.imports).toList(),
   errors: results.expand((result) => result.errors).toList(),
   skipped: results.fold(0, (total, result) => total + result.skipped),
@@ -1310,4 +1333,40 @@ String? _unitTitleForPath(String relativePath) {
       return words.join(' ');
     }),
   );
+}
+
+/// How many sentences of one file are quoted in its error line.
+const _sentencesShownPerFile = 5;
+
+/// The marker [describeImportErrors] looks for to add the how-to-fix hint.
+const _noEmphasisMarker = 'no **emphasis**';
+
+/// One line (or, for example sentences without `**`, a few) saying why the
+/// file at [path] could not be imported. [path] is what the person knows the
+/// file by: a name inside a zip (`lessons.zip/unit1/a.md`) or the path under
+/// the chosen folder.
+String describeImportError(String path, Object error) {
+  if (error is MissingEmphasisException) {
+    final count = error.sentences.length;
+    return [
+      '$path: $count example '
+          '${count == 1 ? 'sentence has' : 'sentences have'} '
+          '$_noEmphasisMarker',
+      for (final missing in error.sentences.take(_sentencesShownPerFile))
+        '    ${missing.word}: ${missing.sentence}',
+      if (count > _sentencesShownPerFile)
+        '    …and ${count - _sentencesShownPerFile} more',
+    ].join('\n');
+  }
+  return '$path: $error';
+}
+
+/// Every error of an import under [headline], once, with how to fix example
+/// sentences that lack `**`.
+String describeImportErrors(String headline, List<String> errors) {
+  final hint = errors.any((error) => error.contains(_noEmphasisMarker))
+      ? '\nWrap the word being studied in ** **, for example: '
+            '저는 **배**를 먹어요.'
+      : '';
+  return '$headline\n${errors.join('\n')}$hint';
 }

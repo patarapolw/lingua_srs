@@ -96,7 +96,6 @@ class _VocabEditDialogState extends State<VocabEditDialog>
   /// [_pendingEmphasis]. Sentences without an entry keep their own setting.
   final Map<String, bool> _pendingUseAudio = {};
 
-  bool _showNotesPreview = false;
   String? _targetError;
   String? _translationError;
   String? _posError;
@@ -369,11 +368,13 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                             MarkdownNotesField(
                               key: const ValueKey('review-notes-ko-en'),
                               label: 'KO ➔ EN',
+                              addLabel: 'Add KO ➔ EN review note',
                               controller: _targetToNativeBackNotesCtrl,
                             ),
                             MarkdownNotesField(
                               key: const ValueKey('review-notes-en-ko'),
                               label: 'EN ➔ KO',
+                              addLabel: 'Add EN ➔ KO review note',
                               controller: _nativeToTargetBackNotesCtrl,
                             ),
                           ],
@@ -382,60 +383,12 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                       const SizedBox(height: 20),
                     ],
 
-                    // Notes Section (with Markdown preview toggle)
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Vocab notes',
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        TextButton.icon(
-                          icon: Icon(
-                            _showNotesPreview ? Icons.edit : Icons.preview,
-                            size: 18,
-                          ),
-                          label: Text(_showNotesPreview ? 'Edit' : 'Preview'),
-                          onPressed: () => setState(
-                            () => _showNotesPreview = !_showNotesPreview,
-                          ),
-                        ),
-                      ],
+                    MarkdownNotesField(
+                      key: const ValueKey('vocab-notes'),
+                      label: 'Vocab notes',
+                      addLabel: 'Add vocab note',
+                      controller: _notesCtrl,
                     ),
-                    const SizedBox(height: 6),
-                    if (_showNotesPreview)
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surfaceContainerHighest
-                              .withValues(alpha: 0.3),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: theme.colorScheme.outlineVariant,
-                          ),
-                        ),
-                        constraints: const BoxConstraints(minHeight: 120),
-                        child: _notesCtrl.text.isEmpty
-                            ? const Text(
-                                'No notes entered yet.',
-                                style: TextStyle(color: Colors.grey),
-                              )
-                            : MarkdownContent(content: _notesCtrl.text),
-                      )
-                    else
-                      MarkdownTextField(
-                        controller: _notesCtrl,
-                        maxLines: 5,
-                        decoration: const InputDecoration(
-                          hintText: 'Markdown notes, e.g. **bold**, lists',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
                     const SizedBox(height: 24),
 
                     // Linked Sentences from Pool
@@ -1094,7 +1047,8 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                   ),
                   const SizedBox(height: 8),
                   MarkdownNotesField(
-                    label: 'Notes (Markdown)',
+                    label: 'Sentence notes',
+                    addLabel: 'Add sentence note',
                     controller: notesCtrl,
                   ),
                 ],

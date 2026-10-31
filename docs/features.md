@@ -23,7 +23,8 @@ Full feature reference. For a short overview see the [README](../README.md).
    - **Reset Progress**: Reset SRS progress for an entire lesson or an individual vocabulary item without changing card visibility.
    - Delete a part-of-speech group and its vocabulary, or delete an individual vocabulary entry. Deleting an entry resets SRS progress for any other entries sharing its ID.
    - Detects enabled cards with the same front prompt (without comparing their example sentences) and lets you add a disambiguation cue displayed on the card front.
-   - Each card direction has editable Markdown notes displayed on its back.
+   - Each card direction has editable Markdown notes displayed on its back. Notes fields everywhere work alike: an *Add … note* button while empty, the rendered notes with *Edit* once filled, *Preview* while editing.
+   - **Image cache**: online images in Markdown are downloaded once into `image_cache/` (next to `audio_cache/`; on Windows under `%LOCALAPPDATA%\\cc.polv\\lingua.srs`) and shown from disk afterwards, including offline. An image that cannot be saved (not a picture, SVG, over 25 MB, offline the first time) is shown from the network as before.
 
 4. **Front-of-Card Random Sentence with Cloze Deletion**:
    - Each card dynamically selects a **random example sentence** from the vocabulary's pool to display on the front.

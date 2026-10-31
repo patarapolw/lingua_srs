@@ -18,6 +18,7 @@ lingua_srs/
 │   │   ├── srs_service.dart           # SM-2 algorithm implementation
 │   │   ├── yaml_parser_service.dart   # Markdown/YAML lesson & sentence parser
 │   │   ├── audio_service.dart         # Audio playback, TTS and offline caching
+│   │   ├── image_cache_service.dart   # Disk cache for online images in Markdown
 │   │   ├── deepseek_service.dart      # DeepSeek chat client for quiz discussions
 │   │   ├── lesson_ai_prompt.dart      # Prompt, ids and suggestions for lesson AI chats
 │   │   ├── ai_discussion_search.dart  # Ids, search and related-word suggestions for saved AI chats
@@ -47,7 +48,9 @@ lingua_srs/
 │       ├── folder_picker_dialog.dart  # Pick an existing or new folder to move a lesson/folder into
 │       ├── lesson_hierarchy_view.dart # Lesson folder tree with reordering
 │       ├── lesson_html_view.dart      # Lesson Markdown reader (WebView document)
+│       ├── cached_markdown_image.dart # Online Markdown image shown from the disk cache
 │       ├── markdown_content.dart      # Markdown renderer for notes and chat
+│       ├── markdown_notes_field.dart  # Notes form field: Add button, rendered notes, Edit/Preview
 │       └── youtube_embed.dart         # YouTube embed for lesson Markdown
 └── test/                              # Parser, SRS, storage, import and widget tests
 ```
