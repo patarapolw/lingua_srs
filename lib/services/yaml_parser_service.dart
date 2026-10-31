@@ -14,6 +14,26 @@ class YamlParseResult {
   YamlParseResult({required this.lesson, required this.sentences});
 }
 
+/// An example sentence in the target language that has no `**emphasis**`.
+typedef MissingEmphasis = ({String word, String sentence});
+
+/// A file with example sentences that have no `**emphasis**`, every one of
+/// them, so the file can be fixed in one go. Importing needs the marking to
+/// know which part of the sentence a word is about.
+class MissingEmphasisException extends FormatException {
+  MissingEmphasisException(this.sentences) : super(_describe(sentences));
+
+  final List<MissingEmphasis> sentences;
+
+  static String _describe(List<MissingEmphasis> sentences) {
+    final count = sentences.length;
+    return '$count example ${count == 1 ? 'sentence has' : 'sentences have'} '
+        'no **emphasis**. Wrap the word being studied in ** **, for '
+        'example: 저는 **배**를 먹어요.\n'
+        '${sentences.map((m) => '  ${m.word}: ${m.sentence}').join('\n')}';
+  }
+}
+
 class YamlParserService {
   /// Known language keys for auto-detection
   static const List<String> knownLangKeys = [
@@ -108,6 +128,7 @@ class YamlParserService {
         : doc;
     final List<VocabItem> vocabList = [];
     final List<Sentence> allSentences = [];
+    final List<MissingEmphasis> missingEmphasis = [];
 
     void parseSection(String sectionName, dynamic value, List<String> parent) {
       final sectionPath = [...parent, sectionName];
@@ -129,6 +150,7 @@ class YamlParserService {
         String notes = '';
         String disambiguation = '';
         final List<String> itemSentenceIds = [];
+        final Map<String, SentenceEmphasis> itemEmphasis = {};
 
         for (final field in item.entries) {
           final key = field.key.toString().trim().toLowerCase();
@@ -199,15 +221,26 @@ class YamlParserService {
             }
 
             if (exTarget.isNotEmpty || exTrans.isNotEmpty) {
+              // The sentence is shared and kept plain; the `**` marking is
+              // this word's own.
+              if (exTarget.isNotEmpty && !Sentence.hasEmphasis(exTarget)) {
+                // Keep going: the whole file is reported at once.
+                missingEmphasis.add((word: targetWord, sentence: exTarget));
+                continue;
+              }
               final sentence = Sentence(
-                targetText: exTarget,
-                translationText: exTrans,
+                targetText: Sentence.stripEmphasis(exTarget),
+                translationText: Sentence.stripEmphasis(exTrans),
                 audioUrl: exAudio,
                 ttsText: exTts,
                 notes: exNotes,
               );
               allSentences.add(sentence);
               itemSentenceIds.add(sentence.id);
+              itemEmphasis[sentence.id] = SentenceEmphasis(
+                target: exTarget,
+                translation: exTrans,
+              );
             }
           }
         }
@@ -227,6 +260,7 @@ class YamlParserService {
             notes: notes,
             disambiguation: disambiguation,
             sentenceIds: itemSentenceIds,
+            sentenceEmphasis: itemEmphasis,
           );
           vocabList.add(vocab);
         }
@@ -248,6 +282,10 @@ class YamlParserService {
       vocabularies: vocabList,
       markdownContent: markdownContent,
     );
+
+    if (missingEmphasis.isNotEmpty) {
+      throw MissingEmphasisException(missingEmphasis);
+    }
 
     // Link sentence lessonId
     for (final s in allSentences) {

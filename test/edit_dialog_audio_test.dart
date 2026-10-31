@@ -9,6 +9,7 @@ import 'package:lingua_srs/services/audio_service.dart';
 import 'package:lingua_srs/views/sentence_pool_view.dart';
 import 'package:lingua_srs/widgets/audio_button.dart';
 import 'package:lingua_srs/widgets/audio_edit_fields.dart';
+import 'package:lingua_srs/widgets/markdown_content.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -420,6 +421,50 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
     }
 
+    testWidgets('the edit dialog offers to add a note when there is none', (
+      tester,
+    ) async {
+      await openPool(tester, _RecordingAudio(), sentence: appleSentence());
+
+      await tester.tap(find.text('I eat an apple'));
+      await tester.pumpAndSettle();
+
+      final inDialog = find.byType(AlertDialog);
+      expect(
+        find.descendant(of: inDialog, matching: find.text('Add sentence note')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: inDialog, matching: find.text('Preview')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('the edit dialog shows a filled note rendered', (tester) async {
+      await openPool(
+        tester,
+        _RecordingAudio(),
+        sentence: appleSentence()..notes = 'Eat **slowly**',
+      );
+
+      await tester.tap(find.text('I eat an apple'));
+      await tester.pumpAndSettle();
+
+      final inDialog = find.byType(AlertDialog);
+      expect(
+        find.descendant(of: inDialog, matching: find.text('Edit')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: inDialog, matching: find.byType(MarkdownContent)),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: inDialog, matching: find.text('Add sentence note')),
+        findsNothing,
+      );
+    });
+
     testWidgets('rows have no audio button', (tester) async {
       await openPool(
         tester,
@@ -537,7 +582,7 @@ void main() {
       await tester.tap(find.widgetWithText(FilledButton, 'Add Sentence'));
       await tester.pumpAndSettle();
       await tester.enterText(
-        find.widgetWithText(TextField, 'Target Sentence (Markdown)'),
+        find.widgetWithText(TextField, 'Target Sentence'),
         '3개 주세요',
       );
       await tester.tap(find.text('Text-to-speech'));

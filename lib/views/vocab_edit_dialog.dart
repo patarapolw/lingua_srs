@@ -12,12 +12,13 @@ import '../services/korean_text_search.dart';
 import '../widgets/audio_button.dart';
 import '../widgets/audio_edit_fields.dart';
 import '../widgets/emphasis_text.dart';
-import '../widgets/markdown_content.dart';
 import '../widgets/markdown_notes_field.dart';
-import '../widgets/markdown_text_field.dart';
 import 'similar_meanings_dialog.dart';
 import 'similar_search_dialog.dart';
 import 'vocab_merge_dialogs.dart';
+
+const _needsEmphasis =
+    'Wrap the word being studied in ** **, e.g. 저는 **배**를 먹어요';
 
 class VocabEditDialog extends StatefulWidget {
   final VocabItem vocab;
@@ -82,8 +83,10 @@ class _VocabEditDialogState extends State<VocabEditDialog>
   /// sentence pool and get linked only when the word is saved.
   final List<Sentence> _draftSentences = [];
 
-  /// Emphasis edits to pool sentences, applied on Save so cancelling leaves
-  /// the pool untouched.
+  /// This word's edited examples (target and translation, with `**`), applied
+  /// on Save so cancelling leaves the pool and the word untouched. The
+  /// `**` marking is the word's own; any change to the plain text is made to
+  /// the shared pool sentence.
   final Map<String, ({String target, String translation})> _pendingEmphasis =
       {};
 
@@ -91,7 +94,6 @@ class _VocabEditDialogState extends State<VocabEditDialog>
   /// [_pendingEmphasis]. Sentences without an entry keep their own setting.
   final Map<String, bool> _pendingUseAudio = {};
 
-  bool _showNotesPreview = false;
   String? _targetError;
   String? _translationError;
   String? _posError;
@@ -364,11 +366,13 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                             MarkdownNotesField(
                               key: const ValueKey('review-notes-ko-en'),
                               label: 'KO ➔ EN',
+                              addLabel: 'Add KO ➔ EN review note',
                               controller: _targetToNativeBackNotesCtrl,
                             ),
                             MarkdownNotesField(
                               key: const ValueKey('review-notes-en-ko'),
                               label: 'EN ➔ KO',
+                              addLabel: 'Add EN ➔ KO review note',
                               controller: _nativeToTargetBackNotesCtrl,
                             ),
                           ],
@@ -377,60 +381,12 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                       const SizedBox(height: 20),
                     ],
 
-                    // Notes Section (with Markdown preview toggle)
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Vocab notes',
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        TextButton.icon(
-                          icon: Icon(
-                            _showNotesPreview ? Icons.edit : Icons.preview,
-                            size: 18,
-                          ),
-                          label: Text(_showNotesPreview ? 'Edit' : 'Preview'),
-                          onPressed: () => setState(
-                            () => _showNotesPreview = !_showNotesPreview,
-                          ),
-                        ),
-                      ],
+                    MarkdownNotesField(
+                      key: const ValueKey('vocab-notes'),
+                      label: 'Vocab notes',
+                      addLabel: 'Add vocab note',
+                      controller: _notesCtrl,
                     ),
-                    const SizedBox(height: 6),
-                    if (_showNotesPreview)
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surfaceContainerHighest
-                              .withValues(alpha: 0.3),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: theme.colorScheme.outlineVariant,
-                          ),
-                        ),
-                        constraints: const BoxConstraints(minHeight: 120),
-                        child: _notesCtrl.text.isEmpty
-                            ? const Text(
-                                'No notes entered yet.',
-                                style: TextStyle(color: Colors.grey),
-                              )
-                            : MarkdownContent(content: _notesCtrl.text),
-                      )
-                    else
-                      MarkdownTextField(
-                        controller: _notesCtrl,
-                        maxLines: 5,
-                        decoration: const InputDecoration(
-                          hintText: 'Markdown notes, e.g. **bold**, lists',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
                     const SizedBox(height: 24),
 
                     // Linked Sentences from Pool
@@ -479,7 +435,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                       Padding(
                         padding: const EdgeInsets.only(bottom: 4),
                         child: Text(
-                          'Tap an example to edit its **emphasis**.',
+                          'Tap an example to edit its text and its **emphasis**.',
                           style: theme.textTheme.bodySmall,
                         ),
                       ),
@@ -516,17 +472,12 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                             margin: const EdgeInsets.symmetric(vertical: 4),
                             child: ListTile(
                               onTap: () => _editLinkedSentence(sentence),
-                              title: EmphasisText(
-                                _pendingEmphasis[sentence.id]?.target ??
-                                    sentence.targetText,
-                              ),
+                              title: EmphasisText(_markedFor(sentence).target),
                               subtitle: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   EmphasisText(
-                                    _pendingEmphasis[sentence.id]
-                                            ?.translation ??
-                                        sentence.translationText,
+                                    _markedFor(sentence).translation,
                                   ),
                                   SentenceAudioChoice(
                                     hasRecording: sentence.hasAudioUrl,
@@ -684,38 +635,55 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     );
   }
 
+  /// The example [sentence] as this word shows it: its pending edit, else the
+  /// word's saved emphasis, else the plain pool text.
+  ({String target, String translation}) _markedFor(Sentence sentence) =>
+      _pendingEmphasis[sentence.id] ??
+      (
+        target: widget.vocab.targetTextFor(sentence),
+        translation: widget.vocab.translationTextFor(sentence),
+      );
+
+  /// How many other words list [sentenceId] as an example.
+  int _otherUsers(AppProvider provider, String sentenceId) => provider.lessons
+      .expand((lesson) => lesson.vocabularies)
+      .where(
+        (vocab) =>
+            !identical(vocab, widget.vocab) &&
+            vocab.sentenceIds.contains(sentenceId),
+      )
+      .length;
+
+  /// Picks [sentence] from the pool: the word's emphasis is edited first, and
+  /// everything is applied on Save with the rest of the word.
   Future<void> _editAndLinkSentence({
     required BuildContext context,
     required Sentence sentence,
     required StateSetter setSheetState,
   }) async {
-    final provider = this.context.read<AppProvider>();
     final edited = await _editEmphasis(
       target: sentence.targetText,
       translation: sentence.translationText,
+      otherUsers: _otherUsers(this.context.read<AppProvider>(), sentence.id),
     );
     if (edited == null || !mounted) return;
 
-    sentence
-      ..targetText = edited.target
-      ..translationText = edited.translation;
-    final canonical = await provider.updateSentenceInPool(sentence);
-    if (mounted && context.mounted) {
+    _pendingEmphasis[sentence.id] = edited;
+    if (context.mounted) {
       setSheetState(() {
-        if (!_sentenceIds.contains(canonical.id)) {
-          _sentenceIds.add(canonical.id);
-        }
+        if (!_sentenceIds.contains(sentence.id)) _sentenceIds.add(sentence.id);
       });
-      setState(() {});
     }
+    setState(() {});
   }
 
-  /// Edits only the `**` emphasis of a sentence. The plain text has to stay
-  /// the same: a sentence is identified by its text without emphasis, and one
-  /// sentence can be shared by several words.
+  /// Edits an example for this word: its text, which is the same sentence for
+  /// every word that uses it, and the `**` emphasis, which is this word's own.
+  /// [otherUsers] other words share the sentence and are warned about.
   Future<({String target, String translation})?> _editEmphasis({
     required String target,
     required String translation,
+    int otherUsers = 0,
   }) async {
     final targetCtrl = TextEditingController(
       text: Sentence.suggestEmphasis(
@@ -727,34 +695,42 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     final translationCtrl = TextEditingController(
       text: Sentence.suggestEmphasis(translation, _translationCtrl.text),
     );
-    const mismatch = 'Only ** emphasis can be changed here.';
     final result = await showDialog<({String target, String translation})>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) {
-          final targetOk = Sentence.sameExceptEmphasis(target, targetCtrl.text);
-          final translationOk = Sentence.sameExceptEmphasis(
-            translation,
-            translationCtrl.text,
-          );
+          final targetOk = Sentence.hasEmphasis(targetCtrl.text);
+          final theme = Theme.of(dialogContext);
           return AlertDialog(
-            title: const Text('Edit emphasis'),
+            title: const Text('Edit Example'),
             content: SizedBox(
               width: 520,
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    if (otherUsers > 0) ...[
+                      Text(
+                        'This sentence is also used by $otherUsers other '
+                        '${otherUsers == 1 ? 'word' : 'words'}. Changing '
+                        'its text changes it for all of them; only the ** '
+                        'emphasis is yours alone.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.error,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     TextField(
                       controller: targetCtrl,
-                      minLines: 2,
+                      minLines: 1,
                       maxLines: 5,
                       onChanged: (_) => setDialogState(() {}),
                       decoration: InputDecoration(
-                        labelText: 'Korean sentence',
+                        labelText: 'Sentence',
                         helperText: 'Wrap each part in **double asterisks**; use several for several words.',
                         helperMaxLines: 2,
-                        errorText: targetOk ? null : mismatch,
+                        errorText: targetOk ? null : _needsEmphasis,
                         border: const OutlineInputBorder(),
                       ),
                     ),
@@ -762,20 +738,19 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                     Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
-                        'Cloze: ${Sentence(targetText: targetCtrl.text, translationText: '').toCloze(targetWord: _targetWordCtrl.text)}',
-                        style: Theme.of(dialogContext).textTheme.bodySmall,
+                        'Cloze: ${Sentence.clozeOf(targetCtrl.text, targetWord: _targetWordCtrl.text)}',
+                        style: theme.textTheme.bodySmall,
                       ),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: translationCtrl,
-                      minLines: 2,
+                      minLines: 1,
                       maxLines: 5,
                       onChanged: (_) => setDialogState(() {}),
-                      decoration: InputDecoration(
+                      decoration: const InputDecoration(
                         labelText: 'Translation',
-                        errorText: translationOk ? null : mismatch,
-                        border: const OutlineInputBorder(),
+                        border: OutlineInputBorder(),
                       ),
                     ),
                   ],
@@ -788,7 +763,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                 child: const Text('Cancel'),
               ),
               FilledButton(
-                onPressed: targetOk && translationOk
+                onPressed: targetOk
                     ? () => Navigator.pop(dialogContext, (
                         target: targetCtrl.text.trim(),
                         translation: translationCtrl.text.trim(),
@@ -806,10 +781,11 @@ class _VocabEditDialogState extends State<VocabEditDialog>
   }
 
   Future<void> _editLinkedSentence(Sentence sentence) async {
-    final pending = _pendingEmphasis[sentence.id];
+    final current = _markedFor(sentence);
     final edited = await _editEmphasis(
-      target: pending?.target ?? sentence.targetText,
-      translation: pending?.translation ?? sentence.translationText,
+      target: current.target,
+      translation: current.translation,
+      otherUsers: _otherUsers(context.read<AppProvider>(), sentence.id),
     );
     if (edited == null || !mounted) return;
     setState(() => _pendingEmphasis[sentence.id] = edited);
@@ -1022,51 +998,61 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     final audioCtrl = TextEditingController();
     final notesCtrl = TextEditingController();
     var useAudio = true;
+    var showEmphasisError = false;
+    StateSetter? refreshDialog;
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(widget.isNew ? 'Add example' : 'Add New Sentence to Pool'),
+        title: Text(widget.isNew ? 'Add Example' : 'Add New Sentence to Pool'),
         content: StatefulBuilder(
-          builder: (ctx, setDialogState) => SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: targetCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Korean sentence',
-                    hintText: 'Use **word** for bold/cloze',
+          builder: (ctx, setDialogState) {
+            refreshDialog = setDialogState;
+            return SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: targetCtrl,
+                    onChanged: (_) => setDialogState(() {}),
+                    decoration: InputDecoration(
+                      labelText: 'Sentence',
+                      hintText: 'e.g. 저는 **배**를 먹어요',
+                      helperText: 'Wrap the word being studied in **double asterisks**.',
+                      helperMaxLines: 2,
+                      errorText:
+                          showEmphasisError &&
+                              !Sentence.hasEmphasis(targetCtrl.text)
+                          ? _needsEmphasis
+                          : null,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: transCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'English translation',
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: transCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'English translation',
+                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                AudioEditFields(
-                  audioUrl: audioCtrl,
-                  useAudio: useAudio,
-                  onUseAudioChanged: (value) =>
-                      setDialogState(() => useAudio = value),
-                  ttsText: ttsCtrl,
-                  spokenFallback: targetCtrl,
-                ),
-                const SizedBox(height: 8),
-                MarkdownTextField(
-                  controller: notesCtrl,
-                  minLines: 2,
-                  maxLines: 5,
-                  decoration: const InputDecoration(
-                    labelText: 'Notes (Markdown)',
+                  const SizedBox(height: 12),
+                  AudioEditFields(
+                    audioUrl: audioCtrl,
+                    useAudio: useAudio,
+                    onUseAudioChanged: (value) =>
+                        setDialogState(() => useAudio = value),
+                    ttsText: ttsCtrl,
+                    spokenFallback: targetCtrl,
                   ),
-                ),
-              ],
-            ),
-          ),
+                  const SizedBox(height: 8),
+                  MarkdownNotesField(
+                    label: 'Sentence notes',
+                    addLabel: 'Add sentence note',
+                    controller: notesCtrl,
+                  ),
+                ],
+              ),
+            );
+          },
         ),
         actions: [
           TextButton(
@@ -1076,6 +1062,16 @@ class _VocabEditDialogState extends State<VocabEditDialog>
           FilledButton(
             onPressed: () async {
               if (targetCtrl.text.trim().isNotEmpty) {
+                if (!Sentence.hasEmphasis(targetCtrl.text)) {
+                  refreshDialog?.call(() => showEmphasisError = true);
+                  return;
+                }
+                // The pool keeps the sentence plain; the marking is this
+                // word's own and is applied when the word is saved.
+                final marked = (
+                  target: targetCtrl.text.trim(),
+                  translation: transCtrl.text.trim(),
+                );
                 final newSentence = Sentence(
                   targetText: targetCtrl.text.trim(),
                   translationText: transCtrl.text.trim(),
@@ -1121,6 +1117,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                       if (!_sentenceIds.contains(existing.id)) {
                         _sentenceIds.add(existing.id);
                       }
+                      _pendingEmphasis[existing.id] = marked;
                     });
                   } else {
                     setState(() => _draftSentences.add(newSentence));
@@ -1135,6 +1132,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                   if (!_sentenceIds.contains(canonical.id)) {
                     _sentenceIds.add(canonical.id);
                   }
+                  _pendingEmphasis[canonical.id] = marked;
                 });
                 if (ctx.mounted) Navigator.pop(ctx);
               }
@@ -1330,6 +1328,8 @@ class _VocabEditDialogState extends State<VocabEditDialog>
   }
 
   Future<void> _save() async {
+    // This word's `**` marking of its examples, taken from the edits below.
+    final marks = <String, SentenceEmphasis>{};
     if (widget.isNew) {
       final pos = _posCtrl.text.trim();
       setState(() {
@@ -1350,7 +1350,13 @@ class _VocabEditDialogState extends State<VocabEditDialog>
       if (!await _confirmDuplicates() || !mounted) return;
       final pool = context.read<AppProvider>();
       for (final draft in _draftSentences) {
+        // The pool strips the marking; the word keeps it.
+        final marked = SentenceEmphasis(
+          target: draft.targetText,
+          translation: draft.translationText,
+        );
         final canonical = await pool.addSentenceToPool(draft);
+        marks[canonical.id] = marked;
         if (!_sentenceIds.contains(canonical.id)) {
           _sentenceIds.add(canonical.id);
         }
@@ -1367,18 +1373,33 @@ class _VocabEditDialogState extends State<VocabEditDialog>
       sentence.useAudio = entry.value;
       await sentencePool.updateSentenceInPool(sentence);
     }
-    for (final entry in _pendingEmphasis.entries) {
+    for (final entry in _pendingEmphasis.entries.toList()) {
       if (!_sentenceIds.contains(entry.key)) continue;
       final sentence = sentencePool.getSentenceById(entry.key);
       if (sentence == null) continue;
-      if (sentence.targetText == entry.value.target &&
-          sentence.translationText == entry.value.translation) {
-        continue;
+      var id = sentence.id;
+      final target = Sentence.stripEmphasis(entry.value.target);
+      final translation = Sentence.stripEmphasis(entry.value.translation);
+      if (sentence.targetText != target ||
+          sentence.translationText != translation) {
+        // The text is the pool's, shared by every word that uses the sentence.
+        sentence
+          ..targetText = target
+          ..translationText = translation;
+        final canonical = await sentencePool.updateSentenceInPool(sentence);
+        if (canonical.id != id) {
+          // The edit made it the same as another sentence, which it joined.
+          _sentenceIds = {
+            for (final linked in _sentenceIds)
+              linked == id ? canonical.id : linked,
+          }.toList();
+          id = canonical.id;
+        }
       }
-      sentence
-        ..targetText = entry.value.target
-        ..translationText = entry.value.translation;
-      await sentencePool.updateSentenceInPool(sentence);
+      marks[id] = SentenceEmphasis(
+        target: entry.value.target,
+        translation: entry.value.translation,
+      );
     }
     if (!mounted) return;
     final provider = context.read<AppProvider>();
@@ -1408,6 +1429,30 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     widget.vocab.notes = _notesCtrl.text.trim();
     widget.vocab.disambiguation = _disambiguationCtrl.text.trim();
     widget.vocab.sentenceIds = _sentenceIds;
+    final emphasis = {...widget.vocab.sentenceEmphasis, ...marks};
+    for (final id in _sentenceIds) {
+      if (emphasis.containsKey(id)) continue;
+      // Linked without an edit: suggest the marking from the word itself.
+      final sentence = provider.getSentenceById(id);
+      if (sentence == null) continue;
+      final suggested = Sentence.suggestEmphasis(
+        sentence.targetText,
+        widget.vocab.targetWord,
+        korean: true,
+      );
+      if (!Sentence.hasEmphasis(suggested)) continue;
+      emphasis[id] = SentenceEmphasis(
+        target: suggested,
+        translation: Sentence.suggestEmphasis(
+          sentence.translationText,
+          widget.vocab.translation,
+        ),
+      );
+    }
+    widget.vocab.sentenceEmphasis = {
+      for (final id in _sentenceIds)
+        if (emphasis[id] != null) id: emphasis[id]!,
+    };
 
     widget.vocab.cardTargetToNative.isEnabled = _enableTargetToNative;
     widget.vocab.cardNativeToTarget.isEnabled = _enableNativeToTarget;

@@ -217,7 +217,12 @@ class AppProvider extends ChangeNotifier {
     _lessons = await StorageService.loadLessons();
     // Loaded after lessons because a fresh debug install seeds sentences there.
     _sentences = await StorageService.loadSentences();
-    if (_canonicalizeSentencePool()) {
+    // Before canonicalizing: duplicates merge into one sentence, and each word
+    // must have taken its own `**` marking by then.
+    final splitEmphasis = _splitSentenceEmphasis();
+    final canonicalized = _canonicalizeSentencePool();
+    final deduped = _dedupeSentenceLinks();
+    if (splitEmphasis || canonicalized || deduped) {
       await StorageService.saveSentences(_sentences);
       await StorageService.saveLessons(_lessons);
     }
@@ -275,13 +280,122 @@ class AppProvider extends ChangeNotifier {
 
     if (redirectedIds.isEmpty) return false;
 
+    // A sentence that was the canonical one can lose that place to a later
+    // duplicate with a recording (A -> B, then B -> C). Follow each id to the
+    // sentence that stayed, or a word keeps the id of one that is gone.
+    for (final id in redirectedIds.keys.toList()) {
+      var target = redirectedIds[id]!;
+      for (var hops = 0; redirectedIds.containsKey(target); hops++) {
+        if (hops > redirectedIds.length) break;
+        target = redirectedIds[target]!;
+      }
+      redirectedIds[id] = target;
+    }
+
     for (final vocab in _lessons.expand((lesson) => lesson.vocabularies)) {
-      vocab.sentenceIds = _unique(
-        vocab.sentenceIds.map((id) => redirectedIds[id] ?? id),
-      );
+      _redirectSentences(vocab, redirectedIds);
     }
     _sentences = canonicalSentences;
     return true;
+  }
+
+  /// Moves the `**` emphasis of sentences saved before each word had its own:
+  /// every word linking such a sentence takes the marking as its own, and the
+  /// pool keeps plain text. Returns whether anything changed.
+  bool _splitSentenceEmphasis() {
+    final byId = {for (final sentence in _sentences) sentence.id: sentence};
+    var changed = false;
+    for (final vocab in _lessons.expand((lesson) => lesson.vocabularies)) {
+      for (final id in vocab.sentenceIds) {
+        final sentence = byId[id];
+        if (sentence == null || vocab.sentenceEmphasis.containsKey(id)) {
+          continue;
+        }
+        if (!Sentence.hasEmphasis(sentence.targetText) &&
+            !Sentence.hasEmphasis(sentence.translationText)) {
+          continue;
+        }
+        vocab.sentenceEmphasis[id] = SentenceEmphasis(
+          target: sentence.targetText,
+          translation: sentence.translationText,
+        );
+        changed = true;
+      }
+    }
+    for (final sentence in _sentences) {
+      final target = Sentence.stripEmphasis(sentence.targetText);
+      final translation = Sentence.stripEmphasis(sentence.translationText);
+      if (target == sentence.targetText &&
+          translation == sentence.translationText) {
+        continue;
+      }
+      sentence
+        ..targetText = target
+        ..translationText = translation;
+      changed = true;
+    }
+    return changed;
+  }
+
+  /// Drops an id a word lists twice. Returns whether anything changed.
+  bool _dedupeSentenceLinks() {
+    var changed = false;
+    for (final vocab in _lessons.expand((lesson) => lesson.vocabularies)) {
+      final unique = _unique(vocab.sentenceIds);
+      if (unique.length == vocab.sentenceIds.length) continue;
+      vocab.sentenceIds = unique;
+      changed = true;
+    }
+    return changed;
+  }
+
+  /// Points [vocab] at the sentences [redirect] maps its ids to, and keeps its
+  /// emphasis with them. When two ids become one, the emphasis already kept
+  /// for the surviving id wins.
+  static void _redirectSentences(
+    VocabItem vocab,
+    Map<String, String> redirect,
+  ) {
+    if (redirect.isEmpty) return;
+    final emphasis = <String, SentenceEmphasis>{};
+    for (final entry in vocab.sentenceEmphasis.entries) {
+      if (!redirect.containsKey(entry.key)) emphasis[entry.key] = entry.value;
+    }
+    for (final entry in vocab.sentenceEmphasis.entries) {
+      emphasis.putIfAbsent(redirect[entry.key] ?? entry.key, () => entry.value);
+    }
+    vocab.sentenceEmphasis = emphasis;
+    vocab.sentenceIds = _unique(
+      vocab.sentenceIds.map((id) => redirect[id] ?? id),
+    );
+  }
+
+  /// After [sentence] was edited, fits every word's emphasis of it to the new
+  /// text: what the edit did not touch stays emphasized, and a word whose
+  /// emphasis was edited away gets a fresh suggestion from its own text.
+  void _carryEmphasisTo(Sentence sentence) {
+    for (final vocab in _lessons.expand((lesson) => lesson.vocabularies)) {
+      final emphasis = vocab.sentenceEmphasis[sentence.id];
+      if (emphasis == null) continue;
+      vocab.sentenceEmphasis[sentence.id] = SentenceEmphasis(
+        target:
+            Sentence.carryEmphasis(emphasis.target, sentence.targetText) ??
+            Sentence.suggestEmphasis(
+              sentence.targetText,
+              vocab.targetWord,
+              korean: true,
+            ),
+        translation:
+            Sentence.carryEmphasis(
+              emphasis.translation,
+              sentence.translationText,
+            ) ??
+            Sentence.suggestEmphasis(
+              sentence.translationText,
+              vocab.translation,
+            ),
+      );
+    }
   }
 
   void selectLesson(String? lessonId) {
@@ -482,6 +596,7 @@ class AppProvider extends ChangeNotifier {
 
   Future<Sentence> updateSentenceInPool(Sentence sentence) async {
     final canonical = _upsertSentence(sentence);
+    _carryEmphasisTo(canonical);
     await StorageService.saveSentences(_sentences);
     await StorageService.saveLessons(_lessons);
     notifyListeners();
@@ -527,8 +642,9 @@ class AppProvider extends ChangeNotifier {
           orElse: () => null,
         );
     canonical
-      ..targetText = incoming.targetText
-      ..translationText = incoming.translationText
+      // The pool is plain text: the `**` marking belongs to each word.
+      ..targetText = Sentence.stripEmphasis(incoming.targetText)
+      ..translationText = Sentence.stripEmphasis(incoming.translationText)
       ..audioUrl = audioUrl
       ..ttsText = ttsText
       ..notes = notes
@@ -550,12 +666,15 @@ class AppProvider extends ChangeNotifier {
       if (!identical(canonical, incoming)) incoming.id,
     }..remove(canonical.id);
     if (removedIds.isNotEmpty) {
+      final merges = _mergedInto;
+      if (merges != null) {
+        for (final id in removedIds) {
+          merges[id] = canonical.id;
+        }
+      }
+      final redirect = {for (final id in removedIds) id: canonical.id};
       for (final vocab in _lessons.expand((lesson) => lesson.vocabularies)) {
-        vocab.sentenceIds = _unique(
-          vocab.sentenceIds.map(
-            (id) => removedIds.contains(id) ? canonical.id : id,
-          ),
-        );
+        _redirectSentences(vocab, redirect);
       }
       _sentences.removeWhere((sentence) {
         final remove =
@@ -647,7 +766,40 @@ class AppProvider extends ChangeNotifier {
     return importedLessons;
   }
 
+  // Where the sentences merged away during one lesson import went. Two words
+  // of the same file can share a sentence, and the second one's upsert replaces
+  // the first's, so ids handed out earlier have to be followed.
+  Map<String, String>? _mergedInto;
+
+  String _followMerges(String id) {
+    final merges = _mergedInto;
+    if (merges == null) return id;
+    var current = id;
+    for (var hops = 0; merges.containsKey(current); hops++) {
+      if (hops > merges.length) break;
+      current = merges[current]!;
+    }
+    return current;
+  }
+
   Lesson _applyParsedLesson(
+    YamlParseResult parsed, {
+    Map<String, List<Sentence>>? sentenceIndex,
+    Map<String, VocabItem>? vocabIndex,
+  }) {
+    _mergedInto = {};
+    try {
+      return _applyParsedLessonTracked(
+        parsed,
+        sentenceIndex: sentenceIndex,
+        vocabIndex: vocabIndex,
+      );
+    } finally {
+      _mergedInto = null;
+    }
+  }
+
+  Lesson _applyParsedLessonTracked(
     YamlParseResult parsed, {
     Map<String, List<Sentence>>? sentenceIndex,
     Map<String, VocabItem>? vocabIndex,
@@ -688,10 +840,9 @@ class AppProvider extends ChangeNotifier {
           bySignature: sentenceIndex,
         ).id;
       }
+      sentenceIds.updateAll((_, id) => _followMerges(id));
       for (final vocab in parsed.lesson.vocabularies) {
-        vocab.sentenceIds = _unique(
-          vocab.sentenceIds.map((id) => sentenceIds[id] ?? id),
-        );
+        _redirectSentences(vocab, sentenceIds);
         vocab.shared.stampUnowned(parsed.lesson.id);
       }
       _lessons.add(parsed.lesson);
@@ -776,6 +927,7 @@ class AppProvider extends ChangeNotifier {
       importedSentenceBySignature[signature] =
           importedSentenceIds[sentence.id]!;
     }
+    importedSentenceIds.updateAll((_, id) => _followMerges(id));
 
     final vocabById = <String, List<VocabItem>>{};
     final vocabByMeaning = <String, List<VocabItem>>{};
@@ -791,9 +943,7 @@ class AppProvider extends ChangeNotifier {
     final matchedLessonVocabularies = <VocabItem>{};
     final newVocabularies = <VocabItem>[];
     for (final importedVocab in parsed.lesson.vocabularies) {
-      importedVocab.sentenceIds = importedVocab.sentenceIds
-          .map((id) => importedSentenceIds[id] ?? id)
-          .toList();
+      _redirectSentences(importedVocab, importedSentenceIds);
 
       final previousVocab = _findExistingVocabInIndexes(
         importedVocab,
@@ -823,7 +973,8 @@ class AppProvider extends ChangeNotifier {
         ..translation = importedVocab.translation
         ..pos = importedVocab.pos
         ..sectionPath = importedVocab.sectionPath
-        ..sentenceIds = importedVocab.sentenceIds;
+        ..sentenceIds = importedVocab.sentenceIds
+        ..sentenceEmphasis = importedVocab.sentenceEmphasis;
       lessonMatch.shared
         ..mergeImport(
           SharedVocab.audioField,

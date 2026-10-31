@@ -23,7 +23,8 @@ Full feature reference. For a short overview see the [README](../README.md).
    - **Reset Progress**: Reset SRS progress for an entire lesson or an individual vocabulary item without changing card visibility.
    - Delete a part-of-speech group and its vocabulary, or delete an individual vocabulary entry. Deleting an entry resets SRS progress for any other entries sharing its ID.
    - Detects enabled cards with the same front prompt (without comparing their example sentences) and lets you add a disambiguation cue displayed on the card front.
-   - Each card direction has editable Markdown notes displayed on its back.
+   - Each card direction has editable Markdown notes displayed on its back. Notes fields everywhere work alike: an *Add … note* button while empty, the rendered notes with *Edit* once filled, *Preview* while editing.
+   - **Image cache**: online images in Markdown are downloaded once into `image_cache/` (next to `audio_cache/`; on Windows under `%LOCALAPPDATA%\\cc.polv\\lingua.srs`) and shown from disk afterwards, including offline. An image that cannot be saved (not a picture, SVG, over 25 MB, offline the first time) is shown from the network as before.
 
 4. **Front-of-Card Random Sentence with Cloze Deletion**:
    - Each card dynamically selects a **random example sentence** from the vocabulary's pool to display on the front.
@@ -33,7 +34,7 @@ Full feature reference. For a short overview see the [README](../README.md).
 
 5. **Sentence Pooling**:
    - Sentences from all lessons are indexed into a central **Sentence Pool**.
-   - Browse, search, edit notes on, and link any sentence from the pool to any vocabulary item.
+   - Browse, search, edit and link any sentence from the pool to any vocabulary item. The pool holds plain text; the `**` emphasis (bold and cloze blank) is set per word, so words sharing a sentence can stress different parts. See [lesson-format.md](lesson-format.md).
    - The sentence picker opens with the selected vocabulary as its search query. Korean-aware local tokenization handles Hangul subwords, common particles, and frequent verb/adjective endings without downloading a large model.
    - Create new sentences directly in the pool or while editing a vocabulary item.
    - A matching **Vocab Pool** tab lists every distinct word once, even when several lessons share it, with the lessons it appears in. Search in Korean (Hangul finds the word, its conjugated forms and its meaning) or in English (meanings and notes, best match first), narrow by part of speech, and tap a word to edit it.
@@ -53,7 +54,7 @@ Full feature reference. For a short overview see the [README](../README.md).
    - **Voices vary**: when an Android language has several installed offline voices, each utterance picks one at random.
    - **Alternate TTS text** (`ko_text`) is used for review autoplay and replay as well as for the audio buttons.
    - **Recording or TTS**: every word and sentence with an audio URL has a *Use this recording* checkbox in its editor. Unticking it speaks with TTS instead, and keeps the URL.
-   - **Preview in the editors**: the vocabulary editor, the *Add example* dialog and the Sentence Pool editor all have a button on the Audio URL (plays the URL as typed) and one in the header of the collapsible *Text-to-speech* section (speaks the TTS text, or the word or sentence while that is blank), so TTS can be previewed without opening the section. The Sentence Pool list itself has no audio buttons.
+   - **Preview in the editors**: the vocabulary editor, the *Add Example* dialog and the Sentence Pool editor all have a button on the Audio URL (plays the URL as typed) and one in the header of the collapsible *Text-to-speech* section (speaks the TTS text, or the word or sentence while that is blank), so TTS can be previewed without opening the section. The Sentence Pool list itself has no audio buttons.
    - **Order**: in every editor the Audio URL comes first, with its *Use this recording* checkbox directly under it, followed by the collapsible *Text-to-speech* section that is used when there is no recording or it is switched off.
    - **Per example**: in the vocabulary editor each example that has a recording has a small *Use recording* chip (ticked plays the recording, unticked speaks with TTS). Choices on existing examples are applied when the word is saved.
 
