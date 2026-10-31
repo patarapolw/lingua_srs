@@ -102,11 +102,12 @@ void main() {
       expect(card.isShortInterval, isFalse);
     });
 
-    test('Hard on a mature card stays on a multi-day interval', () {
+    test('Hard on a mature card is still a 12 h interval', () {
       final card = dueCard(gap: const Duration(days: 10));
       SrsService.processReview(card, SrsRating.hard);
 
-      expect(card.isShortInterval, isFalse);
+      expect(card.dueDate.difference(card.lastReviewed!).inHours, 12);
+      expect(card.isShortInterval, isTrue);
     });
   });
 

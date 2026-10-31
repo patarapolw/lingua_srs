@@ -5,6 +5,7 @@ import '../models/lesson.dart';
 import '../models/vocab_item.dart';
 import '../models/srs_card.dart';
 import '../providers/app_provider.dart';
+import '../services/srs_service.dart';
 import '../widgets/audio_button.dart';
 import '../widgets/emphasis_text.dart';
 import '../widgets/markdown_content.dart';
@@ -17,6 +18,10 @@ String cardStatusLabel(SrsCard card) {
   if (!card.isEnabled) return 'Hidden';
   if (card.isNewCard) return 'New';
   if (card.isDue) return 'Due';
+  // Again and Hard come back within 24 h; their interval in days is hidden.
+  if (card.isShortInterval) {
+    return SrsService.formatDuration(card.dueDate.difference(DateTime.now()));
+  }
   return '${card.interval}d';
 }
 
