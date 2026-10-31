@@ -22,6 +22,7 @@ lingua_srs/
 │   │   ├── deepseek_service.dart      # DeepSeek chat client for quiz discussions
 │   │   ├── lesson_ai_prompt.dart      # Prompt, ids and suggestions for lesson AI chats
 │   │   ├── word_ai_prompt.dart        # Prompt for word AI chats, with the current example sentence
+│   │   ├── ai_question_suggestions.dart # Fixed and AI-suggested questions offered in AI chats, per language
 │   │   ├── ai_discussion_search.dart  # Ids, search and related-word suggestions for saved AI chats
 │   │   ├── korean_text_search.dart    # Korean-aware sentence search tokenizer
 │   │   ├── vocab_picker_search.dart   # Ranks vocabulary for the merge picker; scores a typed query

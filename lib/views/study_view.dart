@@ -884,6 +884,7 @@ class _StudyViewState extends State<StudyView> {
         translation: item.vocab.translation,
         targetLanguage: item.lesson.targetLanguage,
         nativeLanguage: item.lesson.nativeLanguage,
+        pos: item.vocab.pos,
         sentenceTarget: sentence == null
             ? null
             : item.vocab.targetTextFor(sentence),

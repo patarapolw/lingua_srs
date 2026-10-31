@@ -1,11 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../models/ai_discussion_message.dart';
 import '../models/lesson.dart';
+import '../models/vocab_item.dart';
 import '../providers/app_provider.dart';
 import '../services/ai_discussion_search.dart';
+import '../services/ai_question_suggestions.dart';
 import '../services/deepseek_service.dart';
 import '../services/lesson_ai_prompt.dart';
 import '../services/word_ai_prompt.dart';
@@ -25,6 +29,10 @@ class AiDiscussionDialog extends StatefulWidget {
   final String nativeLanguage;
   final String? sentenceTarget;
   final String? sentenceTranslation;
+
+  /// The word's part of speech, which decides whether to offer a question
+  /// about conjugation.
+  final String? pos;
   final Lesson? lesson;
 
   /// The word or lesson this chat was about no longer exists. The chat opens
@@ -40,6 +48,7 @@ class AiDiscussionDialog extends StatefulWidget {
     required this.nativeLanguage,
     this.sentenceTarget,
     this.sentenceTranslation,
+    this.pos,
     this.lesson,
     this.orphaned = false,
   });
@@ -55,6 +64,14 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
   String? _error;
   String _streamingAnswer = '';
   bool _wasAtBottom = true;
+
+  /// Questions the AI suggested after the last answer. They are not saved: a
+  /// reopened chat shows only the fixed ones until the next answer.
+  List<String> _aiQuestions = const [];
+
+  /// Counts the questions sent, so that suggestions for an old answer that
+  /// arrive late are dropped.
+  int _suggestionRound = 0;
 
   /// An orphaned chat is only read until the learner chooses to continue.
   late bool _readOnly = widget.orphaned;
@@ -189,29 +206,90 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
     );
   }
 
-  List<String> _suggestedQuestions(bool hasMessages) {
+  bool get _hasSentence => widget.sentenceTarget?.trim().isNotEmpty == true;
+
+  bool get _isVerbOrAdjective =>
+      widget.pos != null && VocabItem.isVerbOrAdjective(widget.pos!);
+
+  /// Questions for a chat that has no messages yet.
+  List<String> _firstQuestions() {
     // The questions are about a word or lesson that is not there to ask about.
     if (widget.orphaned) return const [];
-    if (widget.lesson != null) {
-      return LessonAiPrompt.suggestedQuestions(hasMessages);
-    }
-    final questions = !hasMessages
-        ? [
-            'Explain the etymology and Hanja of "${widget.targetWord}".',
-            if (widget.sentenceTarget?.isNotEmpty == true)
-              'How does this sentence work?',
-            'How is "${widget.targetWord}" used in everyday speech?',
-            'Give me another example sentence with "${widget.targetWord}".',
-          ]
-        : [
-            'Explain the etymology and Hanja of "${widget.targetWord}".',
-            'Can you give another example with "${widget.targetWord}"?',
-            'How would a native speaker say this more naturally?',
-            if (widget.sentenceTarget?.isNotEmpty == true)
-              'What other useful expressions are in this sentence?',
-          ];
+    if (widget.lesson != null) return LessonAiPrompt.suggestedQuestions(false);
+    return AiQuestionSuggestions.wordFirstQuestions(
+      language: widget.targetLanguage,
+      word: widget.targetWord,
+      hasSentence: _hasSentence,
+      verbOrAdjective: _isVerbOrAdjective,
+    );
+  }
 
-    return questions;
+  /// Questions to offer after an answer: fixed ones not asked yet, and the
+  /// AI's suggestions once they have arrived.
+  List<String> _followUpQuestions(List<AiDiscussionMessage> messages) {
+    if (widget.orphaned) return const [];
+    return AiQuestionSuggestions.followUps(
+      hardcoded: widget.lesson != null
+          ? LessonAiPrompt.suggestedQuestions(true)
+          : AiQuestionSuggestions.wordFollowUps(
+              language: widget.targetLanguage,
+              word: widget.targetWord,
+              hasSentence: _hasSentence,
+              verbOrAdjective: _isVerbOrAdjective,
+            ),
+      asked: [
+        for (final message in messages)
+          if (message.role == 'user') message.content,
+      ],
+      ai: _aiQuestions,
+    );
+  }
+
+  /// Asks the AI what the learner may want to ask next. The questions are a
+  /// bonus, so a failure is not shown.
+  Future<void> _loadAiQuestions({
+    required int round,
+    required AppProvider provider,
+    required String question,
+    required String answer,
+  }) async {
+    final language = widget.targetLanguage;
+    if (!AiQuestionSuggestions.supports(language)) return;
+    final isLesson = widget.lesson != null;
+    try {
+      final reply = await DeepSeekService.completeJson(
+        apiKey: provider.deepSeekApiKey,
+        maxTokens: 400,
+        messages: AiQuestionSuggestions.aiRequest(
+          language: language,
+          subject: isLesson
+              ? AiQuestionSuggestions.lessonSubject(
+                  language: language,
+                  title: widget.targetWord,
+                )
+              : AiQuestionSuggestions.wordSubject(
+                  language: language,
+                  word: widget.targetWord,
+                  translation: widget.translation,
+                ),
+          nativeLanguage: widget.nativeLanguage,
+          question: question,
+          answer: answer,
+          asked: [
+            for (final message in provider.getAiDiscussion(widget.discussionId))
+              if (message.role == 'user') message.content,
+          ],
+          sentenceTarget: isLesson ? null : widget.sentenceTarget,
+          sentenceTranslation: isLesson ? null : widget.sentenceTranslation,
+        ),
+      );
+      if (!mounted || round != _suggestionRound) return;
+      setState(
+        () => _aiQuestions = AiQuestionSuggestions.parseAiQuestions(reply),
+      );
+    } catch (_) {
+      // The fixed questions are shown without them.
+    }
   }
 
   void _insertNewline() {
@@ -255,6 +333,8 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
       _sending = true;
       _error = null;
       _streamingAnswer = '';
+      _aiQuestions = const [];
+      _suggestionRound++;
     });
 
     try {
@@ -287,6 +367,16 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
         widget.discussionId,
         AiDiscussionMessage(role: 'assistant', content: answer.toString()),
       );
+      if (!widget.orphaned) {
+        unawaited(
+          _loadAiQuestions(
+            round: _suggestionRound,
+            provider: provider,
+            question: question,
+            answer: answer.toString(),
+          ),
+        );
+      }
     } catch (error) {
       if (mounted) setState(() => _error = 'Could not get an answer: $error');
     } finally {
@@ -311,6 +401,8 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
     final messages = provider.getAiDiscussion(widget.discussionId);
+    final firstQuestions = _firstQuestions();
+    final followUps = _followUpQuestions(messages);
     final theme = Theme.of(context);
     final width = MediaQuery.sizeOf(context).width;
     final height = MediaQuery.sizeOf(context).height;
@@ -453,28 +545,30 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                                     ),
                                   const SizedBox(height: 12),
                                 ],
-                                Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Text(
-                                    'Try asking',
-                                    style: theme.textTheme.labelMedium,
+                                if (firstQuestions.isNotEmpty) ...[
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      'Try asking',
+                                      style: theme.textTheme.labelMedium,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(height: 4),
-                                Wrap(
-                                  spacing: 6,
-                                  runSpacing: 4,
-                                  children: _suggestedQuestions(false)
-                                      .map(
-                                        (question) => ActionChip(
-                                          label: Text(question),
-                                          onPressed: _sending
-                                              ? null
-                                              : () => _sendQuestion(question),
-                                        ),
-                                      )
-                                      .toList(),
-                                ),
+                                  const SizedBox(height: 4),
+                                  Wrap(
+                                    spacing: 6,
+                                    runSpacing: 4,
+                                    children: firstQuestions
+                                        .map(
+                                          (question) => ActionChip(
+                                            label: Text(question),
+                                            onPressed: _sending
+                                                ? null
+                                                : () => _sendQuestion(question),
+                                          ),
+                                        )
+                                        .toList(),
+                                  ),
+                                ],
                               ],
                             ),
                           ),
@@ -543,7 +637,7 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                           },
                         ),
                 ),
-                if (messages.isNotEmpty && _suggestedQuestions(true).isNotEmpty)
+                if (messages.isNotEmpty && followUps.isNotEmpty)
                   ExpansionTile(
                     title: Text(
                       'Suggested next questions',
@@ -552,7 +646,7 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                     tilePadding: EdgeInsets.zero,
                     visualDensity: VisualDensity.compact,
                     initiallyExpanded: height > 1000,
-                    children: _suggestedQuestions(true)
+                    children: followUps
                         .map(
                           (question) => ActionChip(
                             label: Text(question),
@@ -657,6 +751,7 @@ AiDiscussionDialog aiDiscussionDialogFor(AiDiscussionSummary discussion) {
     nativeLanguage: discussion.lesson?.nativeLanguage ?? 'en',
     sentenceTarget: discussion.sentence?.targetText,
     sentenceTranslation: discussion.sentence?.translationText,
+    pos: discussion.vocab?.pos,
     lesson: discussion.isLesson ? discussion.lesson : null,
     orphaned: discussion.isOrphaned,
   );
