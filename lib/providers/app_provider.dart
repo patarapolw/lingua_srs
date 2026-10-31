@@ -221,7 +221,8 @@ class AppProvider extends ChangeNotifier {
     // must have taken its own `**` marking by then.
     final splitEmphasis = _splitSentenceEmphasis();
     final canonicalized = _canonicalizeSentencePool();
-    if (splitEmphasis || canonicalized) {
+    final deduped = _dedupeSentenceLinks();
+    if (splitEmphasis || canonicalized || deduped) {
       await StorageService.saveSentences(_sentences);
       await StorageService.saveLessons(_lessons);
     }
@@ -279,6 +280,18 @@ class AppProvider extends ChangeNotifier {
 
     if (redirectedIds.isEmpty) return false;
 
+    // A sentence that was the canonical one can lose that place to a later
+    // duplicate with a recording (A -> B, then B -> C). Follow each id to the
+    // sentence that stayed, or a word keeps the id of one that is gone.
+    for (final id in redirectedIds.keys.toList()) {
+      var target = redirectedIds[id]!;
+      for (var hops = 0; redirectedIds.containsKey(target); hops++) {
+        if (hops > redirectedIds.length) break;
+        target = redirectedIds[target]!;
+      }
+      redirectedIds[id] = target;
+    }
+
     for (final vocab in _lessons.expand((lesson) => lesson.vocabularies)) {
       _redirectSentences(vocab, redirectedIds);
     }
@@ -319,6 +332,18 @@ class AppProvider extends ChangeNotifier {
       sentence
         ..targetText = target
         ..translationText = translation;
+      changed = true;
+    }
+    return changed;
+  }
+
+  /// Drops an id a word lists twice. Returns whether anything changed.
+  bool _dedupeSentenceLinks() {
+    var changed = false;
+    for (final vocab in _lessons.expand((lesson) => lesson.vocabularies)) {
+      final unique = _unique(vocab.sentenceIds);
+      if (unique.length == vocab.sentenceIds.length) continue;
+      vocab.sentenceIds = unique;
       changed = true;
     }
     return changed;
@@ -750,7 +775,8 @@ class AppProvider extends ChangeNotifier {
     final merges = _mergedInto;
     if (merges == null) return id;
     var current = id;
-    while (merges.containsKey(current)) {
+    for (var hops = 0; merges.containsKey(current); hops++) {
+      if (hops > merges.length) break;
       current = merges[current]!;
     }
     return current;

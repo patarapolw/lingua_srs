@@ -418,5 +418,75 @@ vocabulary:
         isNotNull,
       );
     });
+
+    Future<AppProvider> loadWith(
+      List<Sentence> sentences,
+      List<VocabItem> vocabularies,
+    ) async {
+      SharedPreferences.setMockInitialValues({
+        ..._freshStore,
+        'lingua_srs_lessons': jsonEncode([
+          Lesson(id: 'lesson', title: 'L', vocabularies: vocabularies).toJson(),
+        ]),
+        'lingua_srs_sentences': jsonEncode([
+          for (final sentence in sentences) sentence.toJson(),
+        ]),
+      });
+      final provider = await _loadedProvider();
+      addTearDown(provider.dispose);
+      return provider;
+    }
+
+    test('three copies of a sentence keep every word linked', () async {
+      // The pool keeps the first copy, then swaps it for the third, which has a
+      // recording: the second copy has to follow to the third, not the first.
+      final provider = await loadWith(
+        [
+          Sentence(id: 'a', targetText: '사과를 먹어요', translationText: 'x'),
+          Sentence(id: 'b', targetText: '사과를 먹어요', translationText: 'x'),
+          Sentence(
+            id: 'c',
+            targetText: '사과를 먹어요',
+            translationText: 'x',
+            audioUrl: 'https://example.com/c.mp3',
+          ),
+        ],
+        [
+          VocabItem(
+            targetWord: '사과',
+            translation: 'apple',
+            pos: 'nouns',
+            sentenceIds: ['a'],
+          ),
+          VocabItem(
+            targetWord: '먹다',
+            translation: 'eat',
+            pos: 'verbs',
+            sentenceIds: ['b'],
+          ),
+        ],
+      );
+
+      expect(provider.sentences.map((s) => s.id), ['c']);
+      for (final word in provider.lessons.single.vocabularies) {
+        expect(word.sentenceIds, ['c'], reason: word.targetWord);
+      }
+    });
+
+    test('an id a word lists twice is kept once', () async {
+      final provider = await loadWith(
+        [Sentence(id: 'a', targetText: '사과를 먹어요', translationText: 'x')],
+        [
+          VocabItem(
+            targetWord: '사과',
+            translation: 'apple',
+            pos: 'nouns',
+            sentenceIds: ['a', 'a'],
+          ),
+        ],
+      );
+
+      expect(provider.lessons.single.vocabularies.single.sentenceIds, ['a']);
+    });
   });
 }
