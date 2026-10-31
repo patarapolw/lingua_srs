@@ -1668,7 +1668,7 @@ vocabulary:
       // 2. Hard scheduling for learning card
       final hardCard = SrsCard(direction: CardDirection.targetToNative);
       SrsService.processReview(hardCard, SrsRating.hard);
-      expect(hardCard.interval, 0);
+      expect(hardCard.interval, 1); // hidden interval; shown as 12 h
       expect(
         hardCard.dueDate.difference(now).inHours,
         12,
