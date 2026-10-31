@@ -27,7 +27,7 @@ class _Server {
     return http.Response.bytes(
       body,
       status,
-      headers: {if (contentType != null) 'content-type': contentType!},
+      headers: {'content-type': ?contentType},
     );
   });
 }

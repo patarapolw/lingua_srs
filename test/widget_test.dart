@@ -2557,16 +2557,21 @@ vocabulary:
       final lesson = await seed(tester, provider, 'L1', 'nouns', '사과', 'apple');
       await openEdit(tester, provider, lesson);
 
+      final koEn = find.byKey(const ValueKey('review-notes-ko-en'));
+      final enKo = find.byKey(const ValueKey('review-notes-en-ko'));
       expect(find.text('Review notes', skipOffstage: false), findsOneWidget);
-      expect(find.byType(MarkdownNotesField), findsNothing);
+      // Only the word's own notes are shown; the review notes are collapsed.
+      expect(find.byType(MarkdownNotesField), findsOneWidget);
+      expect(koEn, findsNothing);
+      expect(enKo, findsNothing);
 
       await tester.ensureVisible(find.text('Review notes'));
       await tester.tap(find.text('Review notes'));
       await tester.pumpAndSettle();
-      expect(find.byType(MarkdownNotesField), findsNWidgets(2));
+      expect(find.byType(MarkdownNotesField), findsNWidgets(3));
+      expect(koEn, findsOneWidget);
+      expect(enKo, findsOneWidget);
 
-      final koEn = find.byKey(const ValueKey('review-notes-ko-en'));
-      final enKo = find.byKey(const ValueKey('review-notes-en-ko'));
       // Each field is a button until a note is started.
       expect(
         find.descendant(of: koEn, matching: find.byType(TextField)),
