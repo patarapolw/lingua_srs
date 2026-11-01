@@ -99,6 +99,10 @@ class _ReviewNotesEditorState extends State<ReviewNotesEditor> {
           child: Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: TextButton.icon(
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+              ),
               icon: const Icon(Icons.edit_note, size: 18),
               label: const Text('Add review note'),
               onPressed: _start,

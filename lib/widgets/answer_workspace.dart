@@ -110,16 +110,19 @@ class _AnswerWorkspaceState extends State<AnswerWorkspace> {
 
   @override
   Widget build(BuildContext context) {
+    const title = 'Your answer';
+
     if (!_expanded) {
       return Align(
         alignment: Alignment.centerLeft,
-        child: Padding(
-          padding: const EdgeInsets.only(top: 16, bottom: 8),
-          child: TextButton.icon(
-            icon: const Icon(Icons.edit_note, size: 18),
-            label: const Text('Scratchpad'),
-            onPressed: () => setState(() => _expanded = true),
+        child: TextButton.icon(
+          style: TextButton.styleFrom(
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
           ),
+          icon: const Icon(Icons.edit_note, size: 18),
+          label: const Text(title),
+          onPressed: () => setState(() => _expanded = true),
         ),
       );
     }
@@ -138,9 +141,7 @@ class _AnswerWorkspaceState extends State<AnswerWorkspace> {
         children: [
           Row(
             children: [
-              Expanded(
-                child: Text('Scratchpad', style: theme.textTheme.labelLarge),
-              ),
+              Expanded(child: Text(title, style: theme.textTheme.labelLarge)),
               IconButton(
                 tooltip: 'Draw',
                 visualDensity: VisualDensity.compact,

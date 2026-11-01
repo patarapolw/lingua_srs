@@ -681,6 +681,51 @@ vocabulary:
       await tester.pumpAndSettle();
     }
 
+    testWidgets('answer pad stays by the sentence on both sides', (
+      tester,
+    ) async {
+      await openStudy(
+        tester,
+        direction: CardDirection.targetToNative,
+        yaml: withSentence,
+      );
+      final sentence = find.textContaining('저는 배를 먹었어요', findRichText: true);
+      final answerPad = find.text('Your answer');
+      expect(
+        tester.getRect(answerPad).top,
+        greaterThan(tester.getRect(sentence).bottom),
+      );
+
+      await tester.tap(answerPad);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Type'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'keep this answer');
+
+      await reveal(tester);
+      expect(find.text('keep this answer'), findsOneWidget);
+      expect(
+        tester.getRect(answerPad).top,
+        greaterThan(tester.getRect(sentence).bottom),
+      );
+    });
+
+    testWidgets('answer and review note controls share a left margin', (
+      tester,
+    ) async {
+      await openStudy(
+        tester,
+        direction: CardDirection.targetToNative,
+        yaml: withSentence,
+      );
+      await reveal(tester);
+
+      expect(
+        tester.getRect(find.text('Your answer')).left,
+        tester.getRect(find.text('Add review note')).left,
+      );
+    });
+
     testWidgets('nothing is shown by default', (tester) async {
       await openStudy(
         tester,

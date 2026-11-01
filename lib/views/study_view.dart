@@ -1543,7 +1543,13 @@ class _StudyViewState extends State<StudyView> {
                                       ),
                                   ],
 
-                                  const SizedBox(height: 28),
+                                  const SizedBox(height: 12),
+                                  AnswerWorkspace(
+                                    key: ValueKey(
+                                      'answer-$_currentIndex-${item.card.id}',
+                                    ),
+                                    onSubmit: _submitAnswerWorkspace,
+                                  ),
                                 ]
                                 // ---------------- BACK VIEW ----------------
                                 else ...[
@@ -1678,6 +1684,12 @@ class _StudyViewState extends State<StudyView> {
                                     ),
                                     const SizedBox(height: 16),
                                   ],
+                                  AnswerWorkspace(
+                                    key: ValueKey(
+                                      'answer-$_currentIndex-${item.card.id}',
+                                    ),
+                                    onSubmit: _submitAnswerWorkspace,
+                                  ),
 
                                   ReviewNotesEditor(
                                     key: ValueKey(
@@ -1751,12 +1763,6 @@ class _StudyViewState extends State<StudyView> {
                                     ),
                                   ),
                                 ],
-                                AnswerWorkspace(
-                                  key: ValueKey(
-                                    'answer-$_currentIndex-${item.card.id}',
-                                  ),
-                                  onSubmit: _submitAnswerWorkspace,
-                                ),
                                 if (!_isAnswerRevealed) ...[
                                   const SizedBox(height: 16),
                                   Center(

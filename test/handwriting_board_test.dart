@@ -5,6 +5,20 @@ import 'package:lingua_srs/widgets/answer_workspace.dart';
 
 void main() {
   group('AnswerWorkspace', () {
+    testWidgets('keeps the collapsed scratchpad control compact', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: AnswerWorkspace(onSubmit: _noop)),
+        ),
+      );
+
+      final button = tester.widget<TextButton>(find.byType(TextButton));
+      expect(button.style!.visualDensity, VisualDensity.compact);
+      expect(button.style!.padding!.resolve({}), EdgeInsets.zero);
+    });
+
     testWidgets('supports typed answers and Ctrl+Enter submission', (
       tester,
     ) async {
