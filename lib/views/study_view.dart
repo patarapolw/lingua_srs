@@ -532,6 +532,15 @@ class _StudyViewState extends State<StudyView> {
     }
   }
 
+  void _submitAnswerWorkspace() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    if (_isAnswerRevealed) {
+      _rateCard(SrsRating.good);
+    } else {
+      _revealAnswer();
+    }
+  }
+
   void _rateCard(SrsRating rating) {
     if (_currentIndex >= _queue.length) return;
     if (_isReviewingPast) {
@@ -1746,7 +1755,7 @@ class _StudyViewState extends State<StudyView> {
                                   key: ValueKey(
                                     'answer-$_currentIndex-${item.card.id}',
                                   ),
-                                  onSubmit: _revealAnswer,
+                                  onSubmit: _submitAnswerWorkspace,
                                 ),
                                 if (!_isAnswerRevealed) ...[
                                   const SizedBox(height: 16),
