@@ -12,6 +12,7 @@ import 'package:lingua_srs/services/lesson_ai_prompt.dart';
 import 'package:lingua_srs/services/storage_service.dart';
 import 'package:lingua_srs/views/ai_discussion_dialog.dart';
 import 'package:lingua_srs/views/recent_ai_discussions_view.dart';
+import 'package:lingua_srs/widgets/ai_question_chip.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -422,6 +423,15 @@ void main() {
 
       expect(find.text('Earlier discussions'), findsNothing);
       expect(find.text('Try asking'), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is Wrap &&
+              widget.children.any((child) => child is AiQuestionChip) &&
+              widget.alignment == WrapAlignment.center,
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('shows nothing extra when there are no earlier discussions', (

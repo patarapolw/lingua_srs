@@ -563,11 +563,10 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                                     ),
                                   ),
                                   const SizedBox(height: 4),
-                                  // Full width, so that the chips start at the
-                                  // left instead of being centered as a group.
                                   SizedBox(
                                     width: double.infinity,
                                     child: Wrap(
+                                      alignment: WrapAlignment.center,
                                       spacing: 6,
                                       runSpacing: 6,
                                       children: firstQuestions
