@@ -102,25 +102,45 @@ class ReviewHistoryRecord {
   }
 }
 
+/// The first-pass record that decides each card: of the records flagged as a
+/// first session rating, the one at the latest queue position. A card normally
+/// has one, but a card reset to New mid-session is rated as a first review
+/// again, and must not be counted twice.
+Iterable<ReviewHistoryRecord> _decidingFirstPassRecords(
+  Iterable<ReviewHistoryRecord> history,
+) {
+  final latest = <String, ReviewHistoryRecord>{};
+  for (final r in history) {
+    if (!r.wasFirstSessionRating) continue;
+    final current = latest[r.card.id];
+    if (current == null || r.queueIndex >= current.queueIndex) {
+      latest[r.card.id] = r;
+    }
+  }
+  return latest.values;
+}
+
 /// Cards marked Good or Easy on their FIRST pass. Second-pass answers don't
-/// count.
-int firstPassRightCount(Iterable<ReviewHistoryRecord> history) => history
-    .where(
-      (r) =>
-          r.wasFirstSessionRating &&
-          (r.ratingGiven == SrsRating.good || r.ratingGiven == SrsRating.easy),
-    )
-    .length;
+/// count, and a card reset and re-rated this session counts once.
+int firstPassRightCount(Iterable<ReviewHistoryRecord> history) =>
+    _decidingFirstPassRecords(history)
+        .where(
+          (r) =>
+              r.ratingGiven == SrsRating.good ||
+              r.ratingGiven == SrsRating.easy,
+        )
+        .length;
 
 /// Cards marked Again or Hard on their FIRST pass. Second-pass answers don't
-/// count.
-int firstPassWrongCount(Iterable<ReviewHistoryRecord> history) => history
-    .where(
-      (r) =>
-          r.wasFirstSessionRating &&
-          (r.ratingGiven == SrsRating.again || r.ratingGiven == SrsRating.hard),
-    )
-    .length;
+/// count, and a card reset and re-rated this session counts once.
+int firstPassWrongCount(Iterable<ReviewHistoryRecord> history) =>
+    _decidingFirstPassRecords(history)
+        .where(
+          (r) =>
+              r.ratingGiven == SrsRating.again ||
+              r.ratingGiven == SrsRating.hard,
+        )
+        .length;
 
 /// The rating that currently decides each card, keyed by card id: the answer
 /// at the latest queue position, so a re-queued repeat overrides the first

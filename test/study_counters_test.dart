@@ -99,6 +99,67 @@ void main() {
     });
   });
 
+  group('first-pass counters after a mid-session reset', () {
+    test('Again, reset, then Good counts the card once, as right', () {
+      final a = itemFor('a');
+      final history = [
+        record(a, SrsRating.again, index: 0),
+        // After the reset the card is rated as a first review again.
+        record(a, SrsRating.good, index: 3),
+      ];
+
+      expect(firstPassRightCount(history), 1);
+      expect(firstPassWrongCount(history), 0);
+    });
+
+    test('Good, reset, then Again counts the card once, as wrong', () {
+      final a = itemFor('a');
+      final history = [
+        record(a, SrsRating.good, index: 0),
+        record(a, SrsRating.again, index: 3),
+      ];
+
+      expect(firstPassRightCount(history), 0);
+      expect(firstPassWrongCount(history), 1);
+    });
+
+    test('undoing the post-reset rating makes the earlier one count', () {
+      final a = itemFor('a');
+      final history = [
+        record(a, SrsRating.again, index: 0),
+        record(a, SrsRating.good, index: 3),
+      ]..removeLast();
+
+      expect(firstPassRightCount(history), 0);
+      expect(firstPassWrongCount(history), 1);
+    });
+
+    test('a repeat after the reset-and-re-rate still does not count', () {
+      final a = itemFor('a');
+      final history = [
+        record(a, SrsRating.again, index: 0),
+        record(a, SrsRating.again, index: 3),
+        record(a, SrsRating.good, index: 6, firstSession: false),
+      ];
+
+      expect(firstPassRightCount(history), 0);
+      expect(firstPassWrongCount(history), 1);
+    });
+
+    test('other cards are unaffected by a reset card', () {
+      final a = itemFor('a');
+      final b = itemFor('b');
+      final history = [
+        record(a, SrsRating.again, index: 0),
+        record(b, SrsRating.good, index: 1),
+        record(a, SrsRating.hard, index: 3),
+      ];
+
+      expect(firstPassRightCount(history), 1); // b
+      expect(firstPassWrongCount(history), 1); // a
+    });
+  });
+
   group('distinctCardCount', () {
     test('a re-queued duplicate does not add a card', () {
       final a = itemFor('a');
