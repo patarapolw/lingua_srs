@@ -90,9 +90,7 @@ class BackupService {
               entry.key == _keyDeepSeekApiKey ||
               !_isValidPreference(entry.key, entry.value),
         ) ||
-        lessonMarkdown.entries.any(
-          (entry) => entry.value is! String,
-        )) {
+        lessonMarkdown.entries.any((entry) => entry.value is! String)) {
       throw const FormatException('Invalid LinguaSRS backup data.');
     }
     for (final entry in preferences.entries.toList()) {
