@@ -128,18 +128,27 @@ class VocabItem {
   static String _emphasized(String plain, String? marked) =>
       (marked == null ? null : Sentence.carryEmphasis(marked, plain)) ?? plain;
 
+  /// Whether [category] says the word is a verb or adjective, as `verbs`,
+  /// `Adjectives` and `passive verbs` do. "Adverbs" and "verbal nouns" have
+  /// "verb" in them but are not verbs.
   static bool isVerbOrAdjective(String category) {
-    final lower = category.toLowerCase().trim();
-    return lower == 'verb' ||
-        lower == 'verbs' ||
-        lower == 'adjective' ||
-        lower == 'adjectives' ||
-        lower.contains('verb') ||
-        lower.contains('adjective');
+    final lower = category.toLowerCase().replaceAll(
+      RegExp(r'adverb\w*|verbal nouns?'),
+      '',
+    );
+    return lower.contains('verb') || lower.contains('adjective');
   }
 
   List<String> get effectiveSectionPath =>
       sectionPath.isEmpty ? (pos.isEmpty ? const [] : [pos]) : sectionPath;
+
+  /// What says what kind of word this is: [pos] and the sections the word is
+  /// under. Either can be a category such as "food" instead of a part of
+  /// speech, so a word is not known to be a verb from one of them alone.
+  List<String> get categoryLabels => [
+    for (final label in {pos, ...effectiveSectionPath})
+      if (label.trim().isNotEmpty) label,
+  ];
 
   Map<String, dynamic> toJson() => {
     'id': id,

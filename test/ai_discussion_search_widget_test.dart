@@ -12,6 +12,7 @@ import 'package:lingua_srs/services/lesson_ai_prompt.dart';
 import 'package:lingua_srs/services/storage_service.dart';
 import 'package:lingua_srs/views/ai_discussion_dialog.dart';
 import 'package:lingua_srs/views/recent_ai_discussions_view.dart';
+import 'package:lingua_srs/widgets/ai_question_chip.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -422,6 +423,15 @@ void main() {
 
       expect(find.text('Earlier discussions'), findsNothing);
       expect(find.text('Try asking'), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is Wrap &&
+              widget.children.any((child) => child is AiQuestionChip) &&
+              widget.alignment == WrapAlignment.center,
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('shows nothing extra when there are no earlier discussions', (
@@ -499,6 +509,88 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(AiDiscussionDialog), findsNothing);
+    });
+
+    testWidgets('tapping a suggested question fills the composer', (
+      tester,
+    ) async {
+      final (provider, _) = await loadedProvider(tester);
+      await openDialog(tester, provider, 'v-apple:new');
+      const question = 'Is "사과" Sino-Korean (Hanja) or native Korean?';
+
+      await tester.tap(find.text(question));
+      await tester.pumpAndSettle();
+
+      final composer = tester.widget<TextField>(
+        find.descendant(
+          of: find.byType(AiDiscussionDialog),
+          matching: find.byType(TextField),
+        ),
+      );
+      expect(composer.controller!.text, question);
+      expect(provider.getAiDiscussion('v-apple:new'), isEmpty);
+      expect(
+        find.text('Add your DeepSeek API key in settings first.'),
+        findsNothing,
+      );
+    });
+
+    testWidgets('sending from the composer dismisses the keyboard', (
+      tester,
+    ) async {
+      final (provider, _) = await loadedProvider(tester);
+      await openDialog(tester, provider, 'v-apple:new');
+      final composer = find.descendant(
+        of: find.byType(AiDiscussionDialog),
+        matching: find.byType(TextField),
+      );
+      await tester.showKeyboard(composer);
+      await tester.enterText(composer, 'What does it mean?');
+      expect(tester.testTextInput.isVisible, isTrue);
+
+      await tester.testTextInput.receiveAction(TextInputAction.send);
+      await tester.pumpAndSettle();
+
+      expect(tester.testTextInput.isVisible, isFalse);
+      expect(tester.widget<TextField>(composer).focusNode!.hasFocus, isFalse);
+      expect(
+        find.text('Add your DeepSeek API key in settings first.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('sending collapses suggested questions', (tester) async {
+      final (provider, _) = await loadedProvider(
+        tester,
+        discussions: {
+          'v-apple:new': [
+            _msg('user', 'What is 사과?', 1),
+            _msg('assistant', 'It means apple.', 2),
+          ],
+        },
+      );
+      await openDialog(tester, provider, 'v-apple:new');
+      expect(find.byType(AiQuestionChip), findsWidgets);
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is Wrap &&
+              widget.children.any((child) => child is AiQuestionChip) &&
+              widget.alignment == WrapAlignment.center,
+        ),
+        findsOneWidget,
+      );
+
+      final composer = find.descendant(
+        of: find.byType(AiDiscussionDialog),
+        matching: find.byType(TextField),
+      );
+      await tester.enterText(composer, 'What else can it mean?');
+      await tester.testTextInput.receiveAction(TextInputAction.send);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AiQuestionChip), findsNothing);
+      expect(find.text('Suggested next questions'), findsOneWidget);
     });
   });
 

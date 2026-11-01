@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -6,9 +8,12 @@ import '../models/ai_discussion_message.dart';
 import '../models/lesson.dart';
 import '../providers/app_provider.dart';
 import '../services/ai_discussion_search.dart';
+import '../services/ai_question_suggestions.dart';
 import '../services/deepseek_service.dart';
 import '../services/lesson_ai_prompt.dart';
+import '../services/word_ai_prompt.dart';
 import '../widgets/ai_discussion_suggestion_tile.dart';
+import '../widgets/ai_question_chip.dart';
 import '../widgets/emphasis_text.dart';
 import '../widgets/markdown_content.dart';
 import 'related_ai_discussions_sheet.dart';
@@ -24,6 +29,10 @@ class AiDiscussionDialog extends StatefulWidget {
   final String nativeLanguage;
   final String? sentenceTarget;
   final String? sentenceTranslation;
+
+  /// What the data says about the word's kind (its part of speech and its
+  /// sections), which with the word decides whether to ask about its forms.
+  final List<String> categories;
   final Lesson? lesson;
 
   /// The word or lesson this chat was about no longer exists. The chat opens
@@ -39,6 +48,7 @@ class AiDiscussionDialog extends StatefulWidget {
     required this.nativeLanguage,
     this.sentenceTarget,
     this.sentenceTranslation,
+    this.categories = const [],
     this.lesson,
     this.orphaned = false,
   });
@@ -49,11 +59,21 @@ class AiDiscussionDialog extends StatefulWidget {
 
 class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
   final TextEditingController _questionController = TextEditingController();
+  final FocusNode _questionFocusNode = FocusNode();
   final ScrollController _messagesController = ScrollController();
+  final ExpansibleController _followUpsController = ExpansibleController();
   bool _sending = false;
   String? _error;
   String _streamingAnswer = '';
   bool _wasAtBottom = true;
+
+  /// Questions the AI suggested after the last answer. They are not saved: a
+  /// reopened chat shows only the fixed ones until the next answer.
+  List<String> _aiQuestions = const [];
+
+  /// Counts the questions sent, so that suggestions for an old answer that
+  /// arrive late are dropped.
+  int _suggestionRound = 0;
 
   /// An orphaned chat is only read until the learner chooses to continue.
   late bool _readOnly = widget.orphaned;
@@ -81,7 +101,9 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
   @override
   void dispose() {
     _questionController.dispose();
+    _questionFocusNode.dispose();
     _messagesController.dispose();
+    _followUpsController.dispose();
     super.dispose();
   }
 
@@ -167,43 +189,120 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
               nativeLanguage: widget.nativeLanguage,
             );
     }
-    final sentence = widget.sentenceTarget?.trim();
-    final sentenceTranslation = widget.sentenceTranslation?.trim();
-    return [
-      'You are a helpful language-learning tutor.',
-      'The learner is studying ${widget.targetLanguage} with ${widget.nativeLanguage} support.',
-      'Vocabulary: "${widget.targetWord}" means "${widget.translation}".',
-      if (sentence?.isNotEmpty == true)
-        'Example sentence: "$sentence"${sentenceTranslation?.isNotEmpty == true ? ' (translation: "$sentenceTranslation")' : ''}.',
-      if (sentence?.isNotEmpty == true) 'Earlier messages in this conversation may be about other example sentences of this vocabulary. "This sentence" means the one above.',
-      'Answer questions about this vocabulary and example sentence clearly. Explain nuances and usage when useful.',
-      'Format your answer using Markdown.',
-    ].join('\n');
+    return WordAiPrompt.systemPrompt(
+      targetLanguage: widget.targetLanguage,
+      nativeLanguage: widget.nativeLanguage,
+      targetWord: widget.targetWord,
+      translation: widget.translation,
+      sentenceTarget: widget.sentenceTarget,
+      sentenceTranslation: widget.sentenceTranslation,
+    );
   }
 
-  List<String> _suggestedQuestions(bool hasMessages) {
+  /// The saved conversation as the AI should read it. In a word chat the
+  /// newest question carries the example sentence on the card.
+  List<AiDiscussionMessage> _history(List<AiDiscussionMessage> saved) {
+    if (widget.lesson != null || widget.orphaned) return saved;
+    return WordAiPrompt.withCurrentSentence(
+      saved,
+      sentenceTarget: widget.sentenceTarget,
+      sentenceTranslation: widget.sentenceTranslation,
+    );
+  }
+
+  bool get _hasSentence => widget.sentenceTarget?.trim().isNotEmpty == true;
+
+  bool get _isVerbOrAdjective => AiQuestionSuggestions.isVerbOrAdjective(
+    language: widget.targetLanguage,
+    word: widget.targetWord,
+    categories: widget.categories,
+  );
+
+  /// Questions for a chat that has no messages yet.
+  List<String> _firstQuestions() {
     // The questions are about a word or lesson that is not there to ask about.
     if (widget.orphaned) return const [];
-    if (widget.lesson != null) {
-      return LessonAiPrompt.suggestedQuestions(hasMessages);
-    }
-    final questions = !hasMessages
-        ? [
-            'Explain the etymology and Hanja of "${widget.targetWord}".',
-            if (widget.sentenceTarget?.isNotEmpty == true)
-              'How does this sentence work?',
-            'How is "${widget.targetWord}" used in everyday speech?',
-            'Give me another example sentence with "${widget.targetWord}".',
-          ]
-        : [
-            'Explain the etymology and Hanja of "${widget.targetWord}".',
-            'Can you give another example with "${widget.targetWord}"?',
-            'How would a native speaker say this more naturally?',
-            if (widget.sentenceTarget?.isNotEmpty == true)
-              'What other useful expressions are in this sentence?',
-          ];
+    if (widget.lesson != null) return LessonAiPrompt.suggestedQuestions(false);
+    return AiQuestionSuggestions.wordFirstQuestions(
+      language: widget.targetLanguage,
+      word: widget.targetWord,
+      hasSentence: _hasSentence,
+      verbOrAdjective: _isVerbOrAdjective,
+    );
+  }
 
-    return questions;
+  /// Questions to offer after an answer: fixed ones not asked yet, and the
+  /// AI's suggestions once they have arrived.
+  List<String> _followUpQuestions(List<AiDiscussionMessage> messages) {
+    if (widget.orphaned) return const [];
+    return AiQuestionSuggestions.followUps(
+      hardcoded: widget.lesson != null
+          ? LessonAiPrompt.suggestedQuestions(true)
+          : AiQuestionSuggestions.wordFollowUps(
+              language: widget.targetLanguage,
+              word: widget.targetWord,
+              hasSentence: _hasSentence,
+              verbOrAdjective: _isVerbOrAdjective,
+            ),
+      asked: [
+        for (final message in messages)
+          if (message.role == 'user') message.content,
+      ],
+      ai: _aiQuestions,
+    );
+  }
+
+  /// Asks the AI what the learner may want to ask next. The questions are a
+  /// bonus, so a failure is not shown.
+  Future<void> _loadAiQuestions({
+    required int round,
+    required AppProvider provider,
+    required String question,
+    required String answer,
+  }) async {
+    final language = widget.targetLanguage;
+    if (!AiQuestionSuggestions.supports(language)) return;
+    final isLesson = widget.lesson != null;
+    try {
+      final reply = await DeepSeekService.completeJson(
+        apiKey: provider.deepSeekApiKey,
+        maxTokens: 400,
+        messages: AiQuestionSuggestions.aiRequest(
+          language: language,
+          subject: isLesson
+              ? AiQuestionSuggestions.lessonSubject(
+                  language: language,
+                  title: widget.targetWord,
+                )
+              : AiQuestionSuggestions.wordSubject(
+                  language: language,
+                  word: widget.targetWord,
+                  translation: widget.translation,
+                  verbOrAdjective: _isVerbOrAdjective,
+                ),
+          nativeLanguage: widget.nativeLanguage,
+          question: question,
+          answer: answer,
+          asked: [
+            for (final message in provider.getAiDiscussion(widget.discussionId))
+              if (message.role == 'user') message.content,
+          ],
+          // The fixed questions on screen, which the AI should not repeat.
+          // Its own are not on screen yet.
+          shown: _followUpQuestions(
+            provider.getAiDiscussion(widget.discussionId),
+          ),
+          sentenceTarget: isLesson ? null : widget.sentenceTarget,
+          sentenceTranslation: isLesson ? null : widget.sentenceTranslation,
+        ),
+      );
+      if (!mounted || round != _suggestionRound) return;
+      setState(
+        () => _aiQuestions = AiQuestionSuggestions.parseAiQuestions(reply),
+      );
+    } catch (_) {
+      // The fixed questions are shown without them.
+    }
   }
 
   void _insertNewline() {
@@ -216,6 +315,14 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
       text: text,
       selection: TextSelection.collapsed(offset: start + 1),
     );
+  }
+
+  void _selectSuggestedQuestion(String question) {
+    _questionController.value = TextEditingValue(
+      text: question,
+      selection: TextSelection.collapsed(offset: question.length),
+    );
+    _questionFocusNode.requestFocus();
   }
 
   KeyEventResult _handleComposerKeyEvent(FocusNode node, KeyEvent event) {
@@ -232,21 +339,27 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
     return KeyEventResult.ignored;
   }
 
-  Future<void> _sendQuestion([String? suggestedQuestion]) async {
-    final question = (suggestedQuestion ?? _questionController.text).trim();
+  Future<void> _sendQuestion() async {
+    final question = _questionController.text.trim();
     if (_sending || question.isEmpty) return;
 
+    if (_followUpsController.isExpanded) {
+      _followUpsController.collapse();
+    }
+    FocusScope.of(context).unfocus();
     final provider = context.read<AppProvider>();
     if (provider.deepSeekApiKey.isEmpty) {
       setState(() => _error = 'Add your DeepSeek API key in settings first.');
       return;
     }
 
-    if (suggestedQuestion == null) _questionController.clear();
+    _questionController.clear();
     setState(() {
       _sending = true;
       _error = null;
       _streamingAnswer = '';
+      _aiQuestions = const [];
+      _suggestionRound++;
     });
 
     try {
@@ -256,7 +369,7 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
       );
       final messages = [
         AiDiscussionMessage(role: 'system', content: _systemPrompt()),
-        ...provider.getAiDiscussion(widget.discussionId),
+        ..._history(provider.getAiDiscussion(widget.discussionId)),
       ];
       final answer = StringBuffer();
       await for (final chunk in DeepSeekService.replyStream(
@@ -279,6 +392,16 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
         widget.discussionId,
         AiDiscussionMessage(role: 'assistant', content: answer.toString()),
       );
+      if (!widget.orphaned) {
+        unawaited(
+          _loadAiQuestions(
+            round: _suggestionRound,
+            provider: provider,
+            question: question,
+            answer: answer.toString(),
+          ),
+        );
+      }
     } catch (error) {
       if (mounted) setState(() => _error = 'Could not get an answer: $error');
     } finally {
@@ -303,6 +426,8 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
     final messages = provider.getAiDiscussion(widget.discussionId);
+    final firstQuestions = _firstQuestions();
+    final followUps = _followUpQuestions(messages);
     final theme = Theme.of(context);
     final width = MediaQuery.sizeOf(context).width;
     final height = MediaQuery.sizeOf(context).height;
@@ -445,28 +570,37 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                                     ),
                                   const SizedBox(height: 12),
                                 ],
-                                Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Text(
-                                    'Try asking',
-                                    style: theme.textTheme.labelMedium,
+                                if (firstQuestions.isNotEmpty) ...[
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      'Try asking',
+                                      style: theme.textTheme.labelMedium,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(height: 4),
-                                Wrap(
-                                  spacing: 6,
-                                  runSpacing: 4,
-                                  children: _suggestedQuestions(false)
-                                      .map(
-                                        (question) => ActionChip(
-                                          label: Text(question),
-                                          onPressed: _sending
-                                              ? null
-                                              : () => _sendQuestion(question),
-                                        ),
-                                      )
-                                      .toList(),
-                                ),
+                                  const SizedBox(height: 4),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: Wrap(
+                                      alignment: WrapAlignment.center,
+                                      spacing: 6,
+                                      runSpacing: 6,
+                                      children: firstQuestions
+                                          .map(
+                                            (question) => AiQuestionChip(
+                                              label: question,
+                                              onPressed: _sending
+                                                  ? null
+                                                  : () =>
+                                                        _selectSuggestedQuestion(
+                                                          question,
+                                                        ),
+                                            ),
+                                          )
+                                          .toList(),
+                                    ),
+                                  ),
+                                ],
                               ],
                             ),
                           ),
@@ -535,25 +669,37 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                           },
                         ),
                 ),
-                if (messages.isNotEmpty && _suggestedQuestions(true).isNotEmpty)
+                if (messages.isNotEmpty && followUps.isNotEmpty)
                   ExpansionTile(
+                    controller: _followUpsController,
                     title: Text(
                       'Suggested next questions',
                       style: theme.textTheme.labelMedium,
                     ),
                     tilePadding: EdgeInsets.zero,
+                    expandedAlignment: Alignment.centerLeft,
+                    expandedCrossAxisAlignment: CrossAxisAlignment.start,
                     visualDensity: VisualDensity.compact,
                     initiallyExpanded: height > 1000,
-                    children: _suggestedQuestions(true)
-                        .map(
-                          (question) => ActionChip(
-                            label: Text(question),
-                            onPressed: _sending
-                                ? null
-                                : () => _sendQuestion(question),
-                          ),
-                        )
-                        .toList(),
+                    children: [
+                      SizedBox(
+                        width: double.infinity,
+                        child: Wrap(
+                          alignment: WrapAlignment.center,
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            for (final question in followUps)
+                              AiQuestionChip(
+                                label: question,
+                                onPressed: _sending
+                                    ? null
+                                    : () => _selectSuggestedQuestion(question),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 SizedBox(
                   height: 2,
@@ -596,6 +742,7 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                           onKeyEvent: _handleComposerKeyEvent,
                           child: TextField(
                             controller: _questionController,
+                            focusNode: _questionFocusNode,
                             minLines: 1,
                             maxLines: 4,
                             textCapitalization: TextCapitalization.sentences,
@@ -649,6 +796,7 @@ AiDiscussionDialog aiDiscussionDialogFor(AiDiscussionSummary discussion) {
     nativeLanguage: discussion.lesson?.nativeLanguage ?? 'en',
     sentenceTarget: discussion.sentence?.targetText,
     sentenceTranslation: discussion.sentence?.translationText,
+    categories: discussion.vocab?.categoryLabels ?? const [],
     lesson: discussion.isLesson ? discussion.lesson : null,
     orphaned: discussion.isOrphaned,
   );

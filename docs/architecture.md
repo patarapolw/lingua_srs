@@ -21,6 +21,8 @@ lingua_srs/
 │   │   ├── image_cache_service.dart   # Disk cache for online images in Markdown
 │   │   ├── deepseek_service.dart      # DeepSeek chat client for quiz discussions
 │   │   ├── lesson_ai_prompt.dart      # Prompt, ids and suggestions for lesson AI chats
+│   │   ├── word_ai_prompt.dart        # Prompt for word AI chats, with the current example sentence
+│   │   ├── ai_question_suggestions.dart # Fixed and AI-suggested questions offered in AI chats, per language
 │   │   ├── ai_discussion_search.dart  # Ids, search and related-word suggestions for saved AI chats
 │   │   ├── korean_text_search.dart    # Korean-aware sentence search tokenizer
 │   │   ├── vocab_picker_search.dart   # Ranks vocabulary for the merge picker; scores a typed query
@@ -42,6 +44,7 @@ lingua_srs/
 │   └── widgets/
 │       ├── adaptive_scaffold.dart     # Responsive layout (Rail vs BottomNav)
 │       ├── ai_discussion_suggestion_tile.dart # One suggested AI discussion and why
+│       ├── ai_question_chip.dart              # A suggested question to tap; a long one wraps onto more lines
 │       ├── audio_button.dart          # Audio play/stop indicator
 │       ├── audio_edit_fields.dart     # Audio URL (preview, use-recording checkbox) and collapsible TTS text fields for edit dialogs
 │       ├── emphasis_text.dart         # Sentence text with **bold** segments, no Markdown
