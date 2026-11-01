@@ -128,14 +128,15 @@ class VocabItem {
   static String _emphasized(String plain, String? marked) =>
       (marked == null ? null : Sentence.carryEmphasis(marked, plain)) ?? plain;
 
+  /// Whether [category] says the word is a verb or adjective, as `verbs`,
+  /// `Adjectives` and `passive verbs` do. "Adverbs" and "verbal nouns" have
+  /// "verb" in them but are not verbs.
   static bool isVerbOrAdjective(String category) {
-    final lower = category.toLowerCase().trim();
-    return lower == 'verb' ||
-        lower == 'verbs' ||
-        lower == 'adjective' ||
-        lower == 'adjectives' ||
-        lower.contains('verb') ||
-        lower.contains('adjective');
+    final lower = category.toLowerCase().replaceAll(
+      RegExp(r'adverb\w*|verbal nouns?'),
+      '',
+    );
+    return lower.contains('verb') || lower.contains('adjective');
   }
 
   List<String> get effectiveSectionPath =>
