@@ -104,10 +104,12 @@ void main() {
         expect(
           questions,
           contains(
-            'How is "사과" pronounced? Which sound rules affect it in speech '
-            '(linking, nasalization, tensification)?',
+            'How is "사과" pronounced? Which sound rules affect it in speech?',
           ),
         );
+        // The AI works out which sound rules are meant.
+        expect(questions.join('\n'), isNot(contains('linking')));
+        expect(questions.join('\n'), isNot(contains('nasalization')));
       }
     });
 

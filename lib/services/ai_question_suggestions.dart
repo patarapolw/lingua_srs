@@ -300,9 +300,7 @@ class _KoreanQuestions extends _LanguageQuestions {
     if (hasSentence)
       'What speech level is this sentence in (formality and politeness)? '
           'Show it in the other common levels.',
-    'How is "$word" pronounced? '
-        'Which sound rules affect it in speech '
-        '(linking, nasalization, tensification)?',
+    'How is "$word" pronounced? Which sound rules affect it in speech?',
     'Quiz me on "$word" with 3 short questions.',
     if (hasSentence) 'What other useful expressions are in this sentence?',
     if (verbOrAdjective) _conjugation(word),
