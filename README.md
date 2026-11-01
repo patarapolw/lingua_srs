@@ -4,10 +4,16 @@ SRS that puts language learning first: custom lessons, lesson-by-lesson vocabula
 
 ## Screenshots
 
-<p align="center">
-  <img src="docs/images/desktop-lessons.png" alt="Desktop lessons dashboard with daily review queue" width="74%">
-  <img src="docs/images/android-lessons.png" alt="LinguaSRS lessons dashboard on a Pixel Fold Android emulator" width="20%">
-</p>
+<table>
+  <tr>
+    <th align="center">Desktop</th>
+    <th align="center">Android</th>
+  </tr>
+  <tr>
+    <td valign="top"><img src="docs/images/desktop-lessons.png" alt="Desktop lessons dashboard with daily review queue" width="100%"></td>
+    <td valign="top"><img src="docs/images/android-lessons.png" alt="LinguaSRS lessons dashboard on Android" width="100%"></td>
+  </tr>
+</table>
 
 <details>
 <summary>More desktop screenshots</summary>
