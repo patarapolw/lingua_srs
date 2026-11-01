@@ -1919,11 +1919,29 @@ class AppProvider extends ChangeNotifier {
 
     if (dueOnly && !mistakesOnly) {
       // Reviews first, then new cards; each has its own rolling 24h limit.
-      // Lesson order is kept within both groups.
+      // New cards follow hierarchy order and favor lessons already in progress.
       final due = <StudyCardItem>[];
       final newCards = <StudyCardItem>[];
       for (final item in queue) {
         (item.card.isNewCard ? newCards : due).add(item);
+      }
+      final newCardsInPriorityOrder = <StudyCardItem>[];
+      final otherNewCards = <StudyCardItem>[];
+      final newCardsByLesson = <String, List<StudyCardItem>>{};
+      for (final item in newCards) {
+        newCardsByLesson.putIfAbsent(item.lesson.id, () => []).add(item);
+      }
+      for (final lesson in _orderedLessons()) {
+        final lessonCards = newCardsByLesson.remove(lesson.id);
+        if (lessonCards == null) continue;
+        final hasStarted = lesson.vocabularies.any(
+          (vocab) =>
+              vocab.cardTargetToNative.introducedAt != null ||
+              vocab.cardNativeToTarget.introducedAt != null,
+        );
+        (hasStarted ? newCardsInPriorityOrder : otherNewCards).addAll(
+          lessonCards,
+        );
       }
       // Sub-24h intervals (1 h / 12 h) ignore the review limit and do not use
       // up any of its quota.
@@ -1937,10 +1955,68 @@ class AppProvider extends ChangeNotifier {
           reviewBudget--;
         }
       }
-      return [...reviews, ...newCards.take(remainingNewCards24h)];
+      final prioritizedNewCards = [
+        ...newCardsInPriorityOrder,
+        ...otherNewCards,
+      ].take(remainingNewCards24h);
+      return [...reviews, ...prioritizedNewCards];
     }
 
     return queue;
+  }
+
+  List<Lesson> _orderedLessons() {
+    final lastSavedRank = _lessonHierarchyOrder.values.fold<int>(
+      -1,
+      (maximum, rank) => rank > maximum ? rank : maximum,
+    );
+    final folderOrigins = <String, int>{};
+    for (var index = 0; index < _lessons.length; index++) {
+      final path = <String>[];
+      for (final folder in _lessons[index].folderPath) {
+        path.add(folder);
+        folderOrigins.putIfAbsent(hierarchyFolderKey(path), () => index);
+      }
+    }
+
+    final ranksByLesson = <String, List<int>>{};
+    for (var index = 0; index < _lessons.length; index++) {
+      final lesson = _lessons[index];
+      final ranks = <int>[];
+      final path = <String>[];
+      for (final folder in lesson.folderPath) {
+        path.add(folder);
+        final key = hierarchyFolderKey(path);
+        ranks.add(
+          _lessonHierarchyOrder[key] ?? lastSavedRank + folderOrigins[key]! + 1,
+        );
+      }
+      final key = 'lesson:${lesson.id}';
+      ranks.add(_lessonHierarchyOrder[key] ?? lastSavedRank + index + 1);
+      ranksByLesson[lesson.id] = ranks;
+    }
+
+    final originalIndexes = {
+      for (var index = 0; index < _lessons.length; index++)
+        _lessons[index].id: index,
+    };
+    final ordered = [..._lessons];
+    ordered.sort((first, second) {
+      final firstRanks = ranksByLesson[first.id]!;
+      final secondRanks = ranksByLesson[second.id]!;
+      for (
+        var index = 0;
+        index < min(firstRanks.length, secondRanks.length);
+        index++
+      ) {
+        final comparison = firstRanks[index].compareTo(secondRanks[index]);
+        if (comparison != 0) return comparison;
+      }
+      final lengthComparison = firstRanks.length.compareTo(secondRanks.length);
+      if (lengthComparison != 0) return lengthComparison;
+      return originalIndexes[first.id]!.compareTo(originalIndexes[second.id]!);
+    });
+    return ordered;
   }
 
   List<StudyCardItem> getRecentMistakesQueue({String? lessonId}) =>
