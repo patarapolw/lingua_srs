@@ -91,7 +91,7 @@ class BackupService {
               !_isValidPreference(entry.key, entry.value),
         ) ||
         lessonMarkdown.entries.any(
-          (entry) => entry.key is! String || entry.value is! String,
+          (entry) => entry.value is! String,
         )) {
       throw const FormatException('Invalid LinguaSRS backup data.');
     }

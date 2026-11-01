@@ -135,6 +135,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
   }
 
   Future<void> _restoreData() async {
+    final provider = context.read<AppProvider>();
     setState(() => _saving = true);
     try {
       final files = await FilePicker.pickFiles(
@@ -166,7 +167,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
 
       final bytes = await files.single.readAsBytes();
       await BackupService.restoreBackup(utf8.decode(bytes));
-      await context.read<AppProvider>().init();
+      await provider.init();
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text('Backup restored.')));
