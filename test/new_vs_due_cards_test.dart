@@ -292,16 +292,12 @@ void main() {
 
     test('new cards follow saved unit ordering', () async {
       final provider = await newProvider(maxNewCards: 1);
-      final laterUnit = lessonWith(
-        'Later',
-        [newVocab('나중')],
-        unitTitle: 'Later Unit',
-      );
-      final movedUnit = lessonWith(
-        'Moved',
-        [newVocab('먼저')],
-        unitTitle: 'Moved Unit',
-      );
+      final laterUnit = lessonWith('Later', [
+        newVocab('나중'),
+      ], unitTitle: 'Later Unit');
+      final movedUnit = lessonWith('Moved', [
+        newVocab('먼저'),
+      ], unitTitle: 'Moved Unit');
       provider.lessons.addAll([laterUnit, movedUnit]);
       await provider.saveLessonHierarchyOrder([
         'folder:moved unit',

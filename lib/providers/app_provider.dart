@@ -1975,10 +1975,7 @@ class AppProvider extends ChangeNotifier {
       final path = <String>[];
       for (final folder in _lessons[index].folderPath) {
         path.add(folder);
-        folderOrigins.putIfAbsent(
-          hierarchyFolderKey(path),
-          () => index,
-        );
+        folderOrigins.putIfAbsent(hierarchyFolderKey(path), () => index);
       }
     }
 
@@ -1991,8 +1988,7 @@ class AppProvider extends ChangeNotifier {
         path.add(folder);
         final key = hierarchyFolderKey(path);
         ranks.add(
-          _lessonHierarchyOrder[key] ??
-              lastSavedRank + folderOrigins[key]! + 1,
+          _lessonHierarchyOrder[key] ?? lastSavedRank + folderOrigins[key]! + 1,
         );
       }
       final key = 'lesson:${lesson.id}';
