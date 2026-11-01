@@ -571,6 +571,15 @@ void main() {
       );
       await openDialog(tester, provider, 'v-apple:new');
       expect(find.byType(AiQuestionChip), findsWidgets);
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is Wrap &&
+              widget.children.any((child) => child is AiQuestionChip) &&
+              widget.alignment == WrapAlignment.center,
+        ),
+        findsOneWidget,
+      );
 
       final composer = find.descendant(
         of: find.byType(AiDiscussionDialog),

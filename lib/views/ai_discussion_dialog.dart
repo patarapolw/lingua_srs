@@ -682,16 +682,23 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                     visualDensity: VisualDensity.compact,
                     initiallyExpanded: height > 1000,
                     children: [
-                      for (final question in followUps)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 6),
-                          child: AiQuestionChip(
-                            label: question,
-                            onPressed: _sending
-                                ? null
-                                : () => _selectSuggestedQuestion(question),
-                          ),
+                      SizedBox(
+                        width: double.infinity,
+                        child: Wrap(
+                          alignment: WrapAlignment.center,
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            for (final question in followUps)
+                              AiQuestionChip(
+                                label: question,
+                                onPressed: _sending
+                                    ? null
+                                    : () => _selectSuggestedQuestion(question),
+                              ),
+                          ],
                         ),
+                      ),
                     ],
                   ),
                 SizedBox(
