@@ -322,7 +322,7 @@ void main() {
             direction: CardDirection.targetToNative,
             status: SrsStatus.review,
             dueDate: DateTime.now().add(const Duration(days: 1)),
-            introducedAt: DateTime.now(),
+            introducedAt: DateTime.now().subtract(const Duration(days: 2)),
           ),
         ),
         newVocab('계속'),
