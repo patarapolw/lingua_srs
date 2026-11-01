@@ -44,12 +44,13 @@ void main() {
       expect(longSize.height, greaterThan(shortSize.height * 2));
     });
 
-    testWidgets('shows the whole question', (tester) async {
+    testWidgets('shows the whole question, centered', (tester) async {
       await tester.pumpWidget(
         _host([AiQuestionChip(label: _long, onPressed: () {})]),
       );
 
       final text = tester.widget<Text>(find.text(_long));
+      expect(text.textAlign, TextAlign.center);
       expect(text.maxLines, isNull);
       expect(text.softWrap, isNull);
       expect(text.overflow, isNull);

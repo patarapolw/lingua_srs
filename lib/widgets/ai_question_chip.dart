@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 ///
 /// It looks like an outlined chip, but a long question breaks onto more lines
 /// instead of being cut off at the edge of the screen, which is what the label
-/// of a Material chip does: it is kept on one line.
+/// of a Material chip does: it is kept on one line. The lines of a long
+/// question are centered.
 class AiQuestionChip extends StatelessWidget {
   final String label;
 
@@ -38,6 +39,7 @@ class AiQuestionChip extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: Text(
               label,
+              textAlign: TextAlign.center,
               style: theme.textTheme.labelLarge?.copyWith(
                 color: enabled
                     ? colors.onSurfaceVariant
