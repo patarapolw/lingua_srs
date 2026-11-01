@@ -208,8 +208,12 @@ void main() {
       ),
     );
 
-    Lesson lessonWith(String title, List<VocabItem> vocab) {
-      final lesson = Lesson(title: title);
+    Lesson lessonWith(
+      String title,
+      List<VocabItem> vocab, {
+      String? unitTitle,
+    }) {
+      final lesson = Lesson(title: title, unitTitle: unitTitle);
       lesson.vocabularies.addAll(vocab);
       return lesson;
     }
@@ -269,6 +273,71 @@ void main() {
         expect(queue.where((item) => item.card.isNewCard), hasLength(3));
       },
     );
+
+    test('new cards follow saved lesson ordering', () async {
+      final provider = await newProvider(maxNewCards: 1);
+      final first = lessonWith('First', [newVocab('하나')]);
+      final movedUp = lessonWith('Moved up', [newVocab('둘')]);
+      provider.lessons.addAll([first, movedUp]);
+      await provider.saveLessonHierarchyOrder([
+        'lesson:${movedUp.id}',
+        'lesson:${first.id}',
+      ]);
+
+      expect(
+        provider.getStudyQueue(dueOnly: true).single.lesson.id,
+        movedUp.id,
+      );
+    });
+
+    test('new cards follow saved unit ordering', () async {
+      final provider = await newProvider(maxNewCards: 1);
+      final laterUnit = lessonWith(
+        'Later',
+        [newVocab('나중')],
+        unitTitle: 'Later Unit',
+      );
+      final movedUnit = lessonWith(
+        'Moved',
+        [newVocab('먼저')],
+        unitTitle: 'Moved Unit',
+      );
+      provider.lessons.addAll([laterUnit, movedUnit]);
+      await provider.saveLessonHierarchyOrder([
+        'folder:moved unit',
+        'folder:later unit',
+      ]);
+
+      expect(
+        provider.getStudyQueue(dueOnly: true).single.lesson.id,
+        movedUnit.id,
+      );
+    });
+
+    test('new cards finish an already-started lesson first', () async {
+      final provider = await newProvider(maxNewCards: 1);
+      final notStarted = lessonWith('Not started', [newVocab('새')]);
+      final started = lessonWith('Started', [
+        VocabItem(
+          targetWord: '진행',
+          translation: 'in progress',
+          pos: 'nouns',
+          cardTargetToNative: SrsCard(
+            direction: CardDirection.targetToNative,
+            status: SrsStatus.review,
+            dueDate: DateTime.now().add(const Duration(days: 1)),
+            introducedAt: DateTime.now(),
+          ),
+        ),
+        newVocab('계속'),
+      ]);
+      provider.lessons.addAll([notStarted, started]);
+
+      expect(
+        provider.getStudyQueue(dueOnly: true).single.lesson.id,
+        started.id,
+      );
+    });
 
     test('the review limit caps due cards without touching new ones', () async {
       final provider = await newProvider(maxReviews: 1);
