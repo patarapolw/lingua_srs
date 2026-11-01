@@ -36,16 +36,15 @@ class _AnswerWorkspaceState extends State<AnswerWorkspace> {
   final _textController = TextEditingController();
   final _canvasKey = GlobalKey();
   final List<_AnswerStroke> _strokes = [];
-  late _AnswerMode _mode = _isDesktop
-      ? _AnswerMode.type
-      : _AnswerMode.draw;
+  late _AnswerMode _mode = _isDesktop ? _AnswerMode.type : _AnswerMode.draw;
   Color _color = Colors.black;
   bool _eraser = false;
   bool _drawing = false;
 
   bool get _isDesktop => switch (defaultTargetPlatform) {
-    TargetPlatform.windows || TargetPlatform.macOS || TargetPlatform.linux =>
-      true,
+    TargetPlatform.windows ||
+    TargetPlatform.macOS ||
+    TargetPlatform.linux => true,
     _ => false,
   };
 
@@ -99,7 +98,7 @@ class _AnswerWorkspaceState extends State<AnswerWorkspace> {
 
   KeyEventResult _handleTextKey(FocusNode node, KeyEvent event) {
     if (event is KeyDownEvent &&
-        event.isControlPressed &&
+        HardwareKeyboard.instance.isControlPressed &&
         (event.logicalKey == LogicalKeyboardKey.enter ||
             event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
       widget.onSubmit();
@@ -122,33 +121,41 @@ class _AnswerWorkspaceState extends State<AnswerWorkspace> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Your answer',
-                  style: theme.textTheme.titleSmall,
-                ),
-              ),
-              SegmentedButton<_AnswerMode>(
-                showSelectedIcon: false,
-                segments: const [
-                  ButtonSegment(
-                    value: _AnswerMode.draw,
-                    icon: Icon(Icons.draw_outlined),
-                    label: Text('Draw'),
-                  ),
-                  ButtonSegment(
-                    value: _AnswerMode.type,
-                    icon: Icon(Icons.keyboard_outlined),
-                    label: Text('Type'),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 240;
+              return Row(
+                children: [
+                  if (!compact)
+                    Expanded(
+                      child: Text(
+                        'Your answer',
+                        style: theme.textTheme.titleSmall,
+                      ),
+                    ),
+                  SegmentedButton<_AnswerMode>(
+                    showSelectedIcon: false,
+                    segments: [
+                      ButtonSegment(
+                        value: _AnswerMode.draw,
+                        icon: const Icon(Icons.draw_outlined),
+                        label: compact ? null : const Text('Draw'),
+                        tooltip: 'Draw answer',
+                      ),
+                      ButtonSegment(
+                        value: _AnswerMode.type,
+                        icon: const Icon(Icons.keyboard_outlined),
+                        label: compact ? null : const Text('Type'),
+                        tooltip: 'Type answer',
+                      ),
+                    ],
+                    selected: {_mode},
+                    onSelectionChanged: (selection) =>
+                        setState(() => _mode = selection.first),
                   ),
                 ],
-                selected: {_mode},
-                onSelectionChanged: (selection) =>
-                    setState(() => _mode = selection.first),
-              ),
-            ],
+              );
+            },
           ),
           const SizedBox(height: 8),
           if (_mode == _AnswerMode.draw) ...[
@@ -164,11 +171,7 @@ class _AnswerWorkspaceState extends State<AnswerWorkspace> {
                       _color = entry.value;
                       _eraser = false;
                     }),
-                    icon: Icon(
-                      Icons.circle,
-                      color: entry.value,
-                      size: 20,
-                    ),
+                    icon: Icon(Icons.circle, color: entry.value, size: 20),
                     style: IconButton.styleFrom(
                       side: _color == entry.value && !_eraser
                           ? BorderSide(color: theme.colorScheme.primary)

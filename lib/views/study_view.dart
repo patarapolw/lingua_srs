@@ -735,7 +735,7 @@ class _StudyViewState extends State<StudyView> {
     // Typing a review note must not trigger flip/rate/audio shortcuts.
     if (isEditingText()) return;
 
-    if (event.isControlPressed &&
+    if (HardwareKeyboard.instance.isControlPressed &&
         (event.logicalKey == LogicalKeyboardKey.enter ||
             event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
       if (_isAnswerRevealed) {

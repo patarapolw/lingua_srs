@@ -11,9 +11,7 @@ void main() {
       var submits = 0;
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: AnswerWorkspace(onSubmit: () => submits++),
-          ),
+          home: Scaffold(body: AnswerWorkspace(onSubmit: () => submits++)),
         ),
       );
       await tester.tap(find.text('Type'));
@@ -81,6 +79,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), 'answer');
       await tester.tap(find.text('Next card'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Type'));
       await tester.pumpAndSettle();
       expect(
         tester.widget<TextField>(find.byType(TextField)).controller!.text,
