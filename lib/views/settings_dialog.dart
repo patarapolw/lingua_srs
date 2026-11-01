@@ -1,7 +1,12 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/app_provider.dart';
+import '../services/backup_service.dart';
 import '../widgets/icon_switch.dart';
 
 class SettingsDialog extends StatefulWidget {
@@ -98,6 +103,79 @@ class _SettingsDialogState extends State<SettingsDialog> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Could not remove DeepSeek API key: $error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _backupData() async {
+    setState(() => _saving = true);
+    try {
+      final backup = await BackupService.createBackup();
+      final saved = await FilePicker.saveFile(
+        dialogTitle: 'Save LinguaSRS backup',
+        fileName: 'lingua_srs_backup.json',
+        bytes: Uint8List.fromList(utf8.encode(backup)),
+      );
+      if (saved != null && mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Backup saved.')));
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not create backup: $error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _restoreData() async {
+    setState(() => _saving = true);
+    try {
+      final files = await FilePicker.pickFiles(
+        dialogTitle: 'Select LinguaSRS backup',
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+      );
+      if (files.isEmpty || !mounted) return;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Restore backup?'),
+          content: const Text(
+            'This replaces the app data on this device. Your DeepSeek API key will remain on this device.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Restore'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+
+      final bytes = await files.single.readAsBytes();
+      await BackupService.restoreBackup(utf8.decode(bytes));
+      await context.read<AppProvider>().init();
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Backup restored.')));
+        Navigator.of(context).pop();
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not restore backup: $error')),
         );
       }
     } finally {
@@ -204,6 +282,28 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     }),
                   );
                 }).toList(),
+              ),
+              const SizedBox(height: 24),
+              Text('Backup and restore', style: theme.textTheme.titleSmall),
+              const SizedBox(height: 8),
+              const Text(
+                'Save your lessons and study progress to a file, or restore them on this device. The DeepSeek API key is not included.',
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: _saving ? null : _backupData,
+                    icon: const Icon(Icons.download),
+                    label: const Text('Back up'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _saving ? null : _restoreData,
+                    icon: const Icon(Icons.upload),
+                    label: const Text('Restore'),
+                  ),
+                ],
               ),
               const SizedBox(height: 24),
               Text('AI discussions', style: theme.textTheme.titleSmall),

@@ -396,6 +396,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Max reviews per 24 hours'), findsOneWidget);
     expect(find.text('DeepSeek API key'), findsOneWidget);
+    expect(find.text('Back up'), findsOneWidget);
+    expect(find.text('Restore'), findsOneWidget);
   });
 
   testWidgets('Merge menu is hidden without a DeepSeek key or history', (
