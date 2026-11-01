@@ -15,6 +15,7 @@ import '../services/ai_discussion_search.dart';
 import '../services/audio_service.dart';
 import '../services/srs_service.dart';
 import '../widgets/audio_button.dart';
+import '../widgets/answer_workspace.dart';
 import '../widgets/emphasis_text.dart';
 import '../widgets/markdown_content.dart';
 import '../widgets/pronunciation_line.dart';
@@ -724,6 +725,17 @@ class _StudyViewState extends State<StudyView> {
     if (event is! KeyDownEvent) return;
     // Typing a review note must not trigger flip/rate/audio shortcuts.
     if (isEditingText()) return;
+
+    if (event.isControlPressed &&
+        (event.logicalKey == LogicalKeyboardKey.enter ||
+            event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
+      if (_isAnswerRevealed) {
+        _rateCard(SrsRating.good);
+      } else {
+        _revealAnswer();
+      }
+      return;
+    }
 
     // Space: Flip between Front and Back
     if (event.logicalKey == LogicalKeyboardKey.space) {
@@ -1523,27 +1535,6 @@ class _StudyViewState extends State<StudyView> {
                                   ],
 
                                   const SizedBox(height: 28),
-                                  Center(
-                                    child: FilledButton.icon(
-                                      style: FilledButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 36,
-                                          vertical: 16,
-                                        ),
-                                        textStyle: const TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      icon: const Icon(Icons.touch_app),
-                                      label: Text(
-                                        _showKeyHints
-                                            ? 'Show Answer (Space / Enter)'
-                                            : 'Show Answer',
-                                      ),
-                                      onPressed: _revealAnswer,
-                                    ),
-                                  ),
                                 ]
                                 // ---------------- BACK VIEW ----------------
                                 else ...[
@@ -1748,6 +1739,36 @@ class _StudyViewState extends State<StudyView> {
                                             : 'Flip back to Front',
                                       ),
                                       onPressed: _toggleFlip,
+                                    ),
+                                  ),
+                                ],
+                                AnswerWorkspace(
+                                  key: ValueKey(
+                                    'answer-$_currentIndex-${item.card.id}',
+                                  ),
+                                  onSubmit: _revealAnswer,
+                                ),
+                                if (!_isAnswerRevealed) ...[
+                                  const SizedBox(height: 16),
+                                  Center(
+                                    child: FilledButton.icon(
+                                      style: FilledButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 36,
+                                          vertical: 16,
+                                        ),
+                                        textStyle: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      icon: const Icon(Icons.touch_app),
+                                      label: Text(
+                                        _showKeyHints
+                                            ? 'Show Answer (Space / Enter)'
+                                            : 'Show Answer',
+                                      ),
+                                      onPressed: _revealAnswer,
                                     ),
                                   ),
                                 ],
