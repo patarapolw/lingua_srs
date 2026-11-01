@@ -29,7 +29,7 @@ void main() {
         ),
       );
       expect(find.byType(TextField), findsNothing);
-      await tester.tap(find.text('Scratchpad'));
+      await tester.tap(find.text('Your answer'));
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Type'));
       await tester.pumpAndSettle();
@@ -46,7 +46,7 @@ void main() {
       await tester.tap(find.byTooltip('Hide scratchpad'));
       await tester.pumpAndSettle();
       expect(find.byType(TextField), findsNothing);
-      await tester.tap(find.text('Scratchpad'));
+      await tester.tap(find.text('Your answer'));
       await tester.pumpAndSettle();
       expect(find.text('안녕하세요'), findsOneWidget);
     });
@@ -60,7 +60,7 @@ void main() {
         ),
       );
       expect(find.byKey(const ValueKey('answer-drawing-canvas')), findsNothing);
-      await tester.tap(find.text('Scratchpad'));
+      await tester.tap(find.text('Your answer'));
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Draw'));
       await tester.pumpAndSettle();
@@ -119,14 +119,14 @@ void main() {
           ),
         ),
       );
-      await tester.tap(find.text('Scratchpad'));
+      await tester.tap(find.text('Your answer'));
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Type'));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), 'answer');
       await tester.tap(find.text('Next card'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Scratchpad'));
+      await tester.tap(find.text('Your answer'));
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Type'));
       await tester.pumpAndSettle();
