@@ -555,19 +555,25 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                                     ),
                                   ),
                                   const SizedBox(height: 4),
-                                  Wrap(
-                                    spacing: 6,
-                                    runSpacing: 6,
-                                    children: firstQuestions
-                                        .map(
-                                          (question) => AiQuestionChip(
-                                            label: question,
-                                            onPressed: _sending
-                                                ? null
-                                                : () => _sendQuestion(question),
-                                          ),
-                                        )
-                                        .toList(),
+                                  // Full width, so that the chips start at the
+                                  // left instead of being centered as a group.
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: Wrap(
+                                      spacing: 6,
+                                      runSpacing: 6,
+                                      children: firstQuestions
+                                          .map(
+                                            (question) => AiQuestionChip(
+                                              label: question,
+                                              onPressed: _sending
+                                                  ? null
+                                                  : () =>
+                                                        _sendQuestion(question),
+                                            ),
+                                          )
+                                          .toList(),
+                                    ),
                                   ),
                                 ],
                               ],
@@ -645,6 +651,8 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                       style: theme.textTheme.labelMedium,
                     ),
                     tilePadding: EdgeInsets.zero,
+                    expandedAlignment: Alignment.centerLeft,
+                    expandedCrossAxisAlignment: CrossAxisAlignment.start,
                     visualDensity: VisualDensity.compact,
                     initiallyExpanded: height > 1000,
                     children: [
