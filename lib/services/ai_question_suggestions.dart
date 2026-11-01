@@ -23,8 +23,11 @@ class AiQuestionSuggestions {
   /// list there is room for [maxQuestions] - their count.
   static const maxFixedQuestions = 3;
 
-  /// Longest AI question that is shown, so that a chip stays a chip.
-  static const maxAiQuestionLength = 120;
+  /// What the AI is told to keep its questions to, so that a chip stays short.
+  static const maxAiQuestionWords = 8;
+
+  /// Longest AI question that is shown, in case it did not keep to that.
+  static const maxAiQuestionLength = 80;
 
   static const Map<String, _LanguageQuestions> _languages = {
     'ko': _KoreanQuestions(),
@@ -67,15 +70,20 @@ class AiQuestionSuggestions {
       ) ??
       const [];
 
-  /// What the AI is asked about when it suggests questions about a word.
+  /// What the AI is asked about when it suggests questions about a word. A verb
+  /// or adjective is on the card in its dictionary form, and the AI is told.
   static String wordSubject({
     required String language,
     required String word,
     required String translation,
+    bool verbOrAdjective = false,
   }) {
     final name = _require(language).name;
     final meaning = translation.trim();
-    return 'the $name word "$word"${meaning.isEmpty ? '' : ' ($meaning)'}';
+    final kind = verbOrAdjective ? 'verb or adjective' : 'word';
+    return 'the $name $kind "$word"'
+        '${meaning.isEmpty ? '' : ' ($meaning)'}'
+        '${verbOrAdjective ? ', given in its dictionary form' : ''}';
   }
 
   /// What the AI is asked about when it suggests questions about a lesson.
@@ -134,6 +142,7 @@ class AiQuestionSuggestions {
     required String question,
     required String answer,
     required Iterable<String> asked,
+    Iterable<String> shown = const [],
     String? sentenceTarget,
     String? sentenceTranslation,
   }) {
@@ -153,13 +162,19 @@ class AiQuestionSuggestions {
         content: [
           'You suggest follow-up questions for a learner of ${questions.name}.',
           'Reply with JSON only: {"questions": ["...", "..."]}',
-          'Suggest $maxAiQuestions short questions (under 12 words each) '
-              'the learner would likely ask next about $subject.',
+          'Suggest $maxAiQuestions questions the learner would likely ask '
+              'next about $subject.',
+          'Each is one short question of at most $maxAiQuestionWords words '
+              '(about 50 characters).',
           questions.practicalFocus,
           'Write them in the learner\'s native language ($nativeLanguage), '
               'as the learner would type them.',
-          'Each question must make sense on its own.',
-          'Never repeat or reword a question that was already asked.',
+          'Each question must make sense on its own. '
+              'Say "this sentence" only if an example sentence is given.',
+          'Never repeat or reword a question that was already asked '
+              'or is already on screen.',
+          'Examples of the style, not to be copied: '
+              '${questions.exampleQuestions.map((q) => '"$q"').join(', ')}',
         ].join('\n'),
       ),
       AiDiscussionMessage(
@@ -174,6 +189,10 @@ class AiQuestionSuggestions {
           if (earlier.isNotEmpty) ...[
             'Already asked:',
             for (final q in earlier) '- $q',
+          ],
+          if (shown.isNotEmpty) ...[
+            'Already on screen:',
+            for (final q in shown) '- ${_clip(q, 120)}',
           ],
         ].join('\n'),
       ),
@@ -248,6 +267,9 @@ abstract class _LanguageQuestions {
   /// useful to a learner of this language.
   String get practicalFocus;
 
+  /// A few short questions that show the AI the style that is wanted.
+  List<String> get exampleQuestions;
+
   /// For a chat with no messages. [AiQuestionSuggestions.maxQuestions] of them
   /// are shown, from the first.
   List<String> wordFirst({
@@ -273,7 +295,17 @@ class _KoreanQuestions extends _LanguageQuestions {
   @override
   String get practicalFocus =>
       'Favor practical use: real sentences, how it sounds, '
-      'how Koreans actually say it.';
+      'how Koreans actually say it. '
+      'A noun has a register (casual, neutral, formal, honorific words), not '
+      'speech levels. A verb or adjective takes speech-level endings, and its '
+      'dictionary form has none.';
+
+  @override
+  List<String> get exampleQuestions => const [
+    'How do I say this politely?',
+    'What are common mistakes with this word?',
+    'Show me a short dialogue using it.',
+  ];
 
   // A verb or adjective is on the card in its dictionary form, so what is
   // asked about it is its forms, and speech levels show in the endings. A noun

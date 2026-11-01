@@ -272,6 +272,7 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                   language: language,
                   word: widget.targetWord,
                   translation: widget.translation,
+                  verbOrAdjective: _isVerbOrAdjective,
                 ),
           nativeLanguage: widget.nativeLanguage,
           question: question,
@@ -280,6 +281,11 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
             for (final message in provider.getAiDiscussion(widget.discussionId))
               if (message.role == 'user') message.content,
           ],
+          // The fixed questions on screen, which the AI should not repeat.
+          // Its own are not on screen yet.
+          shown: _followUpQuestions(
+            provider.getAiDiscussion(widget.discussionId),
+          ),
           sentenceTarget: isLesson ? null : widget.sentenceTarget,
           sentenceTranslation: isLesson ? null : widget.sentenceTranslation,
         ),

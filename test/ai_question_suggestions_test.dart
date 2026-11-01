@@ -297,6 +297,28 @@ void main() {
       );
     });
 
+    test('tells the AI a verb or adjective is in its dictionary form', () {
+      expect(
+        AiQuestionSuggestions.wordSubject(
+          language: 'ko',
+          word: '먹다',
+          translation: 'to eat',
+          verbOrAdjective: true,
+        ),
+        'the Korean verb or adjective "먹다" (to eat), '
+        'given in its dictionary form',
+      );
+      expect(
+        AiQuestionSuggestions.wordSubject(
+          language: 'ko',
+          word: '먹다',
+          translation: '',
+          verbOrAdjective: true,
+        ),
+        'the Korean verb or adjective "먹다", given in its dictionary form',
+      );
+    });
+
     test('will not build a request or a subject for another language', () {
       expect(
         () => AiQuestionSuggestions.aiRequest(
@@ -491,6 +513,71 @@ void main() {
       expect(messages[0].content, contains('practical'));
     });
 
+    test('asks for questions of a few words', () {
+      final system = AiQuestionSuggestions.aiRequest(
+        language: 'ko',
+        subject: 's',
+        nativeLanguage: 'en',
+        question: 'q',
+        answer: 'a',
+        asked: const [],
+      )[0].content;
+
+      expect(system, contains('at most 8 words'));
+      expect(system, contains('(about 50 characters)'));
+    });
+
+    test('tells the AI what a noun, a verb and a sentence have', () {
+      final system = AiQuestionSuggestions.aiRequest(
+        language: 'ko',
+        subject: 's',
+        nativeLanguage: 'en',
+        question: 'q',
+        answer: 'a',
+        asked: const [],
+      )[0].content;
+
+      expect(system, contains('A noun has a register'));
+      expect(system, contains('not speech levels'));
+      expect(system, contains('dictionary form has none'));
+      expect(system, contains('Say "this sentence" only if an example'));
+    });
+
+    test('shows the AI the style of question that is wanted', () {
+      final system = AiQuestionSuggestions.aiRequest(
+        language: 'ko',
+        subject: 's',
+        nativeLanguage: 'en',
+        question: 'q',
+        answer: 'a',
+        asked: const [],
+      )[0].content;
+
+      expect(system, contains('not to be copied'));
+      expect(system, contains('"How do I say this politely?"'));
+    });
+
+    test('lists the questions on screen after the ones asked', () {
+      final messages = AiQuestionSuggestions.aiRequest(
+        language: 'ko',
+        subject: 's',
+        nativeLanguage: 'en',
+        question: 'q',
+        answer: 'a',
+        asked: const ['Asked?'],
+        shown: const ['On screen 1?', 'On screen 2?'],
+      );
+
+      expect(userLines(messages).skip(3), [
+        'Already asked:',
+        '- Asked?',
+        'Already on screen:',
+        '- On screen 1?',
+        '- On screen 2?',
+      ]);
+      expect(messages[0].content, contains('or is already on screen'));
+    });
+
     test('tells the AI the subject, the last exchange and what was asked', () {
       final messages = AiQuestionSuggestions.aiRequest(
         language: 'ko',
@@ -546,6 +633,7 @@ void main() {
 
       expect(messages[1].content, isNot(contains('Example sentence')));
       expect(messages[1].content, isNot(contains('Already asked')));
+      expect(messages[1].content, isNot(contains('Already on screen')));
     });
 
     test('cuts a long answer short', () {
@@ -612,6 +700,15 @@ void main() {
           '"$justRight"]}',
         ),
         ['One?', justRight],
+      );
+    });
+
+    test('keeps a question of 80 characters and drops one of 81', () {
+      expect(
+        AiQuestionSuggestions.parseAiQuestions(
+          '{"questions": ["${'a' * 81}", "${'b' * 80}"]}',
+        ),
+        ['b' * 80],
       );
     });
 
