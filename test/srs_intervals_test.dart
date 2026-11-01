@@ -91,6 +91,49 @@ void main() {
     });
   });
 
+  group('Good growth', () {
+    test('Good always leaves a 1 day card, even at the ease floor', () {
+      final card = cardWith(interval: 1, repetitions: 5, easeFactor: 1.3);
+
+      final intervals = <int>[];
+      for (var i = 0; i < 6; i++) {
+        SrsService.processReview(card, SrsRating.good);
+        intervals.add(card.interval);
+      }
+
+      expect(intervals.first, 2);
+      expect(intervals, orderedEquals([...intervals]..sort()));
+      expect(intervals.toSet(), hasLength(intervals.length));
+      expect(intervals.last, greaterThan(5));
+    });
+
+    test('Good is longer than the current interval after 2 repetitions', () {
+      for (var repetitions = 2; repetitions < 8; repetitions++) {
+        for (final interval in [0, 1, 2, 3, 6, 15, 40, 200]) {
+          for (final ease in [1.3, 1.5, 2.5, 3.1]) {
+            final card = cardWith(
+              interval: interval,
+              repetitions: repetitions,
+              easeFactor: ease,
+            );
+
+            expect(
+              daysFor(card, SrsRating.good),
+              greaterThan(interval),
+              reason: 'reps $repetitions, interval $interval, ease $ease',
+            );
+          }
+        }
+      }
+    });
+
+    test('mature intervals still follow interval * ease', () {
+      final card = cardWith(interval: 20, repetitions: 5, easeFactor: 2.5);
+
+      expect(daysFor(card, SrsRating.good), 50);
+    });
+  });
+
   group('Hard', () {
     test('is always shown as 12 h', () {
       for (final interval in [0, 1, 6, 15, 90]) {

@@ -51,12 +51,15 @@ class SrsService {
     return '${(days / 365).toStringAsFixed(1)}y';
   }
 
-  /// Days until the next review if [card] is rated Good now.
+  /// Days until the next review if [card] is rated Good now. Past the first
+  /// two repetitions it grows by at least a day, otherwise a 1 day card with
+  /// an ease below 1.5 rounds back to 1 day on every Good.
   static int goodInterval(SrsCard card) {
     final repetitions = card.repetitions + 1;
     if (repetitions == 1) return 1;
     if (repetitions == 2) return 6;
-    return max(1, (card.interval * card.easeFactor).round());
+    final grown = (card.interval * card.easeFactor).round();
+    return max(card.interval + 1, grown);
   }
 
   /// Days until the next review if [card] is rated Easy now. Always longer
