@@ -233,6 +233,90 @@ void main() {
     });
   });
 
+  group('AiQuestionSuggestions.isVerbOrAdjective', () {
+    bool check(
+      String word,
+      List<String> categories, {
+      String language = 'ko',
+    }) => AiQuestionSuggestions.isVerbOrAdjective(
+      language: language,
+      word: word,
+      categories: categories,
+    );
+
+    test('a category that says verb or adjective settles it', () {
+      for (final category in [
+        'verbs',
+        'Verbs',
+        'adjectives',
+        'passive verbs',
+        'irregular verbs',
+      ]) {
+        // Whatever the word looks like.
+        expect(check('사과', [category]), isTrue, reason: category);
+        expect(check('먹다', [category]), isTrue, reason: category);
+      }
+    });
+
+    test('any of the labels can say it, such as a section', () {
+      expect(check('먹히다', ['general', 'verbs', 'passive verbs']), isTrue);
+      expect(check('사과', ['food', 'Verbs']), isTrue);
+    });
+
+    test('a part of speech that is not a verb settles that too', () {
+      for (final category in [
+        'nouns',
+        'Nouns',
+        'adverbs',
+        'verbal nouns',
+        'numbers',
+        'pronouns',
+        'particles',
+      ]) {
+        expect(check('사과', [category]), isFalse, reason: category);
+        // Not even a word that ends like a verb.
+        expect(check('바다', [category]), isFalse, reason: category);
+        expect(check('먹다', [category]), isFalse, reason: category);
+      }
+    });
+
+    test('verbs win over another label when they disagree', () {
+      expect(check('먹다', ['nouns', 'verbs']), isTrue);
+    });
+
+    test('a category that is no part of speech leaves it to the word', () {
+      for (final category in [
+        'food',
+        'daily life',
+        'general',
+        'announcements',
+      ]) {
+        expect(check('먹다', [category]), isTrue, reason: category);
+        expect(check('예쁘다', [category]), isTrue, reason: category);
+        expect(check('열심히 하다', [category]), isTrue, reason: category);
+        expect(check('사과', [category]), isFalse, reason: category);
+      }
+    });
+
+    test('a word without any label is told by the word', () {
+      expect(check('먹다', const []), isTrue);
+      expect(check(' 먹다 ', ['', '  ']), isTrue);
+      expect(check('사과', const []), isFalse);
+      expect(check('', const []), isFalse);
+    });
+
+    test('a noun that ends in 다 is taken for a verb under a category', () {
+      // A known mistake of going by the word, which a part of speech avoids.
+      expect(check('바다', ['nature']), isTrue);
+      expect(check('바다', ['nouns']), isFalse);
+    });
+
+    test('is false in a language there are no questions for', () {
+      expect(check('먹다', ['verbs'], language: 'ja'), isFalse);
+      expect(check('먹다', const [], language: 'ja'), isFalse);
+    });
+  });
+
   group('AiQuestionSuggestions language check', () {
     List<String> first(String language) =>
         AiQuestionSuggestions.wordFirstQuestions(

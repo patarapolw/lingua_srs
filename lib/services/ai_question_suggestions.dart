@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../models/ai_discussion_message.dart';
+import '../models/vocab_item.dart';
 
 /// The questions the AI chats offer as buttons.
 ///
@@ -36,6 +37,37 @@ class AiQuestionSuggestions {
   /// Whether there are questions for [language], a code like `ko` (a region
   /// as in `ko-KR` and the English name are accepted too).
   static bool supports(String language) => _forLanguage(language) != null;
+
+  /// Whether a word is a verb or adjective, which decides if its forms are
+  /// asked about. [categories] are what the data says about the word: its part
+  /// of speech and its sections. Any of them can be a category such as "food"
+  /// instead of a part of speech, so:
+  /// - one that says verb or adjective, as `verbs` and `passive verbs` do,
+  ///   makes it one;
+  /// - otherwise one that names another part of speech, as `nouns` does, makes
+  ///   it not one;
+  /// - otherwise nothing tells, and the word itself is looked at.
+  static bool isVerbOrAdjective({
+    required String language,
+    required String word,
+    required Iterable<String> categories,
+  }) {
+    final questions = _forLanguage(language);
+    if (questions == null) return false;
+    final labels = [
+      for (final category in categories)
+        if (category.trim().isNotEmpty) category.trim().toLowerCase(),
+    ];
+    if (labels.any(VocabItem.isVerbOrAdjective)) return true;
+    if (labels.any(_otherPartOfSpeech.hasMatch)) return false;
+    return questions.looksLikeVerbOrAdjective(word);
+  }
+
+  /// Parts of speech that a category can name instead of a verb or adjective.
+  static final _otherPartOfSpeech = RegExp(
+    r'\b(noun|adverb|number|numeral|pronoun|particle|determiner|conjunction|'
+    r'interjection|counter)',
+  );
 
   /// Questions for a word chat that has no messages yet. Nothing is asked of
   /// the AI to show them. None for a language that is not [supports]ed.
@@ -270,6 +302,10 @@ abstract class _LanguageQuestions {
   /// A few short questions that show the AI the style that is wanted.
   List<String> get exampleQuestions;
 
+  /// Whether [word] looks like a verb or adjective in its dictionary form, for
+  /// when the data does not say. A guess that can be wrong.
+  bool looksLikeVerbOrAdjective(String word);
+
   /// For a chat with no messages. [AiQuestionSuggestions.maxQuestions] of them
   /// are shown, from the first.
   List<String> wordFirst({
@@ -299,6 +335,12 @@ class _KoreanQuestions extends _LanguageQuestions {
       'A noun has a register (casual, neutral, formal, honorific words), not '
       'speech levels. A verb or adjective takes speech-level endings, and its '
       'dictionary form has none.';
+
+  /// Verbs and adjectives are listed ending in 다: 먹다, 예쁘다, 공부하다. A few
+  /// nouns end in it too, such as 바다, and are taken for verbs when nothing
+  /// else says they are not.
+  @override
+  bool looksLikeVerbOrAdjective(String word) => word.trim().endsWith('다');
 
   @override
   List<String> get exampleQuestions => const [

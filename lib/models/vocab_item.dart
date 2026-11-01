@@ -142,6 +142,14 @@ class VocabItem {
   List<String> get effectiveSectionPath =>
       sectionPath.isEmpty ? (pos.isEmpty ? const [] : [pos]) : sectionPath;
 
+  /// What says what kind of word this is: [pos] and the sections the word is
+  /// under. Either can be a category such as "food" instead of a part of
+  /// speech, so a word is not known to be a verb from one of them alone.
+  List<String> get categoryLabels => [
+    for (final label in {pos, ...effectiveSectionPath})
+      if (label.trim().isNotEmpty) label,
+  ];
+
   Map<String, dynamic> toJson() => {
     'id': id,
     'idIsExplicit': idIsExplicit,

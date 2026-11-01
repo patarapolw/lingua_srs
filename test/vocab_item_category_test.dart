@@ -1,8 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lingua_srs/models/vocab_item.dart';
 
-VocabItem wordIn(String pos) =>
-    VocabItem(targetWord: '먹다', translation: 'to eat', pos: pos);
+VocabItem wordIn(String pos, {List<String>? sectionPath}) => VocabItem(
+  targetWord: '먹다',
+  translation: 'to eat',
+  pos: pos,
+  sectionPath: sectionPath,
+);
 
 void main() {
   group('VocabItem.isVerbOrAdjective', () {
@@ -74,6 +78,30 @@ void main() {
         expect(word.cardTargetToNative.isEnabled, isTrue, reason: pos);
         expect(word.cardNativeToTarget.isEnabled, isFalse, reason: pos);
       }
+    });
+  });
+
+  group('VocabItem.categoryLabels', () {
+    test('is the part of speech when there are no sections', () {
+      expect(wordIn('verbs').categoryLabels, ['verbs']);
+    });
+
+    test('lists the part of speech and the sections once', () {
+      expect(
+        wordIn('verbs', sectionPath: ['verbs', 'passive verbs']).categoryLabels,
+        ['verbs', 'passive verbs'],
+      );
+      expect(
+        wordIn('food', sectionPath: ['daily life', 'food']).categoryLabels,
+        ['food', 'daily life'],
+      );
+    });
+
+    test('leaves out blank labels', () {
+      expect(wordIn('').categoryLabels, isEmpty);
+      expect(wordIn('', sectionPath: ['  ', 'verbs']).categoryLabels, [
+        'verbs',
+      ]);
     });
   });
 }

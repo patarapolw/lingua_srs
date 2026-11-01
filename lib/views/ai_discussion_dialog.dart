@@ -6,7 +6,6 @@ import 'package:provider/provider.dart';
 
 import '../models/ai_discussion_message.dart';
 import '../models/lesson.dart';
-import '../models/vocab_item.dart';
 import '../providers/app_provider.dart';
 import '../services/ai_discussion_search.dart';
 import '../services/ai_question_suggestions.dart';
@@ -31,9 +30,9 @@ class AiDiscussionDialog extends StatefulWidget {
   final String? sentenceTarget;
   final String? sentenceTranslation;
 
-  /// The word's part of speech, which decides whether to offer a question
-  /// about conjugation.
-  final String? pos;
+  /// What the data says about the word's kind (its part of speech and its
+  /// sections), which with the word decides whether to ask about its forms.
+  final List<String> categories;
   final Lesson? lesson;
 
   /// The word or lesson this chat was about no longer exists. The chat opens
@@ -49,7 +48,7 @@ class AiDiscussionDialog extends StatefulWidget {
     required this.nativeLanguage,
     this.sentenceTarget,
     this.sentenceTranslation,
-    this.pos,
+    this.categories = const [],
     this.lesson,
     this.orphaned = false,
   });
@@ -209,8 +208,11 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
 
   bool get _hasSentence => widget.sentenceTarget?.trim().isNotEmpty == true;
 
-  bool get _isVerbOrAdjective =>
-      widget.pos != null && VocabItem.isVerbOrAdjective(widget.pos!);
+  bool get _isVerbOrAdjective => AiQuestionSuggestions.isVerbOrAdjective(
+    language: widget.targetLanguage,
+    word: widget.targetWord,
+    categories: widget.categories,
+  );
 
   /// Questions for a chat that has no messages yet.
   List<String> _firstQuestions() {
@@ -768,7 +770,7 @@ AiDiscussionDialog aiDiscussionDialogFor(AiDiscussionSummary discussion) {
     nativeLanguage: discussion.lesson?.nativeLanguage ?? 'en',
     sentenceTarget: discussion.sentence?.targetText,
     sentenceTranslation: discussion.sentence?.translationText,
-    pos: discussion.vocab?.pos,
+    categories: discussion.vocab?.categoryLabels ?? const [],
     lesson: discussion.isLesson ? discussion.lesson : null,
     orphaned: discussion.isOrphaned,
   );
