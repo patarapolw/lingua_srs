@@ -41,6 +41,11 @@ class StorageService {
   static final Map<String, String> _lessonMarkdownCache = {};
   static Set<String> _storedLessonMarkdownIds = {};
 
+  static void resetLessonMarkdownCache() {
+    _lessonMarkdownCache.clear();
+    _storedLessonMarkdownIds = {};
+  }
+
   static Future<String> loadDeepSeekApiKey() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_keyDeepSeekApiKey) ?? '';

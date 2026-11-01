@@ -20,6 +20,7 @@ lingua_srs/
 │   │   ├── audio_service.dart         # Audio playback, TTS and offline caching
 │   │   ├── image_cache_service.dart   # Disk cache for online images in Markdown
 │   │   ├── deepseek_service.dart      # DeepSeek chat client for quiz discussions
+│   │   ├── backup_service.dart        # Versioned local data backup and restore
 │   │   ├── lesson_ai_prompt.dart      # Prompt, ids and suggestions for lesson AI chats
 │   │   ├── word_ai_prompt.dart        # Prompt for word AI chats, with the current example sentence
 │   │   ├── ai_question_suggestions.dart # Fixed and AI-suggested questions offered in AI chats, per language
