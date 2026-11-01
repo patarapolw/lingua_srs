@@ -199,6 +199,11 @@ class AiQuestionSuggestions {
           'Each is one short question of at most $maxAiQuestionWords words '
               '(about 50 characters).',
           questions.practicalFocus,
+          if (sentence != null && sentence.isNotEmpty)
+            'At least one question must focus on a short, specific phrase '
+                'from the example sentence, not just the target word or the '
+                'whole sentence. Quote that phrase and ask what it means '
+                'here or how else to say it. Do not invent a phrase.',
           'Write them in the learner\'s native language ($nativeLanguage), '
               'as the learner would type them.',
           'Each question must make sense on its own. '
@@ -330,8 +335,8 @@ class _KoreanQuestions extends _LanguageQuestions {
 
   @override
   String get practicalFocus =>
-      'Favor practical use: real sentences, how it sounds, '
-      'how Koreans actually say it. '
+      'Favor practical use: common, natural ways to use a word, useful '
+      'expressions, how it sounds, and how Koreans actually say it. '
       'A noun has a register (casual, neutral, formal, honorific words), not '
       'speech levels. A verb or adjective takes speech-level endings, and its '
       'dictionary form has none.';
@@ -345,6 +350,8 @@ class _KoreanQuestions extends _LanguageQuestions {
   @override
   List<String> get exampleQuestions => const [
     'How do I say this politely?',
+    'How else can I use this word?',
+    'How else could I say "[short phrase]"?',
     'What are common mistakes with this word?',
     'Show me a short dialogue using it.',
   ];
@@ -363,10 +370,10 @@ class _KoreanQuestions extends _LanguageQuestions {
     _origin(word),
     if (hasSentence) _sentenceGrammar,
     if (verbOrAdjective) _irregular(word) else _register(word),
-    if (verbOrAdjective) _conjugation(word),
+    if (verbOrAdjective) _anotherExample(word),
     if (verbOrAdjective) _speechLevels(word),
     if (hasSentence) _sentenceSpeechLevel,
-    _anotherExample(word),
+    if (!verbOrAdjective) _anotherExample(word),
   ];
 
   @override
@@ -376,14 +383,14 @@ class _KoreanQuestions extends _LanguageQuestions {
     required bool verbOrAdjective,
   }) => [
     if (hasSentence) _sentenceSpeechLevel,
+    if (hasSentence) _sentenceExpressions,
     if (verbOrAdjective) _irregular(word),
-    if (verbOrAdjective) _conjugation(word),
+    _otherUses(word),
+    _anotherExample(word),
     verbOrAdjective ? _conjugatedSounds(word) : _pronunciation(word),
     if (verbOrAdjective) _speechLevels(word) else _register(word),
     verbOrAdjective ? _quizInSentences(word) : _quiz(word),
-    if (hasSentence) _sentenceExpressions,
     _similarWords(word),
-    _anotherExample(word),
   ];
 
   static String _origin(String word) =>
@@ -396,7 +403,9 @@ class _KoreanQuestions extends _LanguageQuestions {
       'What speech level is this sentence in? Show the other levels.';
 
   static const _sentenceExpressions =
-      'Other useful expressions in this sentence?';
+      'Which useful phrases from this sentence can I reuse?';
+
+  static String _otherUses(String word) => 'What other ways can I use "$word"?';
 
   static String _register(String word) =>
       'What register is "$word"? Is there a more polite word for it?';
@@ -406,10 +415,6 @@ class _KoreanQuestions extends _LanguageQuestions {
 
   static String _irregular(String word) =>
       'Is "$word" irregular? If so, how does it change?';
-
-  /// Asks for the forms the learner will meet, in sentences, not a table.
-  static String _conjugation(String word) =>
-      'Show me sentences with how "$word" commonly conjugates.';
 
   static String _pronunciation(String word) =>
       'How is "$word" pronounced? Which sound rules apply?';
@@ -427,5 +432,5 @@ class _KoreanQuestions extends _LanguageQuestions {
       'How is "$word" different from similar words?';
 
   static String _anotherExample(String word) =>
-      'Give me another example sentence with "$word".';
+      'Show me more example sentences with "$word".';
 }

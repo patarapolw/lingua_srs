@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// A suggested question that can be tapped to ask it.
+/// A suggested question chip.
 ///
 /// It looks like an outlined chip, but a long question breaks onto more lines
 /// instead of being cut off at the edge of the screen, which is what the label
@@ -9,7 +9,7 @@ import 'package:flutter/material.dart';
 class AiQuestionChip extends StatelessWidget {
   final String label;
 
-  /// Asks the question. The chip is disabled without it.
+  /// Handles tapping the question. The chip is disabled without it.
   final VoidCallback? onPressed;
 
   const AiQuestionChip({super.key, required this.label, this.onPressed});

@@ -59,7 +59,9 @@ class AiDiscussionDialog extends StatefulWidget {
 
 class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
   final TextEditingController _questionController = TextEditingController();
+  final FocusNode _questionFocusNode = FocusNode();
   final ScrollController _messagesController = ScrollController();
+  final ExpansibleController _followUpsController = ExpansibleController();
   bool _sending = false;
   String? _error;
   String _streamingAnswer = '';
@@ -99,7 +101,9 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
   @override
   void dispose() {
     _questionController.dispose();
+    _questionFocusNode.dispose();
     _messagesController.dispose();
+    _followUpsController.dispose();
     super.dispose();
   }
 
@@ -313,6 +317,14 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
     );
   }
 
+  void _selectSuggestedQuestion(String question) {
+    _questionController.value = TextEditingValue(
+      text: question,
+      selection: TextSelection.collapsed(offset: question.length),
+    );
+    _questionFocusNode.requestFocus();
+  }
+
   KeyEventResult _handleComposerKeyEvent(FocusNode node, KeyEvent event) {
     final isEnter =
         event.logicalKey == LogicalKeyboardKey.enter ||
@@ -327,17 +339,21 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
     return KeyEventResult.ignored;
   }
 
-  Future<void> _sendQuestion([String? suggestedQuestion]) async {
-    final question = (suggestedQuestion ?? _questionController.text).trim();
+  Future<void> _sendQuestion() async {
+    final question = _questionController.text.trim();
     if (_sending || question.isEmpty) return;
 
+    if (_followUpsController.isExpanded) {
+      _followUpsController.collapse();
+    }
+    FocusScope.of(context).unfocus();
     final provider = context.read<AppProvider>();
     if (provider.deepSeekApiKey.isEmpty) {
       setState(() => _error = 'Add your DeepSeek API key in settings first.');
       return;
     }
 
-    if (suggestedQuestion == null) _questionController.clear();
+    _questionController.clear();
     setState(() {
       _sending = true;
       _error = null;
@@ -576,7 +592,9 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                                               onPressed: _sending
                                                   ? null
                                                   : () =>
-                                                        _sendQuestion(question),
+                                                        _selectSuggestedQuestion(
+                                                          question,
+                                                        ),
                                             ),
                                           )
                                           .toList(),
@@ -653,6 +671,7 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                 ),
                 if (messages.isNotEmpty && followUps.isNotEmpty)
                   ExpansionTile(
+                    controller: _followUpsController,
                     title: Text(
                       'Suggested next questions',
                       style: theme.textTheme.labelMedium,
@@ -670,7 +689,7 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                             label: question,
                             onPressed: _sending
                                 ? null
-                                : () => _sendQuestion(question),
+                                : () => _selectSuggestedQuestion(question),
                           ),
                         ),
                     ],
@@ -716,6 +735,7 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                           onKeyEvent: _handleComposerKeyEvent,
                           child: TextField(
                             controller: _questionController,
+                            focusNode: _questionFocusNode,
                             minLines: 1,
                             maxLines: 4,
                             textCapitalization: TextCapitalization.sentences,

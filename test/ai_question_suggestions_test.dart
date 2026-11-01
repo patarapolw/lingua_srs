@@ -48,27 +48,33 @@ void main() {
       expect(first(hasSentence: false, verbOrAdjective: false), [
         'Is "사과" Sino-Korean (Hanja) or native Korean?',
         'What register is "사과"? Is there a more polite word for it?',
-        'Give me another example sentence with "사과".',
+        'Show me more example sentences with "사과".',
       ]);
     });
 
-    test('a verb with a sentence is asked if it is irregular, and forms', () {
-      expect(first(hasSentence: true, verbOrAdjective: true), [
-        'Is "먹다" Sino-Korean (Hanja) or native Korean?',
-        sentenceGrammar,
-        'Is "먹다" irregular? If so, how does it change?',
-        'Show me sentences with how "먹다" commonly conjugates.',
-      ]);
-    });
+    test(
+      'a verb with a sentence is asked if it is irregular and for examples',
+      () {
+        expect(first(hasSentence: true, verbOrAdjective: true), [
+          'Is "먹다" Sino-Korean (Hanja) or native Korean?',
+          sentenceGrammar,
+          'Is "먹다" irregular? If so, how does it change?',
+          'Show me more example sentences with "먹다".',
+        ]);
+      },
+    );
 
-    test('a verb without a sentence is also asked its speech levels', () {
-      expect(first(hasSentence: false, verbOrAdjective: true), [
-        'Is "먹다" Sino-Korean (Hanja) or native Korean?',
-        'Is "먹다" irregular? If so, how does it change?',
-        'Show me sentences with how "먹다" commonly conjugates.',
-        'Show "먹다" in the different speech levels.',
-      ]);
-    });
+    test(
+      'a verb without a sentence is asked for examples and speech levels',
+      () {
+        expect(first(hasSentence: false, verbOrAdjective: true), [
+          'Is "먹다" Sino-Korean (Hanja) or native Korean?',
+          'Is "먹다" irregular? If so, how does it change?',
+          'Show me more example sentences with "먹다".',
+          'Show "먹다" in the different speech levels.',
+        ]);
+      },
+    );
 
     test('only a verb or adjective is asked about forms and endings', () {
       final noun = first(hasSentence: true, verbOrAdjective: false).join('\n');
@@ -118,43 +124,47 @@ void main() {
     test('a noun with a sentence starts with the sentence speech level', () {
       expect(followUps(hasSentence: true, verbOrAdjective: false), [
         sentenceSpeechLevel,
+        'Which useful phrases from this sentence can I reuse?',
+        'What other ways can I use "사과"?',
+        'Show me more example sentences with "사과".',
         'How is "사과" pronounced? Which sound rules apply?',
         'What register is "사과"? Is there a more polite word for it?',
         'Quiz me on "사과" with 3 short questions.',
-        'Other useful expressions in this sentence?',
         'How is "사과" different from similar words?',
-        'Give me another example sentence with "사과".',
       ]);
     });
 
     test('a noun without a sentence has nothing about a sentence', () {
       expect(followUps(hasSentence: false, verbOrAdjective: false), [
+        'What other ways can I use "사과"?',
+        'Show me more example sentences with "사과".',
         'How is "사과" pronounced? Which sound rules apply?',
         'What register is "사과"? Is there a more polite word for it?',
         'Quiz me on "사과" with 3 short questions.',
         'How is "사과" different from similar words?',
-        'Give me another example sentence with "사과".',
       ]);
     });
 
     test('a verb with a sentence is asked about its forms and sounds', () {
       expect(followUps(hasSentence: true, verbOrAdjective: true), [
         sentenceSpeechLevel,
+        'Which useful phrases from this sentence can I reuse?',
         'Is "먹다" irregular? If so, how does it change?',
-        'Show me sentences with how "먹다" commonly conjugates.',
+        'What other ways can I use "먹다"?',
+        'Show me more example sentences with "먹다".',
         'Which sound rules affect "먹다" when it conjugates?',
         'Show "먹다" in the different speech levels.',
         'Quiz me on "먹다" in sentences, 3 questions.',
-        'Other useful expressions in this sentence?',
         'How is "먹다" different from similar words?',
-        'Give me another example sentence with "먹다".',
       ]);
     });
 
     test('a verb without a sentence has nothing about a sentence', () {
       final questions = followUps(hasSentence: false, verbOrAdjective: true);
 
-      expect(questions.first, startsWith('Is "먹다" irregular?'));
+      expect(questions.first, 'Is "먹다" irregular? If so, how does it change?');
+      expect(questions, contains('What other ways can I use "먹다"?'));
+      expect(questions, contains('Show me more example sentences with "먹다".'));
       expect(questions.join('\n'), isNot(contains('this sentence')));
     });
 
@@ -595,6 +605,10 @@ void main() {
       expect(messages[0].content, contains('(en)'));
       expect(messages[0].content, contains('learner of Korean'));
       expect(messages[0].content, contains('practical'));
+      expect(
+        messages[0].content,
+        contains('common, natural ways to use a word'),
+      );
     });
 
     test('asks for questions of a few words', () {
@@ -639,6 +653,8 @@ void main() {
 
       expect(system, contains('not to be copied'));
       expect(system, contains('"How do I say this politely?"'));
+      expect(system, contains('How else can I use this word?'));
+      expect(system, contains('"[short phrase]"'));
     });
 
     test('lists the questions on screen after the ones asked', () {
@@ -701,6 +717,11 @@ void main() {
           '(translation: "I eat an apple.")',
         ),
       );
+      expect(
+        messages[0].content,
+        contains('short, specific phrase from the example sentence'),
+      );
+      expect(messages[0].content, contains('Quote that phrase'));
     });
 
     test('leaves out a blank sentence and an empty asked list', () {
@@ -716,6 +737,10 @@ void main() {
       );
 
       expect(messages[1].content, isNot(contains('Example sentence')));
+      expect(
+        messages[0].content,
+        isNot(contains('short, specific phrase from the example sentence')),
+      );
       expect(messages[1].content, isNot(contains('Already asked')));
       expect(messages[1].content, isNot(contains('Already on screen')));
     });
