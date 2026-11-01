@@ -10,187 +10,224 @@ List<String> aiQuestions(int count) => [
 ];
 
 void main() {
-  group('AiQuestionSuggestions.wordFirstQuestions', () {
-    test('a noun with a sentence gets origin, grammar, usage, example', () {
-      final questions = AiQuestionSuggestions.wordFirstQuestions(
-        language: 'ko',
-        word: '사과',
-        hasSentence: true,
-        verbOrAdjective: false,
-      );
+  List<String> first({
+    required bool hasSentence,
+    required bool verbOrAdjective,
+  }) => AiQuestionSuggestions.wordFirstQuestions(
+    language: 'ko',
+    word: verbOrAdjective ? '먹다' : '사과',
+    hasSentence: hasSentence,
+    verbOrAdjective: verbOrAdjective,
+  );
 
-      expect(questions, [
-        'Is "사과" Sino-Korean (Hanja) or native Korean? '
-            'Explain where it comes from.',
-        'How does this sentence work? Break down the grammar and particles.',
-        'How is "사과" used in everyday speech? '
-            'What formality and politeness (speech levels) does it suit?',
+  List<String> followUps({
+    required bool hasSentence,
+    required bool verbOrAdjective,
+  }) => AiQuestionSuggestions.wordFollowUps(
+    language: 'ko',
+    word: verbOrAdjective ? '먹다' : '사과',
+    hasSentence: hasSentence,
+    verbOrAdjective: verbOrAdjective,
+  );
+
+  const sentenceGrammar = "Break down this sentence's grammar and particles.";
+  const sentenceSpeechLevel =
+      'What speech level is this sentence in? Show the other levels.';
+
+  group('AiQuestionSuggestions.wordFirstQuestions', () {
+    test('a noun with a sentence is asked its register and the sentence', () {
+      expect(first(hasSentence: true, verbOrAdjective: false), [
+        'Is "사과" Sino-Korean (Hanja) or native Korean?',
+        sentenceGrammar,
+        'What register is "사과"? Is there a more polite word for it?',
+        sentenceSpeechLevel,
+      ]);
+    });
+
+    test('a noun without a sentence is asked its register and an example', () {
+      expect(first(hasSentence: false, verbOrAdjective: false), [
+        'Is "사과" Sino-Korean (Hanja) or native Korean?',
+        'What register is "사과"? Is there a more polite word for it?',
         'Give me another example sentence with "사과".',
       ]);
     });
 
-    test('a verb with a sentence swaps the extra example for conjugation', () {
-      final questions = AiQuestionSuggestions.wordFirstQuestions(
-        language: 'ko',
-        word: '먹다',
-        hasSentence: true,
-        verbOrAdjective: true,
-      );
-
-      expect(questions, hasLength(AiQuestionSuggestions.maxQuestions));
-      expect(
-        questions[3],
+    test('a verb with a sentence is asked if it is irregular, and forms', () {
+      expect(first(hasSentence: true, verbOrAdjective: true), [
+        'Is "먹다" Sino-Korean (Hanja) or native Korean?',
+        sentenceGrammar,
+        'Is "먹다" irregular? If so, how does it change?',
         'Show me sentences with how "먹다" commonly conjugates.',
-      );
-      expect(questions.join('\n'), isNot(contains('another example')));
+      ]);
     });
 
-    test('a word without a sentence gets no question about the sentence', () {
-      final noun = AiQuestionSuggestions.wordFirstQuestions(
-        language: 'ko',
-        word: '사과',
-        hasSentence: false,
-        verbOrAdjective: false,
-      );
-      final verb = AiQuestionSuggestions.wordFirstQuestions(
-        language: 'ko',
-        word: '먹다',
-        hasSentence: false,
-        verbOrAdjective: true,
-      );
-
-      expect(noun, hasLength(3));
-      expect(noun.join('\n'), isNot(contains('this sentence')));
-      expect(verb, hasLength(4));
-      expect(verb.join('\n'), isNot(contains('this sentence')));
-      expect(verb.join('\n'), contains('commonly conjugates'));
+    test('a verb without a sentence is also asked its speech levels', () {
+      expect(first(hasSentence: false, verbOrAdjective: true), [
+        'Is "먹다" Sino-Korean (Hanja) or native Korean?',
+        'Is "먹다" irregular? If so, how does it change?',
+        'Show me sentences with how "먹다" commonly conjugates.',
+        'Show "먹다" in the different speech levels.',
+      ]);
     });
 
-    test('asks about speech levels as formality and politeness', () {
-      final questions = AiQuestionSuggestions.wordFirstQuestions(
-        language: 'ko',
-        word: '사과',
-        hasSentence: false,
-        verbOrAdjective: false,
-      );
+    test('only a verb or adjective is asked about forms and endings', () {
+      final noun = first(hasSentence: true, verbOrAdjective: false).join('\n');
 
-      expect(questions.join('\n'), contains('formality and politeness'));
+      expect(noun, isNot(contains('irregular')));
+      expect(noun, isNot(contains('conjugates')));
+      expect(noun, isNot(contains('speech levels')));
+    });
+
+    test('only a noun and other words are asked their register', () {
+      for (final hasSentence in [true, false]) {
+        final verb = first(
+          hasSentence: hasSentence,
+          verbOrAdjective: true,
+        ).join('\n');
+
+        expect(verb, isNot(contains('register')));
+      }
+    });
+
+    test('a word without a sentence is not asked about the sentence', () {
+      for (final verb in [true, false]) {
+        final questions = first(hasSentence: false, verbOrAdjective: verb);
+
+        expect(questions.join('\n'), isNot(contains('this sentence')));
+      }
+    });
+
+    test('is never longer than the most that is shown at once', () {
+      for (final hasSentence in [true, false]) {
+        for (final verb in [true, false]) {
+          final questions = first(
+            hasSentence: hasSentence,
+            verbOrAdjective: verb,
+          );
+
+          expect(
+            questions.length <= AiQuestionSuggestions.maxQuestions,
+            isTrue,
+          );
+        }
+      }
     });
   });
 
   group('AiQuestionSuggestions.wordFollowUps', () {
-    test('with a sentence, starts with its speech level', () {
-      final questions = AiQuestionSuggestions.wordFollowUps(
-        language: 'ko',
-        word: '사과',
-        hasSentence: true,
-        verbOrAdjective: false,
-      );
-
-      expect(questions[0], startsWith('What speech level is this sentence in'));
-      expect(questions[0], contains('formality and politeness'));
-      expect(questions.join('\n'), contains('other useful expressions'));
+    test('a noun with a sentence starts with the sentence speech level', () {
+      expect(followUps(hasSentence: true, verbOrAdjective: false), [
+        sentenceSpeechLevel,
+        'How is "사과" pronounced? Which sound rules apply?',
+        'What register is "사과"? Is there a more polite word for it?',
+        'Quiz me on "사과" with 3 short questions.',
+        'Other useful expressions in this sentence?',
+        'How is "사과" different from similar words?',
+        'Give me another example sentence with "사과".',
+      ]);
     });
 
-    test('asks how the word is pronounced, with or without a sentence', () {
-      for (final hasSentence in [true, false]) {
-        final questions = AiQuestionSuggestions.wordFollowUps(
-          language: 'ko',
-          word: '사과',
-          hasSentence: hasSentence,
-          verbOrAdjective: false,
-        );
-
-        expect(
-          questions,
-          contains(
-            'How is "사과" pronounced? Which sound rules affect it in speech?',
-          ),
-        );
-        // The AI works out which sound rules are meant.
-        expect(questions.join('\n'), isNot(contains('linking')));
-        expect(questions.join('\n'), isNot(contains('nasalization')));
-      }
+    test('a noun without a sentence has nothing about a sentence', () {
+      expect(followUps(hasSentence: false, verbOrAdjective: false), [
+        'How is "사과" pronounced? Which sound rules apply?',
+        'What register is "사과"? Is there a more polite word for it?',
+        'Quiz me on "사과" with 3 short questions.',
+        'How is "사과" different from similar words?',
+        'Give me another example sentence with "사과".',
+      ]);
     });
 
-    test('pronunciation comes after the speech level, before the quiz', () {
-      final withSentence = AiQuestionSuggestions.wordFollowUps(
-        language: 'ko',
-        word: '사과',
-        hasSentence: true,
-        verbOrAdjective: false,
-      );
-      final withoutSentence = AiQuestionSuggestions.wordFollowUps(
-        language: 'ko',
-        word: '사과',
-        hasSentence: false,
-        verbOrAdjective: false,
-      );
-
-      expect(withSentence[0], startsWith('What speech level'));
-      expect(withSentence[1], startsWith('How is "사과" pronounced?'));
-      expect(withSentence[2], startsWith('Quiz me on "사과"'));
-      expect(withoutSentence[0], startsWith('How is "사과" pronounced?'));
-      expect(withoutSentence[1], startsWith('Quiz me on "사과"'));
+    test('a verb with a sentence is asked about its forms and sounds', () {
+      expect(followUps(hasSentence: true, verbOrAdjective: true), [
+        sentenceSpeechLevel,
+        'Is "먹다" irregular? If so, how does it change?',
+        'Show me sentences with how "먹다" commonly conjugates.',
+        'Which sound rules affect "먹다" when it conjugates?',
+        'Show "먹다" in the different speech levels.',
+        'Quiz me on "먹다" in sentences, 3 questions.',
+        'Other useful expressions in this sentence?',
+        'How is "먹다" different from similar words?',
+        'Give me another example sentence with "먹다".',
+      ]);
     });
 
-    test('never asks how the sentence is pronounced', () {
-      final questions = AiQuestionSuggestions.wordFollowUps(
-        language: 'ko',
-        word: '사과',
-        hasSentence: true,
-        verbOrAdjective: true,
-      );
+    test('a verb without a sentence has nothing about a sentence', () {
+      final questions = followUps(hasSentence: false, verbOrAdjective: true);
 
-      expect(
-        questions.join('\n'),
-        isNot(contains('How is this sentence pronounced')),
-      );
-    });
-
-    test('without a sentence, asks nothing about the sentence', () {
-      final questions = AiQuestionSuggestions.wordFollowUps(
-        language: 'ko',
-        word: '사과',
-        hasSentence: false,
-        verbOrAdjective: true,
-      );
-
+      expect(questions.first, startsWith('Is "먹다" irregular?'));
       expect(questions.join('\n'), isNot(contains('this sentence')));
     });
 
-    test('offers conjugation for a verb or adjective only', () {
-      final verb = AiQuestionSuggestions.wordFollowUps(
-        language: 'ko',
-        word: '먹다',
-        hasSentence: false,
-        verbOrAdjective: true,
-      );
-      final noun = AiQuestionSuggestions.wordFollowUps(
-        language: 'ko',
-        word: '사과',
-        hasSentence: false,
-        verbOrAdjective: false,
-      );
+    test('a sentence has a speech level whatever the word is', () {
+      for (final verb in [true, false]) {
+        expect(
+          followUps(hasSentence: true, verbOrAdjective: verb).first,
+          sentenceSpeechLevel,
+        );
+        expect(
+          followUps(hasSentence: false, verbOrAdjective: verb),
+          isNot(contains(sentenceSpeechLevel)),
+        );
+      }
+    });
+
+    test('a conjugated verb has sound rules, a noun is just pronounced', () {
+      final verb = followUps(hasSentence: false, verbOrAdjective: true);
+      final noun = followUps(hasSentence: false, verbOrAdjective: false);
 
       expect(
         verb,
-        contains('Show me sentences with how "먹다" commonly conjugates.'),
+        contains('Which sound rules affect "먹다" when it conjugates?'),
       );
-      expect(noun.join('\n'), isNot(contains('conjugates')));
+      expect(verb.join('\n'), isNot(contains('pronounced')));
+      expect(
+        noun,
+        contains('How is "사과" pronounced? Which sound rules apply?'),
+      );
+    });
+
+    test('leaves the sound rules to the AI to name', () {
+      for (final hasSentence in [true, false]) {
+        for (final verb in [true, false]) {
+          final questions = followUps(
+            hasSentence: hasSentence,
+            verbOrAdjective: verb,
+          ).join('\n');
+
+          expect(questions, isNot(contains('linking')));
+          expect(questions, isNot(contains('nasalization')));
+        }
+      }
     });
 
     test('has no repeated question', () {
       for (final hasSentence in [true, false]) {
         for (final verb in [true, false]) {
-          final questions = AiQuestionSuggestions.wordFollowUps(
-            language: 'ko',
-            word: '먹다',
+          final questions = followUps(
             hasSentence: hasSentence,
             verbOrAdjective: verb,
           );
 
           expect(questions.toSet(), hasLength(questions.length));
+        }
+      }
+    });
+
+    test('offers a first question again if it was skipped', () {
+      for (final hasSentence in [true, false]) {
+        for (final verb in [true, false]) {
+          final later = followUps(
+            hasSentence: hasSentence,
+            verbOrAdjective: verb,
+          );
+          final firsts = first(hasSentence: hasSentence, verbOrAdjective: verb);
+
+          // The origin and the grammar of the sentence are asked once, at the
+          // start. All the others can be asked again if they were skipped.
+          for (final question in firsts.skip(1)) {
+            if (question == sentenceGrammar) continue;
+            expect(later, contains(question), reason: question);
+          }
         }
       }
     });

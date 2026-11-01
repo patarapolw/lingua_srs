@@ -275,20 +275,24 @@ class _KoreanQuestions extends _LanguageQuestions {
       'Favor practical use: real sentences, how it sounds, '
       'how Koreans actually say it.';
 
+  // A verb or adjective is on the card in its dictionary form, so what is
+  // asked about it is its forms, and speech levels show in the endings. A noun
+  // has no endings, so it is asked about its register instead. A sentence has
+  // a speech level whatever the word is.
+
   @override
   List<String> wordFirst({
     required String word,
     required bool hasSentence,
     required bool verbOrAdjective,
   }) => [
-    'Is "$word" Sino-Korean (Hanja) or native Korean? '
-        'Explain where it comes from.',
-    if (hasSentence)
-      'How does this sentence work? Break down the grammar and particles.',
-    'How is "$word" used in everyday speech? '
-        'What formality and politeness (speech levels) does it suit?',
+    _origin(word),
+    if (hasSentence) _sentenceGrammar,
+    if (verbOrAdjective) _irregular(word) else _register(word),
     if (verbOrAdjective) _conjugation(word),
-    'Give me another example sentence with "$word".',
+    if (verbOrAdjective) _speechLevels(word),
+    if (hasSentence) _sentenceSpeechLevel,
+    _anotherExample(word),
   ];
 
   @override
@@ -297,18 +301,57 @@ class _KoreanQuestions extends _LanguageQuestions {
     required bool hasSentence,
     required bool verbOrAdjective,
   }) => [
-    if (hasSentence)
-      'What speech level is this sentence in (formality and politeness)? '
-          'Show it in the other common levels.',
-    'How is "$word" pronounced? Which sound rules affect it in speech?',
-    'Quiz me on "$word" with 3 short questions.',
-    if (hasSentence) 'What other useful expressions are in this sentence?',
+    if (hasSentence) _sentenceSpeechLevel,
+    if (verbOrAdjective) _irregular(word),
     if (verbOrAdjective) _conjugation(word),
-    'How is "$word" different from similar words?',
-    'Give me another example sentence with "$word".',
+    verbOrAdjective ? _conjugatedSounds(word) : _pronunciation(word),
+    if (verbOrAdjective) _speechLevels(word) else _register(word),
+    verbOrAdjective ? _quizInSentences(word) : _quiz(word),
+    if (hasSentence) _sentenceExpressions,
+    _similarWords(word),
+    _anotherExample(word),
   ];
+
+  static String _origin(String word) =>
+      'Is "$word" Sino-Korean (Hanja) or native Korean?';
+
+  static const _sentenceGrammar =
+      "Break down this sentence's grammar and particles.";
+
+  static const _sentenceSpeechLevel =
+      'What speech level is this sentence in? Show the other levels.';
+
+  static const _sentenceExpressions =
+      'Other useful expressions in this sentence?';
+
+  static String _register(String word) =>
+      'What register is "$word"? Is there a more polite word for it?';
+
+  static String _speechLevels(String word) =>
+      'Show "$word" in the different speech levels.';
+
+  static String _irregular(String word) =>
+      'Is "$word" irregular? If so, how does it change?';
 
   /// Asks for the forms the learner will meet, in sentences, not a table.
   static String _conjugation(String word) =>
       'Show me sentences with how "$word" commonly conjugates.';
+
+  static String _pronunciation(String word) =>
+      'How is "$word" pronounced? Which sound rules apply?';
+
+  static String _conjugatedSounds(String word) =>
+      'Which sound rules affect "$word" when it conjugates?';
+
+  static String _quiz(String word) =>
+      'Quiz me on "$word" with 3 short questions.';
+
+  static String _quizInSentences(String word) =>
+      'Quiz me on "$word" in sentences, 3 questions.';
+
+  static String _similarWords(String word) =>
+      'How is "$word" different from similar words?';
+
+  static String _anotherExample(String word) =>
+      'Give me another example sentence with "$word".';
 }
