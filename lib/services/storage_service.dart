@@ -34,6 +34,7 @@ class StorageService {
   static const String _keyMaxReviews24h = 'lingua_srs_max_reviews_24h';
   static const String _keyMaxNewCards24h = 'lingua_srs_max_new_cards_24h';
   static const String _keyReviewTimestamps = 'lingua_srs_review_timestamps_24h';
+  static const String _keyDailyReviewCounts = 'lingua_srs_daily_review_counts';
 
   /// Defaults for the rolling 24-hour limits. 0 means unlimited.
   static const int defaultMaxReviews24h = 100;
@@ -262,6 +263,41 @@ class StorageService {
         .map((t) => t.toIso8601String())
         .toList();
     await prefs.setStringList(_keyReviewTimestamps, strings);
+  }
+
+  static Future<Map<DateTime, int>> loadDailyReviewCounts() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_keyDailyReviewCounts);
+    if (raw == null || raw.isEmpty) return {};
+
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return {};
+      final counts = <DateTime, int>{};
+      for (final entry in decoded.entries) {
+        final date = DateTime.tryParse(entry.key.toString());
+        if (date != null && entry.value is int && entry.value > 0) {
+          final day = DateTime(date.year, date.month, date.day);
+          counts[day] = entry.value as int;
+        }
+      }
+      return counts;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  static Future<void> saveDailyReviewCounts(Map<DateTime, int> counts) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _keyDailyReviewCounts,
+      jsonEncode({
+        for (final entry in counts.entries)
+          '${entry.key.year.toString().padLeft(4, '0')}-'
+              '${entry.key.month.toString().padLeft(2, '0')}-'
+              '${entry.key.day.toString().padLeft(2, '0')}': entry.value,
+      }),
+    );
   }
 
   static Future<List<Sentence>> loadSentences() async {

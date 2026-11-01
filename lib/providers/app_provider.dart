@@ -89,6 +89,7 @@ class AppProvider extends ChangeNotifier {
   int _maxReviews24h = StorageService.defaultMaxReviews24h;
   int _maxNewCards24h = StorageService.defaultMaxNewCards24h;
   List<DateTime> _reviewTimestamps24h = [];
+  Map<DateTime, int> _dailyReviewCounts = {};
 
   List<Lesson> get lessons => _lessons;
   List<Sentence> get sentences => _sentences;
@@ -107,6 +108,8 @@ class AppProvider extends ChangeNotifier {
   String? get selectedLessonId => _selectedLessonId;
   int get maxReviews24h => _maxReviews24h;
   int get maxNewCards24h => _maxNewCards24h;
+  Map<DateTime, int> get dailyReviewCounts =>
+      Map.unmodifiable(_dailyReviewCounts);
   Map<String, List<AiDiscussionMessage>> get aiDiscussions => Map.unmodifiable(
     _aiDiscussions.map<String, List<AiDiscussionMessage>>(
       (id, messages) =>
@@ -214,6 +217,7 @@ class AppProvider extends ChangeNotifier {
     _lessonFolderExpansion = results.$7;
     _pronunciationOptions = results.$8;
     _maxNewCards24h = results.$9;
+    _dailyReviewCounts = await StorageService.loadDailyReviewCounts();
     _lessons = await StorageService.loadLessons();
     // Loaded after lessons because a fresh debug install seeds sentences there.
     _sentences = await StorageService.loadSentences();
@@ -2033,8 +2037,11 @@ class AppProvider extends ChangeNotifier {
     // was on a sub-24h interval does not count toward the 24 h review limit.
     final countsTowardLimit = !card.isShortInterval;
     SrsService.processReview(card, rating);
+    final now = DateTime.now();
+    final date = DateTime(now.year, now.month, now.day);
+    _dailyReviewCounts[date] = (_dailyReviewCounts[date] ?? 0) + 1;
+    await StorageService.saveDailyReviewCounts(_dailyReviewCounts);
     if (countsTowardLimit) {
-      final now = DateTime.now();
       _reviewTimestamps24h.removeWhere((t) => now.difference(t).inHours >= 24);
       _reviewTimestamps24h.add(now);
       await StorageService.saveReviewTimestamps(_reviewTimestamps24h);
