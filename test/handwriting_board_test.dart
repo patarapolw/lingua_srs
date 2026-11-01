@@ -14,8 +14,13 @@ void main() {
           home: Scaffold(body: AnswerWorkspace(onSubmit: () => submits++)),
         ),
       );
-      await tester.tap(find.text('Type'));
+      expect(find.byType(TextField), findsNothing);
+      await tester.tap(find.text('Scratchpad'));
       await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Type'));
+      await tester.pumpAndSettle();
+      expect(find.byType(Dialog), findsNothing);
+      expect(find.byType(TextField), findsOneWidget);
       await tester.enterText(find.byType(TextField), '안녕하세요');
       expect(find.text('안녕하세요'), findsOneWidget);
 
@@ -24,6 +29,12 @@ void main() {
       await tester.sendKeyUpEvent(LogicalKeyboardKey.enter);
       await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
       expect(submits, 1);
+      await tester.tap(find.byTooltip('Hide scratchpad'));
+      await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsNothing);
+      await tester.tap(find.text('Scratchpad'));
+      await tester.pumpAndSettle();
+      expect(find.text('안녕하세요'), findsOneWidget);
     });
 
     testWidgets('draws with pointer input and clears the drawing', (
@@ -34,13 +45,24 @@ void main() {
           home: Scaffold(body: AnswerWorkspace(onSubmit: _noop)),
         ),
       );
-      await tester.tap(find.text('Draw'));
+      expect(find.byKey(const ValueKey('answer-drawing-canvas')), findsNothing);
+      await tester.tap(find.text('Scratchpad'));
       await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Draw'));
+      await tester.pumpAndSettle();
+      final scrim = tester
+          .widget<Scaffold>(
+            find.ancestor(
+              of: find.byKey(const ValueKey('answer-drawing-canvas')),
+              matching: find.byType(Scaffold),
+            ),
+          )
+          .backgroundColor!;
+      expect(scrim.a, greaterThan(0));
+      expect(scrim.a, lessThan(1));
       final canvas = find.byKey(const ValueKey('answer-drawing-canvas'));
-      await tester.dragFrom(
-        tester.getTopLeft(canvas) + const Offset(30, 30),
-        const Offset(60, 25),
-      );
+      expect(tester.getSize(canvas).height, greaterThan(300));
+      await tester.dragFrom(tester.getCenter(canvas), const Offset(60, 25));
       await tester.pump();
       expect(find.text('Write with your finger or pen'), findsNothing);
       expect(find.byTooltip('Eraser'), findsOneWidget);
@@ -52,6 +74,14 @@ void main() {
       await tester.tap(find.byTooltip('Clear drawing'));
       await tester.pump();
       expect(find.text('Write with your finger or pen'), findsOneWidget);
+      await tester.tap(find.byTooltip('Close scratchpad'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('answer-drawing-canvas')), findsNothing);
+      await tester.tap(find.text('Open drawing pad'));
+      await tester.pumpAndSettle();
+      expect(find.text('Write with your finger or pen'), findsOneWidget);
+      await tester.tap(find.byTooltip('Close scratchpad'));
+      await tester.pumpAndSettle();
     });
 
     testWidgets('clears answer state when the card key changes', (
@@ -75,12 +105,16 @@ void main() {
           ),
         ),
       );
-      await tester.tap(find.text('Type'));
+      await tester.tap(find.text('Scratchpad'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Type'));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), 'answer');
       await tester.tap(find.text('Next card'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Type'));
+      await tester.tap(find.text('Scratchpad'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Type'));
       await tester.pumpAndSettle();
       expect(
         tester.widget<TextField>(find.byType(TextField)).controller!.text,

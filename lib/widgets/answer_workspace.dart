@@ -40,6 +40,7 @@ class _AnswerWorkspaceState extends State<AnswerWorkspace> {
   Color _color = Colors.black;
   bool _eraser = false;
   bool _drawing = false;
+  bool _expanded = false;
 
   bool get _isDesktop => switch (defaultTargetPlatform) {
     TargetPlatform.windows ||
@@ -65,9 +66,9 @@ class _AnswerWorkspaceState extends State<AnswerWorkspace> {
     return renderBox.size;
   }
 
-  void _startStroke(DragStartDetails details) {
+  void _startStroke(DragStartDetails details, StateSetter setDialogState) {
     final size = _canvasSize;
-    setState(() {
+    setDialogState(() {
       _drawing = true;
       _strokes.add(
         _AnswerStroke(
@@ -79,11 +80,11 @@ class _AnswerWorkspaceState extends State<AnswerWorkspace> {
     });
   }
 
-  void _extendStroke(DragUpdateDetails details) {
+  void _extendStroke(DragUpdateDetails details, StateSetter setDialogState) {
     if (!_drawing || _strokes.isEmpty) return;
     final size = _canvasSize;
     final last = _strokes.last;
-    setState(() {
+    setDialogState(() {
       _strokes[_strokes.length - 1] = _AnswerStroke(
         points: [...last.points, _normalize(details.localPosition, size)],
         color: last.color,
@@ -109,11 +110,25 @@ class _AnswerWorkspaceState extends State<AnswerWorkspace> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_expanded) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: Padding(
+          padding: const EdgeInsets.only(top: 16, bottom: 8),
+          child: TextButton.icon(
+            icon: const Icon(Icons.edit_note, size: 18),
+            label: const Text('Scratchpad'),
+            onPressed: () => setState(() => _expanded = true),
+          ),
+        ),
+      );
+    }
+
     final theme = Theme.of(context);
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.only(top: 24),
-      padding: const EdgeInsets.all(14),
+      margin: const EdgeInsets.only(top: 16),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: theme.colorScheme.secondaryContainer.withValues(alpha: 0.25),
         borderRadius: BorderRadius.circular(12),
@@ -121,121 +136,43 @@ class _AnswerWorkspaceState extends State<AnswerWorkspace> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final compact = constraints.maxWidth < 240;
-              return Row(
-                children: [
-                  if (!compact)
-                    Expanded(
-                      child: Text(
-                        'Your answer',
-                        style: theme.textTheme.titleSmall,
-                      ),
-                    ),
-                  SegmentedButton<_AnswerMode>(
-                    showSelectedIcon: false,
-                    segments: [
-                      ButtonSegment(
-                        value: _AnswerMode.draw,
-                        icon: const Icon(Icons.draw_outlined),
-                        label: compact ? null : const Text('Draw'),
-                        tooltip: 'Draw answer',
-                      ),
-                      ButtonSegment(
-                        value: _AnswerMode.type,
-                        icon: const Icon(Icons.keyboard_outlined),
-                        label: compact ? null : const Text('Type'),
-                        tooltip: 'Type answer',
-                      ),
-                    ],
-                    selected: {_mode},
-                    onSelectionChanged: (selection) =>
-                        setState(() => _mode = selection.first),
-                  ),
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 8),
-          if (_mode == _AnswerMode.draw) ...[
-            Wrap(
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 4,
-              children: [
-                for (final entry in _colors.entries)
-                  IconButton(
-                    tooltip: '${entry.key} pen',
-                    visualDensity: VisualDensity.compact,
-                    onPressed: () => setState(() {
-                      _color = entry.value;
-                      _eraser = false;
-                    }),
-                    icon: Icon(Icons.circle, color: entry.value, size: 20),
-                    style: IconButton.styleFrom(
-                      side: _color == entry.value && !_eraser
-                          ? BorderSide(color: theme.colorScheme.primary)
-                          : BorderSide.none,
-                    ),
-                  ),
-                IconButton(
-                  tooltip: _eraser ? 'Pen' : 'Eraser',
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () => setState(() => _eraser = !_eraser),
-                  icon: Icon(_eraser ? Icons.edit : Icons.auto_fix_normal),
-                ),
-                IconButton(
-                  tooltip: 'Clear drawing',
-                  visualDensity: VisualDensity.compact,
-                  onPressed: _strokes.isEmpty
-                      ? null
-                      : () => setState(_strokes.clear),
-                  icon: const Icon(Icons.delete_outline),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            SizedBox(
-              height: 140,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: GestureDetector(
-                  key: _canvasKey,
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () {},
-                  onPanStart: _startStroke,
-                  onPanUpdate: _extendStroke,
-                  onPanEnd: (_) => _endStroke(),
-                  child: CustomPaint(
-                    key: const ValueKey('answer-drawing-canvas'),
-                    foregroundPainter: _AnswerPainter(
-                      List.unmodifiable(_strokes),
-                    ),
-                    child: Container(
-                      color: theme.colorScheme.surfaceContainerHighest,
-                      alignment: Alignment.center,
-                      child: _strokes.isEmpty
-                          ? Text(
-                              'Write with your finger or pen',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            )
-                          : null,
-                    ),
-                  ),
-                ),
+          Row(
+            children: [
+              Expanded(
+                child: Text('Scratchpad', style: theme.textTheme.labelLarge),
               ),
-            ),
-          ] else
+              IconButton(
+                tooltip: 'Draw',
+                visualDensity: VisualDensity.compact,
+                isSelected: _mode == _AnswerMode.draw,
+                icon: const Icon(Icons.draw_outlined),
+                onPressed: () {
+                  setState(() => _mode = _AnswerMode.draw);
+                  _openDrawing();
+                },
+              ),
+              IconButton(
+                tooltip: 'Type',
+                visualDensity: VisualDensity.compact,
+                isSelected: _mode == _AnswerMode.type,
+                icon: const Icon(Icons.keyboard_outlined),
+                onPressed: () => setState(() => _mode = _AnswerMode.type),
+              ),
+              IconButton(
+                tooltip: 'Hide scratchpad',
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.expand_less),
+                onPressed: () => setState(() => _expanded = false),
+              ),
+            ],
+          ),
+          if (_mode == _AnswerMode.type)
             Focus(
               onKeyEvent: _handleTextKey,
               child: TextField(
                 controller: _textController,
                 minLines: 1,
                 maxLines: 3,
-                textInputAction: TextInputAction.done,
-                onSubmitted: (_) => widget.onSubmit(),
                 decoration: InputDecoration(
                   hintText: 'Type your answer…',
                   border: const OutlineInputBorder(),
@@ -252,8 +189,148 @@ class _AnswerWorkspaceState extends State<AnswerWorkspace> {
                 ),
                 onChanged: (_) => setState(() {}),
               ),
+            )
+          else
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                icon: const Icon(Icons.fullscreen, size: 18),
+                label: Text(
+                  _strokes.isEmpty ? 'Open drawing pad' : 'Continue drawing',
+                ),
+                onPressed: _openDrawing,
+              ),
             ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _openDrawing() =>
+      showDialog<void>(
+        context: context,
+        barrierColor: Colors.transparent,
+        builder: (context) => StatefulBuilder(
+          builder: (context, setDialogState) =>
+              _buildDrawingScratchpad(context, setDialogState),
+        ),
+      ).then((_) {
+        if (mounted) setState(() {});
+      });
+
+  Widget _buildDrawingScratchpad(
+    BuildContext context,
+    StateSetter setDialogState,
+  ) {
+    final theme = Theme.of(context);
+    return Dialog.fullscreen(
+      backgroundColor: Colors.transparent,
+      child: Scaffold(
+        backgroundColor: theme.colorScheme.surface.withValues(alpha: 0.6),
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Column(
+              children: [
+                Material(
+                  elevation: 3,
+                  color: theme.colorScheme.surface,
+                  borderRadius: BorderRadius.circular(24),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 2,
+                      children: [
+                        IconButton(
+                          tooltip: 'Close scratchpad',
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.of(context).pop(),
+                        ),
+                        for (final entry in _colors.entries)
+                          IconButton(
+                            tooltip: '${entry.key} pen',
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () => setDialogState(() {
+                              _color = entry.value;
+                              _eraser = false;
+                            }),
+                            icon: Icon(
+                              Icons.circle,
+                              color: entry.value,
+                              size: 20,
+                            ),
+                            style: IconButton.styleFrom(
+                              side: _color == entry.value && !_eraser
+                                  ? BorderSide(color: theme.colorScheme.primary)
+                                  : BorderSide.none,
+                            ),
+                          ),
+                        IconButton(
+                          tooltip: _eraser ? 'Pen' : 'Eraser',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () =>
+                              setDialogState(() => _eraser = !_eraser),
+                          icon: Icon(
+                            _eraser ? Icons.edit : Icons.auto_fix_normal,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Clear drawing',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: _strokes.isEmpty
+                              ? null
+                              : () => setDialogState(_strokes.clear),
+                          icon: const Icon(Icons.delete_outline),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: GestureDetector(
+                    key: _canvasKey,
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {},
+                    onPanStart: (details) =>
+                        _startStroke(details, setDialogState),
+                    onPanUpdate: (details) =>
+                        _extendStroke(details, setDialogState),
+                    onPanEnd: (_) => _endStroke(),
+                    child: CustomPaint(
+                      key: const ValueKey('answer-drawing-canvas'),
+                      foregroundPainter: _AnswerPainter(
+                        List.unmodifiable(_strokes),
+                      ),
+                      child: Center(
+                        child: _strokes.isEmpty
+                            ? DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.surface.withValues(
+                                    alpha: 0.55,
+                                  ),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 6,
+                                  ),
+                                  child: Text(
+                                    'Write with your finger or pen',
+                                    style: theme.textTheme.bodySmall,
+                                  ),
+                                ),
+                              )
+                            : null,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
