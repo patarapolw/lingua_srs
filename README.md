@@ -5,15 +5,18 @@ SRS that puts language learning first: custom lessons, lesson-by-lesson vocabula
 ## Screenshots
 
 <p align="center">
-  <img src="docs/images/desktop-lessons.png" alt="Desktop lessons dashboard with daily review queue" width="49%">
-  <img src="docs/images/desktop-vocab-pool.png" alt="Desktop vocabulary pool with search and part-of-speech filters" width="49%">
+  <img src="docs/images/desktop-lessons.png" alt="Desktop lessons dashboard with daily review queue" width="74%">
+  <img src="docs/images/android-lessons.png" alt="LinguaSRS lessons dashboard on a Pixel Fold Android emulator" width="20%">
 </p>
+
+<details>
+<summary>More desktop screenshots</summary>
+
 <p align="center">
+  <img src="docs/images/desktop-vocab-pool.png" alt="Desktop vocabulary pool with search and part-of-speech filters" width="49%">
   <img src="docs/images/desktop-sentences.png" alt="Desktop shared sentence pool" width="49%">
 </p>
-<p align="center">
-  <img src="docs/images/android-lessons.png" alt="LinguaSRS lessons dashboard on a Pixel Fold Android emulator" width="32%">
-</p>
+</details>
 
 ## Highlights
 
