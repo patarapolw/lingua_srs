@@ -14,6 +14,7 @@ import '../services/deepseek_service.dart';
 import '../services/lesson_ai_prompt.dart';
 import '../services/word_ai_prompt.dart';
 import '../widgets/ai_discussion_suggestion_tile.dart';
+import '../widgets/ai_question_chip.dart';
 import '../widgets/emphasis_text.dart';
 import '../widgets/markdown_content.dart';
 import 'related_ai_discussions_sheet.dart';
@@ -556,11 +557,11 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                                   const SizedBox(height: 4),
                                   Wrap(
                                     spacing: 6,
-                                    runSpacing: 4,
+                                    runSpacing: 6,
                                     children: firstQuestions
                                         .map(
-                                          (question) => ActionChip(
-                                            label: Text(question),
+                                          (question) => AiQuestionChip(
+                                            label: question,
                                             onPressed: _sending
                                                 ? null
                                                 : () => _sendQuestion(question),
@@ -646,16 +647,18 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                     tilePadding: EdgeInsets.zero,
                     visualDensity: VisualDensity.compact,
                     initiallyExpanded: height > 1000,
-                    children: followUps
-                        .map(
-                          (question) => ActionChip(
-                            label: Text(question),
+                    children: [
+                      for (final question in followUps)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: AiQuestionChip(
+                            label: question,
                             onPressed: _sending
                                 ? null
                                 : () => _sendQuestion(question),
                           ),
-                        )
-                        .toList(),
+                        ),
+                    ],
                   ),
                 SizedBox(
                   height: 2,

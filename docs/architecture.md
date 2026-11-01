@@ -44,6 +44,7 @@ lingua_srs/
 │   └── widgets/
 │       ├── adaptive_scaffold.dart     # Responsive layout (Rail vs BottomNav)
 │       ├── ai_discussion_suggestion_tile.dart # One suggested AI discussion and why
+│       ├── ai_question_chip.dart              # A suggested question to tap; a long one wraps onto more lines
 │       ├── audio_button.dart          # Audio play/stop indicator
 │       ├── audio_edit_fields.dart     # Audio URL (preview, use-recording checkbox) and collapsible TTS text fields for edit dialogs
 │       ├── emphasis_text.dart         # Sentence text with **bold** segments, no Markdown
