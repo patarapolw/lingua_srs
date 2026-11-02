@@ -286,6 +286,21 @@ void main() {
         await tester.pumpAndSettle();
       }
 
+      testWidgets('tiles stay as wide as the list, open or closed', (
+        tester,
+      ) async {
+        final provider = await seeded(tester);
+        await pumpWith(tester, provider, const VocabPoolView());
+        final tile = find.ancestor(
+          of: find.text('공항'),
+          matching: find.byType(Card),
+        );
+        final list = tester.getSize(find.byType(ListView).last).width;
+
+        // Only the list's 16px padding on each side is left over.
+        expect(tester.getSize(tile).width, list - 32);
+      });
+
       testWidgets('reveals Delete only for a word never studied', (
         tester,
       ) async {

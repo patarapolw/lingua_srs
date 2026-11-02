@@ -152,6 +152,7 @@ class _SwipeActionsState extends State<SwipeActions> {
             if (!_busy) _close();
           },
           child: Stack(
+            fit: StackFit.passthrough,
             children: [
               if (_open)
                 Positioned(

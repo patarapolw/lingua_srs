@@ -183,7 +183,6 @@ class _DiscussionCard extends StatelessWidget {
       ],
       child: Card(
         child: ListTile(
-          leading: const CircleAvatar(child: Icon(Icons.forum_outlined)),
           // The date sits beside the title: ListTile limits its trailing widget
           // to 56px, which a date that wraps would exceed.
           title: Row(
