@@ -85,29 +85,10 @@ void main() {
     );
     expect(find.text('Less'), findsOneWidget);
     expect(find.text('More'), findsOneWidget);
-    expect(find.text('Jan'), findsWidgets);
+    expect(find.text('Jan'), findsOneWidget);
     expect(find.byType(RotatedBox), findsWidgets);
-    expect(find.text('Reviews by month'), findsOneWidget);
-    const monthNames = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    expect(
-      find.byTooltip(
-        '${monthNames[today.month - 1]}: ${SrsRating.values.length} reviews',
-      ),
-      findsOneWidget,
-    );
+    expect(find.text('Cards by stage'), findsOneWidget);
+    expect(find.byTooltip('New: 0 cards'), findsOneWidget);
 
     final restoredCounts = await StorageService.loadDailyReviewCounts();
     expect(
@@ -123,6 +104,7 @@ void main() {
       id: 'leech-card',
       direction: CardDirection.targetToNative,
       lapses: 8,
+      status: SrsStatus.review,
     );
     provider.lessons.addAll([
       Lesson(
@@ -152,6 +134,7 @@ void main() {
             cardTargetToNative: SrsCard(
               direction: CardDirection.targetToNative,
               lapses: 7,
+              status: SrsStatus.learning,
             ),
           ),
           VocabItem(
@@ -177,6 +160,9 @@ void main() {
     expect(find.text('0 reviews in the past year'), findsOneWidget);
     expect(find.text('No study activity yet'), findsNothing);
     expect(find.text('Leeches (1)'), findsOneWidget);
+    expect(find.text('Cards by stage'), findsOneWidget);
+    expect(find.byTooltip('Review: 1 card'), findsOneWidget);
+    expect(find.byTooltip('Learning: 1 card'), findsOneWidget);
     expect(find.text('word'), findsOneWidget);
     expect(find.text('meaning'), findsOneWidget);
     expect(find.text('8 lapses'), findsOneWidget);

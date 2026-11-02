@@ -7,20 +7,6 @@ import '../models/vocab_item.dart';
 import '../providers/app_provider.dart';
 
 const _leechLapseThreshold = 8;
-const _monthNames = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
-];
 
 class ActivityHeatmapView extends StatelessWidget {
   const ActivityHeatmapView({super.key});
@@ -58,8 +44,8 @@ class ActivityHeatmapView extends StatelessWidget {
         builder: (context, provider, _) {
           final counts = provider.dailyReviewCounts;
           final leeches = _findLeeches(provider.lessons);
-          final monthlyCounts = _monthlyReviewCounts(counts, today);
-          final maxMonthlyCount = monthlyCounts.values.fold(
+          final stageCounts = _studyStageCounts(provider.lessons);
+          final maxStageCount = stageCounts.values.fold(
             0,
             (maximum, count) => count > maximum ? count : maximum,
           );
@@ -196,24 +182,22 @@ class ActivityHeatmapView extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 24),
-              Text('Reviews by month', style: theme.textTheme.titleMedium),
+              Text('Cards by stage', style: theme.textTheme.titleMedium),
               const SizedBox(height: 12),
               SizedBox(
                 height: 120,
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      for (final entry in monthlyCounts.entries)
-                        _monthBar(
+                child: Row(
+                  children: [
+                    for (final entry in stageCounts.entries)
+                      Expanded(
+                        child: _stageBar(
                           context,
-                          entry.key,
+                          _stageLabel(entry.key),
                           entry.value,
-                          maxMonthlyCount,
+                          maxStageCount,
                         ),
-                    ],
-                  ),
+                      ),
+                  ],
                 ),
               ),
               if (leeches.isNotEmpty) ...[
@@ -314,70 +298,61 @@ class ActivityHeatmapView extends StatelessWidget {
     _ => 4,
   };
 
-  Map<DateTime, int> _monthlyReviewCounts(
-    Map<DateTime, int> counts,
-    DateTime today,
-  ) {
-    final monthlyCounts = {
-      for (var offset = 11; offset >= 0; offset--)
-        DateTime(today.year, today.month - offset, 1): 0,
-    };
-    final firstMonth = monthlyCounts.keys.first;
-    final todayDate = DateTime(today.year, today.month, today.day);
-    for (final entry in counts.entries) {
-      final date = DateTime(
-        entry.key.year,
-        entry.key.month,
-        entry.key.day,
-      );
-      if (date.isBefore(firstMonth) || date.isAfter(todayDate)) continue;
-      final month = DateTime(date.year, date.month);
-      monthlyCounts[month] = monthlyCounts[month]! + entry.value;
+  Map<SrsStatus, int> _studyStageCounts(List<Lesson> lessons) {
+    final counts = {for (final status in SrsStatus.values) status: 0};
+    final seenCardIds = <String>{};
+    for (final vocab in lessons.expand((lesson) => lesson.vocabularies)) {
+      for (final card in [vocab.cardTargetToNative, vocab.cardNativeToTarget]) {
+        if (!card.isEnabled || !seenCardIds.add(card.id)) continue;
+        counts[card.status] = counts[card.status]! + 1;
+      }
     }
-    return monthlyCounts;
+    return counts;
   }
 
-  Widget _monthBar(
+  String _stageLabel(SrsStatus status) => switch (status) {
+    SrsStatus.isNew => 'New',
+    SrsStatus.learning => 'Learning',
+    SrsStatus.review => 'Review',
+  };
+
+  Widget _stageBar(
     BuildContext context,
-    DateTime month,
+    String label,
     int count,
     int maximum,
   ) {
-    final label = _monthNames[month.month - 1];
-    final tooltip = '$label: $count ${count == 1 ? 'review' : 'reviews'}';
+    final tooltip = '$label: $count ${count == 1 ? 'card' : 'cards'}';
     final barHeight = maximum == 0 ? 2.0 : 80.0 * count / maximum;
     return Semantics(
       label: tooltip,
       child: Tooltip(
         message: tooltip,
-        child: SizedBox(
-          width: 36,
-          child: Column(
-            children: [
-              Expanded(
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Container(
-                    width: 16,
-                    height: barHeight,
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primary,
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(3),
-                      ),
+        child: Column(
+          children: [
+            Expanded(
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: Container(
+                  width: 16,
+                  height: barHeight,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary,
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(3),
                     ),
                   ),
                 ),
               ),
-              SizedBox(
-                height: 20,
-                child: Text(
-                  label,
-                  style: Theme.of(context).textTheme.labelSmall,
-                ),
+            ),
+            SizedBox(
+              height: 20,
+              child: Text(
+                label,
+                style: Theme.of(context).textTheme.labelSmall,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
