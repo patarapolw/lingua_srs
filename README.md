@@ -26,16 +26,14 @@ SRS that puts language learning first: custom lessons, lesson-by-lesson vocabula
 
 ## Highlights
 
-- **Lessons as Markdown + YAML**: import files, folders or ZIPs; group lessons into units and nested folders with `::`; read the full Markdown lesson in-app. See [lesson format](docs/lesson-format.md).
-- **Smart cards**: direction defaults by part of speech, per-item overrides, random example sentence on the front, cloze deletion for EN ➔ KO.
-- **Sentence pool**: browse, edit and link sentences across lessons.
-- **Vocab pool**: browse and search every word across lessons, in Korean or English.
-- **Audio**: stream-on-first-play with offline caching; offline system TTS on Android.
-- **Adaptive review**: *Again* cards return a few cards later, interleaved with new cards; review recent mistakes across lessons at any time.
-- **Review controls**: flip cards, navigate back through answered cards, and undo a rating.
-- **Reset progress**: reset SRS for a whole lesson or an individual word without changing card visibility.
-- **AI discussions**: ask DeepSeek about the current card or a whole lesson; chats are saved locally.
-- **Keyboard-first**: Anki-style [hotkeys](docs/hotkeys.md), with undo.
+- **Lessons**: create lessons in-app or import Markdown/YAML files, folders, and ZIPs. Organize lessons into nested units, re-import updates without losing review progress, and read Markdown lessons in-app. See [lesson format](docs/lesson-format.md).
+- **Flexible flashcards**: study Korean ➔ English or English ➔ Korean, with defaults by part of speech and per-word overrides. Cards can show random example sentences, cloze deletions, disambiguation cues, and Markdown notes.
+- **Adaptive review**: SM-2 scheduling with due and new cards, configurable rolling review limits, and short-interval repeats. *Again* cards return later in the session; review recent mistakes across lessons or reset progress for a lesson, word, or card direction.
+- **Shared pools**: browse, search, edit, and link sentences across lessons. Find distinct vocabulary in Korean or English, with part-of-speech filters and lesson references.
+- **Audio and pronunciation**: stream recordings on first play and cache them for offline playback. Use offline system TTS on Android or streamed, cached TTS on other platforms.
+- **AI discussions**: ask DeepSeek about a vocabulary card or lesson, explore suggested and related questions, and revisit locally saved discussions.
+- **Responsive interface**: desktop navigation and review controls alongside touch-friendly mobile navigation and editors.
+- **Keyboard-first**: Anki-style [hotkeys](docs/hotkeys.md), including card navigation and undo.
 
 Currently only Korean ➔ English is supported. Full details in [docs/features.md](docs/features.md).
 
