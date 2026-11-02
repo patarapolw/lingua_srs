@@ -115,28 +115,32 @@ void main() {
     tester,
   ) async {
     final reviewed = DateTime.now().subtract(const Duration(days: 3));
-    await StorageService.saveLessons([
-      Lesson(
-        title: 'Old',
-        vocabularies: [
-          VocabItem(
-            targetWord: 'a',
-            translation: 'b',
-            pos: 'nouns',
-            cardTargetToNative: SrsCard(
-              direction: CardDirection.targetToNative,
-              status: SrsStatus.review,
-              lastReviewed: reviewed,
+    late AppProvider fresh;
+    // Real timers and storage I/O don't progress inside testWidgets' fake zone.
+    await tester.runAsync(() async {
+      await StorageService.saveLessons([
+        Lesson(
+          title: 'Old',
+          vocabularies: [
+            VocabItem(
+              targetWord: 'a',
+              translation: 'b',
+              pos: 'nouns',
+              cardTargetToNative: SrsCard(
+                direction: CardDirection.targetToNative,
+                status: SrsStatus.review,
+                lastReviewed: reviewed,
+              ),
             ),
-          ),
-        ],
-      ),
-    ]);
-    final fresh = AppProvider();
+          ],
+        ),
+      ]);
+      fresh = AppProvider();
+      for (var attempt = 0; attempt < 100 && fresh.isLoading; attempt++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    });
     addTearDown(fresh.dispose);
-    for (var attempt = 0; attempt < 100 && fresh.isLoading; attempt++) {
-      await Future<void>.delayed(const Duration(milliseconds: 10));
-    }
     expect(
       fresh.dailyReviewCounts[DateTime(
         reviewed.year,

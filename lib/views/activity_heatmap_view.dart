@@ -44,36 +44,38 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
       body: Consumer<AppProvider>(
         builder: (context, provider, _) {
           final counts = provider.dailyReviewCounts;
-      final yearStart = DateTime(today.year, today.month, today.day - 364);
-      final earliest = counts.entries
-          .where((entry) => entry.value > 0 && !entry.key.isBefore(yearStart))
-          .map((entry) => entry.key)
-          .fold<DateTime?>(
-            null,
-            (min, date) => min == null || date.isBefore(min) ? date : min,
+          final yearStart = DateTime(today.year, today.month, today.day - 364);
+          final earliest = counts.entries
+              .where(
+                (entry) => entry.value > 0 && !entry.key.isBefore(yearStart),
+              )
+              .map((entry) => entry.key)
+              .fold<DateTime?>(
+                null,
+                (min, date) => min == null || date.isBefore(min) ? date : min,
+              );
+          final firstDay = earliest ?? yearStart;
+          final calendarStart = firstDay.subtract(
+            Duration(days: firstDay.weekday - DateTime.monday),
           );
-      final firstDay = earliest ?? yearStart;
-      final calendarStart = firstDay.subtract(
-        Duration(days: firstDay.weekday - DateTime.monday),
-      );
-      final calendarDays = DateTime.utc(today.year, today.month, today.day)
-          .difference(
-            DateTime.utc(
-              calendarStart.year,
-              calendarStart.month,
-              calendarStart.day,
-            ),
-          )
-          .inDays;
-      final weekCount = (calendarDays ~/ 7) + 1;
-      final weeks = [
-        for (var week = 0; week < weekCount; week++)
-          DateTime(
-            calendarStart.year,
-            calendarStart.month,
-            calendarStart.day + week * 7,
-          ),
-      ];
+          final calendarDays = DateTime.utc(today.year, today.month, today.day)
+              .difference(
+                DateTime.utc(
+                  calendarStart.year,
+                  calendarStart.month,
+                  calendarStart.day,
+                ),
+              )
+              .inDays;
+          final weekCount = (calendarDays ~/ 7) + 1;
+          final weeks = [
+            for (var week = 0; week < weekCount; week++)
+              DateTime(
+                calendarStart.year,
+                calendarStart.month,
+                calendarStart.day + week * 7,
+              ),
+          ];
 
           final leeches = _findLeeches(provider.lessons);
           final stageCounts = _studyStageCounts(provider.lessons);
