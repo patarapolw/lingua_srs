@@ -52,6 +52,7 @@ class LessonHierarchyView extends StatelessWidget {
   final void Function(List<String> folderPath) onMoveFolder;
   final void Function(List<String> folderPath, int lessonCount) onResetFolder;
   final void Function(List<String> folderPath, int lessonCount) onDeleteFolder;
+  final void Function(List<String> folderPath)? onExportFolder;
 
   static const double _indentPerLevel = 24;
 
@@ -66,6 +67,7 @@ class LessonHierarchyView extends StatelessWidget {
     required this.onMoveFolder,
     required this.onResetFolder,
     required this.onDeleteFolder,
+    this.onExportFolder,
   });
 
   @override
@@ -302,6 +304,8 @@ class LessonHierarchyView extends StatelessWidget {
                     orderActions.moveDown();
                   } else if (action == 'reset_srs') {
                     onResetFolder(row.folderPath!, row.lessonCount);
+                  } else if (action == 'export') {
+                    onExportFolder?.call(row.folderPath!);
                   } else if (action == 'delete') {
                     onDeleteFolder(row.folderPath!, row.lessonCount);
                   }
@@ -330,6 +334,18 @@ class LessonHierarchyView extends StatelessWidget {
                     ),
                   ),
                   const PopupMenuDivider(),
+                  if (onExportFolder != null)
+                    const PopupMenuItem(
+                      value: 'export',
+                      child: Row(
+                        children: [
+                          Icon(Icons.archive_outlined, size: 18),
+                          SizedBox(width: 8),
+                          Text('Export unit as ZIP'),
+                        ],
+                      ),
+                    ),
+                  if (onExportFolder != null) const PopupMenuDivider(),
                   PopupMenuItem(
                     value: 'reset_srs',
                     child: Row(

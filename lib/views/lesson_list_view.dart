@@ -1,10 +1,13 @@
 import 'dart:math';
+import 'dart:typed_data';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/lesson.dart';
 import '../providers/app_provider.dart';
+import '../services/lesson_export_service.dart';
 import '../widgets/folder_picker_dialog.dart';
 import '../widgets/lesson_hierarchy_view.dart';
 import 'activity_heatmap_view.dart';
@@ -271,6 +274,45 @@ class LessonListView extends StatelessWidget {
     }
   }
 
+  Future<void> _exportLessons(
+    BuildContext context,
+    AppProvider provider,
+    List<Lesson> lessons,
+    String fileName,
+  ) async {
+    try {
+      final bytes = LessonExportService.createZip(lessons, provider.sentences);
+      final saved = await FilePicker.saveFile(
+        dialogTitle: 'Export lessons as ZIP',
+        fileName: LessonExportService.fileName(fileName),
+        bytes: Uint8List.fromList(bytes),
+      );
+      if (saved != null && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Lessons exported as ZIP.')),
+        );
+      }
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not export lessons: $error')),
+      );
+    }
+  }
+
+  Future<void> _exportLessonGroup(
+    BuildContext context,
+    AppProvider provider,
+    List<String> folderPath,
+  ) => _exportLessons(
+    context,
+    provider,
+    provider.lessons
+        .where((lesson) => isHierarchyPathWithin(lesson.folderPath, folderPath))
+        .toList(),
+    folderPath.last,
+  );
+
   Widget _buildLessonCard(
     BuildContext context,
     AppProvider provider,
@@ -376,6 +418,13 @@ class LessonListView extends StatelessWidget {
                   onSelected: (value) {
                     if (value == 'vocabulary') {
                       openLesson();
+                    } else if (value == 'export') {
+                      _exportLessons(
+                        context,
+                        provider,
+                        [lesson],
+                        lesson.displayTitle,
+                      );
                     } else if (value == 'move_up') {
                       orderActions.moveUp();
                     } else if (value == 'move_down') {
@@ -408,6 +457,23 @@ class LessonListView extends StatelessWidget {
                       ),
                       const PopupMenuDivider(),
                     ],
+                    const PopupMenuItem(
+                      value: 'export',
+                      child: Row(
+                        children: [
+                          Icon(Icons.archive_outlined, size: 18),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Export as ZIP',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuDivider(),
                     PopupMenuItem(
                       value: 'move_up',
                       enabled: orderActions.canMoveUp,
@@ -924,6 +990,8 @@ class LessonListView extends StatelessWidget {
                               path,
                               count,
                             ),
+                        onExportFolder: (path) =>
+                            _exportLessonGroup(context, provider, path),
                       ),
                     ),
                   ),
