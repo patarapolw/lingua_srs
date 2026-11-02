@@ -91,6 +91,32 @@ void main() {
     });
   });
 
+  group('docs/architecture.md', () {
+    final architecture = _readDoc('docs/architecture.md');
+    final libFiles = [
+      for (final entity in Directory('lib').listSync(recursive: true))
+        if (entity is File && entity.path.endsWith('.dart'))
+          entity.uri.pathSegments.last,
+    ];
+
+    test('lists every Dart file under lib/', () {
+      final missing = [
+        for (final name in libFiles)
+          if (!architecture.contains(name)) name,
+      ];
+      expect(missing, isEmpty, reason: 'Not in architecture.md: $missing');
+    });
+
+    test('does not list Dart files that no longer exist', () {
+      final listed = RegExp(r'[a-z0-9_]+\.dart').allMatches(architecture);
+      final stale = [
+        for (final match in listed)
+          if (!libFiles.contains(match[0])) match[0]!,
+      ];
+      expect(stale, isEmpty, reason: 'Not in lib/: $stale');
+    });
+  });
+
   group('README.md', () {
     final readme = _readDoc('README.md');
 
