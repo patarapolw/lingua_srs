@@ -294,8 +294,9 @@ class StorageService {
       jsonEncode({
         for (final entry in counts.entries)
           '${entry.key.year.toString().padLeft(4, '0')}-'
-              '${entry.key.month.toString().padLeft(2, '0')}-'
-              '${entry.key.day.toString().padLeft(2, '0')}': entry.value,
+                  '${entry.key.month.toString().padLeft(2, '0')}-'
+                  '${entry.key.day.toString().padLeft(2, '0')}':
+              entry.value,
       }),
     );
   }

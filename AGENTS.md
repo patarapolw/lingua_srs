@@ -14,6 +14,7 @@ Flutter app (Dart, `provider` state management). See [README.md](README.md) for 
 - 2-space indentation, Dart defaults.
 - Lesson/vocabulary parsing lives only in `lib/services/yaml_parser_service.dart`. Do not parse lesson syntax elsewhere.
 - SRS scheduling lives in `lib/services/srs_service.dart`.
+- Make commits using conventional commit message.
 
 ## Rules
 

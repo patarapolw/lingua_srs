@@ -51,9 +51,6 @@ void main() {
     expect(find.text('More'), findsOneWidget);
 
     final restoredCounts = await StorageService.loadDailyReviewCounts();
-    expect(
-      restoredCounts[DateTime(today.year, today.month, today.day)],
-      1,
-    );
+    expect(restoredCounts[DateTime(today.year, today.month, today.day)], 1);
   });
 }
