@@ -340,82 +340,108 @@ class _SentencePoolViewState extends State<SentencePoolView> {
 
                       final vocabUsageCount = _usageCount(provider, item);
 
+                      final actions = [
+                        SwipeAction(
+                          label: 'Delete',
+                          icon: Icons.delete_outline,
+                          semanticLabel: 'Delete sentence',
+                          onPressed: () => _confirmDelete(provider, item),
+                        ),
+                      ];
                       return SwipeActions(
                         key: ValueKey('sentence-pool-swipe-${item.id}'),
                         margin: const EdgeInsets.all(4),
-                        actions: [
-                          SwipeAction(
-                            label: 'Delete',
-                            icon: Icons.delete_outline,
-                            semanticLabel: 'Delete sentence',
-                            onPressed: () => _confirmDelete(provider, item),
-                          ),
-                        ],
+                        actions: actions,
                         child: Card(
                           elevation: 1,
                           clipBehavior: Clip.antiAlias,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: InkWell(
-                            onTap: () => _showAddEditDialog(sentence: item),
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  EmphasisText(
-                                    item.targetText,
-                                    style: theme.textTheme.titleMedium
-                                        ?.copyWith(fontWeight: FontWeight.w600),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  EmphasisText(
-                                    item.translationText,
-                                    style: theme.textTheme.bodyMedium?.copyWith(
-                                      color: theme.colorScheme.onSurfaceVariant,
-                                    ),
-                                  ),
-                                  if (item.notes.trim().isNotEmpty) ...[
-                                    const SizedBox(height: 8),
-                                    DecoratedBox(
-                                      decoration: BoxDecoration(
-                                        color: theme
-                                            .colorScheme
-                                            .secondaryContainer
-                                            .withValues(alpha: 0.3),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Padding(
-                                        padding: const EdgeInsets.all(10),
-                                        child: MarkdownContent(
-                                          content: item.notes,
-                                          style: theme.textTheme.bodySmall,
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: InkWell(
+                                  onTap: () =>
+                                      _showAddEditDialog(sentence: item),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(16),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        EmphasisText(
+                                          item.targetText,
+                                          style: theme.textTheme.titleMedium
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.w600,
+                                              ),
                                         ),
-                                      ),
+                                        const SizedBox(height: 6),
+                                        EmphasisText(
+                                          item.translationText,
+                                          style: theme.textTheme.bodyMedium
+                                              ?.copyWith(
+                                                color: theme
+                                                    .colorScheme
+                                                    .onSurfaceVariant,
+                                              ),
+                                        ),
+                                        if (item.notes.trim().isNotEmpty) ...[
+                                          const SizedBox(height: 8),
+                                          DecoratedBox(
+                                            decoration: BoxDecoration(
+                                              color: theme
+                                                  .colorScheme
+                                                  .secondaryContainer
+                                                  .withValues(alpha: 0.3),
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                            ),
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(10),
+                                              child: MarkdownContent(
+                                                content: item.notes,
+                                                style:
+                                                    theme.textTheme.bodySmall,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                        const SizedBox(height: 8),
+                                        Wrap(
+                                          spacing: 8,
+                                          runSpacing: 4,
+                                          crossAxisAlignment:
+                                              WrapCrossAlignment.center,
+                                          children: [
+                                            Badge(
+                                              label: Text(
+                                                '$vocabUsageCount vocabs',
+                                              ),
+                                              backgroundColor: theme
+                                                  .colorScheme
+                                                  .secondaryContainer,
+                                              textColor: theme
+                                                  .colorScheme
+                                                  .onSecondaryContainer,
+                                            ),
+                                          ],
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                  const SizedBox(height: 8),
-                                  Wrap(
-                                    spacing: 8,
-                                    runSpacing: 4,
-                                    crossAxisAlignment:
-                                        WrapCrossAlignment.center,
-                                    children: [
-                                      Badge(
-                                        label: Text('$vocabUsageCount vocabs'),
-                                        backgroundColor: theme
-                                            .colorScheme
-                                            .secondaryContainer,
-                                        textColor: theme
-                                            .colorScheme
-                                            .onSecondaryContainer,
-                                      ),
-                                    ],
                                   ),
-                                ],
+                                ),
                               ),
-                            ),
+                              Padding(
+                                padding: const EdgeInsets.only(
+                                  top: 4,
+                                  right: 4,
+                                ),
+                                child: SwipeActionsMenu(actions: actions),
+                              ),
+                            ],
                           ),
                         ),
                       );

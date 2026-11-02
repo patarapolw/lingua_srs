@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lingua_srs/models/sentence.dart';
-import 'package:lingua_srs/models/srs_card.dart';
 import 'package:lingua_srs/models/vocab_item.dart';
 import 'package:lingua_srs/providers/app_provider.dart';
 import 'package:lingua_srs/services/audio_service.dart';
@@ -267,19 +266,11 @@ void main() {
 
     group('swiping a word', () {
       final panelDelete = find.byIcon(Icons.delete_outline);
-      final panelReset = find.byIcon(Icons.restart_alt);
 
       Iterable<VocabItem> copiesOf(AppProvider provider, String word) =>
           provider.lessons
               .expand((lesson) => lesson.vocabularies)
               .where((vocab) => vocab.targetWord == word);
-
-      void study(AppProvider provider, String word) {
-        for (final vocab in copiesOf(provider, word)) {
-          vocab.cardTargetToNative.status = SrsStatus.review;
-          vocab.cardTargetToNative.repetitions = 3;
-        }
-      }
 
       Future<void> swipe(WidgetTester tester, String word) async {
         await tester.drag(find.text(word), const Offset(-600, 0));
@@ -301,73 +292,15 @@ void main() {
         expect(tester.getSize(tile).width, list - 32);
       });
 
-      testWidgets('reveals Delete only for a word never studied', (
-        tester,
-      ) async {
+      testWidgets('reveals only Delete, without asking', (tester) async {
         final provider = await seeded(tester);
         await pumpWith(tester, provider, const VocabPoolView());
 
         await swipe(tester, '공항');
 
         expect(panelDelete, findsOneWidget);
-        expect(panelReset, findsNothing);
+        expect(find.byIcon(Icons.restart_alt), findsNothing);
         expect(find.byType(AlertDialog), findsNothing);
-      });
-
-      testWidgets('reveals Reset and Delete for a studied word', (
-        tester,
-      ) async {
-        final provider = await seeded(tester);
-        study(provider, '공항');
-        await pumpWith(tester, provider, const VocabPoolView());
-
-        await swipe(tester, '공항');
-
-        expect(panelDelete, findsOneWidget);
-        expect(panelReset, findsOneWidget);
-        expect(find.byType(AlertDialog), findsNothing);
-      });
-
-      testWidgets('Reset asks first, and Cancel keeps the progress', (
-        tester,
-      ) async {
-        final provider = await seeded(tester);
-        study(provider, '공항');
-        await pumpWith(tester, provider, const VocabPoolView());
-
-        await swipe(tester, '공항');
-        await tester.tap(panelReset);
-        await tester.pumpAndSettle();
-        expect(find.text('Reset SRS Progress for "공항"?'), findsOneWidget);
-        await tester.tap(find.text('Cancel'));
-        await tester.pumpAndSettle();
-
-        expect(
-          copiesOf(provider, '공항').single.cardTargetToNative.status,
-          SrsStatus.review,
-        );
-        expect(panelReset, findsNothing);
-      });
-
-      testWidgets('confirming Reset sends both cards back to New', (
-        tester,
-      ) async {
-        final provider = await seeded(tester);
-        study(provider, '먹다');
-        await pumpWith(tester, provider, const VocabPoolView());
-
-        await swipe(tester, '먹다');
-        await tester.tap(panelReset);
-        await tester.pumpAndSettle();
-        await tester.tap(find.widgetWithText(FilledButton, 'Reset to New'));
-        await tester.pumpAndSettle();
-
-        for (final vocab in copiesOf(provider, '먹다')) {
-          expect(vocab.cardTargetToNative.status, SrsStatus.isNew);
-          expect(vocab.cardTargetToNative.repetitions, 0);
-        }
-        expect(find.text('Reset SRS progress for "먹다".'), findsOneWidget);
-        expect(find.text('먹다'), findsOneWidget);
       });
 
       testWidgets('Delete lists every lesson, and Cancel keeps the word', (
@@ -525,6 +458,96 @@ void main() {
 
       expect(find.textContaining('removed as an example'), findsNothing);
       expect(find.textContaining('will be deleted.'), findsOneWidget);
+    });
+  });
+
+  group('Desktop actions menu', () {
+    Future<AppProvider> withSentence(WidgetTester tester) async {
+      final provider = await seeded(tester);
+      await tester.runAsync(
+        () => provider.addSentenceToPool(
+          Sentence(targetText: '사과를 먹어요', translationText: 'I eat an apple'),
+        ),
+      );
+      return provider;
+    }
+
+    testWidgets('Vocab Pool tiles have a menu on a wide screen', (
+      tester,
+    ) async {
+      final provider = await seeded(tester);
+      await pumpWith(tester, provider, const VocabPoolView());
+
+      expect(find.byTooltip('More'), findsNWidgets(4));
+      await tester.tap(find.byTooltip('More').first);
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Delete "'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(find.text('4 words'), findsOneWidget);
+    });
+
+    testWidgets('the Vocab Pool menu deletes after confirming', (tester) async {
+      final provider = await seeded(tester);
+      await pumpWith(tester, provider, const VocabPoolView());
+
+      final card = find.ancestor(
+        of: find.text('공항'),
+        matching: find.byType(Card),
+      );
+      await tester.tap(
+        find.descendant(of: card, matching: find.byTooltip('More')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('공항'), findsNothing);
+      expect(find.text('3 words'), findsOneWidget);
+    });
+
+    testWidgets('Sentence Pool tiles have a menu that confirms first', (
+      tester,
+    ) async {
+      final provider = await withSentence(tester);
+      await pumpWith(tester, provider, const SentencePoolView());
+
+      await tester.tap(find.byTooltip('More'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+      expect(find.text('Delete this sentence?'), findsOneWidget);
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('사과를 먹어요'), findsNothing);
+      expect(provider.sentences, isEmpty);
+    });
+
+    testWidgets('the menu is hidden on a narrow screen', (tester) async {
+      final provider = await withSentence(tester);
+      for (final home in [const VocabPoolView(), const SentencePoolView()]) {
+        await pumpWith(tester, provider, home, size: const Size(420, 900));
+        expect(find.byTooltip('More'), findsNothing);
+      }
+    });
+
+    testWidgets('tapping a tile still opens it beside the menu', (
+      tester,
+    ) async {
+      final provider = await seeded(tester);
+      await pumpWith(tester, provider, const VocabPoolView());
+
+      await tester.tap(find.text('공항'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(VocabEditDialog), findsOneWidget);
     });
   });
 

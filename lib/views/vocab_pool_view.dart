@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../models/srs_card.dart';
-import '../models/vocab_item.dart';
 import '../models/vocab_merge_record.dart';
 import '../providers/app_provider.dart';
 import '../services/vocab_pool_search.dart';
@@ -38,42 +36,6 @@ class _VocabPoolViewState extends State<VocabPoolView> {
       }
     }
     VocabEditDialog.show(context, group.entry, lessonId: lessonId);
-  }
-
-  bool _hasProgress(VocabItem vocab) =>
-      vocab.cardTargetToNative.status != SrsStatus.isNew ||
-      vocab.cardNativeToTarget.status != SrsStatus.isNew;
-
-  Future<void> _confirmReset(AppProvider provider, VocabItem vocab) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Reset SRS Progress for "${vocab.targetWord}"?'),
-        content: const Text(
-          'Both cards of this word go back to New, losing their repetitions, '
-          'intervals, and review dates. Are you sure?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.orange.shade800,
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Reset to New'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    await provider.resetVocabSrs(vocab);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Reset SRS progress for "${vocab.targetWord}".')),
-    );
   }
 
   Future<void> _confirmDelete(AppProvider provider, VocabGroup group) async {
@@ -242,25 +204,18 @@ class _VocabPoolViewState extends State<VocabPoolView> {
                     itemBuilder: (context, index) {
                       final group = filtered[index];
                       final entry = group.entry;
+                      final actions = [
+                        SwipeAction(
+                          label: 'Delete',
+                          icon: Icons.delete_outline,
+                          semanticLabel: 'Delete word',
+                          onPressed: () => _confirmDelete(provider, group),
+                        ),
+                      ];
                       return SwipeActions(
                         key: ValueKey('vocab-pool-swipe-${group.id}'),
                         margin: const EdgeInsets.all(4),
-                        actions: [
-                          if (_hasProgress(entry))
-                            SwipeAction(
-                              label: 'Reset',
-                              icon: Icons.restart_alt,
-                              kind: SwipeActionKind.caution,
-                              semanticLabel: 'Reset SRS progress',
-                              onPressed: () => _confirmReset(provider, entry),
-                            ),
-                          SwipeAction(
-                            label: 'Delete',
-                            icon: Icons.delete_outline,
-                            semanticLabel: 'Delete word',
-                            onPressed: () => _confirmDelete(provider, group),
-                          ),
-                        ],
+                        actions: actions,
                         child: Card(
                           key: ValueKey('vocab-pool-${group.id}'),
                           elevation: 1,
@@ -268,56 +223,80 @@ class _VocabPoolViewState extends State<VocabPoolView> {
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: InkWell(
-                            onTap: () => _edit(provider, group),
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    entry.targetWord,
-                                    style: theme.textTheme.titleMedium
-                                        ?.copyWith(fontWeight: FontWeight.w600),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    entry.translation,
-                                    style: theme.textTheme.bodyMedium?.copyWith(
-                                      color: theme.colorScheme.onSurfaceVariant,
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: InkWell(
+                                  onTap: () => _edit(provider, group),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(16),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          entry.targetWord,
+                                          style: theme.textTheme.titleMedium
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          entry.translation,
+                                          style: theme.textTheme.bodyMedium
+                                              ?.copyWith(
+                                                color: theme
+                                                    .colorScheme
+                                                    .onSurfaceVariant,
+                                              ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Wrap(
+                                          spacing: 8,
+                                          runSpacing: 4,
+                                          crossAxisAlignment:
+                                              WrapCrossAlignment.center,
+                                          children: [
+                                            if (entry.pos.trim().isNotEmpty)
+                                              Badge(
+                                                label: Text(
+                                                  VocabPoolSearch.posLabel(
+                                                    entry.pos,
+                                                  ),
+                                                ),
+                                                backgroundColor: theme
+                                                    .colorScheme
+                                                    .secondaryContainer,
+                                                textColor: theme
+                                                    .colorScheme
+                                                    .onSecondaryContainer,
+                                              ),
+                                            Text(
+                                              group.lessonTitles.join(' · '),
+                                              style: theme.textTheme.bodySmall
+                                                  ?.copyWith(
+                                                    color: theme
+                                                        .colorScheme
+                                                        .outline,
+                                                  ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                  const SizedBox(height: 8),
-                                  Wrap(
-                                    spacing: 8,
-                                    runSpacing: 4,
-                                    crossAxisAlignment:
-                                        WrapCrossAlignment.center,
-                                    children: [
-                                      if (entry.pos.trim().isNotEmpty)
-                                        Badge(
-                                          label: Text(
-                                            VocabPoolSearch.posLabel(entry.pos),
-                                          ),
-                                          backgroundColor: theme
-                                              .colorScheme
-                                              .secondaryContainer,
-                                          textColor: theme
-                                              .colorScheme
-                                              .onSecondaryContainer,
-                                        ),
-                                      Text(
-                                        group.lessonTitles.join(' · '),
-                                        style: theme.textTheme.bodySmall
-                                            ?.copyWith(
-                                              color: theme.colorScheme.outline,
-                                            ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
+                                ),
                               ),
-                            ),
+                              Padding(
+                                padding: const EdgeInsets.only(
+                                  top: 4,
+                                  right: 4,
+                                ),
+                                child: SwipeActionsMenu(actions: actions),
+                              ),
+                            ],
                           ),
                         ),
                       );

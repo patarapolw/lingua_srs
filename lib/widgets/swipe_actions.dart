@@ -25,6 +25,47 @@ class SwipeAction {
   final Future<void> Function() onPressed;
 }
 
+/// The width from which the app uses its desktop layout (see AdaptiveScaffold).
+const _desktopWidth = 800;
+
+/// A `⋮` button listing [actions], for desktop layouts where nobody would
+/// discover the swipe. Renders nothing on narrow screens.
+class SwipeActionsMenu extends StatelessWidget {
+  const SwipeActionsMenu({super.key, required this.actions});
+
+  final List<SwipeAction> actions;
+
+  /// Whether tiles should offer the menu for the current screen width.
+  static bool isShown(BuildContext context) =>
+      MediaQuery.sizeOf(context).width >= _desktopWidth;
+
+  /// Space a tile should leave free for the button.
+  static const double width = 40;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!isShown(context)) return const SizedBox.shrink();
+    return PopupMenuButton<SwipeAction>(
+      tooltip: 'More',
+      icon: const Icon(Icons.more_vert),
+      onSelected: (action) => action.onPressed(),
+      itemBuilder: (context) => [
+        for (final action in actions)
+          PopupMenuItem(
+            value: action,
+            child: Row(
+              children: [
+                Icon(action.icon, size: 18),
+                const SizedBox(width: 8),
+                Text(action.label),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 /// Reveals a panel of [actions] when the child is swiped from end to start.
 ///
 /// Unlike [Dismissible], the child follows the finger only as far as the panel
