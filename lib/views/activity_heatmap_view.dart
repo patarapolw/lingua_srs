@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/lesson.dart';
+import '../models/srs_card.dart';
+import '../models/vocab_item.dart';
 import '../providers/app_provider.dart';
+
+const _leechLapseThreshold = 8;
 
 class ActivityHeatmapView extends StatelessWidget {
   const ActivityHeatmapView({super.key});
@@ -38,6 +43,7 @@ class ActivityHeatmapView extends StatelessWidget {
       body: Consumer<AppProvider>(
         builder: (context, provider, _) {
           final counts = provider.dailyReviewCounts;
+          final leeches = _findLeeches(provider.lessons);
           final total = counts.entries
               .where(
                 (entry) =>
@@ -48,7 +54,7 @@ class ActivityHeatmapView extends StatelessWidget {
               )
               .fold(0, (sum, entry) => sum + entry.value);
 
-          if (total == 0) {
+          if (total == 0 && leeches.isEmpty) {
             return const Center(
               child: Padding(
                 padding: EdgeInsets.all(24),
@@ -170,6 +176,35 @@ class ActivityHeatmapView extends StatelessWidget {
                   Text('More', style: theme.textTheme.labelSmall),
                 ],
               ),
+              if (leeches.isNotEmpty) ...[
+                const SizedBox(height: 24),
+                Text(
+                  'Leeches (${leeches.length})',
+                  style: theme.textTheme.titleMedium,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Cards with at least $_leechLapseThreshold lapses may need a new approach.',
+                  style: theme.textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 8),
+                for (final leech in leeches)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.warning_amber_rounded),
+                    title: Text(
+                      leech.card.direction == CardDirection.targetToNative
+                          ? leech.vocab.targetWord
+                          : leech.vocab.translation,
+                    ),
+                    subtitle: Text(
+                      leech.card.direction == CardDirection.targetToNative
+                          ? leech.vocab.translation
+                          : leech.vocab.targetWord,
+                    ),
+                    trailing: Text('${leech.card.lapses} lapses'),
+                  ),
+              ],
             ],
           );
         },
@@ -247,4 +282,28 @@ class ActivityHeatmapView extends StatelessWidget {
       level / 4,
     )!;
   }
+
+  List<_LeechCard> _findLeeches(List<Lesson> lessons) {
+    final cardsById = <String, _LeechCard>{};
+    for (final vocab in lessons.expand((lesson) => lesson.vocabularies)) {
+      for (final card in [vocab.cardTargetToNative, vocab.cardNativeToTarget]) {
+        if (card.isEnabled && card.lapses >= _leechLapseThreshold) {
+          cardsById.putIfAbsent(
+            card.id,
+            () => _LeechCard(vocab: vocab, card: card),
+          );
+        }
+      }
+    }
+    final leeches = cardsById.values.toList()
+      ..sort((first, second) => second.card.lapses.compareTo(first.card.lapses));
+    return leeches;
+  }
+}
+
+class _LeechCard {
+  const _LeechCard({required this.vocab, required this.card});
+
+  final VocabItem vocab;
+  final SrsCard card;
 }

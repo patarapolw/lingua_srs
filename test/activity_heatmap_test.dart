@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lingua_srs/models/lesson.dart';
 import 'package:lingua_srs/models/srs_card.dart';
+import 'package:lingua_srs/models/vocab_item.dart';
 import 'package:lingua_srs/providers/app_provider.dart';
 import 'package:lingua_srs/services/storage_service.dart';
 import 'package:lingua_srs/views/activity_heatmap_view.dart';
@@ -91,6 +93,75 @@ void main() {
       restoredCounts[DateTime(today.year, today.month, today.day)],
       SrsRating.values.length,
     );
+  });
+
+  testWidgets('shows unique enabled leeches at the lapse threshold', (
+    tester,
+  ) async {
+    final leech = SrsCard(
+      id: 'leech-card',
+      direction: CardDirection.targetToNative,
+      lapses: 8,
+    );
+    provider.lessons.addAll([
+      Lesson(
+        title: 'First',
+        vocabularies: [
+          VocabItem(
+            targetWord: 'word',
+            translation: 'meaning',
+            pos: 'nouns',
+            cardTargetToNative: leech,
+          ),
+        ],
+      ),
+      Lesson(
+        title: 'Second',
+        vocabularies: [
+          VocabItem(
+            targetWord: 'duplicate',
+            translation: 'meaning',
+            pos: 'nouns',
+            cardTargetToNative: leech,
+          ),
+          VocabItem(
+            targetWord: 'not-yet',
+            translation: 'not-yet',
+            pos: 'nouns',
+            cardTargetToNative: SrsCard(
+              direction: CardDirection.targetToNative,
+              lapses: 7,
+            ),
+          ),
+          VocabItem(
+            targetWord: 'disabled',
+            translation: 'disabled',
+            pos: 'nouns',
+            cardTargetToNative: SrsCard(
+              direction: CardDirection.targetToNative,
+              isEnabled: false,
+              lapses: 9,
+            ),
+          ),
+        ],
+      ),
+    ]);
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppProvider>.value(
+        value: provider,
+        child: const MaterialApp(home: ActivityHeatmapView()),
+      ),
+    );
+
+    expect(find.text('0 reviews in the past year'), findsOneWidget);
+    expect(find.text('No study activity yet'), findsNothing);
+    expect(find.text('Leeches (1)'), findsOneWidget);
+    expect(find.text('word'), findsOneWidget);
+    expect(find.text('meaning'), findsOneWidget);
+    expect(find.text('8 lapses'), findsOneWidget);
+    expect(find.text('duplicate'), findsNothing);
+    expect(find.text('not-yet'), findsNothing);
+    expect(find.text('disabled'), findsNothing);
   });
 
   testWidgets('opens study activity from the Lessons options on mobile', (
