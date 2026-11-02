@@ -26,17 +26,31 @@ SRS that puts language learning first: custom lessons, lesson-by-lesson vocabula
 
 ## Highlights
 
-- **Lessons as Markdown + YAML**: write lessons in-app or import files, folders or ZIPs; group lessons into units and nested folders with `::`; read the full Markdown lesson in-app. Re-importing updates in place and keeps your progress. See [lesson format](docs/lesson-format.md).
-- **Smart cards**: direction defaults by part of speech, per-item overrides, random example sentence on the front, cloze deletion for EN ➔ KO.
-- **Sentence pool**: browse, edit and link sentences across lessons.
-- **Vocab pool**: browse and search every word across lessons, in Korean or English.
+- **Lessons as Markdown + YAML** (see [lesson format](docs/lesson-format.md)):
+  - Write lessons in-app, or import files, folders and ZIPs.
+  - Group lessons into units and nested folders with `::`.
+  - Read the full Markdown lesson in-app.
+  - Re-importing updates in place and keeps your progress.
+- **Smart cards**:
+  - Verbs and adjectives are studied EN ➔ KO by default, other words KO ➔ EN; switch either direction (or both) on or off per word.
+  - The front shows a random example sentence.
+  - EN ➔ KO cards hide the word in that sentence (cloze deletion).
+- **Shared pools**: browse, edit and link sentences across lessons; search every word in Korean or English.
 - **Audio**: stream-on-first-play with offline caching; offline system TTS on Android, cached online TTS elsewhere.
-- **Adaptive review**: *Again* cards return a few cards later, interleaved with new cards; rolling 24-hour limits for reviews and new cards; review recent mistakes across lessons at any time.
-- **Review controls**: flip cards, navigate back through answered cards, undo a rating, and draw or type your answer before revealing it.
-- **Reset progress**: reset SRS for a whole lesson or an individual word without changing card visibility.
+- **Adaptive review**:
+  - *Again* cards return a few cards later, interleaved with new cards.
+  - Rolling 24-hour limits for reviews and new cards.
+  - Review recent mistakes across lessons at any time.
+  - Reset SRS progress for a lesson or a single word without changing card visibility.
+- **Review controls**:
+  - Flip cards and navigate back through answered cards.
+  - Undo a rating.
+  - Draw or type your answer before revealing it.
 - **Study activity**: a one-year review heatmap, cards by stage, and a list of leeches (8+ lapses).
 - **AI discussions**: ask DeepSeek (API key in Settings) about the current card or a whole lesson; chats are saved locally.
-- **Backup and export**: back up and restore lessons and progress as a JSON file (the DeepSeek key is left out); export lessons or whole units as ZIP.
+- **Backup and export**:
+  - Back up and restore lessons and progress as JSON (the DeepSeek key is left out).
+  - Export lessons or whole units as ZIP.
 - **Keyboard-enabled**: Anki-style [hotkeys](docs/hotkeys.md), with undo.
 
 Currently only Korean ➔ English is supported. Full details in [docs/features.md](docs/features.md).

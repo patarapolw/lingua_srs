@@ -156,7 +156,7 @@ void main() {
       for (final bullet in bullets) {
         expect(
           bullet.length,
-          lessThanOrEqualTo(300),
+          lessThanOrEqualTo(200),
           reason: 'Move detail to docs/features.md: $bullet',
         );
       }
