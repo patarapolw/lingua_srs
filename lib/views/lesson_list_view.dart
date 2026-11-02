@@ -7,6 +7,7 @@ import '../models/lesson.dart';
 import '../providers/app_provider.dart';
 import '../widgets/folder_picker_dialog.dart';
 import '../widgets/lesson_hierarchy_view.dart';
+import 'activity_heatmap_view.dart';
 import 'lesson_detail_view.dart';
 import 'lesson_reader_view.dart';
 import 'study_view.dart';
@@ -600,15 +601,20 @@ class LessonListView extends StatelessWidget {
         actions: [
           Consumer<AppProvider>(
             builder: (context, provider, _) {
-              if (!provider.canUseAi && provider.mergeHistory.isEmpty) {
-                return const SizedBox.shrink();
-              }
               return PopupMenuButton<String>(
-                tooltip: 'Vocabulary merging',
-                icon: const Icon(Icons.merge_type),
+                tooltip: 'More options',
+                icon: const Icon(Icons.more_vert),
                 onSelected: (action) {
                   if (action == 'ai') showAiMergeSuggestions(context);
                   if (action == 'history') showMergeHistory(context);
+                  if (action == 'activity') {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                        builder: (_) => const ActivityHeatmapView(),
+                      ),
+                    );
+                  }
                 },
                 itemBuilder: (_) => [
                   if (provider.canUseAi)
@@ -626,6 +632,14 @@ class LessonListView extends StatelessWidget {
                     child: const ListTile(
                       leading: Icon(Icons.undo),
                       title: Text('Merge history / undo'),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'activity',
+                    child: ListTile(
+                      leading: Icon(Icons.calendar_month_outlined),
+                      title: Text('Study activity'),
                       contentPadding: EdgeInsets.zero,
                     ),
                   ),
