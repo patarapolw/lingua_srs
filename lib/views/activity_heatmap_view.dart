@@ -48,6 +48,24 @@ class ActivityHeatmapView extends StatelessWidget {
               )
               .fold(0, (sum, entry) => sum + entry.value);
 
+          if (total == 0) {
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.calendar_month_outlined, size: 40),
+                    SizedBox(height: 12),
+                    Text('No study activity yet'),
+                    SizedBox(height: 4),
+                    Text('Review vocabulary to see your activity here.'),
+                  ],
+                ),
+              ),
+            );
+          }
+
           return ListView(
             padding: const EdgeInsets.all(20),
             children: [
@@ -67,11 +85,16 @@ class ActivityHeatmapView extends StatelessWidget {
                         for (var index = 0; index < weeks.length; index++)
                           SizedBox(
                             width: 16,
-                            child: Text(
-                              _monthLabel(weeks, index),
-                              maxLines: 1,
-                              overflow: TextOverflow.clip,
-                              style: theme.textTheme.labelSmall,
+                            height: 56,
+                            child: Center(
+                              child: RotatedBox(
+                                quarterTurns: 3,
+                                child: Text(
+                                  _monthLabel(weeks, index),
+                                  maxLines: 1,
+                                  style: theme.textTheme.labelSmall,
+                                ),
+                              ),
                             ),
                           ),
                       ],

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../views/activity_heatmap_view.dart';
 import '../views/recent_ai_discussions_view.dart';
 import '../views/lesson_list_view.dart';
 import '../views/sentence_pool_view.dart';
@@ -36,7 +35,6 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
       const VocabPoolView(),
       const SentencePoolView(),
       const RecentAiDiscussionsView(),
-      const ActivityHeatmapView(),
     ];
 
     if (isDesktop) {
@@ -118,11 +116,6 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
                   selectedIcon: Icon(Icons.forum),
                   label: Text('Recent Discussions'),
                 ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.calendar_month_outlined),
-                  selectedIcon: Icon(Icons.calendar_month),
-                  label: Text('Activity'),
-                ),
               ],
             ),
             const VerticalDivider(width: 1),
@@ -158,11 +151,6 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
             icon: Icon(Icons.forum_outlined),
             selectedIcon: Icon(Icons.forum),
             label: 'Discussions',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.calendar_month_outlined),
-            selectedIcon: Icon(Icons.calendar_month),
-            label: 'Activity',
           ),
         ],
       ),
