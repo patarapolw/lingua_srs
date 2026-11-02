@@ -8,41 +8,75 @@ import '../providers/app_provider.dart';
 
 const _leechLapseThreshold = 8;
 
-class ActivityHeatmapView extends StatelessWidget {
+class ActivityHeatmapView extends StatefulWidget {
   const ActivityHeatmapView({super.key});
+
+  @override
+  State<ActivityHeatmapView> createState() => _ActivityHeatmapViewState();
+}
+
+class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
+  final _scrollController = ScrollController();
+  bool _scrolledToEnd = false;
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToEnd() {
+    if (_scrolledToEnd) return;
+    _scrolledToEnd = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final today = DateTime.now();
-    final firstDay = DateTime(today.year, today.month, today.day - 364);
-    final calendarStart = firstDay.subtract(
-      Duration(days: firstDay.weekday - DateTime.monday),
-    );
-    final calendarDays = DateTime.utc(today.year, today.month, today.day)
-        .difference(
-          DateTime.utc(
-            calendarStart.year,
-            calendarStart.month,
-            calendarStart.day,
-          ),
-        )
-        .inDays;
-    final weekCount = (calendarDays ~/ 7) + 1;
-    final weeks = [
-      for (var week = 0; week < weekCount; week++)
-        DateTime(
-          calendarStart.year,
-          calendarStart.month,
-          calendarStart.day + week * 7,
-        ),
-    ];
-
     return Scaffold(
       appBar: AppBar(title: const Text('Study activity')),
       body: Consumer<AppProvider>(
         builder: (context, provider, _) {
           final counts = provider.dailyReviewCounts;
+          final yearStart = DateTime(today.year, today.month, today.day - 364);
+          final earliest = counts.entries
+              .where(
+                (entry) => entry.value > 0 && !entry.key.isBefore(yearStart),
+              )
+              .map((entry) => entry.key)
+              .fold<DateTime?>(
+                null,
+                (min, date) => min == null || date.isBefore(min) ? date : min,
+              );
+          final firstDay = earliest ?? yearStart;
+          final calendarStart = firstDay.subtract(
+            Duration(days: firstDay.weekday - DateTime.monday),
+          );
+          final calendarDays = DateTime.utc(today.year, today.month, today.day)
+              .difference(
+                DateTime.utc(
+                  calendarStart.year,
+                  calendarStart.month,
+                  calendarStart.day,
+                ),
+              )
+              .inDays;
+          final weekCount = (calendarDays ~/ 7) + 1;
+          final weeks = [
+            for (var week = 0; week < weekCount; week++)
+              DateTime(
+                calendarStart.year,
+                calendarStart.month,
+                calendarStart.day + week * 7,
+              ),
+          ];
+
           final leeches = _findLeeches(provider.lessons);
           final stageCounts = _studyStageCounts(provider.lessons);
           final maxStageCount = stageCounts.values.fold(
@@ -77,6 +111,7 @@ class ActivityHeatmapView extends StatelessWidget {
             );
           }
 
+          _scrollToEnd();
           return ListView(
             padding: const EdgeInsets.all(20),
             children: [
@@ -86,6 +121,7 @@ class ActivityHeatmapView extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               SingleChildScrollView(
+                controller: _scrollController,
                 scrollDirection: Axis.horizontal,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

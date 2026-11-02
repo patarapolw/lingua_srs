@@ -22,4 +22,14 @@ Flutter app (Dart, `provider` state management). See [README.md](README.md) for 
 - When the lesson syntax changes, update `docs/lesson-format.md`. `test/docs_test.dart` parses its examples and will fail if they break.
 - Keep `README.md` short; put detail in `docs/`.
 - Don't commit machine-specific paths or personal study data.
-- Add: - Track bugs and planned work in GitHub Issues, not in the repo. Reference the issue in PRs (e.g. "Fixes #12")
+- Track bugs and planned work in GitHub Issues, not in the repo. Reference the issue in PRs (e.g. "Fixes #12")
+- In `testWidgets`, wrap real async work (`Future.delayed`, timers, storage I/O) in `tester.runAsync`; the fake-async zone otherwise hangs the test.
+
+## Environments without Flutter/Dart (e.g. cloud agents)
+
+If `flutter` or `dart` isn't available, you can't run tests, `flutter analyze`, or `dart format`, and the CI workflow needs manual approval to run. In that case:
+
+- Hand-format to Dart style: 2-space indent, trailing commas on multi-line argument lists and collections, lines ≤ 80 columns.
+- Still add or update tests in `test/`, written carefully since they can't be run.
+- Keep changes small and focused so they are easy to fix locally.
+- State in the PR description that tests, analyze and format were not run.

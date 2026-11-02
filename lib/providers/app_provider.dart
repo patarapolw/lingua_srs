@@ -219,6 +219,9 @@ class AppProvider extends ChangeNotifier {
     _maxNewCards24h = results.$9;
     _dailyReviewCounts = await StorageService.loadDailyReviewCounts();
     _lessons = await StorageService.loadLessons();
+    if (_dailyReviewCounts.isEmpty && _backfillDailyReviewCounts()) {
+      await StorageService.saveDailyReviewCounts(_dailyReviewCounts);
+    }
     // Loaded after lessons because a fresh debug install seeds sentences there.
     _sentences = await StorageService.loadSentences();
     // Before canonicalizing: duplicates merge into one sentence, and each word
@@ -2030,6 +2033,21 @@ class AppProvider extends ChangeNotifier {
       getRecentMistakesQueue(lessonId: lessonId).length;
 
   int get totalRecentMistakes => getRecentMistakesCount();
+
+  // Reviews made before daily counts were tracked: credit each card's last
+  // review to its day so the activity calendar is not empty.
+  bool _backfillDailyReviewCounts() {
+    final seen = <String>{};
+    for (final vocab in _lessons.expand((lesson) => lesson.vocabularies)) {
+      for (final card in [vocab.cardTargetToNative, vocab.cardNativeToTarget]) {
+        final reviewed = card.lastReviewed;
+        if (reviewed == null || !seen.add(card.id)) continue;
+        final date = DateTime(reviewed.year, reviewed.month, reviewed.day);
+        _dailyReviewCounts[date] = (_dailyReviewCounts[date] ?? 0) + 1;
+      }
+    }
+    return _dailyReviewCounts.isNotEmpty;
+  }
 
   // Answer SRS review
   Future<void> recordCardReview(SrsCard card, SrsRating rating) async {
