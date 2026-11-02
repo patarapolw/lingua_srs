@@ -85,8 +85,29 @@ void main() {
     );
     expect(find.text('Less'), findsOneWidget);
     expect(find.text('More'), findsOneWidget);
-    expect(find.text('Jan'), findsOneWidget);
+    expect(find.text('Jan'), findsWidgets);
     expect(find.byType(RotatedBox), findsWidgets);
+    expect(find.text('Reviews by month'), findsOneWidget);
+    const monthNames = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    expect(
+      find.byTooltip(
+        '${monthNames[today.month - 1]}: ${SrsRating.values.length} reviews',
+      ),
+      findsOneWidget,
+    );
 
     final restoredCounts = await StorageService.loadDailyReviewCounts();
     expect(

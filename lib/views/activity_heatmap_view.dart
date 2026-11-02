@@ -7,6 +7,20 @@ import '../models/vocab_item.dart';
 import '../providers/app_provider.dart';
 
 const _leechLapseThreshold = 8;
+const _monthNames = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
 
 class ActivityHeatmapView extends StatelessWidget {
   const ActivityHeatmapView({super.key});
@@ -44,6 +58,11 @@ class ActivityHeatmapView extends StatelessWidget {
         builder: (context, provider, _) {
           final counts = provider.dailyReviewCounts;
           final leeches = _findLeeches(provider.lessons);
+          final monthlyCounts = _monthlyReviewCounts(counts, today);
+          final maxMonthlyCount = monthlyCounts.values.fold(
+            0,
+            (maximum, count) => count > maximum ? count : maximum,
+          );
           final total = counts.entries
               .where(
                 (entry) =>
@@ -176,6 +195,27 @@ class ActivityHeatmapView extends StatelessWidget {
                   Text('More', style: theme.textTheme.labelSmall),
                 ],
               ),
+              const SizedBox(height: 24),
+              Text('Reviews by month', style: theme.textTheme.titleMedium),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 120,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final entry in monthlyCounts.entries)
+                        _monthBar(
+                          context,
+                          entry.key,
+                          entry.value,
+                          maxMonthlyCount,
+                        ),
+                    ],
+                  ),
+                ),
+              ),
               if (leeches.isNotEmpty) ...[
                 const SizedBox(height: 24),
                 Text(
@@ -273,6 +313,75 @@ class ActivityHeatmapView extends StatelessWidget {
     >= 4 && <= 6 => 3,
     _ => 4,
   };
+
+  Map<DateTime, int> _monthlyReviewCounts(
+    Map<DateTime, int> counts,
+    DateTime today,
+  ) {
+    final monthlyCounts = {
+      for (var offset = 11; offset >= 0; offset--)
+        DateTime(today.year, today.month - offset, 1): 0,
+    };
+    final firstMonth = monthlyCounts.keys.first;
+    final todayDate = DateTime(today.year, today.month, today.day);
+    for (final entry in counts.entries) {
+      final date = DateTime(
+        entry.key.year,
+        entry.key.month,
+        entry.key.day,
+      );
+      if (date.isBefore(firstMonth) || date.isAfter(todayDate)) continue;
+      final month = DateTime(date.year, date.month);
+      monthlyCounts[month] = monthlyCounts[month]! + entry.value;
+    }
+    return monthlyCounts;
+  }
+
+  Widget _monthBar(
+    BuildContext context,
+    DateTime month,
+    int count,
+    int maximum,
+  ) {
+    final label = _monthNames[month.month - 1];
+    final tooltip = '$label: $count ${count == 1 ? 'review' : 'reviews'}';
+    final barHeight = maximum == 0 ? 2.0 : 80.0 * count / maximum;
+    return Semantics(
+      label: tooltip,
+      child: Tooltip(
+        message: tooltip,
+        child: SizedBox(
+          width: 36,
+          child: Column(
+            children: [
+              Expanded(
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Container(
+                    width: 16,
+                    height: barHeight,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primary,
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(3),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(
+                height: 20,
+                child: Text(
+                  label,
+                  style: Theme.of(context).textTheme.labelSmall,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   Color _activityColor(ColorScheme colors, int level) {
     if (level == 0) return colors.surfaceContainerHighest;
