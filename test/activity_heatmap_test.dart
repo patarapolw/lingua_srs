@@ -85,7 +85,21 @@ void main() {
     );
     expect(find.text('Less'), findsOneWidget);
     expect(find.text('More'), findsOneWidget);
-    expect(find.text('Jan'), findsOneWidget);
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    expect(find.text(months[today.month - 1]), findsOneWidget);
     expect(find.byType(RotatedBox), findsWidgets);
     expect(find.text('Cards by stage'), findsOneWidget);
     expect(find.byTooltip('New: 0 cards'), findsOneWidget);
@@ -94,6 +108,42 @@ void main() {
     expect(
       restoredCounts[DateTime(today.year, today.month, today.day)],
       SrsRating.values.length,
+    );
+  });
+
+  testWidgets('backfills activity from last review dates on first load', (
+    tester,
+  ) async {
+    final reviewed = DateTime.now().subtract(const Duration(days: 3));
+    await StorageService.saveLessons([
+      Lesson(
+        title: 'Old',
+        vocabularies: [
+          VocabItem(
+            targetWord: 'a',
+            translation: 'b',
+            pos: 'nouns',
+            cardTargetToNative: SrsCard(
+              direction: CardDirection.targetToNative,
+              status: SrsStatus.review,
+              lastReviewed: reviewed,
+            ),
+          ),
+        ],
+      ),
+    ]);
+    final fresh = AppProvider();
+    addTearDown(fresh.dispose);
+    for (var attempt = 0; attempt < 100 && fresh.isLoading; attempt++) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    expect(
+      fresh.dailyReviewCounts[DateTime(
+        reviewed.year,
+        reviewed.month,
+        reviewed.day,
+      )],
+      1,
     );
   });
 
