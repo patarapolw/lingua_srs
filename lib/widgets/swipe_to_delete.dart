@@ -40,7 +40,23 @@ class _SwipeToDeleteState extends State<SwipeToDelete> {
   bool _dragging = false;
   bool _busy = false;
 
+  // The tile currently showing its Delete button; only one stays open.
+  static _SwipeToDeleteState? _openTile;
+
   bool get _open => _offset != 0;
+
+  @override
+  void dispose() {
+    if (_openTile == this) _openTile = null;
+    super.dispose();
+  }
+
+  void _closeOtherTile(PointerDownEvent _) {
+    final other = _openTile;
+    if (other != null && other != this && other.mounted && !other._busy) {
+      other._close();
+    }
+  }
 
   void _onDragUpdate(DragUpdateDetails details) {
     if (_busy) return;
@@ -59,12 +75,20 @@ class _SwipeToDeleteState extends State<SwipeToDelete> {
       _dragging = false;
       _offset = open ? -widget.revealWidth : 0;
     });
+    if (open) {
+      _openTile = this;
+    } else if (_openTile == this) {
+      _openTile = null;
+    }
   }
 
-  void _close() => setState(() {
-    _dragging = false;
-    _offset = 0;
-  });
+  void _close() {
+    if (_openTile == this) _openTile = null;
+    setState(() {
+      _dragging = false;
+      _offset = 0;
+    });
+  }
 
   Future<void> _delete() async {
     if (_busy) return;
@@ -92,59 +116,62 @@ class _SwipeToDeleteState extends State<SwipeToDelete> {
       customSemanticsActions: {
         CustomSemanticsAction(label: widget.semanticLabel): _delete,
       },
-      child: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onHorizontalDragUpdate: _onDragUpdate,
-        onHorizontalDragEnd: _onDragEnd,
-        onHorizontalDragCancel: () => setState(() {
-          _dragging = false;
-          if (!_busy) _offset = 0;
-        }),
-        child: Stack(
-          children: [
-            if (_offset != 0)
-              Positioned(
-                top: widget.margin.top,
-                bottom: widget.margin.bottom,
-                right: widget.margin.right,
-                width: widget.revealWidth,
-                child: Material(
-                  color: colors.errorContainer,
-                  borderRadius: BorderRadius.circular(12),
-                  child: InkWell(
+      child: Listener(
+        onPointerDown: _closeOtherTile,
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onHorizontalDragUpdate: _onDragUpdate,
+          onHorizontalDragEnd: _onDragEnd,
+          onHorizontalDragCancel: () => setState(() {
+            _dragging = false;
+            if (!_busy) _offset = 0;
+          }),
+          child: Stack(
+            children: [
+              if (_offset != 0)
+                Positioned(
+                  top: widget.margin.top,
+                  bottom: widget.margin.bottom,
+                  right: widget.margin.right,
+                  width: widget.revealWidth,
+                  child: Material(
+                    color: colors.errorContainer,
                     borderRadius: BorderRadius.circular(12),
-                    onTap: _delete,
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.delete_outline,
-                          color: colors.onErrorContainer,
-                        ),
-                        Text(
-                          'Delete',
-                          style: TextStyle(color: colors.onErrorContainer),
-                        ),
-                      ],
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: _delete,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.delete_outline,
+                            color: colors.onErrorContainer,
+                          ),
+                          Text(
+                            'Delete',
+                            style: TextStyle(color: colors.onErrorContainer),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
+              AnimatedContainer(
+                duration: _dragging
+                    ? Duration.zero
+                    : const Duration(milliseconds: 200),
+                curve: Curves.easeOut,
+                transform: Matrix4.translationValues(_offset, 0, 0),
+                child: _open
+                    ? GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: _busy ? null : _close,
+                        child: AbsorbPointer(child: widget.child),
+                      )
+                    : widget.child,
               ),
-            AnimatedContainer(
-              duration: _dragging
-                  ? Duration.zero
-                  : const Duration(milliseconds: 200),
-              curve: Curves.easeOut,
-              transform: Matrix4.translationValues(_offset, 0, 0),
-              child: _open
-                  ? GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: _busy ? null : _close,
-                      child: AbsorbPointer(child: widget.child),
-                    )
-                  : widget.child,
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

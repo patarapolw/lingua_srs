@@ -61,8 +61,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
           children: [
             NavigationRail(
               selectedIndex: _selectedIndex,
-              onDestinationSelected: (idx) =>
-                  _selectTab(idx, isDesktop: true),
+              onDestinationSelected: (idx) => _selectTab(idx, isDesktop: true),
               extended: MediaQuery.of(context).size.width >= 1100,
               leading: Padding(
                 padding: const EdgeInsets.symmetric(
@@ -152,8 +151,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
-        onDestinationSelected: (idx) =>
-            _selectTab(idx, isDesktop: false),
+        onDestinationSelected: (idx) => _selectTab(idx, isDesktop: false),
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.library_books_outlined),

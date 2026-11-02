@@ -1046,6 +1046,36 @@ void main() {
       expect(find.byTooltip('More'), findsNothing);
     });
 
+    testWidgets('pressing a different row puts the swiped row back', (
+      tester,
+    ) async {
+      await open(tester);
+
+      await tester.drag(title('사과'), const Offset(-500, 0));
+      await tester.pumpAndSettle();
+      expect(panel, findsOneWidget);
+
+      await tester.drag(title('먹다'), const Offset(-500, 0));
+      await tester.pumpAndSettle();
+      expect(panel, findsOneWidget);
+      final eatCard = find.ancestor(
+        of: title('먹다'),
+        matching: find.byType(Card),
+      );
+      final appleCard = find.ancestor(
+        of: title('사과'),
+        matching: find.byType(Card),
+      );
+      expect(
+        tester.getTopLeft(appleCard).dx,
+        isNot(lessThan(tester.getTopLeft(eatCard).dx + 1)),
+      );
+
+      await tester.tap(title('사과'));
+      await tester.pumpAndSettle();
+      expect(panel, findsNothing);
+    });
+
     testWidgets('pressing the Delete button asks before deleting', (
       tester,
     ) async {
