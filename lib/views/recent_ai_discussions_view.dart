@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
 import '../services/ai_discussion_search.dart';
 import '../widgets/emphasis_text.dart';
-import '../widgets/swipe_to_delete.dart';
+import '../widgets/swipe_actions.dart';
 import 'ai_discussion_dialog.dart';
 
 class RecentAiDiscussionsView extends StatefulWidget {
@@ -171,10 +171,16 @@ class _DiscussionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SwipeToDelete(
-      semanticLabel: 'Delete discussion',
+    return SwipeActions(
       margin: const EdgeInsets.all(4),
-      onDelete: () => _confirmDelete(context),
+      actions: [
+        SwipeAction(
+          label: 'Delete',
+          icon: Icons.delete_outline,
+          semanticLabel: 'Delete discussion',
+          onPressed: () => _confirmDelete(context),
+        ),
+      ],
       child: Card(
         child: ListTile(
           leading: const CircleAvatar(child: Icon(Icons.forum_outlined)),

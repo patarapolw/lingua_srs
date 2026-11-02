@@ -1621,6 +1621,19 @@ class AppProvider extends ChangeNotifier {
     await saveState();
   }
 
+  /// Removes [vocab] from every lesson that has it. Returns how many lessons
+  /// it was removed from.
+  Future<int> deleteVocabEverywhere(VocabItem vocab) async {
+    var removed = 0;
+    for (final lesson in _lessons) {
+      final before = lesson.vocabularies.length;
+      lesson.vocabularies.removeWhere((item) => item.id == vocab.id);
+      if (lesson.vocabularies.length != before) removed++;
+    }
+    if (removed > 0) await saveState();
+    return removed;
+  }
+
   Future<void> deleteSection(String lessonId, List<String> sectionPath) async {
     final lesson = _lessons.firstWhere((l) => l.id == lessonId);
     bool isInSection(VocabItem vocab) {
@@ -1771,6 +1784,7 @@ class AppProvider extends ChangeNotifier {
   Future<void> resetVocabSrs(VocabItem vocab) async {
     vocab.cardTargetToNative.resetProgress();
     vocab.cardNativeToTarget.resetProgress();
+    _resetSharedProgress([vocab]);
     await saveState();
   }
 
