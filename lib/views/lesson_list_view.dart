@@ -419,12 +419,9 @@ class LessonListView extends StatelessWidget {
                     if (value == 'vocabulary') {
                       openLesson();
                     } else if (value == 'export') {
-                      _exportLessons(
-                        context,
-                        provider,
-                        [lesson],
-                        lesson.displayTitle,
-                      );
+                      _exportLessons(context, provider, [
+                        lesson,
+                      ], lesson.displayTitle);
                     } else if (value == 'move_up') {
                       orderActions.moveUp();
                     } else if (value == 'move_down') {

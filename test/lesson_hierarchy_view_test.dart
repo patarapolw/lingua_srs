@@ -301,7 +301,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Manage Unit 2'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Export unit as ZIP'));
+    await tester.tap(find.text('Export as ZIP'));
     await tester.pumpAndSettle();
     expect(exportedFolder, ['Unit 2']);
   });

@@ -341,7 +341,7 @@ class LessonHierarchyView extends StatelessWidget {
                         children: [
                           Icon(Icons.archive_outlined, size: 18),
                           SizedBox(width: 8),
-                          Text('Export unit as ZIP'),
+                          Text('Export as ZIP'),
                         ],
                       ),
                     ),

@@ -77,10 +77,10 @@ void main() {
       LessonExportService.createZip(lessons, const []),
     );
 
-    expect(
-      archive.files.map((file) => file.name).toSet(),
-      {'.._Same.md', '.._Same (second).md'},
-    );
+    expect(archive.files.map((file) => file.name).toSet(), {
+      '.._Same.md',
+      '.._Same (second).md',
+    });
     expect(LessonExportService.fileName('../Unit'), '.._Unit.zip');
   });
 }
