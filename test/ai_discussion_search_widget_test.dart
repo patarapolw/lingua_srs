@@ -1001,6 +1001,41 @@ void main() {
       expect(find.byIcon(Icons.delete_outline), findsNothing);
     });
 
+    testWidgets('swiping a discussion asks before deleting it', (tester) async {
+      final provider = await open(tester);
+
+      await tester.drag(title('사과'), const Offset(-500, 0));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Delete this discussion?'), findsOneWidget);
+      expect(
+        find.text(
+          'The saved AI conversation about "사과" will be permanently deleted.',
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(title('사과'), findsOneWidget);
+      expect(provider.aiDiscussions.keys, contains('v-apple:no-sentence'));
+    });
+
+    testWidgets('confirming a swipe deletes the discussion', (tester) async {
+      final provider = await open(tester);
+
+      await tester.drag(title('사과'), const Offset(-500, 0));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+      await tester.pumpAndSettle();
+
+      expect(title('사과'), findsNothing);
+      expect(title('먹다'), findsOneWidget);
+      expect(provider.aiDiscussions.keys, ['v-eat:no-sentence']);
+      final stored = await tester.runAsync(StorageService.loadAiDiscussions);
+      expect(stored!.keys, ['v-eat:no-sentence']);
+    });
+
     testWidgets('a discussion is deleted from inside it', (tester) async {
       final provider = await open(tester);
 
