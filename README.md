@@ -36,7 +36,9 @@ SRS that puts language learning first: custom lessons, lesson-by-lesson vocabula
   - The front shows a random example sentence.
   - EN ➔ KO cards hide the word in that sentence (cloze deletion).
 - **Shared pools**: browse, edit and link sentences across lessons; search every word in Korean or English.
+- **Merge duplicates**: combine duplicate words into one shared card, by hand or with AI suggestions, with undo.
 - **Audio**: stream-on-first-play with offline caching; offline system TTS on Android, cached online TTS elsewhere.
+- **Pronunciation cues**: optional romanization (RR) and IPA lines for Korean words and sentences, shown on the back of the card.
 - **Adaptive review**:
   - *Again* cards return a few cards later, interleaved with new cards. In addition, *Again* is due again after 1 hour and *Hard* after 12 hours.
   - Rolling 24-hour limits for reviews and new cards; the short *Again* and *Hard* repeats are never held back by them.

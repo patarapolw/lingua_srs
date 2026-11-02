@@ -11,6 +11,8 @@ lingua_srs/
 │   │   ├── vocab_item.dart            # Vocab model with POS, notes, toggles
 │   │   ├── sentence.dart              # Sentence model with cloze deletion generator
 │   │   ├── srs_card.dart              # SRS state (SM-2 intervals, reps, due date)
+│   │   ├── shared_vocab.dart          # Details and SRS cards shared by every word with the same id
+│   │   ├── vocab_merge_record.dart    # Vocab groups, merge records and undo snapshots
 │   │   └── ai_discussion_message.dart # Saved AI discussion messages
 │   ├── providers/
 │   │   └── app_provider.dart          # State management (lessons, queues, review handling)
@@ -28,6 +30,13 @@ lingua_srs/
 │   │   ├── korean_text_search.dart    # Korean-aware sentence search tokenizer
 │   │   ├── vocab_picker_search.dart   # Ranks vocabulary for the merge picker; scores a typed query
 │   │   ├── vocab_pool_search.dart     # Browse, search and POS filter for the Vocab Pool
+│   │   ├── clipboard_markdown.dart    # Reads the clipboard as Markdown, converting copied HTML
+│   │   ├── html_to_markdown.dart      # Converts copied HTML to Markdown
+│   │   ├── english_text_search.dart   # English full-text search over vocabulary meanings
+│   │   ├── korean_pronunciation_service.dart # Revised Romanization and IPA from how Korean sounds
+│   │   ├── lesson_export_service.dart # Exports lessons and units as a ZIP of Markdown files
+│   │   ├── markdown_archive_service.dart # Reads Markdown files out of an imported ZIP
+│   │   ├── vocab_ai_service.dart      # AI merge suggestions and similar-meaning hints
 │   │   └── storage_service.dart       # Local persistence and debug seed data
 │   ├── views/
 │   │   ├── study_view.dart            # Flashcard study view with cloze & shortcuts
@@ -41,7 +50,11 @@ lingua_srs/
 │   │   ├── ai_discussion_dialog.dart  # AI-assisted quiz discussion chat
 │   │   ├── recent_ai_discussions_view.dart # Recent Discussions tab, with search
 │   │   ├── related_ai_discussions_sheet.dart # Related discussions panel of an AI chat
-│   │   └── deepseek_settings_dialog.dart # DeepSeek API key settings
+│   │   ├── activity_heatmap_view.dart # Study activity: heatmap, cards by stage, leeches
+│   │   ├── similar_meanings_dialog.dart # Review AI-suggested hints for similar words
+│   │   ├── similar_search_dialog.dart # Search similar English meanings to write a front hint
+│   │   ├── vocab_merge_dialogs.dart   # Manual and AI merge flows, merge history and undo
+│   │   └── settings_dialog.dart       # Theme, autoplay, review limits, backup and DeepSeek key
 │   └── widgets/
 │       ├── adaptive_scaffold.dart     # Responsive layout (Rail vs BottomNav)
 │       ├── ai_discussion_suggestion_tile.dart # One suggested AI discussion and why
@@ -56,6 +69,12 @@ lingua_srs/
 │       ├── cached_markdown_image.dart # Online Markdown image shown from the disk cache
 │       ├── markdown_content.dart      # Markdown renderer for notes and chat
 │       ├── markdown_notes_field.dart  # Notes form field: Add button, rendered notes, Edit/Preview
+│       ├── icon_switch.dart           # Switch flanked by icons, e.g. light and dark
+│       ├── markdown_text_field.dart   # Markdown text field that converts pasted HTML
+│       ├── pronunciation_line.dart    # Optional romanization and IPA lines under Korean text
+│       ├── pronunciation_toggle.dart  # RR and IPA toggles in the review menu
+│       ├── review_notes_editor.dart   # Review note editable from a card's back; text-focus check for shortcuts
+│       ├── swipe_actions.dart         # Swipe-to-reveal action panel for list tiles
 │       └── youtube_embed.dart         # YouTube embed for lesson Markdown
 └── test/                              # Parser, SRS, storage, import and widget tests
 ```

@@ -78,6 +78,7 @@ The import button stays disabled until the input can be previewed. Fix any displ
 - Folder and ZIP results start unchecked; select lessons individually or use **Check all** / **Uncheck all**.
 - Only files with a `vocabulary:` key in their frontmatter are imported; other Markdown is ignored.
 - Re-importing updates matching lessons and vocabulary in place, keeping SRS progress and any entries not present in the import.
+- Folder import skips Markdown files that have not changed since you last imported them, and reports how many it skipped.
 
 ### Adding vocabulary to an existing lesson
 
