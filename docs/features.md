@@ -38,6 +38,7 @@ Full feature reference. For a short overview see the [README](../README.md).
    - The sentence picker opens with the selected vocabulary as its search query. Korean-aware local tokenization handles Hangul subwords, common particles, and frequent verb/adjective endings without downloading a large model.
    - Create new sentences directly in the pool or while editing a vocabulary item.
    - A matching **Vocab Pool** tab lists every distinct word once, even when several lessons share it, with the lessons it appears in. Search in Korean (Hangul finds the word, its conjugated forms and its meaning) or in English (meanings and notes, best match first), narrow by part of speech, and tap a word to edit it.
+   - **Deleting from the pools and Recent Discussions**: swipe a tile left to reveal a Delete button (on a wide screen, use the tile's ⋮ menu in the two pools). Nothing is deleted until you confirm. Deleting a word removes it from every lesson that has it, and the dialog lists those lessons; deleting a sentence also removes it as an example from the words that use it.
 
 6. **Instant Audio Streaming with Offline Caching**:
    - **Stream-on-First-Play**: Audio starts streaming immediately on the very first play with zero wait time.

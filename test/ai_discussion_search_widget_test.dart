@@ -1001,6 +1001,122 @@ void main() {
       expect(find.byIcon(Icons.delete_outline), findsNothing);
     });
 
+    final panel = find.byIcon(Icons.delete_outline);
+
+    testWidgets('a swipe reveals a limited Delete button without asking', (
+      tester,
+    ) async {
+      await open(tester);
+      final appleCard = find.ancestor(
+        of: title('사과'),
+        matching: find.byType(Card),
+      );
+      final before = tester.getTopLeft(appleCard).dx;
+
+      await tester.drag(title('사과'), const Offset(-500, 0));
+      await tester.pumpAndSettle();
+
+      final moved = before - tester.getTopLeft(appleCard).dx;
+      expect(moved, 96);
+      expect(panel, findsOneWidget);
+      expect(find.text('Delete this discussion?'), findsNothing);
+    });
+
+    testWidgets('a short swipe springs back', (tester) async {
+      await open(tester);
+
+      await tester.drag(title('사과'), const Offset(-20, 0));
+      await tester.pumpAndSettle();
+
+      expect(panel, findsNothing);
+      expect(find.text('Delete this discussion?'), findsNothing);
+    });
+
+    testWidgets('tapping the open row closes it instead of opening it', (
+      tester,
+    ) async {
+      await open(tester);
+
+      await tester.drag(title('사과'), const Offset(-500, 0));
+      await tester.pumpAndSettle();
+      await tester.tap(title('사과'), warnIfMissed: false);
+      await tester.pumpAndSettle();
+
+      expect(panel, findsNothing);
+      expect(find.byTooltip('More'), findsNothing);
+    });
+
+    testWidgets('pressing a different row puts the swiped row back', (
+      tester,
+    ) async {
+      await open(tester);
+
+      await tester.drag(title('사과'), const Offset(-500, 0));
+      await tester.pumpAndSettle();
+      expect(panel, findsOneWidget);
+
+      await tester.drag(title('먹다'), const Offset(-500, 0));
+      await tester.pumpAndSettle();
+      expect(panel, findsOneWidget);
+      final eatCard = find.ancestor(
+        of: title('먹다'),
+        matching: find.byType(Card),
+      );
+      final appleCard = find.ancestor(
+        of: title('사과'),
+        matching: find.byType(Card),
+      );
+      expect(
+        tester.getTopLeft(appleCard).dx,
+        isNot(lessThan(tester.getTopLeft(eatCard).dx + 1)),
+      );
+
+      await tester.tap(title('사과'));
+      await tester.pumpAndSettle();
+      expect(panel, findsNothing);
+    });
+
+    testWidgets('pressing the Delete button asks before deleting', (
+      tester,
+    ) async {
+      final provider = await open(tester);
+
+      await tester.drag(title('사과'), const Offset(-500, 0));
+      await tester.pumpAndSettle();
+      await tester.tap(panel);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Delete this discussion?'), findsOneWidget);
+      expect(
+        find.text(
+          'The saved AI conversation about "사과" will be permanently deleted.',
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(title('사과'), findsOneWidget);
+      expect(panel, findsNothing);
+      expect(provider.aiDiscussions.keys, contains('v-apple:no-sentence'));
+    });
+
+    testWidgets('confirming deletes the discussion', (tester) async {
+      final provider = await open(tester);
+
+      await tester.drag(title('사과'), const Offset(-500, 0));
+      await tester.pumpAndSettle();
+      await tester.tap(panel);
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+      await tester.pumpAndSettle();
+
+      expect(title('사과'), findsNothing);
+      expect(title('먹다'), findsOneWidget);
+      expect(provider.aiDiscussions.keys, ['v-eat:no-sentence']);
+      final stored = await tester.runAsync(StorageService.loadAiDiscussions);
+      expect(stored!.keys, ['v-eat:no-sentence']);
+    });
     testWidgets('a discussion is deleted from inside it', (tester) async {
       final provider = await open(tester);
 

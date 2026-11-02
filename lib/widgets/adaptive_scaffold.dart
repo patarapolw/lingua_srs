@@ -21,6 +21,24 @@ class AdaptiveScaffold extends StatefulWidget {
 
 class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
   int _selectedIndex = 0;
+  final PageController _pageController = PageController();
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _selectTab(int index, {required bool isDesktop}) {
+    setState(() => _selectedIndex = index);
+    if (!isDesktop && _pageController.hasClients) {
+      _pageController.animateToPage(
+        index,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -43,8 +61,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
           children: [
             NavigationRail(
               selectedIndex: _selectedIndex,
-              onDestinationSelected: (idx) =>
-                  setState(() => _selectedIndex = idx),
+              onDestinationSelected: (idx) => _selectTab(idx, isDesktop: true),
               extended: MediaQuery.of(context).size.width >= 1100,
               leading: Padding(
                 padding: const EdgeInsets.symmetric(
@@ -127,10 +144,14 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
 
     // Mobile Layout: Bottom Navigation Bar
     return Scaffold(
-      body: pages[_selectedIndex],
+      body: PageView(
+        controller: _pageController,
+        onPageChanged: (index) => setState(() => _selectedIndex = index),
+        children: pages,
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
-        onDestinationSelected: (idx) => setState(() => _selectedIndex = idx),
+        onDestinationSelected: (idx) => _selectTab(idx, isDesktop: false),
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.library_books_outlined),

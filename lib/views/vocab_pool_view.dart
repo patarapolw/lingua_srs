@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/vocab_merge_record.dart';
 import '../providers/app_provider.dart';
 import '../services/vocab_pool_search.dart';
+import '../widgets/swipe_actions.dart';
 import 'vocab_edit_dialog.dart';
 
 /// Every distinct vocabulary across all lessons, searchable in Korean and
@@ -35,6 +36,33 @@ class _VocabPoolViewState extends State<VocabPoolView> {
       }
     }
     VocabEditDialog.show(context, group.entry, lessonId: lessonId);
+  }
+
+  Future<void> _confirmDelete(AppProvider provider, VocabGroup group) async {
+    final vocab = group.entry;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Delete "${vocab.targetWord}"?'),
+        content: Text(
+          'It will be removed from ${group.lessonTitles.length == 1 ? 'this lesson' : 'all of these lessons'}'
+          ' and its SRS progress lost:\n\n'
+          '${group.lessonTitles.map((title) => '• $title').join('\n')}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await provider.deleteVocabEverywhere(vocab);
   }
 
   @override
@@ -176,62 +204,99 @@ class _VocabPoolViewState extends State<VocabPoolView> {
                     itemBuilder: (context, index) {
                       final group = filtered[index];
                       final entry = group.entry;
-                      return Card(
-                        key: ValueKey('vocab-pool-${group.id}'),
-                        elevation: 1,
-                        clipBehavior: Clip.antiAlias,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                      final actions = [
+                        SwipeAction(
+                          label: 'Delete',
+                          icon: Icons.delete_outline,
+                          semanticLabel: 'Delete word',
+                          onPressed: () => _confirmDelete(provider, group),
                         ),
-                        child: InkWell(
-                          onTap: () => _edit(provider, group),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  entry.targetWord,
-                                  style: theme.textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  entry.translation,
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 4,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  children: [
-                                    if (entry.pos.trim().isNotEmpty)
-                                      Badge(
-                                        label: Text(
-                                          VocabPoolSearch.posLabel(entry.pos),
+                      ];
+                      return SwipeActions(
+                        key: ValueKey('vocab-pool-swipe-${group.id}'),
+                        margin: const EdgeInsets.all(4),
+                        actions: actions,
+                        child: Card(
+                          key: ValueKey('vocab-pool-${group.id}'),
+                          elevation: 1,
+                          clipBehavior: Clip.antiAlias,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: InkWell(
+                                  onTap: () => _edit(provider, group),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(16),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          entry.targetWord,
+                                          style: theme.textTheme.titleMedium
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.w600,
+                                              ),
                                         ),
-                                        backgroundColor: theme
-                                            .colorScheme
-                                            .secondaryContainer,
-                                        textColor: theme
-                                            .colorScheme
-                                            .onSecondaryContainer,
-                                      ),
-                                    Text(
-                                      group.lessonTitles.join(' · '),
-                                      style: theme.textTheme.bodySmall
-                                          ?.copyWith(
-                                            color: theme.colorScheme.outline,
-                                          ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          entry.translation,
+                                          style: theme.textTheme.bodyMedium
+                                              ?.copyWith(
+                                                color: theme
+                                                    .colorScheme
+                                                    .onSurfaceVariant,
+                                              ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Wrap(
+                                          spacing: 8,
+                                          runSpacing: 4,
+                                          crossAxisAlignment:
+                                              WrapCrossAlignment.center,
+                                          children: [
+                                            if (entry.pos.trim().isNotEmpty)
+                                              Badge(
+                                                label: Text(
+                                                  VocabPoolSearch.posLabel(
+                                                    entry.pos,
+                                                  ),
+                                                ),
+                                                backgroundColor: theme
+                                                    .colorScheme
+                                                    .secondaryContainer,
+                                                textColor: theme
+                                                    .colorScheme
+                                                    .onSecondaryContainer,
+                                              ),
+                                            Text(
+                                              group.lessonTitles.join(' · '),
+                                              style: theme.textTheme.bodySmall
+                                                  ?.copyWith(
+                                                    color: theme
+                                                        .colorScheme
+                                                        .outline,
+                                                  ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
                                     ),
-                                  ],
+                                  ),
                                 ),
-                              ],
-                            ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.only(
+                                  top: 4,
+                                  right: 4,
+                                ),
+                                child: SwipeActionsMenu(actions: actions),
+                              ),
+                            ],
                           ),
                         ),
                       );

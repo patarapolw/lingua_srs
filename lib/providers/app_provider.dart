@@ -610,6 +610,20 @@ class AppProvider extends ChangeNotifier {
     return canonical;
   }
 
+  /// Removes [sentence] from the pool and from every word listing it as an
+  /// example. Saved AI discussions are kept, as they are when a word is deleted.
+  Future<void> deleteSentenceFromPool(Sentence sentence) async {
+    final before = _sentences.length;
+    _sentences.removeWhere((s) => s.id == sentence.id);
+    if (_sentences.length == before) return;
+    for (final vocab in _lessons.expand((lesson) => lesson.vocabularies)) {
+      vocab.sentenceIds.removeWhere((id) => id == sentence.id);
+    }
+    await StorageService.saveSentences(_sentences);
+    await StorageService.saveLessons(_lessons);
+    notifyListeners();
+  }
+
   // Identity set of [_sentences], only maintained during a batch import.
   Set<Sentence>? _importSentenceSet;
 
@@ -1621,6 +1635,19 @@ class AppProvider extends ChangeNotifier {
     await saveState();
   }
 
+  /// Removes [vocab] from every lesson that has it. Returns how many lessons
+  /// it was removed from.
+  Future<int> deleteVocabEverywhere(VocabItem vocab) async {
+    var removed = 0;
+    for (final lesson in _lessons) {
+      final before = lesson.vocabularies.length;
+      lesson.vocabularies.removeWhere((item) => item.id == vocab.id);
+      if (lesson.vocabularies.length != before) removed++;
+    }
+    if (removed > 0) await saveState();
+    return removed;
+  }
+
   Future<void> deleteSection(String lessonId, List<String> sectionPath) async {
     final lesson = _lessons.firstWhere((l) => l.id == lessonId);
     bool isInSection(VocabItem vocab) {
@@ -1771,6 +1798,7 @@ class AppProvider extends ChangeNotifier {
   Future<void> resetVocabSrs(VocabItem vocab) async {
     vocab.cardTargetToNative.resetProgress();
     vocab.cardNativeToTarget.resetProgress();
+    _resetSharedProgress([vocab]);
     await saveState();
   }
 

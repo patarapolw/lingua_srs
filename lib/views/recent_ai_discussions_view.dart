@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
 import '../services/ai_discussion_search.dart';
 import '../widgets/emphasis_text.dart';
+import '../widgets/swipe_actions.dart';
 import 'ai_discussion_dialog.dart';
 
 class RecentAiDiscussionsView extends StatefulWidget {
@@ -108,69 +109,143 @@ class _RecentAiDiscussionsViewState extends State<RecentAiDiscussionsView> {
                           padding: const EdgeInsets.all(16),
                           itemCount: discussions.length,
                           separatorBuilder: (_, _) => const SizedBox(height: 8),
-                          itemBuilder: (context, index) =>
-                              _DiscussionCard(discussion: discussions[index]),
+                          itemBuilder: (context, index) {
+                            final discussion = discussions[index];
+                            return _DiscussionCard(
+                              discussion: discussion,
+                              onDelete: () =>
+                                  _deleteDiscussion(context, discussion),
+                            );
+                          },
                         ),
                 ),
               ],
             ),
     );
   }
+
+  Future<void> _deleteDiscussion(
+    BuildContext context,
+    AiDiscussionSummary discussion,
+  ) async {
+    try {
+      await context.read<AppProvider>().deleteAiDiscussion(discussion.id);
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not delete discussion: $error')),
+      );
+    }
+  }
 }
 
 class _DiscussionCard extends StatelessWidget {
-  const _DiscussionCard({required this.discussion});
+  const _DiscussionCard({required this.discussion, required this.onDelete});
 
   final AiDiscussionSummary discussion;
+  final Future<void> Function() onDelete;
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete this discussion?'),
+        content: Text(
+          'The saved AI conversation about "${discussion.title}" '
+          'will be permanently deleted.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await onDelete();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: ListTile(
-        leading: const CircleAvatar(child: Icon(Icons.forum_outlined)),
-        // The date sits beside the title: ListTile limits its trailing widget
-        // to 56px, which a date that wraps would exceed. Deleting is done
-        // inside the discussion, not from the list.
-        title: Row(
-          children: [
-            Expanded(
-              child: Text(
-                discussion.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              _formatUpdatedAt(discussion.updatedAt),
-              style: Theme.of(context).textTheme.labelSmall,
-            ),
-          ],
+    return SwipeActions(
+      margin: const EdgeInsets.all(4),
+      actions: [
+        SwipeAction(
+          label: 'Delete',
+          icon: Icons.delete_outline,
+          semanticLabel: 'Delete discussion',
+          onPressed: () => _confirmDelete(context),
         ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (discussion.vocab?.translation case final translation
-                when translation != null && translation.trim().isNotEmpty)
-              Text(translation, maxLines: 1, overflow: TextOverflow.ellipsis),
-            if (discussion.sentence?.targetText.trim() case final s?
-                when s.isNotEmpty)
-              Padding(
-                padding: const EdgeInsetsGeometry.only(top: 2, bottom: 2),
-                child: EmphasisText(
-                  s,
-                  style: const TextStyle(fontStyle: FontStyle.italic),
+      ],
+      child: Card(
+        child: ListTile(
+          // The date sits beside the title: ListTile limits its trailing widget
+          // to 56px, which a date that wraps would exceed.
+          title: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  discussion.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-            Text(
-              discussion.preview,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
+              const SizedBox(width: 8),
+              Text(
+                _formatUpdatedAt(discussion.updatedAt),
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+            ],
+          ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (discussion.vocab?.translation case final translation
+                  when translation != null && translation.trim().isNotEmpty)
+                Text(translation, maxLines: 1, overflow: TextOverflow.ellipsis),
+              if (discussion.sentence?.targetText.trim() case final s?
+                  when s.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsetsGeometry.only(top: 2, bottom: 2),
+                  child: EmphasisText(
+                    s,
+                    style: const TextStyle(fontStyle: FontStyle.italic),
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Container(
+                        width: 3,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.outlineVariant,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          discussion.preview,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          onTap: () => showAiDiscussion(context, discussion),
         ),
-        onTap: () => showAiDiscussion(context, discussion),
       ),
     );
   }
