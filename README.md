@@ -38,8 +38,8 @@ SRS that puts language learning first: custom lessons, lesson-by-lesson vocabula
 - **Shared pools**: browse, edit and link sentences across lessons; search every word in Korean or English.
 - **Audio**: stream-on-first-play with offline caching; offline system TTS on Android, cached online TTS elsewhere.
 - **Adaptive review**:
-  - *Again* cards return a few cards later, interleaved with new cards.
-  - Rolling 24-hour limits for reviews and new cards.
+  - *Again* cards return a few cards later, interleaved with new cards. In addition, *Again* is due again after 1 hour and *Hard* after 12 hours.
+  - Rolling 24-hour limits for reviews and new cards; the short *Again* and *Hard* repeats are never held back by them.
   - Review recent mistakes across lessons at any time.
   - Reset SRS progress for a lesson or a single word without changing card visibility.
 - **Review controls**:

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lingua_srs/services/srs_service.dart';
 import 'package:lingua_srs/services/yaml_parser_service.dart';
 
 /// Returns the first fenced code block tagged [lang] in [markdown].
@@ -140,6 +141,14 @@ void main() {
           reason: '${entry.key}/ exists but the intro omits ${entry.value}',
         );
       }
+    });
+
+    test('states the Again and Hard delays used by SrsService', () {
+      final again = SrsService.againDelay.inHours;
+      final hard = SrsService.hardDelay.inHours;
+
+      expect(readme, contains('*Again* is due again after $again hour'));
+      expect(readme, contains('*Hard* after $hard hours'));
     });
 
     test('stays a short overview', () {
