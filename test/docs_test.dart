@@ -79,6 +79,90 @@ void main() {
     });
   });
 
+  group('docs/features.md', () {
+    test('numbers its sections consecutively', () {
+      final doc = _readDoc('docs/features.md');
+      final matches = RegExp(r'^(\d+)\. \*\*', multiLine: true).allMatches(doc);
+      final numbers = [for (final m in matches) int.parse(m[1]!)];
+
+      expect(numbers, isNotEmpty);
+      expect(numbers, [for (var i = 1; i <= numbers.length; i++) i]);
+    });
+  });
+
+  group('README.md', () {
+    final readme = _readDoc('README.md');
+
+    test('links every document in docs/', () {
+      final names = <String>[];
+      for (final entity in Directory('docs').listSync()) {
+        if (entity is File && entity.path.endsWith('.md')) {
+          names.add(entity.uri.pathSegments.last);
+        }
+      }
+      expect(names, isNotEmpty);
+
+      final missing = [
+        for (final name in names)
+          if (!readme.contains('](docs/$name)')) name,
+      ];
+      expect(missing, isEmpty, reason: 'README.md does not link: $missing');
+    });
+
+    test('gives every screenshot alt text', () {
+      final tags = RegExp(r'<img\b[^>]*>').allMatches(readme);
+      expect(tags, isNotEmpty);
+
+      for (final tag in tags) {
+        expect(
+          RegExp(r'\salt="[^"]+"').hasMatch(tag[0]!),
+          isTrue,
+          reason: 'Missing alt text: ${tag[0]}',
+        );
+      }
+    });
+
+    test('names every platform that has a project folder', () {
+      const platforms = {
+        'android': 'Android',
+        'ios': 'iOS',
+        'linux': 'Linux',
+        'macos': 'macOS',
+        'windows': 'Windows',
+      };
+      final intro = readme.substring(0, readme.indexOf('\n## '));
+
+      for (final entry in platforms.entries) {
+        if (!Directory(entry.key).existsSync()) continue;
+        expect(
+          intro,
+          contains(entry.value),
+          reason: '${entry.key}/ exists but the intro omits ${entry.value}',
+        );
+      }
+    });
+
+    test('stays a short overview', () {
+      // AGENTS.md: keep README.md short and put detail in docs/.
+      final lines = readme.trimRight().split('\n');
+      expect(lines.length, lessThanOrEqualTo(80), reason: 'Use docs/ instead');
+
+      final start = readme.indexOf('## Highlights');
+      final end = readme.indexOf('\n## ', start);
+      final section = readme.substring(start, end).split('\n');
+      final bullets = section.where((l) => l.startsWith('- ')).toList();
+      expect(bullets, isNotEmpty);
+
+      for (final bullet in bullets) {
+        expect(
+          bullet.length,
+          lessThanOrEqualTo(300),
+          reason: 'Move detail to docs/features.md: $bullet',
+        );
+      }
+    });
+  });
+
   group('documentation links', () {
     final files = <File>[
       File('README.md'),
