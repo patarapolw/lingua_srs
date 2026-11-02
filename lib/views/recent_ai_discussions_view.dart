@@ -217,10 +217,30 @@ class _DiscussionCard extends StatelessWidget {
                     style: const TextStyle(fontStyle: FontStyle.italic),
                   ),
                 ),
-              Text(
-                discussion.preview,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Container(
+                        width: 3,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.outlineVariant,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          discussion.preview,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ],
           ),
