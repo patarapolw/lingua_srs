@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lingua_srs/models/sentence.dart';
 import 'package:lingua_srs/providers/app_provider.dart';
 import 'package:lingua_srs/services/audio_service.dart';
+import 'package:lingua_srs/views/recent_ai_discussions_view.dart';
 import 'package:lingua_srs/views/sentence_pool_view.dart';
 import 'package:lingua_srs/views/vocab_edit_dialog.dart';
 import 'package:lingua_srs/views/vocab_pool_view.dart';
@@ -474,6 +475,40 @@ void main() {
 
       expect(find.byType(VocabPoolView), findsOneWidget);
       expect(find.text('4 words'), findsOneWidget);
+    });
+
+    testWidgets('swiping moves between all main tabs', (tester) async {
+      final provider = await seeded(tester);
+      await pumpWith(
+        tester,
+        provider,
+        const AdaptiveScaffold(),
+        size: const Size(420, 900),
+      );
+
+      await tester.dragFrom(const Offset(380, 450), const Offset(-300, 0));
+      await tester.pumpAndSettle();
+      expect(find.byType(VocabPoolView), findsOneWidget);
+      expect(
+        tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+        1,
+      );
+
+      await tester.dragFrom(const Offset(380, 450), const Offset(-300, 0));
+      await tester.pumpAndSettle();
+      expect(find.byType(SentencePoolView), findsOneWidget);
+      expect(
+        tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+        2,
+      );
+
+      await tester.dragFrom(const Offset(380, 450), const Offset(-300, 0));
+      await tester.pumpAndSettle();
+      expect(find.byType(RecentAiDiscussionsView), findsOneWidget);
+      expect(
+        tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+        3,
+      );
     });
   });
 }
