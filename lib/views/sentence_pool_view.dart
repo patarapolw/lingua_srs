@@ -7,6 +7,7 @@ import '../widgets/audio_edit_fields.dart';
 import '../widgets/emphasis_text.dart';
 import '../widgets/markdown_content.dart';
 import '../widgets/markdown_notes_field.dart';
+import '../widgets/swipe_actions.dart';
 
 const _emphasisError =
     'Emphasis is set per word. Mark it in the word\'s own editor.';
@@ -33,6 +34,33 @@ class _SentencePoolViewState extends State<SentencePoolView> {
       .expand((lesson) => lesson.vocabularies)
       .where((vocab) => vocab.sentenceIds.contains(sentence.id))
       .length;
+
+  Future<void> _confirmDelete(AppProvider provider, Sentence sentence) async {
+    final usage = _usageCount(provider, sentence);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete this sentence?'),
+        content: Text(
+          '"${Sentence.stripEmphasis(sentence.targetText)}" will be deleted'
+          '${usage == 0 ? '.' : ' and removed as an example from $usage '
+                    '${usage == 1 ? 'word' : 'words'}.'}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await provider.deleteSentenceFromPool(sentence);
+  }
 
   void _showAddEditDialog({Sentence? sentence}) {
     final usage = sentence == null
@@ -312,68 +340,81 @@ class _SentencePoolViewState extends State<SentencePoolView> {
 
                       final vocabUsageCount = _usageCount(provider, item);
 
-                      return Card(
-                        elevation: 1,
-                        clipBehavior: Clip.antiAlias,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: InkWell(
-                          onTap: () => _showAddEditDialog(sentence: item),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                EmphasisText(
-                                  item.targetText,
-                                  style: theme.textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
+                      return SwipeActions(
+                        key: ValueKey('sentence-pool-swipe-${item.id}'),
+                        margin: const EdgeInsets.all(4),
+                        actions: [
+                          SwipeAction(
+                            label: 'Delete',
+                            icon: Icons.delete_outline,
+                            semanticLabel: 'Delete sentence',
+                            onPressed: () => _confirmDelete(provider, item),
+                          ),
+                        ],
+                        child: Card(
+                          elevation: 1,
+                          clipBehavior: Clip.antiAlias,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: InkWell(
+                            onTap: () => _showAddEditDialog(sentence: item),
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  EmphasisText(
+                                    item.targetText,
+                                    style: theme.textTheme.titleMedium
+                                        ?.copyWith(fontWeight: FontWeight.w600),
                                   ),
-                                ),
-                                const SizedBox(height: 6),
-                                EmphasisText(
-                                  item.translationText,
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
-                                if (item.notes.trim().isNotEmpty) ...[
-                                  const SizedBox(height: 8),
-                                  DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      color: theme
-                                          .colorScheme
-                                          .secondaryContainer
-                                          .withValues(alpha: 0.3),
-                                      borderRadius: BorderRadius.circular(8),
+                                  const SizedBox(height: 6),
+                                  EmphasisText(
+                                    item.translationText,
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      color: theme.colorScheme.onSurfaceVariant,
                                     ),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(10),
-                                      child: MarkdownContent(
-                                        content: item.notes,
-                                        style: theme.textTheme.bodySmall,
+                                  ),
+                                  if (item.notes.trim().isNotEmpty) ...[
+                                    const SizedBox(height: 8),
+                                    DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        color: theme
+                                            .colorScheme
+                                            .secondaryContainer
+                                            .withValues(alpha: 0.3),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(10),
+                                        child: MarkdownContent(
+                                          content: item.notes,
+                                          style: theme.textTheme.bodySmall,
+                                        ),
                                       ),
                                     ),
+                                  ],
+                                  const SizedBox(height: 8),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 4,
+                                    crossAxisAlignment:
+                                        WrapCrossAlignment.center,
+                                    children: [
+                                      Badge(
+                                        label: Text('$vocabUsageCount vocabs'),
+                                        backgroundColor: theme
+                                            .colorScheme
+                                            .secondaryContainer,
+                                        textColor: theme
+                                            .colorScheme
+                                            .onSecondaryContainer,
+                                      ),
+                                    ],
                                   ),
                                 ],
-                                const SizedBox(height: 8),
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 4,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  children: [
-                                    Badge(
-                                      label: Text('$vocabUsageCount vocabs'),
-                                      backgroundColor:
-                                          theme.colorScheme.secondaryContainer,
-                                      textColor: theme
-                                          .colorScheme
-                                          .onSecondaryContainer,
-                                    ),
-                                  ],
-                                ),
-                              ],
+                              ),
                             ),
                           ),
                         ),

@@ -434,6 +434,100 @@ void main() {
     });
   });
 
+  group('Sentence Pool swipe', () {
+    final panelDelete = find.byIcon(Icons.delete_outline);
+
+    Future<AppProvider> withSentences(WidgetTester tester) async {
+      final provider = await seeded(tester);
+      await tester.runAsync(() async {
+        final apple = await provider.addSentenceToPool(
+          Sentence(targetText: '사과를 먹어요', translationText: 'I eat an apple'),
+        );
+        await provider.addSentenceToPool(
+          Sentence(
+            targetText: '공항에 가요',
+            translationText: 'I go to the airport',
+          ),
+        );
+        final vocab = provider.lessons
+            .expand((lesson) => lesson.vocabularies)
+            .firstWhere((v) => v.targetWord == '사과');
+        await provider.linkSentenceToVocab(vocab, apple.id);
+      });
+      await pumpWith(tester, provider, const SentencePoolView());
+      return provider;
+    }
+
+    Future<void> swipe(WidgetTester tester, String text) async {
+      await tester.drag(find.text(text), const Offset(-600, 0));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('reveals Delete without asking', (tester) async {
+      await withSentences(tester);
+
+      await swipe(tester, '사과를 먹어요');
+
+      expect(panelDelete, findsOneWidget);
+      expect(find.byType(AlertDialog), findsNothing);
+    });
+
+    testWidgets('Delete asks first, and Cancel keeps the sentence', (
+      tester,
+    ) async {
+      final provider = await withSentences(tester);
+
+      await swipe(tester, '사과를 먹어요');
+      await tester.tap(panelDelete);
+      await tester.pumpAndSettle();
+      expect(find.text('Delete this sentence?'), findsOneWidget);
+      expect(
+        find.textContaining('removed as an example from 1 word.'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(provider.sentences, hasLength(2));
+      expect(find.text('사과를 먹어요'), findsOneWidget);
+      expect(panelDelete, findsNothing);
+    });
+
+    testWidgets('confirming deletes it from the pool and from its words', (
+      tester,
+    ) async {
+      final provider = await withSentences(tester);
+
+      await swipe(tester, '사과를 먹어요');
+      await tester.tap(panelDelete);
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('사과를 먹어요'), findsNothing);
+      expect(find.text('공항에 가요'), findsOneWidget);
+      expect(find.text('1 sentence'), findsOneWidget);
+      expect(provider.sentences.map((s) => s.targetText), ['공항에 가요']);
+      final apple = provider.lessons
+          .expand((lesson) => lesson.vocabularies)
+          .firstWhere((v) => v.targetWord == '사과');
+      expect(apple.sentenceIds, isEmpty);
+    });
+
+    testWidgets('a sentence no word uses is deleted without a usage note', (
+      tester,
+    ) async {
+      await withSentences(tester);
+
+      await swipe(tester, '공항에 가요');
+      await tester.tap(panelDelete);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('removed as an example'), findsNothing);
+      expect(find.textContaining('will be deleted.'), findsOneWidget);
+    });
+  });
+
   group('Search box', () {
     String? hint(WidgetTester tester) =>
         tester.widget<TextField>(find.byType(TextField)).decoration?.hintText;

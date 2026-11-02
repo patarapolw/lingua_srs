@@ -610,6 +610,20 @@ class AppProvider extends ChangeNotifier {
     return canonical;
   }
 
+  /// Removes [sentence] from the pool and from every word listing it as an
+  /// example. Saved AI discussions are kept, as they are when a word is deleted.
+  Future<void> deleteSentenceFromPool(Sentence sentence) async {
+    final before = _sentences.length;
+    _sentences.removeWhere((s) => s.id == sentence.id);
+    if (_sentences.length == before) return;
+    for (final vocab in _lessons.expand((lesson) => lesson.vocabularies)) {
+      vocab.sentenceIds.removeWhere((id) => id == sentence.id);
+    }
+    await StorageService.saveSentences(_sentences);
+    await StorageService.saveLessons(_lessons);
+    notifyListeners();
+  }
+
   // Identity set of [_sentences], only maintained during a batch import.
   Set<Sentence>? _importSentenceSet;
 
