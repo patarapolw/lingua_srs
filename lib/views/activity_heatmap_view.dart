@@ -316,12 +316,7 @@ class ActivityHeatmapView extends StatelessWidget {
     SrsStatus.review => 'Review',
   };
 
-  Widget _stageBar(
-    BuildContext context,
-    String label,
-    int count,
-    int maximum,
-  ) {
+  Widget _stageBar(BuildContext context, String label, int count, int maximum) {
     final tooltip = '$label: $count ${count == 1 ? 'card' : 'cards'}';
     final barHeight = maximum == 0 ? 2.0 : 80.0 * count / maximum;
     return Semantics(
@@ -347,10 +342,7 @@ class ActivityHeatmapView extends StatelessWidget {
             ),
             SizedBox(
               height: 20,
-              child: Text(
-                label,
-                style: Theme.of(context).textTheme.labelSmall,
-              ),
+              child: Text(label, style: Theme.of(context).textTheme.labelSmall),
             ),
           ],
         ),
@@ -380,7 +372,9 @@ class ActivityHeatmapView extends StatelessWidget {
       }
     }
     final leeches = cardsById.values.toList()
-      ..sort((first, second) => second.card.lapses.compareTo(first.card.lapses));
+      ..sort(
+        (first, second) => second.card.lapses.compareTo(first.card.lapses),
+      );
     return leeches;
   }
 }
