@@ -138,6 +138,11 @@ void main() {
     await tester.pump();
   }
 
+  Finder lessonOptionsMenu(String title) => find.descendant(
+    of: find.widgetWithText(ListTile, title),
+    matching: find.byType(PopupMenuButton<String>),
+  );
+
   // The Study button of the dashboard banner (the bolt icon one).
   Finder bannerStudyButton() => find.ancestor(
     of: find.byIcon(Icons.bolt_rounded),
@@ -372,7 +377,7 @@ void main() {
       await seedLesson(tester, provider, total: 2);
       await pumpWith(tester, provider, const LessonListView(), size: phone);
 
-      await tester.tap(find.byType(PopupMenuButton<String>));
+      await tester.tap(lessonOptionsMenu('Lesson'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('View Vocabulary'));
       await tester.pumpAndSettle();
@@ -387,7 +392,7 @@ void main() {
       await seedLesson(tester, provider, total: 2);
       await pumpWith(tester, provider, const LessonListView());
 
-      await tester.tap(find.byType(PopupMenuButton<String>));
+      await tester.tap(lessonOptionsMenu('Lesson'));
       await tester.pumpAndSettle();
       expect(find.text('View Vocabulary'), findsNothing);
       await tester.tapAt(const Offset(5, 5));

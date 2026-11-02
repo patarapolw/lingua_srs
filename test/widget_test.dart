@@ -400,16 +400,20 @@ void main() {
     expect(find.text('Restore'), findsOneWidget);
   });
 
-  testWidgets('Merge menu is hidden without a DeepSeek key or history', (
+  testWidgets('More options hides AI suggestions without a DeepSeek key', (
     tester,
   ) async {
     await pumpApp(tester);
-    expect(find.byTooltip('Vocabulary merging'), findsNothing);
+    await tester.tap(find.byTooltip('More options'));
+    await tester.pumpAndSettle();
+    expect(find.text('Suggest merges with AI'), findsNothing);
   });
 
-  testWidgets('Merge menu offers AI only with a DeepSeek key', (tester) async {
+  testWidgets('More options offers AI suggestions with a DeepSeek key', (
+    tester,
+  ) async {
     await pumpApp(tester, {'lingua_srs_deepseek_api_key': 'test-key'});
-    await tester.tap(find.byTooltip('Vocabulary merging'));
+    await tester.tap(find.byTooltip('More options'));
     await tester.pumpAndSettle();
     expect(find.text('Suggest merges with AI'), findsOneWidget);
   });

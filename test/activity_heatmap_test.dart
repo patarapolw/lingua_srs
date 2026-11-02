@@ -57,13 +57,17 @@ void main() {
   testWidgets('records and persists daily reviews for the activity calendar', (
     tester,
   ) async {
-    final card = SrsCard(direction: CardDirection.targetToNative);
-    await provider.recordCardReview(card, SrsRating.good);
+    for (final rating in SrsRating.values) {
+      await provider.recordCardReview(
+        SrsCard(direction: CardDirection.targetToNative),
+        rating,
+      );
+    }
 
     final today = DateTime.now();
     expect(
       provider.dailyReviewCounts[DateTime(today.year, today.month, today.day)],
-      1,
+      SrsRating.values.length,
     );
 
     await tester.pumpWidget(
@@ -73,14 +77,20 @@ void main() {
       ),
     );
     expect(find.text('Study activity'), findsOneWidget);
-    expect(find.text('1 review in the past year'), findsOneWidget);
+    expect(
+      find.text('${SrsRating.values.length} reviews in the past year'),
+      findsOneWidget,
+    );
     expect(find.text('Less'), findsOneWidget);
     expect(find.text('More'), findsOneWidget);
     expect(find.text('Jan'), findsOneWidget);
     expect(find.byType(RotatedBox), findsWidgets);
 
     final restoredCounts = await StorageService.loadDailyReviewCounts();
-    expect(restoredCounts[DateTime(today.year, today.month, today.day)], 1);
+    expect(
+      restoredCounts[DateTime(today.year, today.month, today.day)],
+      SrsRating.values.length,
+    );
   });
 
   testWidgets('opens study activity from the Lessons options on mobile', (
