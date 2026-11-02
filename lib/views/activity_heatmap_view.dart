@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/lesson.dart';
+import '../models/srs_card.dart';
+import '../models/vocab_item.dart';
 import '../providers/app_provider.dart';
+
+const _leechLapseThreshold = 8;
 
 class ActivityHeatmapView extends StatelessWidget {
   const ActivityHeatmapView({super.key});
@@ -38,6 +43,12 @@ class ActivityHeatmapView extends StatelessWidget {
       body: Consumer<AppProvider>(
         builder: (context, provider, _) {
           final counts = provider.dailyReviewCounts;
+          final leeches = _findLeeches(provider.lessons);
+          final stageCounts = _studyStageCounts(provider.lessons);
+          final maxStageCount = stageCounts.values.fold(
+            0,
+            (maximum, count) => count > maximum ? count : maximum,
+          );
           final total = counts.entries
               .where(
                 (entry) =>
@@ -48,7 +59,7 @@ class ActivityHeatmapView extends StatelessWidget {
               )
               .fold(0, (sum, entry) => sum + entry.value);
 
-          if (total == 0) {
+          if (total == 0 && leeches.isEmpty) {
             return const Center(
               child: Padding(
                 padding: EdgeInsets.all(24),
@@ -170,6 +181,54 @@ class ActivityHeatmapView extends StatelessWidget {
                   Text('More', style: theme.textTheme.labelSmall),
                 ],
               ),
+              const SizedBox(height: 24),
+              Text('Cards by stage', style: theme.textTheme.titleMedium),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 120,
+                child: Row(
+                  children: [
+                    for (final entry in stageCounts.entries)
+                      Expanded(
+                        child: _stageBar(
+                          context,
+                          _stageLabel(entry.key),
+                          entry.value,
+                          maxStageCount,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              if (leeches.isNotEmpty) ...[
+                const SizedBox(height: 24),
+                Text(
+                  'Leeches (${leeches.length})',
+                  style: theme.textTheme.titleMedium,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Cards with at least $_leechLapseThreshold lapses may need a new approach.',
+                  style: theme.textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 8),
+                for (final leech in leeches)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.warning_amber_rounded),
+                    title: Text(
+                      leech.card.direction == CardDirection.targetToNative
+                          ? leech.vocab.targetWord
+                          : leech.vocab.translation,
+                    ),
+                    subtitle: Text(
+                      leech.card.direction == CardDirection.targetToNative
+                          ? leech.vocab.translation
+                          : leech.vocab.targetWord,
+                    ),
+                    trailing: Text('${leech.card.lapses} lapses'),
+                  ),
+              ],
             ],
           );
         },
@@ -239,6 +298,58 @@ class ActivityHeatmapView extends StatelessWidget {
     _ => 4,
   };
 
+  Map<SrsStatus, int> _studyStageCounts(List<Lesson> lessons) {
+    final counts = {for (final status in SrsStatus.values) status: 0};
+    final seenCardIds = <String>{};
+    for (final vocab in lessons.expand((lesson) => lesson.vocabularies)) {
+      for (final card in [vocab.cardTargetToNative, vocab.cardNativeToTarget]) {
+        if (!card.isEnabled || !seenCardIds.add(card.id)) continue;
+        counts[card.status] = counts[card.status]! + 1;
+      }
+    }
+    return counts;
+  }
+
+  String _stageLabel(SrsStatus status) => switch (status) {
+    SrsStatus.isNew => 'New',
+    SrsStatus.learning => 'Learning',
+    SrsStatus.review => 'Review',
+  };
+
+  Widget _stageBar(BuildContext context, String label, int count, int maximum) {
+    final tooltip = '$label: $count ${count == 1 ? 'card' : 'cards'}';
+    final barHeight = maximum == 0 ? 2.0 : 80.0 * count / maximum;
+    return Semantics(
+      label: tooltip,
+      child: Tooltip(
+        message: tooltip,
+        child: Column(
+          children: [
+            Expanded(
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: Container(
+                  width: 16,
+                  height: barHeight,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary,
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(3),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            SizedBox(
+              height: 20,
+              child: Text(label, style: Theme.of(context).textTheme.labelSmall),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Color _activityColor(ColorScheme colors, int level) {
     if (level == 0) return colors.surfaceContainerHighest;
     return Color.lerp(
@@ -247,4 +358,30 @@ class ActivityHeatmapView extends StatelessWidget {
       level / 4,
     )!;
   }
+
+  List<_LeechCard> _findLeeches(List<Lesson> lessons) {
+    final cardsById = <String, _LeechCard>{};
+    for (final vocab in lessons.expand((lesson) => lesson.vocabularies)) {
+      for (final card in [vocab.cardTargetToNative, vocab.cardNativeToTarget]) {
+        if (card.isEnabled && card.lapses >= _leechLapseThreshold) {
+          cardsById.putIfAbsent(
+            card.id,
+            () => _LeechCard(vocab: vocab, card: card),
+          );
+        }
+      }
+    }
+    final leeches = cardsById.values.toList()
+      ..sort(
+        (first, second) => second.card.lapses.compareTo(first.card.lapses),
+      );
+    return leeches;
+  }
+}
+
+class _LeechCard {
+  const _LeechCard({required this.vocab, required this.card});
+
+  final VocabItem vocab;
+  final SrsCard card;
 }
