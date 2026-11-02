@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
 import '../services/ai_discussion_search.dart';
 import '../widgets/emphasis_text.dart';
+import '../widgets/swipe_to_delete.dart';
 import 'ai_discussion_dialog.dart';
 
 class RecentAiDiscussionsView extends StatefulWidget {
@@ -16,7 +17,6 @@ class RecentAiDiscussionsView extends StatefulWidget {
 
 class _RecentAiDiscussionsViewState extends State<RecentAiDiscussionsView> {
   final TextEditingController _searchController = TextEditingController();
-  final Set<String> _dismissedDiscussions = {};
   String _query = '';
 
   @override
@@ -31,11 +31,7 @@ class _RecentAiDiscussionsViewState extends State<RecentAiDiscussionsView> {
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
     final saved = provider.aiDiscussionSummaries;
-    final discussions = AiDiscussionSearch.search(_query, saved)
-        .where(
-          (discussion) => !_dismissedDiscussions.contains(discussion.id),
-        )
-        .toList();
+    final discussions = AiDiscussionSearch.search(_query, saved);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Recent Discussions')),
@@ -117,12 +113,8 @@ class _RecentAiDiscussionsViewState extends State<RecentAiDiscussionsView> {
                             final discussion = discussions[index];
                             return _DiscussionCard(
                               discussion: discussion,
-                              onDismissed: () {
-                                setState(() {
-                                  _dismissedDiscussions.add(discussion.id);
-                                });
-                                _deleteDiscussion(context, discussion);
-                              },
+                              onDelete: () =>
+                                  _deleteDiscussion(context, discussion),
                             );
                           },
                         ),
@@ -139,7 +131,7 @@ class _RecentAiDiscussionsViewState extends State<RecentAiDiscussionsView> {
     try {
       await context.read<AppProvider>().deleteAiDiscussion(discussion.id);
     } catch (error) {
-      if (!mounted) return;
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Could not delete discussion: $error')),
       );
@@ -148,67 +140,41 @@ class _RecentAiDiscussionsViewState extends State<RecentAiDiscussionsView> {
 }
 
 class _DiscussionCard extends StatelessWidget {
-  const _DiscussionCard({
-    required this.discussion,
-    required this.onDismissed,
-  });
+  const _DiscussionCard({required this.discussion, required this.onDelete});
 
   final AiDiscussionSummary discussion;
-  final VoidCallback onDismissed;
+  final Future<void> Function() onDelete;
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete this discussion?'),
+        content: Text(
+          'The saved AI conversation about "${discussion.title}" '
+          'will be permanently deleted.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await onDelete();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Dismissible(
-      key: ValueKey(discussion.id),
-      direction: DismissDirection.endToStart,
-      semanticsLabel: 'Delete discussion',
-      background: const SizedBox.shrink(),
-      secondaryBackground: ColoredBox(
-        color: Theme.of(context).colorScheme.errorContainer,
-        child: Align(
-          alignment: Alignment.centerRight,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Delete',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onErrorContainer,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Icon(
-                  Icons.delete_outline,
-                  color: Theme.of(context).colorScheme.onErrorContainer,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-      confirmDismiss: (_) => showDialog<bool>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('Delete this discussion?'),
-          content: Text(
-            'The saved AI conversation about "${discussion.title}" '
-            'will be permanently deleted.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Delete'),
-            ),
-          ],
-        ),
-      ),
-      onDismissed: (_) => onDismissed(),
+    return SwipeToDelete(
+      semanticLabel: 'Delete discussion',
+      margin: const EdgeInsets.all(4),
+      onDelete: () => _confirmDelete(context),
       child: Card(
         child: ListTile(
           leading: const CircleAvatar(child: Icon(Icons.forum_outlined)),

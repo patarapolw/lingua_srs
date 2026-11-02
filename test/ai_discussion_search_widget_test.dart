@@ -1001,10 +1001,59 @@ void main() {
       expect(find.byIcon(Icons.delete_outline), findsNothing);
     });
 
-    testWidgets('swiping a discussion asks before deleting it', (tester) async {
+    final panel = find.byIcon(Icons.delete_outline);
+
+    testWidgets('a swipe reveals a limited Delete button without asking', (
+      tester,
+    ) async {
+      await open(tester);
+      final appleCard = find.ancestor(
+        of: title('사과'),
+        matching: find.byType(Card),
+      );
+      final before = tester.getTopLeft(appleCard).dx;
+
+      await tester.drag(title('사과'), const Offset(-500, 0));
+      await tester.pumpAndSettle();
+
+      final moved = before - tester.getTopLeft(appleCard).dx;
+      expect(moved, 96);
+      expect(panel, findsOneWidget);
+      expect(find.text('Delete this discussion?'), findsNothing);
+    });
+
+    testWidgets('a short swipe springs back', (tester) async {
+      await open(tester);
+
+      await tester.drag(title('사과'), const Offset(-20, 0));
+      await tester.pumpAndSettle();
+
+      expect(panel, findsNothing);
+      expect(find.text('Delete this discussion?'), findsNothing);
+    });
+
+    testWidgets('tapping the open row closes it instead of opening it', (
+      tester,
+    ) async {
+      await open(tester);
+
+      await tester.drag(title('사과'), const Offset(-500, 0));
+      await tester.pumpAndSettle();
+      await tester.tap(title('사과'), warnIfMissed: false);
+      await tester.pumpAndSettle();
+
+      expect(panel, findsNothing);
+      expect(find.byTooltip('More'), findsNothing);
+    });
+
+    testWidgets('pressing the Delete button asks before deleting', (
+      tester,
+    ) async {
       final provider = await open(tester);
 
       await tester.drag(title('사과'), const Offset(-500, 0));
+      await tester.pumpAndSettle();
+      await tester.tap(panel);
       await tester.pumpAndSettle();
 
       expect(find.text('Delete this discussion?'), findsOneWidget);
@@ -1018,13 +1067,16 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(title('사과'), findsOneWidget);
+      expect(panel, findsNothing);
       expect(provider.aiDiscussions.keys, contains('v-apple:no-sentence'));
     });
 
-    testWidgets('confirming a swipe deletes the discussion', (tester) async {
+    testWidgets('confirming deletes the discussion', (tester) async {
       final provider = await open(tester);
 
       await tester.drag(title('사과'), const Offset(-500, 0));
+      await tester.pumpAndSettle();
+      await tester.tap(panel);
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
       await tester.pumpAndSettle();
@@ -1035,7 +1087,6 @@ void main() {
       final stored = await tester.runAsync(StorageService.loadAiDiscussions);
       expect(stored!.keys, ['v-eat:no-sentence']);
     });
-
     testWidgets('a discussion is deleted from inside it', (tester) async {
       final provider = await open(tester);
 
