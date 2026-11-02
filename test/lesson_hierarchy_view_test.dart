@@ -222,6 +222,7 @@ void main() {
     List<String>? reorderedKeys;
     (List<String>, int)? resetFolder;
     (List<String>, int)? deletedFolder;
+    List<String>? exportedFolder;
 
     await tester.pumpWidget(
       MaterialApp(
@@ -263,6 +264,9 @@ void main() {
               onDeleteFolder: (path, count) {
                 deletedFolder = (path, count);
               },
+              onExportFolder: (path) {
+                exportedFolder = path;
+              },
             ),
           ),
         ),
@@ -294,6 +298,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(deletedFolder?.$1, ['Unit 2']);
     expect(deletedFolder?.$2, 1);
+
+    await tester.tap(find.byTooltip('Manage Unit 2'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Export as ZIP'));
+    await tester.pumpAndSettle();
+    expect(exportedFolder, ['Unit 2']);
   });
 
   testWidgets('slash-separated lesson titles create nested folders', (
