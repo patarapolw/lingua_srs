@@ -37,13 +37,11 @@ SRS that puts language learning first: custom lessons, lesson-by-lesson vocabula
 - **Study activity**: a one-year review heatmap, cards by stage, and a list of leeches (8+ lapses).
 - **AI discussions**: ask DeepSeek (API key in Settings) about the current card or a whole lesson; chats are saved locally.
 - **Backup and export**: back up and restore lessons and progress as a JSON file (the DeepSeek key is left out); export lessons or whole units as ZIP.
-- **Keyboard-first**: Anki-style [hotkeys](docs/hotkeys.md), with undo.
+- **Keyboard-enabled**: Anki-style [hotkeys](docs/hotkeys.md), with undo.
 
 Currently only Korean ➔ English is supported. Full details in [docs/features.md](docs/features.md).
 
 ## Running
-
-Requires the [Flutter SDK](https://docs.flutter.dev/get-started/install) (a Dart version satisfying `environment.sdk` in `pubspec.yaml`).
 
 ```bash
 flutter pub get
