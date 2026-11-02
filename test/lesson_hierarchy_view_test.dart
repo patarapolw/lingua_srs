@@ -112,6 +112,58 @@ void main() {
     expect(reorderedKeys!.first, isNot('folder:unit 1'));
   });
 
+  testWidgets('dragging a nested folder reorders siblings in its parent', (
+    tester,
+  ) async {
+    final lessons = [
+      Lesson(id: 'lesson-1', title: 'Lesson 1', unitTitle: 'Unit 1::Group A'),
+      Lesson(id: 'lesson-2', title: 'Lesson 2', unitTitle: 'Unit 1::Group B'),
+      Lesson(id: 'lesson-3', title: 'Lesson 3', unitTitle: 'Unit 1::Group C'),
+    ];
+    List<String>? reorderedKeys;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            height: 700,
+            child: LessonHierarchyView(
+              lessons: lessons,
+              order: const {},
+              folderExpansion: const {},
+              lessonBuilder: (context, lesson, _) =>
+                  ListTile(title: Text(lesson.displayTitle)),
+              onOrderChanged: (keys) async {
+                reorderedKeys = keys;
+              },
+              onFolderExpansionChanged: (_, _) async {},
+              onMoveFolder: (_) {},
+              onResetFolder: (_, _) {},
+              onDeleteFolder: (_, _) {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final folderDragHandle = find.ancestor(
+      of: find.byTooltip('Manage Unit 1 › Group A'),
+      matching: find.byType(ReorderableDelayedDragStartListener),
+    );
+    final gesture = await tester.startGesture(
+      tester.getCenter(folderDragHandle),
+    );
+    await tester.pump(const Duration(milliseconds: 600));
+    await gesture.moveBy(const Offset(0, 300));
+    await tester.pump();
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(reorderedKeys, isNotNull);
+    expect(reorderedKeys, hasLength(3));
+    expect(reorderedKeys!.first, isNot('folder:unit 1::group a'));
+  });
+
   testWidgets('dragging a lesson reports its saved sibling order', (
     tester,
   ) async {

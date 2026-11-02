@@ -85,12 +85,22 @@ class LessonHierarchyView extends StatelessWidget {
         }
         final reordered = [...rows];
         final moved = reordered.removeAt(oldIndex);
-        final insertionIndex = newIndex.clamp(0, reordered.length).toInt();
+        var insertionIndex = newIndex.clamp(0, reordered.length).toInt();
+        var descendantCount = 0;
+        if (moved.isFolder) {
+          while (oldIndex + descendantCount < reordered.length &&
+              reordered[oldIndex + descendantCount].depth > moved.depth) {
+            descendantCount++;
+          }
+          insertionIndex -= (insertionIndex - oldIndex)
+              .clamp(0, descendantCount)
+              .toInt();
+          reordered.removeRange(oldIndex, oldIndex + descendantCount);
+        }
         final validSiblingGaps = <int>{};
         for (var index = 0; index < reordered.length; index++) {
           final sibling = reordered[index];
           if (sibling.parentKey != moved.parentKey) continue;
-          validSiblingGaps.add(index);
           var subtreeEnd = index + 1;
           if (sibling.isFolder) {
             while (subtreeEnd < reordered.length &&
