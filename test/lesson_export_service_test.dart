@@ -73,7 +73,7 @@ void main() {
       targetLanguage: 'zh-TW',
       vocabularies: [
         VocabItem(
-          targetWord: '学生',
+          targetWord: '學生',
           translation: 'student',
           reading: 'xuésheng',
           simplified: '学生',

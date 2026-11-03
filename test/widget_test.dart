@@ -725,7 +725,7 @@ vocabulary:
 target: zh-TW
 vocabulary:
   nouns:
-    - zh: 学生
+    - zh: 學生
       pinyin: xuésheng
       simplified: 学生
       traditional: 學生
