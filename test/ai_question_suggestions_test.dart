@@ -399,10 +399,10 @@ void main() {
       expect(
         AiQuestionSuggestions.wordSubject(
           language: 'zh-TW',
-          word: '学生',
+          word: '學生',
           translation: 'student',
         ),
-        'the Mandarin Chinese word "学生" (student)',
+        'the Mandarin Chinese word "學生" (student)',
       );
       expect(
         AiQuestionSuggestions.lessonSubject(language: 'zh-CN', title: 'Food'),
@@ -452,7 +452,7 @@ void main() {
         language: 'zh-TW',
         subject: AiQuestionSuggestions.wordSubject(
           language: 'zh-TW',
-          word: '学生',
+          word: '學生',
           translation: 'student',
         ),
         nativeLanguage: 'en',
