@@ -39,6 +39,31 @@ void main() {
   });
 
   group('YAML Parser & Vocabulary Models', () {
+    test('parses and serializes Mandarin readings and character forms', () {
+      final parsed = YamlParserService.parseLessonYaml('''
+target: zh-TW
+vocabulary:
+  nouns:
+    - zh: 学生
+      pinyin: xuésheng
+      simplified: 学生
+      traditional: 學生
+      en: student
+''');
+      final lesson = parsed.lesson;
+      final vocab = lesson.vocabularies.single;
+
+      expect(lesson.targetLanguage, 'zh-TW');
+      expect(vocab.reading, 'xuésheng');
+      expect(vocab.simplified, '学生');
+      expect(vocab.traditional, '學生');
+
+      final restored = VocabItem.fromJson(vocab.toJson());
+      expect(restored.reading, vocab.reading);
+      expect(restored.simplified, vocab.simplified);
+      expect(restored.traditional, vocab.traditional);
+    });
+
     const sampleYaml = '''
 Lesson: Unit 2::Lesson 26
 

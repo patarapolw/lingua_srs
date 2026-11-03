@@ -1075,6 +1075,8 @@ class _StudyViewState extends State<StudyView> {
     }
 
     final item = _queue[_currentIndex];
+    final simplified = item.vocab.simplified;
+    final traditional = item.vocab.traditional;
     final isTargetToNative = item.isTargetToNative;
     final total = distinctCardCount(_queue);
     final currentNumber = distinctProgress(_queue, _currentIndex);
@@ -1587,6 +1589,29 @@ class _StudyViewState extends State<StudyView> {
                                             ),
                                           ],
                                         ),
+                                        if (item.vocab.reading.isNotEmpty)
+                                          Text(
+                                            'Reading: ${item.vocab.reading}',
+                                            style: theme.textTheme.titleMedium
+                                                ?.copyWith(
+                                                  color: theme
+                                                      .colorScheme
+                                                      .onSurfaceVariant,
+                                                ),
+                                            textAlign: TextAlign.center,
+                                          ),
+                                        if (simplified.isNotEmpty ||
+                                            traditional.isNotEmpty)
+                                          Text(
+                                            [
+                                              if (simplified.isNotEmpty)
+                                                'Simplified: $simplified',
+                                              if (traditional.isNotEmpty)
+                                                'Traditional: $traditional',
+                                            ].join(' · '),
+                                            style: theme.textTheme.bodyMedium,
+                                            textAlign: TextAlign.center,
+                                          ),
                                         PronunciationLine(
                                           text: item.vocab.targetWord,
                                           languageCode:

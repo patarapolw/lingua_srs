@@ -42,7 +42,24 @@ vocabulary:
       en: "three items"
 ```
 
-Each entry needs a target-language field (such as `ko`) and a translation field (such as `en`). `ko_text`, `audio`, `notes`, `disambiguation`, `id` and `examples` are optional.
+Each entry needs a target-language field (such as `ko`) and a translation field
+(such as `en`). `ko_text`, `audio`, `notes`, `disambiguation`, `id` and
+`examples` are optional. For Mandarin vocabulary, `pinyin` (or `reading`),
+`simplified` and `traditional` are also optional.
+
+`pinyin` (or `reading`) provides the reading shown on the answer side of a
+study card. `simplified` and `traditional` can record both character forms.
+
+```yaml
+target: zh-TW
+vocabulary:
+  nouns:
+    - zh: 学生
+      pinyin: xuésheng
+      simplified: 学生
+      traditional: 學生
+      en: student
+```
 
 - **`ko_text`** (`<language>_text` for other languages) is alternate text for text-to-speech, used when there is no `audio` file (or its *Use this recording* box is unticked), for example to spell out a number. It also works on entries in `examples`.
 - **Notes** are Markdown (`**bold**`, `*italic*`), written as one string or a list of strings (one paragraph each). Notes on an example are imported as sentence notes, shown on the card back, and editable from the Sentence Pool. Per-card back notes are edited in the vocabulary editor. A notes field is a small *Add … note* button while it is empty, shows the rendered Markdown once it has text (with an *Edit* button), and has a *Preview* button while being edited. Online images in notes are saved on disk the first time they are shown (`image_cache/`, next to the audio cache), so they show again offline and after a restart. Every Markdown editor (notes fields and the lesson editor) converts copied HTML, such as a web page or a Google Docs selection, to Markdown when you paste. Copied text without formatting pastes as it is.

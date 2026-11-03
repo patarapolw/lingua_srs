@@ -57,6 +57,9 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     with SingleTickerProviderStateMixin {
   late TextEditingController _targetWordCtrl;
   late TextEditingController _translationCtrl;
+  late TextEditingController _readingCtrl;
+  late TextEditingController _simplifiedCtrl;
+  late TextEditingController _traditionalCtrl;
   late TextEditingController _posCtrl;
   late TextEditingController _audioCtrl;
   late bool _useAudio;
@@ -197,6 +200,38 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                     ),
                     if (!widget.isNew) ...[
                       const SizedBox(height: 16),
+                      ExpansionTile(
+                        maintainState: true,
+                        tilePadding: EdgeInsets.zero,
+                        childrenPadding: const EdgeInsets.only(top: 8),
+                        title: const Text('Reading and character forms'),
+                        children: [
+                          TextField(
+                            controller: _readingCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Reading / Pinyin',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: _simplifiedCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Simplified form',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: _traditionalCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Traditional form',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
                       _duplicateFrontWarning(
                         provider,
                         CardDirection.targetToNative,
@@ -550,6 +585,9 @@ class _VocabEditDialogState extends State<VocabEditDialog>
   void dispose() {
     _targetWordCtrl.dispose();
     _translationCtrl.dispose();
+    _readingCtrl.dispose();
+    _simplifiedCtrl.dispose();
+    _traditionalCtrl.dispose();
     _posCtrl.dispose();
     _audioCtrl.dispose();
     _ttsCtrl.dispose();
@@ -566,6 +604,9 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     super.initState();
     _targetWordCtrl = TextEditingController(text: widget.vocab.targetWord);
     _translationCtrl = TextEditingController(text: widget.vocab.translation);
+    _readingCtrl = TextEditingController(text: widget.vocab.reading);
+    _simplifiedCtrl = TextEditingController(text: widget.vocab.simplified);
+    _traditionalCtrl = TextEditingController(text: widget.vocab.traditional);
     _posCtrl = TextEditingController(text: widget.vocab.pos);
     _audioCtrl = TextEditingController(text: widget.vocab.audioUrl ?? '');
     _useAudio = widget.vocab.useAudio;
@@ -1416,6 +1457,9 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     provider.rebindVocabId(widget.vocab, _originalId);
     widget.vocab.targetWord = _targetWordCtrl.text.trim();
     widget.vocab.translation = _translationCtrl.text.trim();
+    widget.vocab.reading = _readingCtrl.text.trim();
+    widget.vocab.simplified = _simplifiedCtrl.text.trim();
+    widget.vocab.traditional = _traditionalCtrl.text.trim();
     widget.vocab.pos = _posCtrl.text.trim();
     widget.vocab.audioUrl = _audioCtrl.text.trim().isEmpty
         ? null

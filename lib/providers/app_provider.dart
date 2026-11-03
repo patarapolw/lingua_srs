@@ -992,6 +992,9 @@ class AppProvider extends ChangeNotifier {
         ..idIsExplicit = lessonMatch.idIsExplicit || importedVocab.idIsExplicit
         ..targetWord = importedVocab.targetWord
         ..translation = importedVocab.translation
+        ..reading = importedVocab.reading
+        ..simplified = importedVocab.simplified
+        ..traditional = importedVocab.traditional
         ..pos = importedVocab.pos
         ..sectionPath = importedVocab.sectionPath
         ..sentenceIds = importedVocab.sentenceIds

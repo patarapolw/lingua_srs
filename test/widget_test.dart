@@ -714,6 +714,35 @@ vocabulary:
       );
     });
 
+    testWidgets('Mandarin answer shows reading and character forms', (
+      tester,
+    ) async {
+      await openStudy(
+        tester,
+        direction: CardDirection.targetToNative,
+        targetLanguage: 'zh-TW',
+        yaml: '''
+target: zh-TW
+vocabulary:
+  nouns:
+    - zh: 学生
+      pinyin: xuésheng
+      simplified: 学生
+      traditional: 學生
+      en: student
+''',
+      );
+
+      expect(find.text('Reading: xuésheng'), findsNothing);
+      await reveal(tester);
+
+      expect(find.text('Reading: xuésheng'), findsOneWidget);
+      expect(
+        find.text('Simplified: 学生 · Traditional: 學生'),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('answer and review note controls share a left margin', (
       tester,
     ) async {
@@ -2577,6 +2606,40 @@ vocabulary:
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
     }
+
+    testWidgets('editing saves reading and character forms', (tester) async {
+      final provider = await loadedProvider(tester);
+      final lesson = await seed(
+        tester,
+        provider,
+        'L1',
+        'nouns',
+        '学生',
+        'student',
+      );
+      await openEdit(tester, provider, lesson);
+      await tester.tap(find.text('Reading and character forms'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Reading / Pinyin'),
+        'xuésheng',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Simplified form'),
+        '学生',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Traditional form'),
+        '學生',
+      );
+      await save(tester);
+
+      final vocab = only(lesson);
+      expect(vocab.reading, 'xuésheng');
+      expect(vocab.simplified, '学生');
+      expect(vocab.traditional, '學生');
+    });
 
     testWidgets('editing keeps the Audio URL and TTS sections together', (
       tester,

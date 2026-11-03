@@ -67,6 +67,33 @@ void main() {
     },
   );
 
+  test('exports Mandarin readings and character forms', () {
+    final lesson = Lesson(
+      title: 'Mandarin',
+      targetLanguage: 'zh-TW',
+      vocabularies: [
+        VocabItem(
+          targetWord: '学生',
+          translation: 'student',
+          reading: 'xuésheng',
+          simplified: '学生',
+          traditional: '學生',
+          pos: 'nouns',
+        ),
+      ],
+    );
+
+    final files = MarkdownArchiveService.readMarkdownFiles(
+      LessonExportService.createZip([lesson], const []),
+    );
+    final parsed = YamlParserService.parseLessonYaml(files.single.contents);
+    final vocab = parsed.lesson.vocabularies.single;
+
+    expect(vocab.reading, 'xuésheng');
+    expect(vocab.simplified, '学生');
+    expect(vocab.traditional, '學生');
+  });
+
   test('sanitizes archive paths and disambiguates duplicate lesson names', () {
     final lessons = [
       Lesson(id: 'first', title: '../Same'),

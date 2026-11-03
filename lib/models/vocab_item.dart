@@ -9,6 +9,9 @@ class VocabItem {
   bool idIsExplicit;
   String targetWord;
   String translation;
+  String reading;
+  String simplified;
+  String traditional;
   String pos; // Part of speech or category (e.g. nouns, verbs, adjectives)
   List<String> sectionPath;
   List<String> sentenceIds; // Reference to sentences in the pool
@@ -27,6 +30,9 @@ class VocabItem {
     this.idIsExplicit = false,
     required this.targetWord,
     required this.translation,
+    this.reading = '',
+    this.simplified = '',
+    this.traditional = '',
     required this.pos,
     List<String>? sectionPath,
     String? audioUrl,
@@ -155,6 +161,9 @@ class VocabItem {
     'idIsExplicit': idIsExplicit,
     'targetWord': targetWord,
     'translation': translation,
+    'reading': reading,
+    'simplified': simplified,
+    'traditional': traditional,
     'pos': pos,
     'sectionPath': sectionPath,
     'audioUrl': audioUrl,
@@ -176,6 +185,9 @@ class VocabItem {
     idIsExplicit: json['idIsExplicit'] as bool? ?? false,
     targetWord: json['targetWord'] as String? ?? '',
     translation: json['translation'] as String? ?? '',
+    reading: json['reading'] as String? ?? '',
+    simplified: json['simplified'] as String? ?? '',
+    traditional: json['traditional'] as String? ?? '',
     pos: json['pos'] as String? ?? 'general',
     sectionPath: (json['sectionPath'] as List<dynamic>?)
         ?.map((e) => e.toString())

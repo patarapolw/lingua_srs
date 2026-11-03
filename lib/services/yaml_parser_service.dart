@@ -100,6 +100,7 @@ class YamlParserService {
     String? unitTitle = defaultUnitTitle;
     String targetLang = 'ko';
     String nativeLang = 'en';
+    var hasExplicitTargetLanguage = false;
 
     // 1. Detect lesson title & languages if present at root
     for (final key in doc.keys) {
@@ -113,6 +114,7 @@ class YamlParserService {
           lowerKey == 'target_lang' ||
           lowerKey == 'language') {
         targetLang = doc[key].toString().trim();
+        hasExplicitTargetLanguage = true;
       } else if (lowerKey == 'native' || lowerKey == 'native_lang') {
         nativeLang = doc[key].toString().trim();
       } else if (lowerKey == 'unit' || lowerKey == 'unit_title') {
@@ -144,6 +146,9 @@ class YamlParserService {
         if (item is! Map) continue;
         String targetWord = '';
         String translation = '';
+        String reading = '';
+        String simplified = '';
+        String traditional = '';
         String? vocabId;
         String? vocabAudio;
         String? ttsText;
@@ -176,7 +181,10 @@ class YamlParserService {
 
           if (knownLangKeys.contains(fKey) && targetWord.isEmpty) {
             targetWord = fVal;
-            if (fKey != 'target' && fKey != 'term' && fKey != 'word') {
+            if (!hasExplicitTargetLanguage &&
+                fKey != 'target' &&
+                fKey != 'term' &&
+                fKey != 'word') {
               targetLang = fKey; // Infer target lang from key
             }
           } else if (knownNativeKeys.contains(fKey) && translation.isEmpty) {
@@ -184,6 +192,13 @@ class YamlParserService {
             if (fKey == 'en' || fKey == 'eng') {
               nativeLang = 'en';
             }
+          } else if ((fKey == 'reading' || fKey == 'pinyin') &&
+              reading.isEmpty) {
+            reading = fVal;
+          } else if (fKey == 'simplified' && simplified.isEmpty) {
+            simplified = fVal;
+          } else if (fKey == 'traditional' && traditional.isEmpty) {
+            traditional = fVal;
           } else if (_isTtsKey(fKey) && fVal.isNotEmpty) {
             ttsText = fVal; // e.g. ko_text: alternate text for TTS
           }
@@ -253,6 +268,9 @@ class YamlParserService {
             idIsExplicit: vocabId != null,
             targetWord: targetWord,
             translation: translation,
+            reading: reading,
+            simplified: simplified,
+            traditional: traditional,
             pos: sectionPath.last,
             sectionPath: sectionPath,
             audioUrl: vocabAudio,
