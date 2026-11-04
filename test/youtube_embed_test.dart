@@ -15,6 +15,19 @@ void main() {
         YouTubeEmbed.watchUrl(embed),
         'https://www.youtube.com/watch?v=abc123',
       );
+      expect(
+        YouTubeEmbed.oEmbedUrl(embed).toString(),
+        'https://www.youtube.com/oembed'
+        '?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3Dabc123&format=json',
+      );
+      expect(
+        YouTubeEmbed.autoplayUrl(embed),
+        'https://www.youtube.com/embed/abc123?enablejsapi=1&autoplay=1',
+      );
+      expect(
+        YouTubeEmbed.titleFromOEmbedJson('{"title":"A video title"}'),
+        'A video title',
+      );
     });
 
     test('watch url keeps the playlist of a video', () {
@@ -31,6 +44,7 @@ void main() {
 
       expect(YouTubeEmbed.videoIdFromEmbedUrl(embed), isNull);
       expect(YouTubeEmbed.thumbnailUrl(embed), isNull);
+      expect(YouTubeEmbed.oEmbedUrl(embed), isNull);
       expect(
         YouTubeEmbed.watchUrl(embed),
         'https://www.youtube.com/playlist?list=PL1',

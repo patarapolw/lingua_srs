@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_all/webview_all.dart';
 
@@ -69,6 +70,31 @@ class YouTubeEmbed extends StatefulWidget {
     return id == null ? null : 'https://img.youtube.com/vi/$id/hqdefault.jpg';
   }
 
+  /// The YouTube oEmbed endpoint used to retrieve a video's title.
+  static Uri? oEmbedUrl(String embedUrl) {
+    final watchUrl = YouTubeEmbed.watchUrl(embedUrl);
+    if (videoIdFromEmbedUrl(embedUrl) == null || watchUrl == null) return null;
+    return Uri.https('www.youtube.com', '/oembed', {
+      'url': watchUrl,
+      'format': 'json',
+    });
+  }
+
+  /// Adds the autoplay request used after the thumbnail is tapped.
+  static String autoplayUrl(String embedUrl) {
+    final uri = Uri.parse(embedUrl);
+    return uri
+        .replace(queryParameters: {...uri.queryParameters, 'autoplay': '1'})
+        .toString();
+  }
+
+  static String? titleFromOEmbedJson(String body) {
+    final json = jsonDecode(body);
+    if (json is! Map<String, dynamic>) return null;
+    final title = json['title'];
+    return title is String && title.trim().isNotEmpty ? title : null;
+  }
+
   /// The regular YouTube link of the embed, for a browser or the YouTube app.
   static String? watchUrl(String embedUrl) {
     final uri = Uri.tryParse(embedUrl);
@@ -94,6 +120,7 @@ class YouTubeEmbed extends StatefulWidget {
 class _YouTubeEmbedState extends State<YouTubeEmbed> {
   WebViewController? _controller;
   bool _failed = false;
+  late Future<String?> _titleFuture;
 
   // YouTube rejects embeds (Error 153) from pages without a real HTTPS origin,
   // which is what loadHtmlString gives on Windows. Load a harmless
@@ -103,16 +130,33 @@ class _YouTubeEmbedState extends State<YouTubeEmbed> {
   static const _origin = 'https://www.youtube-nocookie.com';
 
   @override
+  void initState() {
+    super.initState();
+    _titleFuture = _loadTitle();
+  }
+
+  @override
   void didUpdateWidget(YouTubeEmbed oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.embedUrl != widget.embedUrl) {
       _controller = null;
       _failed = false;
+      _titleFuture = _loadTitle();
     }
   }
 
+  Future<String?> _loadTitle() async {
+    final url = YouTubeEmbed.oEmbedUrl(widget.embedUrl);
+    if (url == null) return null;
+    final response = await http.get(url);
+    if (response.statusCode != 200) {
+      throw StateError('YouTube title request failed: ${response.statusCode}');
+    }
+    return YouTubeEmbed.titleFromOEmbedJson(response.body);
+  }
+
   String get _embedScript {
-    final embed = Uri.parse(widget.embedUrl);
+    final embed = Uri.parse(YouTubeEmbed.autoplayUrl(widget.embedUrl));
     final src = embed
         .replace(
           host: 'www.youtube-nocookie.com',
@@ -180,6 +224,42 @@ document.body.appendChild(f);
                 fit: BoxFit.cover,
                 clipBehavior: Clip.hardEdge,
                 child: CachedMarkdownImage(url: thumbnail),
+              ),
+            if (thumbnail != null)
+              Positioned(
+                left: 0,
+                right: 0,
+                top: 0,
+                child: DecoratedBox(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Colors.black87, Colors.transparent],
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 24),
+                    child: FutureBuilder<String?>(
+                      future: _titleFuture,
+                      builder: (context, snapshot) {
+                        final title = snapshot.hasError || snapshot.hasData
+                            ? snapshot.data ?? 'Video title unavailable'
+                            : 'Loading video title…';
+                        return Text(
+                          title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
               ),
             const Icon(Icons.play_circle_fill, size: 64, color: Colors.white70),
           ],
