@@ -13,11 +13,15 @@ class MarkdownContent extends StatelessWidget {
   final TextStyle? style;
   final bool selectable;
 
+  /// Called first for every tapped link; return true if it was handled.
+  final bool Function(String href)? onLink;
+
   const MarkdownContent({
     super.key,
     required this.content,
     this.style,
     this.selectable = false,
+    this.onLink,
   });
 
   static String prepareSpoilerSpans(String input) => input.replaceAllMapped(
@@ -171,7 +175,7 @@ class MarkdownContent extends StatelessWidget {
       selectable: selectable,
       styleSheet: mdStyle,
       onTapLink: (text, href, title) async {
-        if (href == null) return;
+        if (href == null || (onLink?.call(href) ?? false)) return;
         final uri = Uri.tryParse(href);
         if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
           return;

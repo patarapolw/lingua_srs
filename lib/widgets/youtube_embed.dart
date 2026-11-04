@@ -145,9 +145,25 @@ class _YouTubeEmbedState extends State<YouTubeEmbed> {
     }
   }
 
-  Future<String?> _loadTitle() async {
+  /// Titles by video id, so rebuilt embeds in a lazy list don't refetch.
+  /// Failed requests are dropped so they can be retried.
+  static final Map<String, Future<String?>> _titleCache = {};
+
+  Future<String?> _loadTitle() {
     final url = YouTubeEmbed.oEmbedUrl(widget.embedUrl);
-    if (url == null) return null;
+    final id = YouTubeEmbed.videoIdFromEmbedUrl(widget.embedUrl);
+    if (url == null || id == null) return Future.value(null);
+    return _titleCache.putIfAbsent(id, () {
+      final future = _fetchTitle(url);
+      future.catchError((Object _) {
+        _titleCache.remove(id);
+        return null;
+      });
+      return future;
+    });
+  }
+
+  static Future<String?> _fetchTitle(Uri url) async {
     final response = await http.get(url).timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) {
       throw StateError('YouTube title request failed: ${response.statusCode}');
@@ -206,7 +222,18 @@ document.body.appendChild(f);
   Future<void> _openOnYouTube() async {
     final url = YouTubeEmbed.watchUrl(widget.embedUrl);
     if (url == null) return;
-    await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    var opened = false;
+    try {
+      opened = await launchUrl(
+        Uri.parse(url),
+        mode: LaunchMode.externalApplication,
+      );
+    } catch (_) {}
+    if (!opened && mounted) {
+      ScaffoldMessenger.maybeOf(
+        context,
+      )?.showSnackBar(const SnackBar(content: Text('Could not open YouTube.')));
+    }
   }
 
   Widget _thumbnail(BuildContext context) {

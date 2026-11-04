@@ -20,8 +20,18 @@ class LessonReaderView extends StatefulWidget {
 
 class _LessonReaderViewState extends State<LessonReaderView> {
   final LessonContentController _contentController = LessonContentController();
+  String? _parsedMarkdown;
+  LessonContent? _parsed;
 
   String get lessonId => widget.lessonId;
+
+  LessonContent _contentFor(String markdown) {
+    if (_parsed == null || _parsedMarkdown != markdown) {
+      _parsedMarkdown = markdown;
+      _parsed = LessonContent.parse(markdown);
+    }
+    return _parsed!;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,8 +50,8 @@ class _LessonReaderViewState extends State<LessonReaderView> {
       );
     }
     final selectedLesson = lesson;
-    final headings = LessonContent.parse(selectedLesson.markdownContent)
-        .headings;
+    final content = _contentFor(selectedLesson.markdownContent);
+    final headings = content.headings;
 
     return Scaffold(
       appBar: AppBar(
@@ -89,6 +99,7 @@ class _LessonReaderViewState extends State<LessonReaderView> {
           ? _emptyLessonContent(context, selectedLesson)
           : LessonContentView(
               markdown: selectedLesson.markdownContent,
+              content: content,
               controller: _contentController,
             ),
     );

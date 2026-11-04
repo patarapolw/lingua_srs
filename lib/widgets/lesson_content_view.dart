@@ -33,6 +33,7 @@ class LessonContent {
   static final _fenceLine = RegExp(r'^\s{0,3}(```|~~~)');
   static final _headingLine = RegExp(r'^\s{0,3}(#{1,6})\s+(.+?)(?:\s+#+)?\s*$');
   static final _continuationLine = RegExp(r'^(\s|[-*+]\s|\d+[.)]\s|\||>)');
+  static final _setextUnderline = RegExp(r'^ {0,3}(=+|-+)[ \t]*$');
 
   /// Cuts [markdown] into chunks and collects its headings.
   ///
@@ -87,12 +88,13 @@ class LessonContent {
         }
       } else if (fence == null) {
         final heading = _headingLine.firstMatch(line);
-        if (heading != null) {
+        final setextLevel = _setextLevel(lines, i);
+        if (heading != null || setextLevel != null) {
           if (!grouped) flush();
           headings.add(
             LessonHeading(
-              heading[1]!.length,
-              _plainText(heading[2]!),
+              heading != null ? heading[1]!.length : setextLevel!,
+              _plainText(heading != null ? heading[2]! : line.trim()),
               chunks.length,
             ),
           );
@@ -109,6 +111,32 @@ class LessonContent {
     }
     flush();
     return LessonContent(chunks, headings);
+  }
+
+  /// The level of a `Title` over `=====` (1) or `-----` (2) heading whose
+  /// title is the line at [index], or null if it is not one.
+  static int? _setextLevel(List<String> lines, int index) {
+    if (index + 1 >= lines.length) return null;
+    final line = lines[index];
+    if (line.trim().isEmpty ||
+        _continuationLine.hasMatch(line) ||
+        _fenceLine.hasMatch(line) ||
+        _headingLine.hasMatch(line) ||
+        _setextUnderline.hasMatch(line)) {
+      return null;
+    }
+    if (index > 0) {
+      final previous = lines[index - 1];
+      if (previous.trim().isNotEmpty &&
+          !_breakLine.hasMatch(previous) &&
+          !_startLine.hasMatch(previous) &&
+          !_endLine.hasMatch(previous)) {
+        return null;
+      }
+    }
+    final underline = _setextUnderline.firstMatch(lines[index + 1]);
+    if (underline == null) return null;
+    return underline[1]!.startsWith('=') ? 1 : 2;
   }
 
   /// Whether the block starting at the first non-blank line from [index] is a
@@ -224,9 +252,17 @@ class LessonContentController {
 /// [LessonContent.parse]) shown in a lazy list, with selectable text.
 class LessonContentView extends StatefulWidget {
   final String markdown;
+
+  /// [markdown] already parsed, to avoid parsing it again here.
+  final LessonContent? content;
   final LessonContentController? controller;
 
-  const LessonContentView({super.key, required this.markdown, this.controller});
+  const LessonContentView({
+    super.key,
+    required this.markdown,
+    this.content,
+    this.controller,
+  });
 
   @override
   State<LessonContentView> createState() => _LessonContentViewState();
@@ -277,7 +313,10 @@ class _LessonContentViewState extends State<LessonContentView> {
       oldWidget.controller?._scrollTo = null;
       widget.controller?._scrollTo = _scrollTo;
     }
-    if (oldWidget.markdown != widget.markdown) _parse();
+    if (oldWidget.markdown != widget.markdown ||
+        oldWidget.content != widget.content) {
+      _parse();
+    }
   }
 
   @override
@@ -288,7 +327,7 @@ class _LessonContentViewState extends State<LessonContentView> {
   }
 
   void _parse() {
-    _content = LessonContent.parse(widget.markdown);
+    _content = widget.content ?? LessonContent.parse(widget.markdown);
     _keys = List.generate(_content.chunks.length, (_) => GlobalKey());
     _chunkHeights = List<double?>.filled(_content.chunks.length, null);
   }
@@ -374,6 +413,32 @@ class _LessonContentViewState extends State<LessonContentView> {
     }
   }
 
+  /// GitHub-style anchor for a heading: `Hello, World!` becomes `hello-world`.
+  static String _slug(String text) => text
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^\p{L}\p{N}\s_-]', unicode: true), '')
+      .trim()
+      .replaceAll(RegExp(r'\s'), '-');
+
+  /// Handles `#anchor` links by scrolling to the matching heading.
+  bool _onLink(String href) {
+    if (!href.startsWith('#')) return false;
+    String target;
+    try {
+      target = Uri.decodeComponent(href.substring(1));
+    } catch (_) {
+      target = href.substring(1);
+    }
+    target = target.toLowerCase();
+    for (final heading in _content.headings) {
+      if (_slug(heading.text) == target) {
+        _scrollTo(heading);
+        break;
+      }
+    }
+    return true;
+  }
+
   @override
   Widget build(BuildContext context) {
     return SelectionArea(
@@ -396,7 +461,10 @@ class _LessonContentViewState extends State<LessonContentView> {
                   constraints: const BoxConstraints(maxWidth: 900),
                   child: SizedBox(
                     width: double.infinity,
-                    child: MarkdownContent(content: _content.chunks[index]),
+                    child: MarkdownContent(
+                      content: _content.chunks[index],
+                      onLink: _onLink,
+                    ),
                   ),
                 ),
               ),

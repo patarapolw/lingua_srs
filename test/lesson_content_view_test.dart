@@ -106,6 +106,28 @@ void main() {
     });
   });
 
+  group('setext headings', () {
+    test('are listed and start a chunk', () {
+      final content = LessonContent.parse(
+        'Intro\n\nTitle\n=====\n\nbody\n\nSub\n---\n\ntext',
+      );
+
+      expect(content.headings.map((h) => (h.level, h.text)), [
+        (1, 'Title'),
+        (2, 'Sub'),
+      ]);
+      expect(content.headings.map((h) => h.chunk), [1, 2]);
+    });
+
+    test('ignore rules after a multi-line paragraph and fenced code', () {
+      final content = LessonContent.parse(
+        'one\ntwo\n---\n\n```\nTitle\n=====\n```',
+      );
+
+      expect(content.headings, isEmpty);
+    });
+  });
+
   testWidgets('renders chunks and scrolls to a far heading', (tester) async {
     final controller = LessonContentController();
     final markdown = [
