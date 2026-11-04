@@ -6,7 +6,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lingua_srs/models/lesson.dart';
 import 'package:lingua_srs/services/backup_service.dart';
 import 'package:lingua_srs/services/storage_service.dart';
+import 'package:lingua_srs/services/sync_pairing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+const _syncPassword = 'correct horse battery staple';
+final _syncLink = SyncPairing(
+  endpoint: Uri.parse('https://sync.example.com'),
+  email: 'reader@example.com',
+  password: _syncPassword,
+).link;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -16,6 +24,7 @@ void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({
       'lingua_srs_deepseek_api_key': 'device-only-key',
+      'lingua_srs_sync_pairing': _syncLink,
       'lingua_srs_lessons': jsonEncode([
         Lesson(id: 'lesson-id', title: 'Saved').toJson(),
       ]),
@@ -60,6 +69,41 @@ void main() {
       isFalse,
     );
     expect(backup['lessonMarkdown'], {'lesson-id': '# Saved lesson'});
+  });
+
+  test('backup omits the sync pairing and restore keeps it', () async {
+    final backup = await BackupService.createBackup();
+    expect(
+      (jsonDecode(backup) as Map)['preferences'] as Map,
+      isNot(contains('lingua_srs_sync_pairing')),
+    );
+    expect(backup, isNot(contains(_syncPassword)));
+    expect(backup, isNot(contains('reader@example.com')));
+
+    final prefs = await SharedPreferences.getInstance();
+    await BackupService.restoreBackup(backup);
+
+    expect(prefs.getString('lingua_srs_sync_pairing'), _syncLink);
+  });
+
+  test('restore rejects a backup that carries a sync pairing', () async {
+    final backup = jsonEncode({
+      'format': 'lingua_srs_backup',
+      'version': 1,
+      'preferences': {
+        'lingua_srs_sync_pairing': 'linguasrs://sync?email=other%40example.com',
+        'lingua_srs_sentences': '[]',
+      },
+      'lessonMarkdown': {},
+    });
+
+    await expectLater(
+      BackupService.restoreBackup(backup),
+      throwsFormatException,
+    );
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('lingua_srs_sync_pairing'), _syncLink);
   });
 
   test(

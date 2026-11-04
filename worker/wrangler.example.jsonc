@@ -1,0 +1,27 @@
+// Copy to wrangler.jsonc (git-ignored) and put your real values there.
+{
+  "name": "lingua-srs-sync",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  // Serve on <name>.<your subdomain>.workers.dev. Set to false once the Worker
+  // is served from your own domain.
+  "workers_dev": true,
+  // Preview URLs would give every uploaded version of this Worker its own
+  // public address, with the production database attached. They are not needed.
+  "preview_urls": false,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "lingua-srs-sync",
+      "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    // The address confirmation emails are sent from (a domain verified with Resend).
+    "MAIL_FROM": "LinguaSRS <noreply@example.com>",
+    // Keep these below your email provider's and Cloudflare's free limits.
+    "MAX_EMAILS_PER_DAY": "50",
+    "MAX_WRITES_PER_DAY": "2000"
+  }
+}

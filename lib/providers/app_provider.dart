@@ -16,6 +16,7 @@ import '../services/ai_discussion_search.dart';
 import '../services/deepseek_service.dart';
 import '../services/srs_service.dart';
 import '../services/storage_service.dart';
+import '../services/sync_pairing.dart';
 import '../services/vocab_ai_service.dart';
 import '../services/yaml_parser_service.dart';
 
@@ -72,6 +73,7 @@ class AppProvider extends ChangeNotifier {
   /// Enabled options as `<target>_romanization` / `<target>_ipa`.
   Set<String> _pronunciationOptions = {};
   String _deepSeekApiKey = '';
+  SyncPairing? _syncPairing;
   bool _deepSeekKeyRejected = false;
   List<VocabMergeRecord> _mergeHistory = [];
   static const int _maxMergeHistory = 20;
@@ -99,6 +101,9 @@ class AppProvider extends ChangeNotifier {
   bool showIpa(PronunciationTarget target) =>
       _pronunciationOptions.contains('${target.name}_ipa');
   String get deepSeekApiKey => _deepSeekApiKey;
+
+  /// The sync account this device is signed in to, if any.
+  SyncPairing? get syncPairing => _syncPairing;
 
   /// False without a key, and after DeepSeek rejected it (until it changes).
   bool get canUseAi =>
@@ -209,6 +214,7 @@ class AppProvider extends ChangeNotifier {
     ).wait;
     _autoplayAudio = results.$1;
     _deepSeekApiKey = results.$2;
+    _syncPairing = await StorageService.loadSyncPairing();
     _mergeHistory = await StorageService.loadMergeHistory();
     _aiDiscussions = results.$3;
     _maxReviews24h = results.$4;
@@ -435,6 +441,12 @@ class AppProvider extends ChangeNotifier {
     await StorageService.saveDeepSeekApiKey(trimmedApiKey);
     _deepSeekApiKey = trimmedApiKey;
     _deepSeekKeyRejected = false;
+    notifyListeners();
+  }
+
+  Future<void> setSyncPairing(SyncPairing? pairing) async {
+    await StorageService.saveSyncPairing(pairing);
+    _syncPairing = pairing;
     notifyListeners();
   }
 

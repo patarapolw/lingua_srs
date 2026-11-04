@@ -30,6 +30,8 @@ import 'package:lingua_srs/providers/app_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'secret_storage_mock.dart';
+
 /// A study screen must not touch real audio plugins.
 class _FakeAudioService extends ChangeNotifier implements AudioService {
   @override
@@ -72,25 +74,31 @@ http.Response aiOk(Object content) => http.Response(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(setUpSecretStorage);
   const pathProviderChannel = MethodChannel('plugins.flutter.io/path_provider');
+  const appLinksChannel = MethodChannel('com.llfbandit.app_links/events');
   late Directory storageDirectory;
 
   setUp(() {
     storageDirectory = Directory.systemTemp.createTempSync(
       'lingua_srs_widget_test_',
     );
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(pathProviderChannel, (call) async {
-          if (call.method == 'getApplicationSupportDirectory') {
-            return storageDirectory.path;
-          }
-          throw MissingPluginException('Unexpected method: ${call.method}');
-        });
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(pathProviderChannel, (call) async {
+      if (call.method == 'getApplicationSupportDirectory') {
+        return storageDirectory.path;
+      }
+      throw MissingPluginException('Unexpected method: ${call.method}');
+    });
+    messenger.setMockMethodCallHandler(appLinksChannel, (call) async => null);
   });
 
   tearDown(() async {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(pathProviderChannel, null);
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(pathProviderChannel, null);
+    messenger.setMockMethodCallHandler(appLinksChannel, null);
     if (storageDirectory.existsSync()) {
       await storageDirectory.delete(recursive: true);
     }

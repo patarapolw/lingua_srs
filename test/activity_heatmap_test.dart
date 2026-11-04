@@ -10,8 +10,11 @@ import 'package:lingua_srs/widgets/adaptive_scaffold.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'secret_storage_mock.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(setUpSecretStorage);
 
   late AppProvider provider;
 

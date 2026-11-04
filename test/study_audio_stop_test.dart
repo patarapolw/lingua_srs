@@ -10,6 +10,8 @@ import 'package:lingua_srs/views/study_view.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'secret_storage_mock.dart';
+
 /// Records what the review asks of the audio service, and touches no plugin.
 class _RecordingAudioService extends ChangeNotifier implements AudioService {
   int stopCalls = 0;
@@ -39,6 +41,7 @@ class _RecordingAudioService extends ChangeNotifier implements AudioService {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(setUpSecretStorage);
 
   const pathProviderChannel = MethodChannel('plugins.flutter.io/path_provider');
   late Directory storageDirectory;

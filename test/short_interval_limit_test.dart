@@ -9,8 +9,11 @@ import 'package:lingua_srs/providers/app_provider.dart';
 import 'package:lingua_srs/services/srs_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'secret_storage_mock.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(setUpSecretStorage);
   final storageDirectory = Directory.systemTemp.createTempSync(
     'lingua_srs_short_interval_test_',
   );

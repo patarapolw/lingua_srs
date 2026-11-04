@@ -16,6 +16,8 @@ import 'package:lingua_srs/widgets/ai_question_chip.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'secret_storage_mock.dart';
+
 /// Neither screen under test may touch real audio plugins.
 class _FakeAudioService extends ChangeNotifier implements AudioService {
   @override
@@ -48,6 +50,7 @@ VocabItem _word(String id, String ko, String en) =>
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(setUpSecretStorage);
   const pathProviderChannel = MethodChannel('plugins.flutter.io/path_provider');
   late Directory storageDirectory;
 

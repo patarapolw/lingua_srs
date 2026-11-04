@@ -16,6 +16,11 @@ class BackupService {
   static const _version = 1;
   static const _keyPrefix = 'lingua_srs_';
   static const _keyDeepSeekApiKey = 'lingua_srs_deepseek_api_key';
+  static const _keySyncPairing = 'lingua_srs_sync_pairing';
+
+  /// Secrets that stay on the device: never written to a backup, and left
+  /// alone by a restore.
+  static const _deviceOnlyKeys = {_keyDeepSeekApiKey, _keySyncPairing};
   static const _keyLessonMarkdownIds = 'lingua_srs_lesson_markdown_ids';
   static const _stringPreferenceKeys = {
     'lingua_srs_lessons',
@@ -37,7 +42,9 @@ class BackupService {
     final prefs = await SharedPreferences.getInstance();
     final preferences = <String, Object>{};
     for (final key in prefs.getKeys()) {
-      if (!key.startsWith(_keyPrefix) || key == _keyDeepSeekApiKey) continue;
+      if (!key.startsWith(_keyPrefix) || _deviceOnlyKeys.contains(key)) {
+        continue;
+      }
       final value = prefs.get(key);
       if (!_isSupportedPreference(value)) {
         throw StateError('Unsupported preference value for "$key".');
@@ -87,7 +94,7 @@ class BackupService {
     if (preferences.entries.any(
           (entry) =>
               !entry.key.startsWith(_keyPrefix) ||
-              entry.key == _keyDeepSeekApiKey ||
+              _deviceOnlyKeys.contains(entry.key) ||
               !_isValidPreference(entry.key, entry.value),
         ) ||
         lessonMarkdown.entries.any((entry) => entry.value is! String)) {
@@ -126,7 +133,7 @@ class BackupService {
     }
 
     for (final key in prefs.getKeys()) {
-      if (key.startsWith(_keyPrefix) && key != _keyDeepSeekApiKey) {
+      if (key.startsWith(_keyPrefix) && !_deviceOnlyKeys.contains(key)) {
         await prefs.remove(key);
       }
     }

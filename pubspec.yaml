@@ -28,6 +28,7 @@ environment:
 # the latest version available on pub.dev. To see which dependencies have newer
 # versions available, run `flutter pub outdated`.
 dependencies:
+  app_links: ^7.2.2
   flutter:
     sdk: flutter
 
@@ -58,6 +59,11 @@ dependencies:
   # prerelease fixes both but compiles Rust through a build hook, so Linux needs
   # libgtk-3-dev + pkg-config for `flutter test`, locally and in CI.
   super_clipboard: ^0.10.0-dev.2
+  cryptography_plus: ^3.0.0
+  bip39_mnemonic: ^4.1.0
+  password_rules: ^1.0.0
+  qr_flutter: ^4.1.0
+  flutter_secure_storage: 11.2.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

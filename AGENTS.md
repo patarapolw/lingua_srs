@@ -8,6 +8,7 @@ Flutter app (Dart, `provider` state management). See [README.md](README.md) for 
 - `flutter test`: run all tests (`flutter test test/<file>.dart` for one)
 - `dart format .`: format (the repo formats on save; keep diffs formatted)
 - `flutter analyze`: must stay free of warnings
+- `cd worker; npm test`: run the sync Worker tests (run from `worker/`; `npm run typecheck` type-checks it)
 
 ## Conventions
 
@@ -24,6 +25,11 @@ Flutter app (Dart, `provider` state management). See [README.md](README.md) for 
 - Don't commit machine-specific paths or personal study data.
 - Track bugs and planned work in GitHub Issues, not in the repo. Reference the issue in PRs (e.g. "Fixes #12")
 - In `testWidgets`, wrap real async work (`Future.delayed`, timers, storage I/O) in `tester.runAsync`; the fake-async zone otherwise hangs the test.
+
+## Debug sessions and hot restart
+
+- Don't start a Flutter debug session and don't try to hot restart the running app. VS Code doesn't start a Flutter debug session by itself, the Dart MCP server needs one, and a session that an agent starts is never ended by the agent. This is waiting for an upstream fix from Microsoft.
+- A Dart MCP server that is missing or fails to start is expected, not a failure to report. Don't write it into commit messages or PR descriptions (for example "The Dart MCP server failed to start, so hot restart was never done"), and don't list hot restart as unverified. Verify with `flutter analyze` and `flutter test`; checking the running app is left to the person.
 
 ## Environments without Flutter/Dart (e.g. cloud agents)
 

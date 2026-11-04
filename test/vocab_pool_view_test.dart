@@ -15,6 +15,8 @@ import 'package:lingua_srs/widgets/adaptive_scaffold.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'secret_storage_mock.dart';
+
 /// Lesson tabs must not touch real audio plugins.
 class _FakeAudioService extends ChangeNotifier implements AudioService {
   @override
@@ -35,6 +37,7 @@ class _FakeAudioService extends ChangeNotifier implements AudioService {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(setUpSecretStorage);
   const pathProviderChannel = MethodChannel('plugins.flutter.io/path_provider');
   late Directory storageDirectory;
 

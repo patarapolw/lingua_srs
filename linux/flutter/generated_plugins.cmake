@@ -3,8 +3,10 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  app_links_linux
   audioplayers_linux
   desktop_drop
+  flutter_secure_storage_linux
   irondash_engine_context
   super_native_extensions
   webview_all_linux
