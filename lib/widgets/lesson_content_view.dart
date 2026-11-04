@@ -30,9 +30,7 @@ class LessonContent {
   static final _startLine = RegExp(r'^\s*<!--\s*chunk:start\s*-->\s*$');
   static final _endLine = RegExp(r'^\s*<!--\s*chunk:end\s*-->\s*$');
   static final _fenceLine = RegExp(r'^\s{0,3}(```|~~~)');
-  static final _headingLine = RegExp(
-    r'^\s{0,3}(#{1,6})\s+(.+?)(?:\s+#+)?\s*$',
-  );
+  static final _headingLine = RegExp(r'^\s{0,3}(#{1,6})\s+(.+?)(?:\s+#+)?\s*$');
   static final _continuationLine = RegExp(r'^(\s|[-*+]\s|\d+[.)]\s|\||>)');
 
   /// Cuts [markdown] into chunks and collects its headings.
@@ -134,18 +132,16 @@ class LessonContent {
   /// markers are kept for [parse].
   static String preprocess(String markdown) {
     final fencedCodeBlocks = <String>[];
-    var text = markdown
-        .replaceAll('\r\n', '\n')
-        .replaceAllMapped(
-          RegExp(
-            r'(^```[\s\S]*?^```[ \t]*$|^~~~[\s\S]*?^~~~[ \t]*$)',
-            multiLine: true,
-          ),
-          (match) {
-            fencedCodeBlocks.add(match[0]!);
-            return 'LINGUA_CODE_BLOCK_${fencedCodeBlocks.length - 1}';
-          },
-        );
+    var text = markdown.replaceAll('\r\n', '\n').replaceAllMapped(
+      RegExp(
+        r'(^```[\s\S]*?^```[ \t]*$|^~~~[\s\S]*?^~~~[ \t]*$)',
+        multiLine: true,
+      ),
+      (match) {
+        fencedCodeBlocks.add(match[0]!);
+        return 'LINGUA_CODE_BLOCK_${fencedCodeBlocks.length - 1}';
+      },
+    );
 
     String? attr(String attributes, String name) => RegExp(
       '$name\\s*=\\s*["\']([^"\']+)["\']',
@@ -278,6 +274,7 @@ class _LessonContentViewState extends State<LessonContentView> {
       if (!mounted) return;
       final context = _keys[index].currentContext;
       if (context != null) {
+        if (!context.mounted) continue;
         await Scrollable.ensureVisible(
           context,
           duration: const Duration(milliseconds: 250),
