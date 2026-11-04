@@ -72,5 +72,6 @@ flutter test
 - [Keyboard shortcuts](docs/hotkeys.md)
 - [Architecture](docs/architecture.md)
 - [Sync and dictionary import](docs/sync.md)
+- [Sync server administration](docs/admin.md)
 - [Issues](https://github.com/patarapolw/lingua_srs/issues): bugs, ideas and planned work
 - [AGENTS.md](AGENTS.md): conventions for contributors and coding agents

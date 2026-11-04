@@ -560,10 +560,6 @@ void main() {
       final confirmButton = find.widgetWithText(FilledButton, 'Confirm email');
       expect(tester.widget<FilledButton>(confirmButton).onPressed, isNull);
       await tester.enterText(codeField, '1234 5678-9');
-      await tester.pump();
-      expect(tester.widget<TextField>(codeField).controller!.text, '12345678');
-      expect(tester.widget<FilledButton>(confirmButton).onPressed, isNotNull);
-      await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
 
       expect(service.confirmedCode, '12345678');

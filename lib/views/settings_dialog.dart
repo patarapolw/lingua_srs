@@ -887,7 +887,12 @@ class _SettingsDialogState extends State<SettingsDialog> {
                               FilteringTextInputFormatter.digitsOnly,
                               LengthLimitingTextInputFormatter(8),
                             ],
-                            onChanged: (_) => setState(() {}),
+                            onChanged: (_) {
+                              setState(() {});
+                              if (_hasConfirmationCode && !_saving) {
+                                _confirmSyncAccount();
+                              }
+                            },
                             onSubmitted: (_) {
                               if (_hasConfirmationCode && !_saving) {
                                 _confirmSyncAccount();
@@ -901,9 +906,9 @@ class _SettingsDialogState extends State<SettingsDialog> {
                           ),
                           const SizedBox(height: 8),
                           const Text(
-                            'After pasting the code, tap Confirm email. '
-                            'Saving the password in your password manager '
-                            'does not confirm the account.',
+                            'You are signed in as soon as the 8-digit code is '
+                            'entered. Saving the password in your password '
+                            'manager does not confirm the account.',
                           ),
                         ],
                         if (_syncError != null) ...[
