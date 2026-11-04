@@ -60,9 +60,7 @@ class YouTubeEmbed extends StatefulWidget {
     final uri = Uri.tryParse(embedUrl);
     if (uri == null || uri.pathSegments.length < 2) return null;
     final id = uri.pathSegments[1];
-    return uri.pathSegments.first == 'embed' && id != 'videoseries'
-        ? id
-        : null;
+    return uri.pathSegments.first == 'embed' && id != 'videoseries' ? id : null;
   }
 
   /// A thumbnail for the video; null for a playlist-only embed.
@@ -79,10 +77,14 @@ class YouTubeEmbed extends StatefulWidget {
     final list = uri.queryParameters['list'];
     if (id == null && list == null) return null;
     if (id == null) {
-      return Uri.https('www.youtube.com', '/playlist', {'list': list}).toString();
+      return Uri.https('www.youtube.com', '/playlist', {
+        'list': list,
+      }).toString();
     }
-    return Uri.https('www.youtube.com', '/watch', {'v': id, 'list': ?list})
-        .toString();
+    return Uri.https('www.youtube.com', '/watch', {
+      'v': id,
+      'list': ?list,
+    }).toString();
   }
 
   @override
@@ -179,11 +181,7 @@ document.body.appendChild(f);
                 clipBehavior: Clip.hardEdge,
                 child: CachedMarkdownImage(url: thumbnail),
               ),
-            const Icon(
-              Icons.play_circle_fill,
-              size: 64,
-              color: Colors.white70,
-            ),
+            const Icon(Icons.play_circle_fill, size: 64, color: Colors.white70),
           ],
         ),
       ),

@@ -19,8 +19,7 @@ class LessonReaderView extends StatefulWidget {
 }
 
 class _LessonReaderViewState extends State<LessonReaderView> {
-  final LessonContentController _contentController =
-      LessonContentController();
+  final LessonContentController _contentController = LessonContentController();
 
   String get lessonId => widget.lessonId;
 
@@ -41,9 +40,8 @@ class _LessonReaderViewState extends State<LessonReaderView> {
       );
     }
     final selectedLesson = lesson;
-    final headings = LessonContent.parse(
-      selectedLesson.markdownContent,
-    ).headings;
+    final headings = LessonContent.parse(selectedLesson.markdownContent)
+        .headings;
 
     return Scaffold(
       appBar: AppBar(

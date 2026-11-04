@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:lingua_srs/widgets/lesson_content_view.dart';
@@ -108,7 +109,8 @@ void main() {
   testWidgets('renders chunks and scrolls to a far heading', (tester) async {
     final controller = LessonContentController();
     final markdown = [
-      for (var i = 0; i < 40; i++) '# Section $i\n\n${'word ' * 40}',
+      for (var i = 0; i < 40; i++)
+        '# Section $i\n\n${'word ' * ((i % 5 + 1) * 25)}',
     ].join('\n\n');
     final headings = LessonContent.parse(markdown).headings;
 
@@ -127,6 +129,23 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Section 39', findRichText: true), findsWidgets);
+  });
+
+  testWidgets('builds chunks ahead to stabilize the scroll extent', (
+    tester,
+  ) async {
+    final markdown = [
+      for (var i = 0; i < 40; i++) '# Section $i\n\n${'word ' * 100}',
+    ].join('\n\n');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: LessonContentView(markdown: markdown)),
+      ),
+    );
+
+    final list = tester.widget<ListView>(find.byType(ListView));
+    expect(list.scrollCacheExtent, const ScrollCacheExtent.pixels(4000));
   });
 
   testWidgets('lesson markdown fills its reading column', (tester) async {

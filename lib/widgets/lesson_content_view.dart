@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/scheduler.dart';
 
 import 'markdown_content.dart';
@@ -232,15 +233,41 @@ class LessonContentView extends StatefulWidget {
 }
 
 class _LessonContentViewState extends State<LessonContentView> {
+  /// Builds chunks well ahead of the viewport so their heights are measured
+  /// early, keeping the scroll extent (and scrollbar) from jumping.
+  static const double _cacheExtent = 4000;
+
   final ScrollController _scroll = ScrollController();
   late LessonContent _content;
   late List<GlobalKey> _keys;
+  late List<double?> _chunkHeights;
+  final Set<GlobalKey> _pendingMeasurements = {};
+  double? _layoutWidth;
+  double? _textScale;
+  double? _bodyFontSize;
 
   @override
   void initState() {
     super.initState();
     widget.controller?._scrollTo = _scrollTo;
     _parse();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final width = MediaQuery.sizeOf(context).width;
+    final textScale = MediaQuery.textScalerOf(context).scale(14);
+    final bodyFontSize = Theme.of(context).textTheme.bodyMedium?.fontSize ?? 14;
+    if (_layoutWidth != null &&
+        (_layoutWidth != width ||
+            _textScale != textScale ||
+            _bodyFontSize != bodyFontSize)) {
+      _chunkHeights = List<double?>.filled(_content.chunks.length, null);
+    }
+    _layoutWidth = width;
+    _textScale = textScale;
+    _bodyFontSize = bodyFontSize;
   }
 
   @override
@@ -263,10 +290,61 @@ class _LessonContentViewState extends State<LessonContentView> {
   void _parse() {
     _content = LessonContent.parse(widget.markdown);
     _keys = List.generate(_content.chunks.length, (_) => GlobalKey());
+    _chunkHeights = List<double?>.filled(_content.chunks.length, null);
   }
 
-  /// Chunks far away are not built yet, so jump close to the chunk first and
-  /// then align it once it has been built.
+  void _recordChunkHeight(int index) {
+    final renderObject = _keys[index].currentContext?.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.hasSize) return;
+    _chunkHeights[index] = renderObject.size.height;
+  }
+
+  void _scheduleChunkMeasurement(int index) {
+    final key = _keys[index];
+    if (!_pendingMeasurements.add(key)) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _pendingMeasurements.remove(key);
+      if (!mounted || !identical(_keys[index], key)) return;
+      _recordChunkHeight(index);
+    });
+  }
+
+  double _estimatedChunkHeight(int index) {
+    final measuredHeight = _chunkHeights[index];
+    if (measuredHeight != null) return measuredHeight;
+
+    var measuredCharacters = 0;
+    var totalMeasuredHeight = 0.0;
+    for (var i = 0; i < _chunkHeights.length; i++) {
+      final height = _chunkHeights[i];
+      if (height == null) continue;
+      measuredCharacters += math.max(1, _content.chunks[i].length);
+      totalMeasuredHeight += height;
+    }
+    if (measuredCharacters > 0) {
+      return math.max(
+        48,
+        _content.chunks[index].length *
+            totalMeasuredHeight /
+            measuredCharacters,
+      );
+    }
+
+    final width = math.min(_layoutWidth ?? 900, 900) - 48;
+    final charactersPerLine = math.max(1, width / (8 * (_textScale ?? 1)));
+    final estimatedLines = _content.chunks[index].length / charactersPerLine;
+    return math.max(80, estimatedLines * _bodyFontSize! * 1.5 + 48);
+  }
+
+  double _estimatedOffsetForChunk(int index) {
+    var offset = 20.0;
+    for (var i = 0; i < index; i++) {
+      offset += _estimatedChunkHeight(i);
+    }
+    return offset;
+  }
+
+  /// Animates toward an estimated offset, refining it as chunks are measured.
   Future<void> _scrollTo(LessonHeading heading) async {
     final index = heading.chunk;
     if (index < 0 || index >= _keys.length) return;
@@ -283,13 +361,15 @@ class _LessonContentViewState extends State<LessonContentView> {
       }
       if (!_scroll.hasClients) return;
       final position = _scroll.position;
-      final fraction = index / math.max(1, _keys.length - 1);
-      _scroll.jumpTo(
-        (position.maxScrollExtent * fraction).clamp(
-          position.minScrollExtent,
-          position.maxScrollExtent,
-        ),
-      );
+      final target = _estimatedOffsetForChunk(index)
+          .clamp(position.minScrollExtent, position.maxScrollExtent);
+      if ((position.pixels - target).abs() > 1) {
+        await _scroll.animateTo(
+          target,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOutCubic,
+        );
+      }
       await SchedulerBinding.instance.endOfFrame;
     }
   }
@@ -299,20 +379,30 @@ class _LessonContentViewState extends State<LessonContentView> {
     return SelectionArea(
       child: ListView.builder(
         controller: _scroll,
+        scrollCacheExtent: const ScrollCacheExtent.pixels(_cacheExtent),
         padding: const EdgeInsets.fromLTRB(24, 20, 24, 48),
         itemCount: _content.chunks.length,
-        itemBuilder: (context, index) => Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 900),
-            child: SizedBox(
-              width: double.infinity,
-              child: KeyedSubtree(
-                key: _keys[index],
-                child: MarkdownContent(content: _content.chunks[index]),
+        itemBuilder: (context, index) {
+          _scheduleChunkMeasurement(index);
+          return NotificationListener<SizeChangedLayoutNotification>(
+            onNotification: (_) {
+              _recordChunkHeight(index);
+              return false;
+            },
+            child: SizeChangedLayoutNotifier(
+              key: _keys[index],
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 900),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: MarkdownContent(content: _content.chunks[index]),
+                  ),
+                ),
               ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
