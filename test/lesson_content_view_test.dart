@@ -110,7 +110,7 @@ void main() {
     final controller = LessonContentController();
     final markdown = [
       for (var i = 0; i < 40; i++)
-        '# Section $i\n\n${'word ' * ((i % 5 + 1) * 25)}',
+        '# Section $i\n\n${'word ' * ((i % 5 + 1) * 150)}',
     ].join('\n\n');
     final headings = LessonContent.parse(markdown).headings;
 

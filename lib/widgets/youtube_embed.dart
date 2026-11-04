@@ -148,7 +148,7 @@ class _YouTubeEmbedState extends State<YouTubeEmbed> {
   Future<String?> _loadTitle() async {
     final url = YouTubeEmbed.oEmbedUrl(widget.embedUrl);
     if (url == null) return null;
-    final response = await http.get(url);
+    final response = await http.get(url).timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) {
       throw StateError('YouTube title request failed: ${response.statusCode}');
     }
@@ -220,10 +220,8 @@ document.body.appendChild(f);
           fit: StackFit.expand,
           children: [
             if (thumbnail != null)
-              FittedBox(
-                fit: BoxFit.cover,
-                clipBehavior: Clip.hardEdge,
-                child: CachedMarkdownImage(url: thumbnail),
+              Positioned.fill(
+                child: CachedMarkdownImage(url: thumbnail, fit: BoxFit.cover),
               ),
             if (thumbnail != null)
               Positioned(

@@ -15,7 +15,11 @@ import '../services/image_cache_service.dart';
 class CachedMarkdownImage extends StatefulWidget {
   final String url;
 
-  const CachedMarkdownImage({super.key, required this.url});
+  /// When set, the image fills the space it is given and is fitted this way,
+  /// and the loading and broken states are centered in it.
+  final BoxFit? fit;
+
+  const CachedMarkdownImage({super.key, required this.url, this.fit});
 
   @override
   State<CachedMarkdownImage> createState() => _CachedMarkdownImageState();
@@ -40,10 +44,17 @@ class _CachedMarkdownImageState extends State<CachedMarkdownImage> {
     }
   }
 
-  Widget _brokenImage() => const Icon(Icons.broken_image_outlined);
+  Widget _centered(Widget child) =>
+      widget.fit == null ? child : Center(child: child);
+
+  Widget _brokenImage() =>
+      _centered(const Icon(Icons.broken_image_outlined, color: Colors.grey));
 
   Widget _fromNetwork() => Image.network(
     widget.url,
+    fit: widget.fit,
+    width: widget.fit == null ? null : double.infinity,
+    height: widget.fit == null ? null : double.infinity,
     errorBuilder: (context, error, stackTrace) => _brokenImage(),
   );
 
@@ -55,12 +66,14 @@ class _CachedMarkdownImageState extends State<CachedMarkdownImage> {
       future: file,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const Padding(
-            padding: EdgeInsets.all(8),
-            child: SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
+          return _centered(
+            const Padding(
+              padding: EdgeInsets.all(8),
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
             ),
           );
         }
@@ -68,6 +81,9 @@ class _CachedMarkdownImageState extends State<CachedMarkdownImage> {
         if (saved == null) return _fromNetwork();
         return Image.file(
           saved,
+          fit: widget.fit,
+          width: widget.fit == null ? null : double.infinity,
+          height: widget.fit == null ? null : double.infinity,
           errorBuilder: (context, error, stackTrace) {
             // A saved copy that does not decode would stay broken forever.
             unawaited(ImageCacheService.instance.evict(widget.url));
