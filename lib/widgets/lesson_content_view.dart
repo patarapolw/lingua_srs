@@ -307,9 +307,12 @@ class _LessonContentViewState extends State<LessonContentView> {
         itemBuilder: (context, index) => Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 900),
-            child: KeyedSubtree(
-              key: _keys[index],
-              child: MarkdownContent(content: _content.chunks[index]),
+            child: SizedBox(
+              width: double.infinity,
+              child: KeyedSubtree(
+                key: _keys[index],
+                child: MarkdownContent(content: _content.chunks[index]),
+              ),
             ),
           ),
         ),

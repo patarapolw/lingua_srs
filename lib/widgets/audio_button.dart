@@ -43,7 +43,7 @@ class AudioButton extends StatelessWidget {
     final isTts = !_hasAudioUrl && _hasFallbackText;
 
     if (compact) {
-      return IconButton(
+      final button = IconButton(
         iconSize: iconSize,
         visualDensity: VisualDensity.compact,
         tooltip: isPlayingThis
@@ -74,6 +74,15 @@ class AudioButton extends StatelessWidget {
             }
           }
         },
+      );
+      final tableCell = context.findAncestorWidgetOfExactType<TableCell>();
+      if (tableCell == null) return button;
+
+      final textStyle = DefaultTextStyle.of(context).style;
+      final lineHeight = (textStyle.fontSize ?? 14) * (textStyle.height ?? 1.5);
+      return Transform.translate(
+        offset: Offset(0, -(40 - lineHeight) / 2 + 4),
+        child: button,
       );
     }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:lingua_srs/widgets/lesson_content_view.dart';
 
 void main() {
@@ -33,10 +34,7 @@ void main() {
     });
 
     test('cuts a long section at a blank line', () {
-      final content = LessonContent.parse(
-        'aaaa\n\nbbbb\n\ncccc',
-        maxChars: 5,
-      );
+      final content = LessonContent.parse('aaaa\n\nbbbb\n\ncccc', maxChars: 5);
 
       expect(content.chunks, ['aaaa', 'bbbb', 'cccc']);
     });
@@ -129,5 +127,18 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Section 39', findRichText: true), findsWidgets);
+  });
+
+  testWidgets('lesson markdown fills its reading column', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(body: LessonContentView(markdown: '# A short heading')),
+      ),
+    );
+
+    final markdownBox = tester.renderObject<RenderBox>(
+      find.byType(MarkdownBody),
+    );
+    expect(markdownBox.size.width, greaterThan(700));
   });
 }
