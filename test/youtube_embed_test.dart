@@ -13,7 +13,7 @@ void main() {
       );
       expect(
         YouTubeEmbed.watchUrl(embed),
-        'https://m.youtube.com/watch?v=abc123',
+        'https://www.youtube.com/watch?v=abc123',
       );
     });
 
@@ -22,7 +22,7 @@ void main() {
 
       expect(
         YouTubeEmbed.watchUrl(embed),
-        'https://m.youtube.com/watch?v=abc123&list=PL1',
+        'https://www.youtube.com/watch?v=abc123&list=PL1',
       );
     });
 
@@ -33,7 +33,7 @@ void main() {
       expect(YouTubeEmbed.thumbnailUrl(embed), isNull);
       expect(
         YouTubeEmbed.watchUrl(embed),
-        'https://m.youtube.com/playlist?list=PL1',
+        'https://www.youtube.com/playlist?list=PL1',
       );
     });
 
