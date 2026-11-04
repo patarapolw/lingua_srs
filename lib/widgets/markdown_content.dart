@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'audio_button.dart';
 import 'cached_markdown_image.dart';
@@ -12,11 +13,15 @@ class MarkdownContent extends StatelessWidget {
   final TextStyle? style;
   final bool selectable;
 
+  /// Called first for every tapped link; return true if it was handled.
+  final bool Function(String href)? onLink;
+
   const MarkdownContent({
     super.key,
     required this.content,
     this.style,
     this.selectable = false,
+    this.onLink,
   });
 
   static String prepareSpoilerSpans(String input) => input.replaceAllMapped(
@@ -63,7 +68,37 @@ class MarkdownContent extends StatelessWidget {
       RegExp(r'<hr\b[^>]*\/?>', caseSensitive: false),
       '\n\n---\n\n',
     );
-    return text.trim();
+    return _prepareHtmlDel(text).trim();
+  }
+
+  String _prepareHtmlDel(String input) {
+    final code = <String>[];
+    var prefix = 'LINGUA_MARKDOWN_CODE_';
+    while (input.contains(prefix)) {
+      prefix += 'X';
+    }
+
+    String protectCode(Match match) {
+      code.add(match[0]!);
+      return '$prefix${code.length - 1}';
+    }
+
+    var text = input.replaceAllMapped(
+      RegExp(
+        r'(^```[\s\S]*?^```[ \t]*$|^~~~[\s\S]*?^~~~[ \t]*$)',
+        multiLine: true,
+      ),
+      protectCode,
+    );
+    text = text.replaceAllMapped(RegExp(r'(`+)[^\n]*?\1'), protectCode);
+    text = text.replaceAllMapped(
+      RegExp(r'<del\b[^>]*>([\s\S]*?)</del\s*>', caseSensitive: false),
+      (match) => '~~${match[1]}~~',
+    );
+    return text.replaceAllMapped(
+      RegExp('$prefix(\\d+)'),
+      (match) => code[int.parse(match[1]!)],
+    );
   }
 
   @override
@@ -75,8 +110,48 @@ class MarkdownContent extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
+    final bodyFontSize =
+        style?.fontSize ?? theme.textTheme.bodyMedium!.fontSize!;
+    TextStyle? headingStyle(TextStyle? base, double sizeEm) => base?.copyWith(
+      fontSize: bodyFontSize * sizeEm,
+      fontWeight: FontWeight.bold,
+    );
+    final h1 = headingStyle(theme.textTheme.headlineSmall, 2);
+    final h2 = headingStyle(theme.textTheme.titleLarge, 1.5);
+    final h3 = headingStyle(theme.textTheme.titleMedium, 1.17);
+    final h4 = headingStyle(theme.textTheme.bodyLarge, 1);
+    final h5 = headingStyle(theme.textTheme.bodyLarge, 0.83);
+    final h6 = headingStyle(theme.textTheme.bodyLarge, 0.67);
+    const blockSpacing = 16.0;
+    EdgeInsets headingPadding(TextStyle? heading, double marginEm) {
+      final margin = (heading?.fontSize ?? bodyFontSize) * marginEm;
+      final extraBottomMargin = margin > blockSpacing
+          ? margin - blockSpacing
+          : 0.0;
+      return EdgeInsets.only(top: margin, bottom: extraBottomMargin);
+    }
+
     final mdStyle = MarkdownStyleSheet.fromTheme(theme).copyWith(
       p: style ?? theme.textTheme.bodyMedium?.copyWith(height: 1.5),
+      h1: h1,
+      h2: h2,
+      h3: h3,
+      h4: h4,
+      h5: h5,
+      h6: h6,
+      h1Align: WrapAlignment.start,
+      h2Align: WrapAlignment.start,
+      h3Align: WrapAlignment.start,
+      h4Align: WrapAlignment.start,
+      h5Align: WrapAlignment.start,
+      h6Align: WrapAlignment.start,
+      h1Padding: headingPadding(h1, 0.67),
+      h2Padding: headingPadding(h2, 0.83),
+      h3Padding: headingPadding(h3, 1),
+      h4Padding: headingPadding(h4, 1.33),
+      h5Padding: headingPadding(h5, 1.67),
+      h6Padding: headingPadding(h6, 2.33),
+      blockSpacing: blockSpacing,
       strong: (style ?? theme.textTheme.bodyMedium)?.copyWith(
         fontWeight: FontWeight.bold,
         color: theme.colorScheme.primary,
@@ -84,6 +159,7 @@ class MarkdownContent extends StatelessWidget {
       em: (style ?? theme.textTheme.bodyMedium)?.copyWith(
         fontStyle: FontStyle.italic,
       ),
+      del: const TextStyle(decoration: TextDecoration.lineThrough),
       code: TextStyle(
         backgroundColor: theme.colorScheme.surfaceContainerHighest,
         fontFamily: 'monospace',
@@ -98,6 +174,14 @@ class MarkdownContent extends StatelessWidget {
       data: normalized,
       selectable: selectable,
       styleSheet: mdStyle,
+      onTapLink: (text, href, title) async {
+        if (href == null || (onLink?.call(href) ?? false)) return;
+        final uri = Uri.tryParse(href);
+        if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
+          return;
+        }
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      },
       imageBuilder: (uri, title, alt) {
         if (uri.scheme == 'lingua-spoiler') {
           return SpoilerText(text: uri.queryParameters['text'] ?? '');
