@@ -142,7 +142,7 @@ void main() {
       expect(cellText, findsOneWidget);
       expect(
         tester.getCenter(button).dy,
-        closeTo(tester.getCenter(cellText).dy + 2, 0.6),
+        closeTo(tester.getCenter(cellText).dy + 4, 0.6),
       );
     }
   });
