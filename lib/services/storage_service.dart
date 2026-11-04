@@ -99,7 +99,16 @@ class StorageService {
     SharedPreferences prefs,
     String key,
   ) async {
-    final value = await _secretStorage.read(key);
+    final String? value;
+    try {
+      value = await _secretStorage.read(key);
+    } catch (error) {
+      // For example a locked or missing keyring on Linux. Starting without the
+      // secret is better than not starting, and anything still in preferences
+      // is left for the next start.
+      debugPrint('Could not read $key from secure storage: $error');
+      return null;
+    }
     if (value != null) {
       await prefs.remove(key);
       return value;
@@ -108,7 +117,12 @@ class StorageService {
     final legacyValue = prefs.getString(key);
     if (legacyValue == null) return null;
     if (legacyValue.isNotEmpty) {
-      await _secretStorage.write(key, legacyValue);
+      try {
+        await _secretStorage.write(key, legacyValue);
+      } catch (error) {
+        debugPrint('Could not move $key to secure storage: $error');
+        return legacyValue; // keep it in preferences until that works
+      }
     }
     await prefs.remove(key);
     return legacyValue;

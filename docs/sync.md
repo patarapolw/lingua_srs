@@ -23,14 +23,16 @@ The address ends up inside the shipped app, so it is configuration and not a sec
 An account is an **email** (its unique identifier, lowercase) and a **password** the user chooses. A device signs in by:
 
 - typing the email and password,
-- choosing *Use copied link* after copying a one-time pairing link from a signed-in device, which works on a desktop that cannot scan a QR code,
-- scanning the one-time pairing link's QR code on a mobile device opens the app and signs in.
+- choosing *Use copied link* after copying a one-time pairing link from a signed-in device, which works on a desktop that cannot scan a QR code and asks to confirm first,
+- scanning the one-time pairing link's QR code on a mobile device opens the app, which asks to confirm and then signs in.
 
 ```
 linguasrs://pair?token=<one-time-token>#<encryption-key>
 ```
 
 The link contains no plaintext password. The device encrypts the pairing credentials with a random key in the URL fragment; the Worker stores only the encrypted payload and a hash of the one-time token. The link expires after 10 minutes and can be redeemed only once. It is still a bearer credential granting access to the account, so only share it with a device you control. Copy it to the clipboard for desktop sign-in, or scan the QR code on mobile. Pairing credentials are stored in the device's secure storage and are never included in a backup.
+
+Before a pairing link signs a device in, the app shows the email and the server and asks. A link can come from anywhere (a message, a web page, a poster with a QR code), and signing in to someone else's account would sync this device's lessons into it. A release build also follows pairing links only to the built-in server, so a link cannot move the device onto another one; debug and profile builds allow a local Worker. A link that carries a password itself is not accepted.
 
 ## Keys
 
@@ -85,6 +87,12 @@ To change a password, a signed-in device checks the new password policy, downloa
 
 To delete an account, choose *Delete account* in Settings and confirm. This permanently deletes the server account, its encrypted records, inbox, and outstanding pairing invites. Local lessons and progress on that device are not deleted.
 
+### Other devices after a deletion or a password change
+
+Nothing contacts the server in the background yet, so a device that was signed in to the account keeps showing it as signed in, with its lessons and progress untouched, until something uses the server. Then the server answers `401`. It gives the same answer for an account that was deleted and for a password that was changed on another device, because it never says whether an email has an account, so the app cannot tell which happened. It says that the server no longer accepts this sign-in and that the lessons are still on the device. *Check sign-in* in Settings asks on demand. The app never signs a device out by itself: the person chooses to sign out and sign in again with the new password, or to create a new account.
+
+When the sync engine exists it must handle a rejected sign-in the same way: stop syncing, keep the local data, and say so. It must also notice an account that was **re-created**. Signing in is deterministic (the keys come from the email and password), so if an account is deleted and a new one is created with the same email and password, a device that was signed in to the old one would be accepted by the new one. The new account has a different data key and its own change numbers. The engine therefore has to compare an identity of the account (for example its creation time, returned by `GET /account`) every time it connects, and when it differs, stop and ask instead of carrying on with the old data key and pull cursor.
+
 ## Worker API
 
 Routes live under `/v1`. Except for the first two, they need `Authorization: Basic base64(email:authKey)`; a wrong email or key is always `401 invalid_credentials`. An unconfirmed account gets `403 email_not_confirmed` on normal account operations, but can use `DELETE /account` with its correct credentials to delete the pending account and code. Bodies are JSON, errors are `{"error": "<code>"}`, and nothing is cached.
@@ -97,7 +105,7 @@ Routes live under `/v1`. Except for the first two, they need `Authorization: Bas
 | `PUT /account` | Changes the password with `{authKey, wrappedDataKey, kdf?}`; the data is untouched. |
 | `DELETE /account` | Deletes the account and everything in it. Also available to an unconfirmed account with the correct credentials. |
 | `POST /account/pairing` | Creates a short-lived one-time pairing invite and returns its token. The body contains only the encrypted pairing payload. |
-| `POST /pairings/{token}` | Redeems and consumes an invite, returning its encrypted payload. |
+| `GET /pairings/{token}` | Redeems and consumes an invite, returning its encrypted payload. No authentication: the 256 bit token is the secret. |
 | `GET /changes?since=N&limit=M` | Records changed after cursor `N` (default 0), oldest change first, at most 500. Returns `{records, cursor, hasMore}`. |
 | `POST /changes` | Body `{records: [...]}`, 1 to 100 records. Returns `{accepted: n}`. |
 | `GET /inbox` | Returns `{items: [{id, text, createdAt}]}`, at most 100. |

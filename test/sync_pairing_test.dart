@@ -150,6 +150,30 @@ void main() {
       );
     });
 
+    test('normalizeServer checks and tidies a server address', () {
+      expect(
+        SyncPairing.normalizeServer(Uri.parse('https://example.com/sync/')),
+        Uri.parse('https://example.com/sync'),
+      );
+      expect(
+        SyncPairing.normalizeServer(Uri.parse('http://localhost:8787')),
+        Uri.parse('http://localhost:8787'),
+      );
+      for (final bad in [
+        'http://example.com',
+        'ftp://example.com',
+        'https://example.com?a=b',
+        'https://user:pw@example.com',
+        'example.com',
+      ]) {
+        expect(
+          () => SyncPairing.normalizeServer(Uri.parse(bad)),
+          throwsFormatException,
+          reason: bad,
+        );
+      }
+    });
+
     test('toString does not reveal the password', () {
       final pairing = SyncPairing(email: _email, password: _password);
 

@@ -8,6 +8,7 @@ import 'providers/app_provider.dart';
 import 'services/audio_service.dart';
 import 'services/sync_account_service.dart';
 import 'services/sync_pairing.dart';
+import 'views/pairing_confirmation.dart';
 import 'widgets/adaptive_scaffold.dart';
 
 void main() {
@@ -33,6 +34,7 @@ class LinguaSrsApp extends StatefulWidget {
 class _LinguaSrsAppState extends State<LinguaSrsApp> {
   ThemeMode _themeMode = ThemeMode.system;
   final _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+  final _navigatorKey = GlobalKey<NavigatorState>();
   StreamSubscription<Uri>? _uriSubscription;
   String? _lastPairingLink;
 
@@ -52,9 +54,28 @@ class _LinguaSrsAppState extends State<LinguaSrsApp> {
     if (_lastPairingLink == link) return;
     _lastPairingLink = link;
     try {
+      // The dialog needs the navigator, which is not there before the first
+      // frame when the app was opened by the link.
+      if (_navigatorKey.currentContext == null) {
+        await WidgetsBinding.instance.endOfFrame;
+      }
       final pairing = await SyncAccountService().redeemPairingLink(link);
       if (!mounted) return;
-      await context.read<AppProvider>().setSyncPairing(pairing);
+      final provider = context.read<AppProvider>();
+      final dialogContext = _navigatorKey.currentContext;
+      if (dialogContext == null || !dialogContext.mounted) return;
+      final agreed = await confirmPairing(
+        dialogContext,
+        pairing,
+        replacing: provider.syncPairing,
+      );
+      if (!agreed) {
+        _scaffoldMessengerKey.currentState?.showSnackBar(
+          const SnackBar(content: Text('Pairing cancelled.')),
+        );
+        return;
+      }
+      await provider.setSyncPairing(pairing);
       _scaffoldMessengerKey.currentState?.showSnackBar(
         const SnackBar(content: Text('Signed in to sync.')),
       );
@@ -79,6 +100,7 @@ class _LinguaSrsAppState extends State<LinguaSrsApp> {
 
     return MaterialApp(
       scaffoldMessengerKey: _scaffoldMessengerKey,
+      navigatorKey: _navigatorKey,
       title: 'LinguaSRS - Language Learning Flashcards',
       debugShowCheckedModeBanner: false,
       themeMode: _themeMode,

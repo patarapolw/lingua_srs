@@ -10,9 +10,11 @@ import '../providers/app_provider.dart';
 import '../services/backup_service.dart';
 import '../services/sync_account_service.dart';
 import '../services/sync_client.dart';
+import '../services/sync_error_text.dart';
 import '../services/sync_pairing.dart';
 import '../services/sync_password_policy.dart';
 import '../widgets/icon_switch.dart';
+import 'pairing_confirmation.dart';
 
 class SettingsDialog extends StatefulWidget {
   final bool isDarkMode;
@@ -186,7 +188,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
               'from your email, then tap Confirm email.';
         });
       } else {
-        setState(() => _syncError = '$error');
+        setState(() => _syncError = describeSyncError(error));
       }
       return;
     } finally {
@@ -221,7 +223,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
         setState(() => _awaitingSyncConfirmation = true);
       }
     } catch (error) {
-      if (mounted) setState(() => _syncError = '$error');
+      if (mounted) setState(() => _syncError = describeSyncError(error));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -238,17 +240,33 @@ class _SettingsDialogState extends State<SettingsDialog> {
       setState(() => _syncError = error.message);
       return;
     }
+    // Taken before the awaits: checking the code takes a while, and the
+    // account is confirmed on the server even if this dialog is closed in the
+    // meantime (for example while reading the email in another app). The
+    // sign-in has to be saved either way, or the code is used up and this
+    // device is left signed out.
+    final provider = context.read<AppProvider>();
     setState(() {
       _syncError = null;
       _saving = true;
     });
     try {
-      await _syncAccounts.confirmAccount(
-        pairing,
-        _syncConfirmationCodeController.text,
-      );
-      if (!mounted) return;
-      await context.read<AppProvider>().setSyncPairing(pairing);
+      try {
+        await _syncAccounts.confirmAccount(
+          pairing,
+          _syncConfirmationCodeController.text,
+        );
+      } on SyncException catch (error) {
+        if (error.statusCode != 400) rethrow;
+        // A refused code can mean the account was confirmed a moment ago and
+        // this device missed the answer. If the credentials work, sign in.
+        try {
+          await _syncAccounts.validateCredentials(pairing);
+        } on SyncException {
+          throw error; // still not confirmed: report the code
+        }
+      }
+      await provider.setSyncPairing(pairing);
       if (mounted) {
         TextInput.finishAutofillContext();
         _syncEmailController.clear();
@@ -261,7 +279,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
         });
       }
     } catch (error) {
-      if (mounted) setState(() => _syncError = '$error');
+      if (mounted) setState(() => _syncError = describeSyncError(error));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -312,7 +330,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
         const SnackBar(content: Text('Unconfirmed account deleted.')),
       );
     } catch (error) {
-      if (mounted) setState(() => _syncError = '$error');
+      if (mounted) setState(() => _syncError = describeSyncError(error));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -338,7 +356,9 @@ class _SettingsDialogState extends State<SettingsDialog> {
         setState(() => _changingSyncPassword = false);
       }
     } catch (error) {
-      if (mounted) setState(() => _syncError = '$error');
+      if (mounted) {
+        setState(() => _syncError = describeSyncError(error, signedIn: true));
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -350,18 +370,44 @@ class _SettingsDialogState extends State<SettingsDialog> {
     final SyncPairing pairing;
     try {
       final text = data?.text ?? '';
-      final uri = Uri.tryParse(text.trim());
-      pairing = uri?.host == 'pair'
-          ? await _syncAccounts.redeemPairingLink(text)
-          : SyncPairing.parse(text);
+      // Only one-time pairing links. A link that carried the password itself
+      // is not accepted: nothing creates one, and it would skip the server.
+      if (Uri.tryParse(text.trim())?.host != 'pair') {
+        throw const FormatException('Not a LinguaSRS pairing link.');
+      }
+      pairing = await _syncAccounts.redeemPairingLink(text);
     } on FormatException catch (error) {
       setState(() => _syncError = error.message);
       return;
     } catch (error) {
-      setState(() => _syncError = '$error');
+      setState(() => _syncError = describeSyncError(error));
       return;
     }
+    if (!mounted || !await confirmPairing(context, pairing)) return;
     await _saveSyncPairing(pairing);
+  }
+
+  /// Asks the server whether it still accepts this device's sign-in. Nothing
+  /// else contacts it until sync exists, so this is how a device that was
+  /// signed in elsewhere finds out that the account is gone.
+  Future<void> _checkSignIn(SyncPairing pairing) async {
+    setState(() {
+      _syncError = null;
+      _saving = true;
+    });
+    try {
+      await _syncAccounts.validateCredentials(pairing);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('The server accepts this sign-in.')),
+      );
+    } catch (error) {
+      if (mounted) {
+        setState(() => _syncError = describeSyncError(error, signedIn: true));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   Future<void> _saveSyncPairing(SyncPairing? pairing) async {
@@ -477,7 +523,9 @@ class _SettingsDialogState extends State<SettingsDialog> {
         ),
       );
     } catch (error) {
-      if (mounted) setState(() => _syncError = '$error');
+      if (mounted) {
+        setState(() => _syncError = describeSyncError(error, signedIn: true));
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -491,7 +539,9 @@ class _SettingsDialogState extends State<SettingsDialog> {
         content: const Text(
           'This permanently deletes the account and all synced data from the '
           'server. Local lessons and study progress on this device are not '
-          'deleted. This cannot be undone.',
+          'deleted. Other devices signed in to this account stay signed in '
+          'until they next use the server, and then their sign-in is '
+          'rejected; their lessons stay too. This cannot be undone.',
         ),
         actions: [
           TextButton(
@@ -514,7 +564,9 @@ class _SettingsDialogState extends State<SettingsDialog> {
       await _syncAccounts.deleteAccount(pairing);
       if (mounted) await context.read<AppProvider>().setSyncPairing(null);
     } catch (error) {
-      if (mounted) setState(() => _syncError = '$error');
+      if (mounted) {
+        setState(() => _syncError = describeSyncError(error, signedIn: true));
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -533,7 +585,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
         _syncConfirmPasswordController.text = password;
       });
     } catch (error) {
-      if (mounted) setState(() => _syncError = '$error');
+      if (mounted) setState(() => _syncError = describeSyncError(error));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -552,7 +604,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
         _newSyncConfirmPasswordController.text = password;
       });
     } catch (error) {
-      if (mounted) setState(() => _syncError = '$error');
+      if (mounted) setState(() => _syncError = describeSyncError(error));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -1098,6 +1150,13 @@ class _SettingsDialogState extends State<SettingsDialog> {
                   Wrap(
                     spacing: 8,
                     children: [
+                      OutlinedButton.icon(
+                        onPressed: _saving
+                            ? null
+                            : () => _checkSignIn(syncPairing),
+                        icon: const Icon(Icons.verified_user_outlined),
+                        label: const Text('Check sign-in'),
+                      ),
                       OutlinedButton.icon(
                         onPressed: _saving
                             ? null

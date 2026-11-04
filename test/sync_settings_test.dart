@@ -20,10 +20,19 @@ const _password = 'TEST-ONLY-SYNC-PASSWORD';
 final _server = Uri.parse('https://sync.example.com');
 
 class _FakeSyncAccountService extends SyncAccountService {
-  _FakeSyncAccountService({this.pairingLink, this.unconfirmed = false});
+  _FakeSyncAccountService({
+    this.pairingLink,
+    this.unconfirmed = false,
+    this.validateError,
+    this.confirmError,
+    this.redeemedPairing,
+  });
 
   final String? pairingLink;
-  final bool unconfirmed;
+  bool unconfirmed;
+  final SyncException? validateError;
+  final SyncException? confirmError;
+  final SyncPairing? redeemedPairing;
   bool accountDeleted = false;
   bool credentialsValidated = false;
   String? confirmedCode;
@@ -31,6 +40,8 @@ class _FakeSyncAccountService extends SyncAccountService {
 
   @override
   Future<void> validateCredentials(SyncPairing pairing) async {
+    final refused = validateError;
+    if (refused != null) throw refused;
     if (unconfirmed) {
       throw const SyncException(
         'Sync request failed (403): {"error":"email_not_confirmed"}',
@@ -45,6 +56,8 @@ class _FakeSyncAccountService extends SyncAccountService {
 
   @override
   Future<void> confirmAccount(SyncPairing pairing, String code) async {
+    final refused = confirmError;
+    if (refused != null) throw refused;
     confirmedCode = code;
   }
 
@@ -59,7 +72,8 @@ class _FakeSyncAccountService extends SyncAccountService {
   @override
   Future<SyncPairing> redeemPairingLink(String link) async {
     redeemedLink = link;
-    return SyncPairing(endpoint: _server, email: _email, password: _password);
+    return redeemedPairing ??
+        SyncPairing(endpoint: _server, email: _email, password: _password);
   }
 
   @override
@@ -120,6 +134,35 @@ void main() {
       SharedPreferences.setMockInitialValues({});
 
       expect(await StorageService.loadSyncPairing(), isNull);
+    });
+
+    test('a keychain that cannot be read counts as signed out', () async {
+      SharedPreferences.setMockInitialValues({});
+      StorageService.secretStorageForTesting = const BrokenSecretStorage();
+
+      expect(await StorageService.loadSyncPairing(), isNull);
+      expect(await StorageService.loadDeepSeekApiKey(), '');
+    });
+
+    test('a sign-in stays in preferences while the keychain fails', () async {
+      SharedPreferences.setMockInitialValues({
+        'lingua_srs_sync_pairing': pairing.link,
+      });
+      StorageService.secretStorageForTesting = const BrokenSecretStorage(
+        failReads: false,
+      );
+
+      // It cannot be moved to the keychain yet, so it is used from where it is.
+      expect(await StorageService.loadSyncPairing(), pairing);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('lingua_srs_sync_pairing'), pairing.link);
+
+      // Once the keychain works, it is moved there and removed from preferences.
+      final working = MemorySecretStorage();
+      StorageService.secretStorageForTesting = working;
+      expect(await StorageService.loadSyncPairing(), pairing);
+      expect(prefs.getString('lingua_srs_sync_pairing'), isNull);
+      expect(working.values['lingua_srs_sync_pairing'], pairing.link);
     });
 
     test('saves, loads and clears the pairing', () async {
@@ -566,6 +609,116 @@ void main() {
       expect(provider.syncPairing, pairing);
     });
 
+    testWidgets('a wrong email or password is explained plainly', (tester) async {
+      final provider = await loadedProvider(tester);
+      final service = _FakeSyncAccountService(
+        validateError: const SyncException(
+          'Sync request failed (401): {"error":"invalid_credentials"}',
+          statusCode: 401,
+        ),
+      );
+      await openSettings(tester, provider, syncAccountService: service);
+      await typeCredentials(tester);
+      await tapText(tester, 'Sign in');
+
+      expect(
+        find.textContaining('Wrong email or password, or this account'),
+        findsOneWidget,
+      );
+      expect(provider.syncPairing, isNull);
+    });
+
+    testWidgets('a signed-in device can check that the server accepts it', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester, {
+        'lingua_srs_sync_pairing': pairing.link,
+      });
+      final service = _FakeSyncAccountService();
+      await openSettings(tester, provider, syncAccountService: service);
+
+      await tapText(tester, 'Check sign-in');
+
+      expect(service.credentialsValidated, isTrue);
+      expect(find.text('The server accepts this sign-in.'), findsOneWidget);
+    });
+
+    testWidgets('a sign-in the server rejects is explained, not removed', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester, {
+        'lingua_srs_sync_pairing': pairing.link,
+      });
+      final service = _FakeSyncAccountService(
+        validateError: const SyncException(
+          'Sync request failed (401): {"error":"invalid_credentials"}',
+          statusCode: 401,
+        ),
+      );
+      await openSettings(tester, provider, syncAccountService: service);
+
+      await tapText(tester, 'Check sign-in');
+
+      expect(
+        find.textContaining('no longer accepts this sign-in'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('still on this device'), findsOneWidget);
+      // The person decides: nothing signs this device out by itself.
+      expect(provider.syncPairing, pairing);
+      expect(find.text('Sign out'), findsOneWidget);
+    });
+
+    testWidgets('a refused code signs in if the account is already confirmed', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      final service = _FakeSyncAccountService(
+        unconfirmed: true,
+        confirmError: const SyncException(
+          'Sync request failed (400): {"error":"invalid_code"}',
+          statusCode: 400,
+        ),
+      );
+      await openSettings(tester, provider, syncAccountService: service);
+      await typeCredentials(tester);
+      await tapText(tester, 'Sign in');
+      // The account is confirmed after all (a first attempt got through, but
+      // this device never saw the answer), so the credentials now work.
+      service.unconfirmed = false;
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Email confirmation code'),
+        '12345678',
+      );
+      await tester.pumpAndSettle();
+
+      expect(provider.syncPairing, pairing);
+    });
+
+    testWidgets('a wrong code is reported as a wrong code', (tester) async {
+      final provider = await loadedProvider(tester);
+      final service = _FakeSyncAccountService(
+        unconfirmed: true,
+        confirmError: const SyncException(
+          'Sync request failed (400): {"error":"invalid_code"}',
+          statusCode: 400,
+        ),
+      );
+      await openSettings(tester, provider, syncAccountService: service);
+      await typeCredentials(tester);
+      await tapText(tester, 'Sign in');
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Email confirmation code'),
+        '12345678',
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('wrong or has expired'), findsOneWidget);
+      expect(provider.syncPairing, isNull);
+    });
+
     testWidgets('an unconfirmed account can be deleted from confirmation', (
       tester,
     ) async {
@@ -592,17 +745,23 @@ void main() {
         email: _email,
         password: _password,
       );
-      clipboardText = local.link;
+      clipboardText = 'linguasrs://pair?token=${'a' * 64}#${'b' * 43}';
       final provider = await loadedProvider(tester);
-      await openSettings(tester, provider);
+      final service = _FakeSyncAccountService(redeemedPairing: local);
+      await openSettings(tester, provider, syncAccountService: service);
 
       await tapText(tester, 'Use copied link');
+      // The server is shown before anything is saved.
+      expect(find.textContaining('localhost:8787'), findsOneWidget);
+      await tapText(tester, 'Pair');
 
       expect(provider.syncPairing, local);
       expect(find.text('Server http://localhost:8787'), findsOneWidget);
     });
 
-    testWidgets('a copied pairing link signs in on desktop', (tester) async {
+    testWidgets('a copied pairing link asks before it signs in', (
+      tester,
+    ) async {
       final link = 'linguasrs://pair?token=${'a' * 64}#${'b' * 43}';
       clipboardText = link;
       final provider = await loadedProvider(tester);
@@ -612,7 +771,44 @@ void main() {
       await tapText(tester, 'Use copied link');
 
       expect(service.redeemedLink, link);
+      expect(find.text('Pair this device?'), findsOneWidget);
+      expect(find.textContaining('reader@example.com'), findsOneWidget);
+      expect(find.textContaining('sync.example.com'), findsOneWidget);
+      expect(provider.syncPairing, isNull);
+
+      await tapText(tester, 'Pair');
+
       expect(provider.syncPairing, pairing);
+      expect(find.text('Signed in as reader@example.com'), findsOneWidget);
+    });
+
+    testWidgets('a pairing link that is declined signs nobody in', (
+      tester,
+    ) async {
+      clipboardText = 'linguasrs://pair?token=${'a' * 64}#${'b' * 43}';
+      final provider = await loadedProvider(tester);
+      await openSettings(tester, provider);
+
+      await tapText(tester, 'Use copied link');
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pair this device?'), findsNothing);
+      expect(provider.syncPairing, isNull);
+      expect(emailField, findsOneWidget);
+    });
+
+    testWidgets('a link that carries the password itself is not accepted', (
+      tester,
+    ) async {
+      clipboardText = pairing.link;
+      final provider = await loadedProvider(tester);
+      await openSettings(tester, provider);
+
+      await tapText(tester, 'Use copied link');
+
+      expect(find.text('Not a LinguaSRS pairing link.'), findsOneWidget);
+      expect(provider.syncPairing, isNull);
     });
 
     testWidgets('copied text that is not a sign-in link is rejected', (
@@ -624,7 +820,7 @@ void main() {
 
       await tapText(tester, 'Use copied link');
 
-      expect(find.text('Not a LinguaSRS sync link.'), findsOneWidget);
+      expect(find.text('Not a LinguaSRS pairing link.'), findsOneWidget);
       expect(provider.syncPairing, isNull);
     });
 
@@ -634,7 +830,7 @@ void main() {
 
       await tapText(tester, 'Use copied link');
 
-      expect(find.text('Not a LinguaSRS sync link.'), findsOneWidget);
+      expect(find.text('Not a LinguaSRS pairing link.'), findsOneWidget);
       expect(provider.syncPairing, isNull);
     });
 

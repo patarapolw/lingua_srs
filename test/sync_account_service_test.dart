@@ -211,4 +211,64 @@ void main() {
     expect(request.url.path, '/v1/account');
     expect(request.headers['Authorization'], startsWith('Basic '));
   });
+
+  group('pairing links and servers', () {
+    SyncPairing local() => SyncPairing(
+      endpoint: Uri.parse('http://localhost:8787'),
+      email: _email,
+      password: _password,
+    );
+
+    // A fake server that keeps the one invite it is given.
+    http.Client Function() fakeServer() {
+      Object? payload;
+      return () => MockClient((request) async {
+        if (request.method == 'POST') {
+          payload = (jsonDecode(request.body) as Map)['payload'];
+          return _json({'token': 'a' * 64});
+        }
+        return _json({'payload': payload});
+      });
+    }
+
+    test('a link to another server is refused unless that is allowed', () async {
+      final server = fakeServer();
+      final link = await SyncAccountService(
+        clientFactory: server,
+        allowCustomServer: true,
+      ).createPairingLink(local());
+
+      await expectLater(
+        SyncAccountService(
+          clientFactory: server,
+          allowCustomServer: false,
+        ).redeemPairingLink(link),
+        throwsFormatException,
+      );
+      expect(
+        await SyncAccountService(
+          clientFactory: server,
+          allowCustomServer: true,
+        ).redeemPairingLink(link),
+        local(),
+      );
+    });
+
+    test('a link to the built-in server is always followed', () async {
+      final server = fakeServer();
+      final pairing = SyncPairing(email: _email, password: _password);
+      final link = await SyncAccountService(
+        clientFactory: server,
+        allowCustomServer: false,
+      ).createPairingLink(pairing);
+
+      expect(
+        await SyncAccountService(
+          clientFactory: server,
+          allowCustomServer: false,
+        ).redeemPairingLink(link),
+        pairing,
+      );
+    });
+  });
 }

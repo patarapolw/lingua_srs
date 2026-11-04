@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:cryptography_plus/cryptography_plus.dart';
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:http/http.dart' as http;
 
 import 'sync_account_crypto.dart';
@@ -11,10 +12,18 @@ import 'sync_password_policy.dart';
 
 class SyncAccountService {
   final http.Client Function() _clientFactory;
+  final bool _allowCustomServer;
   static final _pairingCipher = AesGcm.with256bits();
 
-  SyncAccountService({http.Client Function()? clientFactory})
-    : _clientFactory = clientFactory ?? http.Client.new;
+  /// A pairing link names the server it belongs to. Release builds only follow
+  /// links to the built-in server, because a link from anywhere could
+  /// otherwise move this device onto someone else's. [allowCustomServer]
+  /// defaults to true in debug and profile builds, for a local Worker.
+  SyncAccountService({
+    http.Client Function()? clientFactory,
+    bool? allowCustomServer,
+  }) : _clientFactory = clientFactory ?? http.Client.new,
+       _allowCustomServer = allowCustomServer ?? !kReleaseMode;
 
   Future<String> generatePassphrase() async {
     final client = _clientFactory();
@@ -171,11 +180,13 @@ class SyncAccountService {
     if (endpoint == null) {
       throw const FormatException('Pairing link has an invalid server.');
     }
-    final normalizedEndpoint = SyncPairing(
-      endpoint: endpoint,
-      email: 'pairing@example.com',
-      password: 'temporary',
-    ).endpoint;
+    final normalizedEndpoint = SyncPairing.normalizeServer(endpoint);
+    if (!_allowCustomServer &&
+        normalizedEndpoint != SyncPairing.defaultEndpoint) {
+      throw const FormatException(
+        'This pairing link is for a different sync server.',
+      );
+    }
     final key = _decodeBase64Url(keyText);
     if (key.length != 32) {
       throw const FormatException('Pairing link has an invalid key.');

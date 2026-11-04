@@ -18,6 +18,30 @@ class MemorySecretStorage implements SecretStorage {
   }
 }
 
+/// A keychain that fails, like a locked or missing keyring on Linux.
+class BrokenSecretStorage implements SecretStorage {
+  const BrokenSecretStorage({this.failReads = true, this.failWrites = true});
+
+  final bool failReads;
+  final bool failWrites;
+
+  @override
+  Future<String?> read(String key) async {
+    if (failReads) throw StateError('keyring is locked');
+    return null;
+  }
+
+  @override
+  Future<void> write(String key, String value) async {
+    if (failWrites) throw StateError('keyring is locked');
+  }
+
+  @override
+  Future<void> delete(String key) async {
+    if (failWrites) throw StateError('keyring is locked');
+  }
+}
+
 void setUpSecretStorage() {
   StorageService.secretStorageForTesting = MemorySecretStorage();
 }

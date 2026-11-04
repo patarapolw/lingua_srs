@@ -106,6 +106,10 @@ class SyncPairing {
   /// The legacy credential link format, which contains the password.
   String get link => toUri().toString();
 
+  /// Checks and normalizes a server address, throwing [FormatException] if it
+  /// cannot be used. Plain http is only accepted for a local Worker.
+  static Uri normalizeServer(Uri endpoint) => _normalizeEndpoint(endpoint);
+
   static Uri? _endpointFromEnvironment() {
     const value = String.fromEnvironment('SYNC_ENDPOINT');
     return value.isEmpty ? null : _normalizeEndpoint(Uri.parse(value));

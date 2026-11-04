@@ -11,7 +11,7 @@ npx wrangler d1 execute lingua-srs-sync --remote --command "SELECT email, verifi
 ```
 
 - No row: the account was never created.
-- `verified_at` is `null`: the account is unconfirmed. Signing in fails with "email confirmation" (HTTP 403), and the app asks for the emailed code. Unconfirmed accounts are removed automatically after 7 days.
+- `verified_at` is `null`: the account is unconfirmed. Signing in fails with "email confirmation" (HTTP 403), and the app asks for the emailed code. An unconfirmed signup older than 7 days is removed the next time anyone creates an account.
 - `verified_at` has a value: the account is confirmed. A "Sync request failed with invalid credentials" error (HTTP 401) then means the password or email is wrong. The server gives the same answer for an unknown email and a wrong password.
 
 Timestamps are milliseconds since the Unix epoch.
