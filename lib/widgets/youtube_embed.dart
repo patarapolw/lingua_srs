@@ -3,8 +3,12 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:webview_all/webview_all.dart';
 
-/// Renders a single YouTube video or playlist in a WebView.
-/// Only the embed is rendered in the WebView; Markdown is not.
+import 'cached_markdown_image.dart';
+
+/// Shows a single YouTube video or playlist as a cached thumbnail, and only
+/// starts a WebView when it is tapped. If the embed cannot play (the WebView
+/// errors, or YouTube forbids the iframe), the regular YouTube watch page is
+/// opened in the same WebView instead.
 class YouTubeEmbed extends StatefulWidget {
   final String embedUrl;
 
@@ -50,12 +54,44 @@ class YouTubeEmbed extends StatefulWidget {
     return Uri.parse(base).replace(queryParameters: queryParameters).toString();
   }
 
+  /// The video id of an embed URL, or null for a playlist-only embed.
+  static String? videoIdFromEmbedUrl(String embedUrl) {
+    final uri = Uri.tryParse(embedUrl);
+    if (uri == null || uri.pathSegments.length < 2) return null;
+    final id = uri.pathSegments[1];
+    return uri.pathSegments.first == 'embed' && id != 'videoseries'
+        ? id
+        : null;
+  }
+
+  /// A thumbnail for the video; null for a playlist-only embed.
+  static String? thumbnailUrl(String embedUrl) {
+    final id = videoIdFromEmbedUrl(embedUrl);
+    return id == null ? null : 'https://img.youtube.com/vi/$id/hqdefault.jpg';
+  }
+
+  /// The regular YouTube page of the embed, which plays without an iframe.
+  static String? watchUrl(String embedUrl) {
+    final uri = Uri.tryParse(embedUrl);
+    if (uri == null) return null;
+    final id = videoIdFromEmbedUrl(embedUrl);
+    final list = uri.queryParameters['list'];
+    if (id == null && list == null) return null;
+    if (id == null) {
+      return Uri.https('m.youtube.com', '/playlist', {'list': list}).toString();
+    }
+    return Uri.https('m.youtube.com', '/watch', {'v': id, 'list': ?list})
+        .toString();
+  }
+
   @override
   State<YouTubeEmbed> createState() => _YouTubeEmbedState();
 }
 
 class _YouTubeEmbedState extends State<YouTubeEmbed> {
-  late final WebViewController _controller;
+  WebViewController? _controller;
+  bool _watchMode = false;
+  bool _failed = false;
 
   // YouTube rejects embeds (Error 153) from pages without a real HTTPS origin,
   // which is what loadHtmlString gives on Windows. Load a harmless
@@ -65,8 +101,16 @@ class _YouTubeEmbedState extends State<YouTubeEmbed> {
   static const _origin = 'https://www.youtube-nocookie.com';
 
   @override
-  void initState() {
-    super.initState();
+  void didUpdateWidget(YouTubeEmbed oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.embedUrl != widget.embedUrl) {
+      _controller = null;
+      _watchMode = false;
+      _failed = false;
+    }
+  }
+
+  String get _embedScript {
     final embed = Uri.parse(widget.embedUrl);
     final src = embed
         .replace(
@@ -74,8 +118,7 @@ class _YouTubeEmbedState extends State<YouTubeEmbed> {
           queryParameters: {...embed.queryParameters, 'origin': _origin},
         )
         .toString();
-    final script =
-        '''
+    return '''
 document.documentElement.innerHTML =
   '<head><meta name="viewport" content="width=device-width, initial-scale=1"></head>' +
   '<body style="margin:0;height:100vh;background:#000"></body>';
@@ -87,29 +130,108 @@ f.allowFullscreen = true;
 f.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:0';
 document.body.appendChild(f);
 ''';
+  }
+
+  void _start() {
     var injected = false;
-    _controller = WebViewController()
+    final controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(
         NavigationDelegate(
+          onWebResourceError: (error) {
+            if (error.isForMainFrame == false) return;
+            _openWatchPage();
+          },
           onPageFinished: (_) {
-            if (injected) return;
+            if (injected || _watchMode) return;
             injected = true;
-            _controller.runJavaScript(script);
+            _controller?.runJavaScript(_embedScript);
           },
         ),
       )
       ..loadRequest(Uri.parse(_hostPage));
+    setState(() {
+      _controller = controller;
+      _watchMode = false;
+      _failed = false;
+    });
+  }
+
+  /// Plays the video on its regular YouTube page, which has no iframe for
+  /// YouTube to forbid. When that has already failed, shows the retry state.
+  void _openWatchPage() {
+    final controller = _controller;
+    final url = YouTubeEmbed.watchUrl(widget.embedUrl);
+    if (!mounted || controller == null) return;
+    if (_watchMode || url == null) {
+      setState(() => _failed = true);
+      return;
+    }
+    setState(() => _watchMode = true);
+    controller.loadRequest(Uri.parse(url));
+  }
+
+  Widget _thumbnail(BuildContext context) {
+    final thumbnail = YouTubeEmbed.thumbnailUrl(widget.embedUrl);
+    return Material(
+      color: Colors.black,
+      child: InkWell(
+        onTap: _start,
+        child: Stack(
+          alignment: Alignment.center,
+          fit: StackFit.expand,
+          children: [
+            if (thumbnail != null)
+              FittedBox(
+                fit: BoxFit.cover,
+                clipBehavior: Clip.hardEdge,
+                child: CachedMarkdownImage(url: thumbnail),
+              ),
+            const Icon(
+              Icons.play_circle_fill,
+              size: 64,
+              color: Colors.white70,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return AspectRatio(
-      aspectRatio: 16 / 9,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: WebViewWidget(controller: _controller),
-      ),
+    final controller = _controller;
+    final Widget player;
+    if (controller == null) {
+      player = _thumbnail(context);
+    } else if (_failed) {
+      player = Center(
+        child: TextButton.icon(
+          onPressed: _start,
+          icon: const Icon(Icons.refresh),
+          label: const Text('Could not load the video. Retry'),
+        ),
+      );
+    } else {
+      player = WebViewWidget(controller: controller);
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        AspectRatio(
+          aspectRatio: 16 / 9,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: player,
+          ),
+        ),
+        if (controller != null && !_watchMode && !_failed)
+          TextButton(
+            onPressed: _openWatchPage,
+            child: const Text('Video not playing? Open on YouTube'),
+          ),
+      ],
     );
   }
 }
