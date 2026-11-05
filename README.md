@@ -4,14 +4,15 @@ SRS that puts language learning first: custom lessons, lesson-by-lesson vocabula
 
 ## Screenshots
 
-<p align="center">
-  <img src="docs/images/android-lessons.png" alt="Lessons dashboard on Android, with the daily review queue and lessons grouped into a unit" width="19%">
-  <img src="docs/images/android-review-front.png" alt="Card front on Android: English prompt with the Korean word blanked out of an example sentence" width="19%">
-  <img src="docs/images/android-review-back.png" alt="Card back on Android: Korean word, example sentence with audio, and Again and Good buttons" width="19%">
-  <img src="docs/images/android-vocab-pool.png" alt="Vocab Pool on Android with search and part-of-speech filters" width="19%">
-  <img src="docs/images/android-sentences.png" alt="Shared Sentence Pool on Android" width="19%">
-</p>
-<p align="center"><sub>Lessons · Review · Answer · Vocab · Sentences</sub></p>
+<table>
+  <tr>
+    <td align="center" valign="top"><img src="docs/images/android-lessons.png" alt="Lessons dashboard on Android, with the daily review queue and lessons grouped into a unit" width="140"><br><sub>Lessons</sub></td>
+    <td align="center" valign="top"><img src="docs/images/android-review-front.png" alt="Card front on Android: English prompt with the Korean word blanked out of an example sentence" width="140"><br><sub>Review</sub></td>
+    <td align="center" valign="top"><img src="docs/images/android-review-back.png" alt="Card back on Android: Korean word, example sentence with audio, and Again and Good buttons" width="140"><br><sub>Answer</sub></td>
+    <td align="center" valign="top"><img src="docs/images/android-vocab-pool.png" alt="Vocab Pool on Android with search and part-of-speech filters" width="140"><br><sub>Vocab</sub></td>
+    <td align="center" valign="top"><img src="docs/images/android-sentences.png" alt="Shared Sentence Pool on Android" width="140"><br><sub>Sentences</sub></td>
+  </tr>
+</table>
 
 <details>
 <summary>Desktop screenshots</summary>
