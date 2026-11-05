@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lingua_srs/services/sync_change_tracker.dart';
 import 'package:lingua_srs/services/sync_records.dart';
@@ -209,6 +211,71 @@ void main() {
       expect(tracker.deviceId, 'device');
       expect(tracker.cursor, 0);
       expect(tracker.records, isEmpty);
+    });
+  });
+
+  group('SyncChangeTracker and the server', () {
+    test('a pulled version is not pending and not seen as a change', () {
+      final tracker = SyncChangeTracker(deviceId: 'device');
+
+      tracker.acceptRemote(
+        _lesson,
+        hash: SyncSnapshot.hash({'title': 'A'}),
+        updatedAt: 500,
+        parts: 3,
+      );
+
+      expect(tracker.pending, isEmpty);
+      expect(tracker.records[_lesson]!.parts, 3);
+      expect(
+        tracker.track({
+          _lesson: {'title': 'A'},
+        }, now: 1000),
+        isEmpty,
+      );
+    });
+
+    test('a local change keeps the part count and the block', () {
+      final tracker = SyncChangeTracker(deviceId: 'device');
+      tracker.track({
+        _lesson: {'title': 'A'},
+      }, now: 1000);
+      tracker.markPushed(_lesson, 1000, parts: 4);
+      tracker.block(_lesson, 2000);
+
+      tracker.track({
+        _lesson: {'title': 'B'},
+      }, now: 3000);
+
+      final state = tracker.records[_lesson]!;
+      expect(state.parts, 4);
+      expect(state.blocked, isTrue);
+    });
+
+    test('recordLocal makes a version to push at the given time', () {
+      final tracker = SyncChangeTracker(deviceId: 'device');
+
+      tracker.recordLocal(_lesson, hash: 'h', updatedAt: 777);
+
+      expect(tracker.pending, [_lesson]);
+      expect(tracker.records[_lesson]!.updatedAt, 777);
+    });
+
+    test('held parts and blocks survive saving', () {
+      final tracker = SyncChangeTracker(deviceId: 'device');
+      tracker.holdPart(_lesson, 2, [1, 2, 3]);
+      tracker.block(_sentence, 10);
+
+      final restored = SyncChangeTracker.fromJson(
+        jsonDecode(jsonEncode(tracker.toJson())) as Map<String, dynamic>,
+      );
+
+      expect(restored.heldParts(_lesson), {
+        2: [1, 2, 3],
+      });
+      expect(restored.records[_sentence]!.blocked, isTrue);
+      restored.releaseParts(_lesson);
+      expect(restored.heldParts(_lesson), isEmpty);
     });
   });
 }
