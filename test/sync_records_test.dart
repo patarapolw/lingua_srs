@@ -54,13 +54,18 @@ VocabItem _vocab({String id = 'word'}) => VocabItem(
 void main() {
   group('SyncSnapshot.build', () {
     test('keeps shared details and cards out of the lesson record', () {
-      final lesson = Lesson(id: 'lesson-1', title: 'L1', vocabularies: [
-        _vocab(),
-      ]);
+      final lesson = Lesson(
+        id: 'lesson-1',
+        title: 'L1',
+        vocabularies: [_vocab()],
+      );
 
       final records = _build(lessons: [lesson]);
-      final entry = (records[const SyncRecordKey('lesson', 'lesson-1')]!
-          ['vocabularies'] as List).single as Map;
+      final entry =
+          (records[const SyncRecordKey('lesson', 'lesson-1')]!['vocabularies']
+                      as List)
+                  .single
+              as Map;
 
       expect(entry['targetWord'], '목적지');
       expect(entry['translation'], 'destination');
@@ -75,9 +80,11 @@ void main() {
     });
 
     test('puts card settings in vocab and scheduling in card', () {
-      final lesson = Lesson(id: 'lesson-1', title: 'L1', vocabularies: [
-        _vocab(),
-      ]);
+      final lesson = Lesson(
+        id: 'lesson-1',
+        title: 'L1',
+        vocabularies: [_vocab()],
+      );
 
       final records = _build(lessons: [lesson]);
       final vocab = records[const SyncRecordKey('vocab', 'word')]!;
@@ -102,8 +109,10 @@ void main() {
       expect(card['vocabId'], 'word');
       expect(card.containsKey('backNotes'), isFalse);
       expect(card.containsKey('isEnabled'), isFalse);
-      expect(records.containsKey(const SyncRecordKey('card', 'card-nt')),
-          isTrue);
+      expect(
+        records.containsKey(const SyncRecordKey('card', 'card-nt')),
+        isTrue,
+      );
     });
 
     test('stores a word used by two lessons once', () {
@@ -147,8 +156,10 @@ void main() {
         lessonOrder: {'folder:a': 2},
       );
 
-      expect(records[const SyncRecordKey('sentence', 's1')]!['targetText'],
-          '가요');
+      expect(
+        records[const SyncRecordKey('sentence', 's1')]!['targetText'],
+        '가요',
+      );
       expect(records[const SyncRecordKey('discussion', 'word:none')], {
         'messages': [
           {'role': 'user', 'content': 'Why?'},
@@ -198,10 +209,7 @@ void main() {
     });
 
     test('changes with the contents', () {
-      expect(
-        SyncSnapshot.hash({'a': 1}),
-        isNot(SyncSnapshot.hash({'a': 2})),
-      );
+      expect(SyncSnapshot.hash({'a': 1}), isNot(SyncSnapshot.hash({'a': 2})));
     });
   });
 

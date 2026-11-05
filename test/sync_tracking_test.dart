@@ -10,6 +10,7 @@ import 'package:lingua_srs/services/sync_pairing.dart';
 import 'package:lingua_srs/services/sync_records.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'debug_print_capture.dart';
 import 'secret_storage_mock.dart';
 
 const _stateKey = 'lingua_srs_sync_state';
@@ -103,11 +104,13 @@ void main() {
 
   test('an unreadable sync state starts again', () async {
     SharedPreferences.setMockInitialValues({_stateKey: 'not json'});
+    final printed = captureDebugPrints();
 
     final tracker = await StorageService.loadSyncChangeTracker();
 
     expect(tracker.records, isEmpty);
     expect(tracker.cursor, 0);
+    expect(printed, [contains('Could not read the sync state')]);
   });
 
   test('backup leaves out the sync state and restore keeps it', () async {

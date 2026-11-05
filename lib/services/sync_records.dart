@@ -33,9 +33,7 @@ class SyncRecordKey {
 
   @override
   bool operator ==(Object other) =>
-      other is SyncRecordKey &&
-      other.kind == kind &&
-      other.localId == localId;
+      other is SyncRecordKey && other.kind == kind && other.localId == localId;
 
   @override
   int get hashCode => Object.hash(kind, localId);

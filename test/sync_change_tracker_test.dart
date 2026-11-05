@@ -68,9 +68,12 @@ void main() {
       expect(state.deleted, isTrue);
       expect(state.pending, isTrue);
       expect(state.updatedAt, 2000);
-      expect(tracker.track({
-        _lesson: {'title': 'A'},
-      }, now: 3000), isEmpty);
+      expect(
+        tracker.track({
+          _lesson: {'title': 'A'},
+        }, now: 3000),
+        isEmpty,
+      );
     });
 
     test('brings a deleted record back when it reappears', () {
@@ -192,10 +195,7 @@ void main() {
     });
 
     test('makes a random device id', () {
-      expect(
-        SyncChangeTracker().deviceId,
-        isNot(SyncChangeTracker().deviceId),
-      );
+      expect(SyncChangeTracker().deviceId, isNot(SyncChangeTracker().deviceId));
     });
 
     test('reset forgets records and the cursor but keeps the device id', () {

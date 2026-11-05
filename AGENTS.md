@@ -20,6 +20,7 @@ Flutter app (Dart, `provider` state management). See [README.md](README.md) for 
 
 ## Rules
 
+- Run `dart format .` before every commit and commit everything it changes, including files you didn't edit. Cloud agents often can't run the formatter, so unformatted code can reach `main`; the next local commit cleans it up.
 - Every behavior change or bug fix needs a test in `test/`.
 - When the lesson syntax changes, update `docs/lesson-format.md`. `test/docs_test.dart` parses its examples and will fail if they break.
 - Keep `README.md` short; put detail in `docs/`.
