@@ -42,4 +42,4 @@ If `flutter` or `dart` isn't available, you can't run tests or `flutter analyze`
 - Still add or update tests in `test/`, written carefully since they can't be run.
 - Keep changes small and focused so they are easy to fix locally.
 - State in the PR description that tests, analyze and format were not run.
-- Before opening a PR, tell the person what to fetch and run locally first (the commands from `ci.yml` that could not run here, scoped to the changed files where possible), so the PR does not trigger a failing CI. Open the PR only after they confirm.
+- Before opening a PR, tell the person what to fetch and run locally first (the commands from `ci.yml` that could not run here, scoped to the changed files where possible), so the PR does not trigger a failing CI. Also list any step that needs a manual check outside CI (for example deploying the Worker, applying a migration, or trying a change in the running app), or say that none does. Open the PR only after they confirm.
