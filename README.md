@@ -4,22 +4,14 @@ SRS that puts language learning first: custom lessons, lesson-by-lesson vocabula
 
 ## Screenshots
 
-<table>
-  <tr>
-    <th align="center">Lessons</th>
-    <th align="center">Review</th>
-    <th align="center">Answer</th>
-    <th align="center">Vocab</th>
-    <th align="center">Sentences</th>
-  </tr>
-  <tr>
-    <td valign="top"><img src="docs/images/android-lessons.png" alt="Lessons dashboard on Android, with the daily review queue and lessons grouped into a unit" width="100%"></td>
-    <td valign="top"><img src="docs/images/android-review-front.png" alt="Card front on Android: English prompt with the Korean word blanked out of an example sentence" width="100%"></td>
-    <td valign="top"><img src="docs/images/android-review-back.png" alt="Card back on Android: Korean word, example sentence with audio, and Again and Good buttons" width="100%"></td>
-    <td valign="top"><img src="docs/images/android-vocab-pool.png" alt="Vocab Pool on Android with search and part-of-speech filters" width="100%"></td>
-    <td valign="top"><img src="docs/images/android-sentences.png" alt="Shared Sentence Pool on Android" width="100%"></td>
-  </tr>
-</table>
+<p align="center">
+  <img src="docs/images/android-lessons.png" alt="Lessons dashboard on Android, with the daily review queue and lessons grouped into a unit" width="19%">
+  <img src="docs/images/android-review-front.png" alt="Card front on Android: English prompt with the Korean word blanked out of an example sentence" width="19%">
+  <img src="docs/images/android-review-back.png" alt="Card back on Android: Korean word, example sentence with audio, and Again and Good buttons" width="19%">
+  <img src="docs/images/android-vocab-pool.png" alt="Vocab Pool on Android with search and part-of-speech filters" width="19%">
+  <img src="docs/images/android-sentences.png" alt="Shared Sentence Pool on Android" width="19%">
+</p>
+<p align="center"><sub>Lessons · Review · Answer · Vocab · Sentences</sub></p>
 
 <details>
 <summary>Desktop screenshots</summary>
