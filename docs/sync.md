@@ -2,7 +2,7 @@
 
 How devices sync, and how a separately developed dictionary app sends content to LinguaSRS. Every account lives on one hosted Cloudflare Worker backed by D1, and data is end-to-end encrypted: the server only stores ciphertext. See issue #2. This also covers the content-import half of #45.
 
-Implemented so far: the Worker (`worker/`), account creation and email confirmation, sign-in, password changes, one-time device pairing, account deletion, and password-derived account keys. Record encryption and the sync engine are follow-up work.
+Implemented so far: the Worker (`worker/`), account creation and email confirmation, sign-in, password changes, one-time device pairing, account deletion, and password-derived account keys. Records describes what will sync; record encryption and the sync engine are follow-up work.
 
 ## Server address
 
@@ -62,7 +62,7 @@ The server stores `SHA-256(authKey)`. Stealing the database therefore gives an a
 
 Records are encrypted with a random 256-bit **data key** created with the account. The server keeps it wrapped: `AES-256-GCM(wrapKey, dataKey)`. A new device signs in, downloads the wrapped key and unwraps it. Because the password only wraps the data key, **changing the password re-wraps one key and re-encrypts nothing**. Each record is `AES-256-GCM(dataKey, data)` with a random nonce and the record's `kind` and `id` as associated data, so a record cannot be swapped for another.
 
-The server can still see the email, each record's `kind` and `id`, `updatedAt`, whether it is deleted, and sizes. Everything inside `data` is hidden.
+The server can still see the email, each record's `kind` and `id`, `updatedAt`, whether it is deleted, and sizes. A record's `id` is a keyed hash, so it does not reveal the word or lesson behind it (see Record ids). Everything inside `data` is hidden.
 
 If the password is forgotten and no device is signed in, the data cannot be recovered; that is the cost of end-to-end encryption. A printable recovery code (the data key) shown at account creation would fix that and is worth adding. The email can prove ownership and allow the account to be reset, but it can never bring the data back.
 
@@ -134,6 +134,78 @@ The record with the newest `updatedAt` wins. An older or equal copy is ignored a
 
 The dictionary app signs in with the same email and password, like another device, so it can encrypt what it posts. The text is in the [lesson format](lesson-format.md) (a new lesson, or a lesson name plus the new vocab to add). LinguaSRS decrypts and lists the inbox, shows the existing import preview and validation, and only then imports. All parsing stays in `YamlParserService`.
 
+## Records
+
+What the app stores on the server, one record per piece of data. This is the design for the sync engine; nothing below is implemented yet.
+
+### What syncs
+
+Everything a backup contains syncs, except what only makes sense on one device:
+
+- **Syncs:** lessons and their Markdown, vocabulary entries, word details and SRS progress, the Sentence Pool, merge history, saved AI discussions, the lesson tree's order, study activity, and the study settings listed below.
+- **Stays on the device:** the DeepSeek key and the sync sign-in (secrets), which folders are expanded, the fingerprints of imported Markdown files (they are keyed by a path on this device), the audio and image caches, and one-off migration flags.
+
+### Kinds
+
+| Kind | One record per | Contents | Conflicts |
+| --- | --- | --- | --- |
+| `lesson` | lesson | Title, unit, languages, and the vocabulary entries as `VocabItem.toJson()` writes them, without the shared fields (details and cards). | Newest wins. |
+| `lesson_md` | lesson with Markdown | The lesson's Markdown. | Newest wins. |
+| `vocab` | vocab id | The `SharedVocab` details (audio, TTS text, notes, disambiguation, their provenance and alternates), and each card's settings: enabled, front hint, back notes, card id. | Newest wins. |
+| `card` | SRS card | Scheduling only: interval, repetitions, ease, due date, status, lapses and the review and mistake dates, plus the vocab id and direction. | Newest wins. |
+| `sentence` | sentence | `Sentence.toJson()`. | Newest wins. |
+| `merge` | merge record | `VocabMergeRecord.toJson()`. Undoing a merge deletes its record. | Newest wins. |
+| `discussion` | saved AI discussion | Its messages. | Merged: the union of both sides' messages, by time. |
+| `activity` | device and day | That device's review count for the day, and its review times while they still count toward the rolling 24-hour limits. | None: only that device writes it. |
+| `lesson_order` | account (one record) | The lesson tree's manual order. | Newest wins. |
+| `settings` | account (one record) | Review limits per 24 hours, autoplay, and the pronunciation lines shown. | Newest wins. |
+
+Why it is split this way:
+
+- **SRS progress is apart from everything else.** A review rewrites one `card` record (about 300 bytes), not a lesson. Editing a card's back note on one device while reviewing it on another does not lose either change, because the note is in `vocab` and the schedule is in `card`.
+- **Shared things are stored once.** Entries with the same vocab id share details and progress in the app, so they share one `vocab` record and its two `card` records, however many lessons contain the word.
+- **Activity is never in conflict.** Each device writes only its own `activity` records, and the totals are the sums across devices, so two devices studying offline on the same day both count. The heatmap and the rolling review and new-card limits read these sums, so studying on two devices does not double the daily limit.
+- **A discussion is merged, not replaced.** Asking the AI about the same word on two devices would otherwise keep only one side's messages.
+
+Two devices reviewing the same card offline: the later review wins, and the earlier one is lost from the schedule but still counted in activity. That is acceptable for spaced repetition, and simpler than replaying both reviews.
+
+### Record ids
+
+The server sees each record's kind and id, so an id must not give away content. A generated vocab id is `auto-` and an unkeyed SHA-256 of the language, word and meaning, so anyone could test it against a dictionary. An explicit `id` from a lesson file can be a plain word.
+
+So the record id is a keyed hash of the local id: `base64url(HMAC-SHA256(idKey, kind + ":" + localId))`, 43 characters, with `idKey = HKDF(dataKey, "record-id")`. Only devices with the data key can compute it. The local id is kept inside the encrypted data, so a pulled record maps back to it. An `activity` record's local id is `<device id>:<YYYY-MM-DD>`, where the device id is random, made once per install, and kept with the sync sign-in. The single records use `lesson_order` and `settings` as their local ids.
+
+### Encrypted envelope
+
+A record's `data` is:
+
+```
+{"v": 1, "n": "<nonce, base64url>", "c": "<ciphertext, base64url>"}
+```
+
+The ciphertext is `AES-256-GCM(dataKey, gzip(JSON))`, with a random 96-bit nonce and `kind + "\0" + record id` as associated data, so the server cannot move a record to another kind or id. The JSON holds `localId`, `schema` (this kind's format version, starting at 1) and the contents.
+
+A device that pulls a record with a `schema` newer than it understands keeps the record as it came and does not overwrite it, and asks for the app to be updated. Otherwise an old version would push back a record with the fields it does not know dropped.
+
+### Large records
+
+The Worker refuses `data` over 32 KB, which leaves about 24 KB of compressed content, roughly 80–100 KB of Markdown or JSON. Lesson Markdown, a long discussion, or a lesson with several hundred words can be bigger. Such a record is split:
+
+- Parts are stored as records of the same kind, with local ids `<localId>#1`, `<localId>#2` and so on, each holding a slice of the compressed bytes.
+- The record itself then holds `parts` (the count) and `sha256` (of the whole compressed content) instead of the contents.
+- Parts are pushed before the record that lists them. A device assembles the content only when every part is present and the hash matches; until then it keeps its own copy.
+- Parts that are no longer needed (after the content shrinks) are deleted.
+
+### Deleting
+
+Deleting a lesson, sentence, merge record, discussion or Markdown pushes a tombstone for it, and for its parts.
+
+`vocab` and `card` records are never deleted because a lesson was removed. Whether a word is still used depends on every lesson on every device, and one device deleting the last lesson that it knows of while another imports the word again would lose that word's progress. An unused `vocab` or `card` record costs a few hundred bytes, and it brings the progress back if the word is imported again. Pruning them can come later, once every device is known to be in sync.
+
+### Write budget
+
+A review writes one `card` record. The engine merges repeated changes to a record into one push, and writes a day's `activity` record once per push rather than once per review. The Worker allows 2,000 record writes per account per day, which covers several hundred reviews a day even when each one is pushed on its own.
+
 ## Staying inside the free plans
 
 Cloudflare's free plans have no bill: past their daily limits requests simply fail, so the worst case is that sync pauses until the next UTC day while every app keeps working offline. The Worker adds its own limits so one account, or a flood of signups, cannot use everything up. They are settings in `wrangler.jsonc`:
@@ -179,6 +251,6 @@ A stored record is changed by an upsert that only applies when the incoming `upd
 
 ## Not covered yet
 
-- Which record kinds exist and how they map to lessons, sentences and SRS cards.
+- The sync engine: change tracking on the device, the record encryption and splitting above, when to sync, and the first sync of a device that already has data. See Records for what it moves.
 - Resetting a forgotten password (confirmed by email, which starts a fresh account because the data cannot be decrypted without the old password), and an authenticator-app second factor.
 - Limiting failed sign-ins per address, see above.
