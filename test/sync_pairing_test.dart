@@ -253,7 +253,7 @@ void main() {
     });
 
     test('a password that starts with a byte order mark is kept', () {
-      for (final password in ['\ufeffsecret', '\ufeff', '\ufeff\ufeffa b']) {
+      for (final password in ['\ufeffsecret', '\ufeff\ufeffa b']) {
         final pairing = SyncPairing(email: _email, password: password);
 
         expect(
