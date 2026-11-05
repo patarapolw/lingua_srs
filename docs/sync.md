@@ -58,34 +58,28 @@ wrapKey = HKDF(master, "wrap")      never leaves the device
 
 The app computes Argon2id with the pure Dart implementation off the UI isolate, so key derivation does not depend on loading a platform-native library.
 
-The server stores `SHA-256(authKey)`. Stealing the database therefore gives an attacker nothing to replay, only a stretched value to guess passwords against, which Argon2id makes expensive.
+The server stores only `SHA-256(authKey)`, not the auth key itself.
 
 Records are encrypted with a random 256-bit **data key** created with the account. The server keeps it wrapped: `AES-256-GCM(wrapKey, dataKey)`. A new device signs in, downloads the wrapped key and unwraps it. Because the password only wraps the data key, **changing the password re-wraps one key and re-encrypts nothing**. Each record is `AES-256-GCM(dataKey, data)` with a random nonce and the record's `kind` and `id` as associated data, so a record cannot be swapped for another.
 
 The server can still see the email, each record's `kind` and `id`, `updatedAt`, whether it is deleted, and sizes. A record's `id` is a keyed hash, so it does not reveal the word or lesson behind it (see Record ids). Everything inside `data` is hidden.
 
-If the password is forgotten and no device is signed in, the data cannot be recovered; that is the cost of end-to-end encryption. A printable recovery code (the data key) shown at account creation would fix that and is worth adding. The email can prove ownership and allow the account to be reset, but it can never bring the data back.
+If the password is forgotten and no device is signed in, the data cannot be recovered. A recovery code (the data key) shown at account creation, planned in #2, would allow it. The email can be used to reset the account, but not to bring the data back.
 
 ## Password rules
 
-Applied only **when an account is created or the password is changed**, never at sign-in, so an account made under an older rule can always sign in. The app uses the published [`password_rules`](https://pub.dev/packages/password_rules) package, configured with the policy below:
+These are this app's choices. They are checked only when an account is created or the password is changed, never at sign-in, so an account made under older rules can always sign in. The app uses the [`password_rules`](https://pub.dev/packages/password_rules) package's `PasswordRules.nist()` preset, plus a breach check:
 
-- **15–64 user-perceived characters**, counted with Unicode grapheme clusters, using the package's NIST preset. The cryptographic derivation itself has no maximum, but the app enforces the package's 64-character policy limit. Spaces and any Unicode are allowed; there are no character-composition requirements.
-- **No required numbers or special characters.** Composition requirements would rule out useful word-based passphrases without replacing the need for length, randomness, and blocklist checks.
-- **Reject common passwords** using the package's `CommonPasswordsRule`, which blocks the 1,000 most common leaked passwords case-insensitively.
-- **Reject breached passwords** using an additional Have I Been Pwned k-anonymity range query; only the first five characters of the password's SHA-1 are sent. Account creation and password changes stop if the breach-list service is unavailable.
-- **Visibility:** Password and confirmation fields have independent show/hide controls, so revealing one does not reveal the other.
-- **No scheduled changes.** Forced rotation makes people pick small variations of the old password. Change it after a suspected leak, or if the password was reused elsewhere that was breached.
-- Offer a generated passphrase of six independently and uniformly selected words from a 2048-word list. Six random words have about 66 bits of selection entropy before blocklist exclusions (five would have about 55 bits), and even the longest possible six words stay inside the 64 character limit. This is not the same as choosing a familiar phrase or selecting the words yourself: predictable word choices make dictionary attacks much easier. The generated phrase is checked against the local policy and breached-password list before being copied into both password and confirmation fields. These checks do not make a manually chosen phrase random. A password manager helps and autofill is supported, but nothing requires one.
+- 15–64 characters, counted as the characters a person sees (grapheme clusters). Spaces and any Unicode are allowed, and no particular kinds of characters are required.
+- Not one of the package's 1,000 most common passwords, ignoring case.
+- Not in Have I Been Pwned's list of breached passwords. Only the first five characters of the password's SHA-1 are sent. If that service cannot be reached, the account is not created or the password is not changed.
+- No scheduled password changes.
 
-The package's `PasswordRules.nist()` preset supplies the 15-character minimum, 64-character maximum, and common-password blocklist used by Sync.
+The password and confirmation fields each have their own show/hide button. The app can also generate a passphrase of six random words from a 2,048-word list, checked against the same rules, and fill both fields with it. Password-manager autofill works.
 
-## Other factors, deliberately not used
+## Other sign-in methods
 
-- **PIN**: only 10^n possibilities, so it is trivial to guess offline from anything derived from it, and easy to watch being typed. It is acceptable only as a local app lock where the device limits attempts. It must never derive the sync or encryption keys.
-- **SMS or email codes**: SMS can be intercepted or taken over by moving the number to another SIM, and an emailed code is only as safe as the mailbox. Neither can produce the data key. Email is used to confirm ownership and to start an account reset.
-- **Biometrics**: not secrets, cannot be changed once leaked, and leaks of fingerprint data have happened. At most they unlock a key kept in the device's own secure storage. The biometric itself is never sent anywhere.
-- **Later**: an authenticator-app (TOTP) code or a passkey as a second factor at the server. It protects the account from being locked or deleted, not the data, which the password already protects.
+Only the email and password sign in and derive the keys. PINs, SMS or email codes and biometrics are not used for either. An authenticator-app code may be added later as a second factor.
 
 ## Creating an account
 
@@ -93,7 +87,7 @@ The package's `PasswordRules.nist()` preset supplies the 15-character minimum, 6
 2. The Worker stores the account as **unconfirmed** and emails an **8 digit code** (valid for 30 minutes). The answer is always `202`, whether or not the email already has an account, so it cannot be used to find out who is registered.
 3. The app asks for the code and sends `{email, authKey, code}` to `POST /v1/accounts/confirm`. After pasting the code, tap **Confirm email**; a password-manager save prompt does not confirm the account. Only then can the account be used. The policy is enforced by the app because the password itself never leaves the device; the Worker only receives derived keys.
 
-The code is typed into the app that started the signup, instead of being a link to click, on purpose. A link would confirm whatever credentials were last submitted for that email, so someone could start a signup with your email and their own password, and you would activate it by clicking. With a code, confirming needs both the emailed code and the credentials of the signup, and a repeated signup replaces the pending credentials, so an attacker can at worst be a nuisance. Five wrong codes cancel the code. A repeated signup within 10 minutes reuses the code already sent instead of sending another email. A signup nobody confirms is forgotten after 7 days.
+The code is typed into the app that started the signup, rather than clicked as a link, so confirming needs both the emailed code and that signup's credentials. A link would confirm whatever credentials were last submitted for the email, including someone else's. A repeated signup replaces the pending credentials. Five wrong codes cancel the code. A repeated signup within 10 minutes reuses the code already sent instead of sending another email. A signup nobody confirms is forgotten after 7 days.
 
 To change a password, a signed-in device checks the new password policy, downloads the wrapped data key, unwraps it with the current password, wraps the same key with the new password, and sends the new authentication key and wrapped key to `PUT /v1/account`. No records are re-encrypted. The device replaces its saved sign-in only after the Worker accepts the change.
 
@@ -136,7 +130,7 @@ The dictionary app signs in with the same email and password, like another devic
 
 ## Records
 
-What the app stores on the server, one record per piece of data. This is the design for the sync engine; nothing below is implemented yet.
+What the app stores on the server, one record per piece of data. Building the records and noticing changes is implemented (see Change tracking); encryption, splitting and sending them are not yet.
 
 ### What syncs
 
@@ -167,7 +161,7 @@ Why it is split this way:
 - **Activity is never in conflict.** Each device writes only its own `activity` records, and the totals are the sums across devices, so two devices studying offline on the same day both count. The heatmap and the rolling review and new-card limits read these sums, so studying on two devices does not double the daily limit.
 - **A discussion is merged, not replaced.** Asking the AI about the same word on two devices would otherwise keep only one side's messages.
 
-Two devices reviewing the same card offline: the later review wins, and the earlier one is lost from the schedule but still counted in activity. That is acceptable for spaced repetition, and simpler than replaying both reviews.
+Two devices reviewing the same card offline: the later review wins, and the earlier one is lost from the schedule but still counted in activity. This app accepts that, because it is simpler than replaying both reviews.
 
 ### Record ids
 
@@ -201,6 +195,14 @@ The Worker refuses `data` over 32 KB, which leaves about 24 KB of compressed con
 Deleting a lesson, sentence, merge record, discussion or Markdown pushes a tombstone for it, and for its parts.
 
 `vocab` and `card` records are never deleted because a lesson was removed. Whether a word is still used depends on every lesson on every device, and one device deleting the last lesson that it knows of while another imports the word again would lose that word's progress. An unused `vocab` or `card` record costs a few hundred bytes, and it brings the progress back if the word is imported again. Pruning them can come later, once every device is known to be in sync.
+
+### Change tracking
+
+The device notices changes by comparing contents instead of marking each edit, so no edit path can be missed. `SyncSnapshot` builds every record from the app's state, and `SyncChangeTracker` keeps a hash of each one. A record whose hash changed gets `updatedAt` set to the time the change was noticed and becomes pending. A record that is gone becomes a pending deletion, except `vocab` and `card` records. The first run after signing in sees every record as new, which is how data from before sync gets pushed. If the device clock has been set back, the new `updatedAt` is still later than the last one.
+
+The tracker also keeps the pull cursor and a random device id, which names this device's `activity` records. It is stored on the device only (`lingua_srs_sync_state`), never in a backup, and a restore leaves it alone. Signing out forgets the records and the cursor but keeps the device id, so signing in again does not count this device's activity twice. Restoring a backup on a signed-in device is seen as edits: records missing from the backup become deletions.
+
+Changes are checked by `AppProvider.trackSyncChanges`. The sync engine calls it before each sync, and calls after edits come with scheduling (steps 4 and 6 in #2).
 
 ### Write budget
 

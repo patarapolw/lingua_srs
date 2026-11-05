@@ -14,6 +14,7 @@ import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'debug_print_capture.dart';
 import 'odd_text.dart';
 import 'secret_storage_mock.dart';
 
@@ -158,9 +159,14 @@ void main() {
     test('a keychain that cannot be read counts as signed out', () async {
       SharedPreferences.setMockInitialValues({});
       StorageService.secretStorageForTesting = const BrokenSecretStorage();
+      final printed = captureDebugPrints();
 
       expect(await StorageService.loadSyncPairing(), isNull);
       expect(await StorageService.loadDeepSeekApiKey(), '');
+      expect(printed, [
+        contains('Could not read lingua_srs_sync_pairing'),
+        contains('Could not read lingua_srs_deepseek_api_key'),
+      ]);
     });
 
     test('a sign-in stays in preferences while the keychain fails', () async {
@@ -170,9 +176,11 @@ void main() {
       StorageService.secretStorageForTesting = const BrokenSecretStorage(
         failReads: false,
       );
+      final printed = captureDebugPrints();
 
       // It cannot be moved to the keychain yet, so it is used from where it is.
       expect(await StorageService.loadSyncPairing(), pairing);
+      expect(printed, [contains('Could not move lingua_srs_sync_pairing')]);
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getString('lingua_srs_sync_pairing'), pairing.link);
 

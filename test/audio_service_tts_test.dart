@@ -8,6 +8,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:lingua_srs/services/audio_service.dart';
 
+import 'debug_print_capture.dart';
+
 /// Stands in for the audioplayers plugin; nothing here plays a clip.
 class _FakePlayer implements AudioPlayer {
   final _completeController = StreamController<void>.broadcast();
@@ -161,10 +163,12 @@ void main() {
     test('speaks nothing when no offline voice is installed', () async {
       final tts = _VoicesTts([_voice('ko-online', 'ko-KR', online: true)]);
       final service = offlineService(tts);
+      final printed = captureDebugPrints();
 
       await service.speak('안녕하세요', language: 'ko');
 
       expect(tts.spoken, isEmpty);
+      expect(printed, [contains('No installed offline Android TTS voice')]);
     });
   });
 

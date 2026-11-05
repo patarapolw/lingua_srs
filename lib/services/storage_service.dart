@@ -12,6 +12,7 @@ import '../models/shared_vocab.dart';
 import '../models/vocab_item.dart';
 import '../models/vocab_merge_record.dart';
 import 'secret_storage.dart';
+import 'sync_change_tracker.dart';
 import 'sync_pairing.dart';
 
 class StorageService {
@@ -23,6 +24,7 @@ class StorageService {
   static const String _keySharedVocab = 'lingua_srs_shared_vocab';
   static const String _keyDeepSeekApiKey = 'lingua_srs_deepseek_api_key';
   static const String _keySyncPairing = 'lingua_srs_sync_pairing';
+  static const String _keySyncState = 'lingua_srs_sync_state';
   static const String _keyVocabMergeHistory = 'lingua_srs_vocab_merge_history';
   static const String _keyAiDiscussions = 'lingua_srs_ai_discussions';
   static const String _keyAutoplay = 'lingua_srs_autoplay';
@@ -83,6 +85,27 @@ class StorageService {
     } on FormatException {
       return null;
     }
+  }
+
+  /// What this device knows about its synced records. A missing or unreadable
+  /// state starts again, which only means every record is pushed once more.
+  static Future<SyncChangeTracker> loadSyncChangeTracker() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_keySyncState);
+    if (raw == null || raw.isEmpty) return SyncChangeTracker();
+    try {
+      return SyncChangeTracker.fromJson(
+        Map<String, dynamic>.from(jsonDecode(raw) as Map),
+      );
+    } catch (error) {
+      debugPrint('Could not read the sync state: $error');
+      return SyncChangeTracker();
+    }
+  }
+
+  static Future<void> saveSyncChangeTracker(SyncChangeTracker tracker) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keySyncState, jsonEncode(tracker.toJson()));
   }
 
   static Future<void> saveSyncPairing(SyncPairing? pairing) async {
