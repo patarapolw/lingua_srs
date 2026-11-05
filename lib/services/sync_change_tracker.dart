@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:uuid/uuid.dart';
 
 import 'sync_records.dart';
@@ -11,6 +13,8 @@ class SyncRecordState {
     required this.updatedAt,
     this.deleted = false,
     this.pending = true,
+    this.parts = 0,
+    this.blocked = false,
   });
 
   /// Hash of the contents, from [SyncSnapshot.hash]; empty once deleted.
@@ -23,11 +27,21 @@ class SyncRecordState {
   /// Changed since the last successful push.
   final bool pending;
 
-  SyncRecordState copyWith({bool? pending}) => SyncRecordState(
+  /// How many parts the record was split into when last pushed, 0 if it was
+  /// not split, so parts it no longer needs can be deleted.
+  final int parts;
+
+  /// The server has a version written by a newer app (a newer schema). This
+  /// device must not overwrite it until the app is updated.
+  final bool blocked;
+
+  SyncRecordState copyWith({bool? pending, int? parts}) => SyncRecordState(
     hash: hash,
     updatedAt: updatedAt,
     deleted: deleted,
     pending: pending ?? this.pending,
+    parts: parts ?? this.parts,
+    blocked: blocked,
   );
 
   Map<String, dynamic> toJson() => {
@@ -35,6 +49,8 @@ class SyncRecordState {
     'updatedAt': updatedAt,
     if (deleted) 'deleted': true,
     if (pending) 'pending': true,
+    if (parts > 0) 'parts': parts,
+    if (blocked) 'blocked': true,
   };
 
   factory SyncRecordState.fromJson(Map<String, dynamic> json) {
@@ -48,6 +64,8 @@ class SyncRecordState {
       updatedAt: updatedAt,
       deleted: json['deleted'] == true,
       pending: json['pending'] == true,
+      parts: json['parts'] is int ? json['parts'] as int : 0,
+      blocked: json['blocked'] == true,
     );
   }
 }
@@ -63,9 +81,11 @@ class SyncChangeTracker {
   SyncChangeTracker({
     String? deviceId,
     Map<SyncRecordKey, SyncRecordState>? records,
+    Map<SyncRecordKey, Map<int, String>>? heldParts,
     this.cursor = 0,
   }) : deviceId = deviceId ?? const Uuid().v4(),
-       _records = records ?? {};
+       _records = records ?? {},
+       _heldParts = heldParts ?? {};
 
   static const _version = 1;
 
@@ -76,6 +96,10 @@ class SyncChangeTracker {
   int cursor;
 
   final Map<SyncRecordKey, SyncRecordState> _records;
+
+  /// Pulled parts of split records whose head has not been joined yet, by
+  /// head, then part number, as base64.
+  final Map<SyncRecordKey, Map<int, String>> _heldParts;
 
   Map<SyncRecordKey, SyncRecordState> get records => Map.unmodifiable(_records);
 
@@ -119,6 +143,8 @@ class SyncChangeTracker {
       _records[entry.key] = SyncRecordState(
         hash: hash,
         updatedAt: stamp(previous),
+        parts: previous?.parts ?? 0,
+        blocked: previous?.blocked ?? false,
       );
       changed.add(entry.key);
     }
@@ -131,25 +157,90 @@ class SyncChangeTracker {
         hash: '',
         updatedAt: stamp(previous),
         deleted: true,
+        parts: previous.parts,
+        blocked: previous.blocked,
       );
       changed.add(key);
     }
     return changed;
   }
 
-  /// Records that the server accepted [key] as it was at [updatedAt]. A
-  /// change made since then stays pending.
-  void markPushed(SyncRecordKey key, int updatedAt) {
+  /// Records that the server accepted [key] as it was at [updatedAt], split
+  /// into [parts] parts (0 when not split). A change made since then stays
+  /// pending.
+  void markPushed(SyncRecordKey key, int updatedAt, {int? parts}) {
     final state = _records[key];
     if (state == null || state.updatedAt != updatedAt) return;
-    _records[key] = state.copyWith(pending: false);
+    _records[key] = state.copyWith(pending: false, parts: parts);
   }
+
+  /// Records a version pulled from the server, and now applied on this
+  /// device, as the one this device has: [hash] of its contents as the app
+  /// now holds them (empty when [deleted]), not pending.
+  void acceptRemote(
+    SyncRecordKey key, {
+    required String hash,
+    required int updatedAt,
+    bool deleted = false,
+    int parts = 0,
+  }) {
+    _records[key] = SyncRecordState(
+      hash: hash,
+      updatedAt: updatedAt,
+      deleted: deleted,
+      pending: false,
+      parts: parts,
+    );
+  }
+
+  /// Records a local version made at [updatedAt] that has to be pushed, such
+  /// as AI discussion messages merged with a pulled version.
+  void recordLocal(
+    SyncRecordKey key, {
+    required String hash,
+    required int updatedAt,
+  }) {
+    final previous = _records[key];
+    _records[key] = SyncRecordState(
+      hash: hash,
+      updatedAt: updatedAt,
+      parts: previous?.parts ?? 0,
+    );
+  }
+
+  /// The server has [key] from a newer app, at [updatedAt]. It is not pushed
+  /// over until this app is updated and pulls it again.
+  void block(SyncRecordKey key, int updatedAt) {
+    final previous = _records[key];
+    _records[key] = SyncRecordState(
+      hash: previous?.hash ?? '',
+      updatedAt: updatedAt,
+      deleted: previous?.deleted ?? false,
+      pending: false,
+      parts: previous?.parts ?? 0,
+      blocked: true,
+    );
+  }
+
+  /// Keeps a pulled part until its head can be joined.
+  void holdPart(SyncRecordKey head, int index, List<int> bytes) =>
+      _heldParts.putIfAbsent(head, () => {})[index] = base64.encode(bytes);
+
+  /// The held parts of [head], by part number.
+  Map<int, List<int>> heldParts(SyncRecordKey head) => {
+    for (final entry in (_heldParts[head] ?? const {}).entries)
+      entry.key: base64.decode(entry.value),
+  };
+
+  /// Forgets the held parts of [head], once joined.
+  void releaseParts(SyncRecordKey head) => _heldParts.remove(head);
 
   /// Forgets every record and the pull cursor, after signing out. The device
   /// id stays, so signing in again does not count this device's activity
   /// twice.
   void reset() {
     _records.clear();
+    _heldParts.clear();
     cursor = 0;
   }
 
@@ -161,6 +252,13 @@ class SyncChangeTracker {
       for (final entry in _records.entries)
         entry.key.storageKey: entry.value.toJson(),
     },
+    if (_heldParts.isNotEmpty)
+      'heldParts': {
+        for (final entry in _heldParts.entries)
+          entry.key.storageKey: {
+            for (final part in entry.value.entries) '${part.key}': part.value,
+          },
+      },
   };
 
   factory SyncChangeTracker.fromJson(Map<String, dynamic> json) {
@@ -168,11 +266,13 @@ class SyncChangeTracker {
     final deviceId = json['deviceId'];
     final cursor = json['cursor'];
     final records = json['records'];
+    final heldParts = json['heldParts'] ?? const {};
     if (version != _version ||
         deviceId is! String ||
         deviceId.isEmpty ||
         cursor is! int ||
-        records is! Map) {
+        records is! Map ||
+        heldParts is! Map) {
       throw const FormatException('Invalid sync state.');
     }
     return SyncChangeTracker(
@@ -183,6 +283,13 @@ class SyncChangeTracker {
           SyncRecordKey.parse(entry.key as String): SyncRecordState.fromJson(
             Map<String, dynamic>.from(entry.value as Map),
           ),
+      },
+      heldParts: {
+        for (final entry in heldParts.entries)
+          SyncRecordKey.parse(entry.key as String): {
+            for (final part in (entry.value as Map).entries)
+              int.parse(part.key as String): part.value as String,
+          },
       },
     );
   }

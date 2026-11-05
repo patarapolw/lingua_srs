@@ -161,14 +161,20 @@ class SyncRecordCipher {
 
   /// The server records for [key] with [data], changed at [updatedAt]: one
   /// record, or a split head and its parts when it is too large, parts first.
+  /// [schemaVersion] is only changed by tests, to act as a newer app.
   Future<List<SyncRecord>> encode(
     SyncRecordKey key,
     Map<String, dynamic> data, {
     required int updatedAt,
+    int schemaVersion = schema,
   }) async {
     final compressed = gzip.encode(
       utf8.encode(
-        jsonEncode({'localId': key.localId, 'schema': schema, 'data': data}),
+        jsonEncode({
+          'localId': key.localId,
+          'schema': schemaVersion,
+          'data': data,
+        }),
       ),
     );
     final whole = await _record(key, compressed, updatedAt);
@@ -205,7 +211,7 @@ class SyncRecordCipher {
         utf8.encode(
           jsonEncode({
             'localId': key.localId,
-            'schema': schema,
+            'schema': schemaVersion,
             'parts': parts.length,
             'sha256': crypto.sha256.convert(compressed).toString(),
           }),

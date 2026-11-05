@@ -2,7 +2,7 @@
 
 How devices sync, and how a separately developed dictionary app sends content to LinguaSRS. Every account lives on one hosted Cloudflare Worker backed by D1, and data is end-to-end encrypted: the server only stores ciphertext. See issue #2. This also covers the content-import half of #45.
 
-Implemented so far: the Worker (`worker/`), account creation and email confirmation, sign-in, password changes, one-time device pairing, account deletion, and password-derived account keys. Records describes what will sync; building, encrypting and decrypting records is implemented, and the sync engine that sends them is follow-up work.
+Implemented so far: the Worker (`worker/`), account creation and email confirmation, sign-in, password changes, one-time device pairing, account deletion, and password-derived account keys. Records describes what will sync; building, encrypting, pulling and pushing records is implemented (`SyncEngine`), and applying pulled records to lessons, cards and the rest, and running syncs from the app, are follow-up work.
 
 ## Server address
 
@@ -130,7 +130,7 @@ The dictionary app signs in with the same email and password, like another devic
 
 ## Records
 
-What the app stores on the server, one record per piece of data. Building the records, noticing changes (see Change tracking), and encrypting, splitting and decrypting them (`SyncRecordCipher`) are implemented; sending them is not yet.
+What the app stores on the server, one record per piece of data. Building the records, noticing changes (see Change tracking), encrypting, splitting and decrypting them (`SyncRecordCipher`), and pulling and pushing them (see Sync engine) are implemented. Applying pulled records to the app's data is not yet.
 
 ### What syncs
 
@@ -208,6 +208,21 @@ The tracker also keeps the pull cursor and a random device id, which names this 
 
 Changes are checked by `AppProvider.trackSyncChanges`. The sync engine calls it before each sync, and calls after edits come with scheduling (steps 4 and 6 in #2).
 
+### Sync engine
+
+`SyncEngine.sync` runs one sync of an account:
+
+1. `GET /account`. A `createdAt` different from the one the data key was unlocked with means the account was re-created: it stops, changes nothing, and reports it. A `401` stops the same way.
+2. Notes local changes (Change tracking).
+3. Pulls everything after the stored cursor and decrypts it. Parts are kept until their head arrives. A record that cannot be decrypted or put together is skipped and counted.
+4. Decides each pulled record:
+   - its own push coming back, or a version it already has: nothing to do;
+   - written by a newer app (a newer `schema`): left alone here and never pushed over, and reported;
+   - changed on this device too: the newer `updatedAt` wins, except AI discussions, whose messages are merged and pushed;
+   - otherwise applied.
+5. Applies the pulled records through a `SyncRecordStore`, notes what they now hash to so they are not pushed back, and saves the cursor.
+6. Pushes what is still pending: whole records, or parts followed by their head, deletions as tombstones, and tombstones for parts a record no longer needs.
+
 ### Write budget
 
 A review writes one `card` record. The engine merges repeated changes to a record into one push, and writes a day's `activity` record once per push rather than once per review. The Worker allows 2,000 record writes per account per day, which covers several hundred reviews a day even when each one is pushed on its own.
@@ -257,6 +272,6 @@ A stored record is changed by an upsert that only applies when the incoming `upd
 
 ## Not covered yet
 
-- The sync engine: change tracking on the device, the record encryption and splitting above, when to sync, and the first sync of a device that already has data. See Records for what it moves.
+- Applying pulled records to lessons, cards and the rest of the app's data, running syncs from the app (when to sync, and what Settings shows), and the first sync of a device that already has data.
 - Resetting a forgotten password (confirmed by email, which starts a fresh account because the data cannot be decrypted without the old password), and an authenticator-app second factor.
 - Limiting failed sign-ins per address, see above.
