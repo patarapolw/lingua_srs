@@ -1,23 +1,25 @@
 # LinguaSRS
 
-SRS that puts language learning first: custom lessons, lesson-by-lesson vocabulary review, and a shared sentence pool. A Flutter app for **Windows, macOS, Linux, Android and iOS**, using an Anki-style SM-2 spaced repetition system.
+SRS that puts language learning first: custom lessons, lesson-by-lesson vocabulary review, and a shared sentence pool. Built for studying on your phone (**Android and iOS**), with the same app on **Windows, macOS and Linux**. It uses an Anki-style SM-2 spaced repetition system.
 
 ## Screenshots
 
 <table>
   <tr>
-    <th align="center">Desktop</th>
-    <th align="center">Android</th>
-  </tr>
-  <tr>
-    <td valign="top"><img src="docs/images/desktop-lessons.png" alt="Desktop lessons dashboard with daily review queue" width="100%"></td>
-    <td valign="top"><img src="docs/images/android-lessons.png" alt="LinguaSRS lessons dashboard on Android" width="100%"></td>
+    <td align="center" valign="top"><img src="docs/images/android-lessons.png" alt="Lessons dashboard on Android, with the daily review queue and lessons grouped into a unit" width="140"><br><sub>Lessons</sub></td>
+    <td align="center" valign="top"><img src="docs/images/android-review-front.png" alt="Card front on Android: English prompt with the Korean word blanked out of an example sentence" width="140"><br><sub>Review</sub></td>
+    <td align="center" valign="top"><img src="docs/images/android-review-back.png" alt="Card back on Android: Korean word, example sentence with audio, and Again and Good buttons" width="140"><br><sub>Answer</sub></td>
+    <td align="center" valign="top"><img src="docs/images/android-vocab-pool.png" alt="Vocab Pool on Android with search and part-of-speech filters" width="140"><br><sub>Vocab</sub></td>
+    <td align="center" valign="top"><img src="docs/images/android-sentences.png" alt="Shared Sentence Pool on Android" width="140"><br><sub>Sentences</sub></td>
   </tr>
 </table>
 
 <details>
-<summary>More desktop screenshots</summary>
+<summary>Desktop screenshots</summary>
 
+<p align="center">
+  <img src="docs/images/desktop-lessons.png" alt="Desktop lessons dashboard with daily review queue" width="100%">
+</p>
 <p align="center">
   <img src="docs/images/desktop-vocab-pool.png" alt="Desktop vocabulary pool with search and part-of-speech filters" width="49%">
   <img src="docs/images/desktop-sentences.png" alt="Desktop shared sentence pool" width="49%">
@@ -61,7 +63,8 @@ Currently only Korean ➔ English is supported. Full details in [docs/features.m
 
 ```bash
 flutter pub get
-flutter run -d windows            # or macos, linux, <android/ios device id>
+flutter devices                   # find your phone's device id
+flutter run -d <device id>        # Android or iOS; or windows, macos, linux
 flutter test
 ```
 
