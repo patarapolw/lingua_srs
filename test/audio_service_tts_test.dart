@@ -188,6 +188,54 @@ void main() {
       expect(tts.spoken, isEmpty);
     });
 
+    test('a tts locale prefix picks that region\'s voice', () async {
+      final tts = _VoicesTts([
+        _voice('zh-cn-a', 'zh-CN'),
+        _voice('zh-tw-a', 'zh-TW'),
+        _voice('zh-cn-b', 'zh-CN'),
+      ]);
+      final service = offlineService(tts);
+
+      for (var i = 0; i < 10; i++) {
+        await service.speak('zh-TW:垃圾', language: 'zh-CN');
+      }
+
+      expect(tts.spoken, everyElement('垃圾'));
+      expect(tts.voiceUsed, everyElement('zh-tw-a'));
+    });
+
+    test(
+      'falls back to any voice of the language without the region',
+      () async {
+        final tts = _VoicesTts([_voice('zh-cn-a', 'zh-CN')]);
+        final service = offlineService(tts);
+
+        await service.speak('zh-TW:垃圾', language: 'zh-CN');
+
+        expect(tts.spoken, ['垃圾']);
+        expect(tts.voiceUsed, ['zh-cn-a']);
+      },
+    );
+
+    test('the online TTS URL uses the tts locale prefix', () {
+      final service = offlineService(_VoicesTts([]));
+
+      final prefixed = Uri.parse(
+        service.getTtsUrl('zh-TW:垃圾', language: 'zh-CN'),
+      ).queryParameters;
+      expect(prefixed['tl'], 'zh-TW');
+      expect(prefixed['q'], '垃圾');
+
+      final taiwan = Uri.parse(service.getTtsUrl('垃圾', language: 'zh-TW'))
+          .queryParameters;
+      expect(taiwan['tl'], 'zh-TW');
+
+      final spaced = Uri.parse(service.getTtsUrl('en: hello', language: 'ko'))
+          .queryParameters;
+      expect(spaced['tl'], 'ko');
+      expect(spaced['q'], 'en: hello');
+    });
+
     test('the online TTS URL leaves out bracketed text too', () {
       final service = offlineService(_VoicesTts([]));
 

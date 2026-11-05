@@ -52,6 +52,54 @@ class YamlParserService {
     'word',
   ];
 
+  /// The field with alternate text for text-to-speech. Older files use
+  /// `<lang>_text` (such as `ko_text`) or `target_text` instead.
+  static const String ttsKey = 'tts';
+
+  /// Languages a `tts` value can name in a locale prefix.
+  static const Set<String> ttsLanguages = {
+    'ko',
+    'ja',
+    'zh',
+    'en',
+    'es',
+    'fr',
+    'de',
+    'ru',
+    'it',
+    'pt',
+    'ar',
+  };
+
+  static final RegExp _ttsLocalePrefix = RegExp(
+    r'^([A-Za-z]{2,3})(?:[-_]([A-Za-z]{4}|[A-Za-z]{2}))?:(?=\S)',
+  );
+
+  /// Splits an optional locale prefix off a `tts` value, such as
+  /// `zh-TW:垃圾`, so that one word is spoken with another voice.
+  ///
+  /// A prefix is a known language, an optional region or script, and a colon
+  /// with no space after it. A colon followed by a space is part of the text,
+  /// as in English (`Note: …`), and so is anything that is not a known
+  /// language (`10:30`).
+  static ({String? locale, String text}) splitTtsLocale(String value) {
+    final trimmed = value.trim();
+    final match = _ttsLocalePrefix.firstMatch(trimmed);
+    if (match == null) return (locale: null, text: trimmed);
+    final language = match.group(1)!.toLowerCase();
+    if (!ttsLanguages.contains(language)) return (locale: null, text: trimmed);
+    final subtag = match.group(2);
+    final locale = subtag == null
+        ? language
+        : '$language-${_localeSubtag(subtag)}';
+    return (locale: locale, text: trimmed.substring(match.end));
+  }
+
+  /// A region is upper case (`TW`), a script title case (`Hant`).
+  static String _localeSubtag(String subtag) => subtag.length == 2
+      ? subtag.toUpperCase()
+      : subtag[0].toUpperCase() + subtag.substring(1).toLowerCase();
+
   static const List<String> knownNativeKeys = [
     'en',
     'eng',
@@ -202,8 +250,10 @@ class YamlParserService {
             traditional = fVal;
           } else if (fKey == 'hanja' && hanja.isEmpty) {
             hanja = fVal;
-          } else if (_isTtsKey(fKey) && fVal.isNotEmpty) {
-            ttsText = fVal; // e.g. ko_text: alternate text for TTS
+          } else if (fKey == ttsKey && fVal.isNotEmpty) {
+            ttsText = fVal; // alternate text for TTS
+          } else if (_isLegacyTtsKey(fKey) && fVal.isNotEmpty) {
+            ttsText ??= fVal; // old name, e.g. ko_text; `tts` wins
           }
         }
 
@@ -233,8 +283,10 @@ class YamlParserService {
                 exTarget = exVal;
               } else if (knownNativeKeys.contains(exKey) && exTrans.isEmpty) {
                 exTrans = exVal;
-              } else if (_isTtsKey(exKey) && exVal.isNotEmpty) {
+              } else if (exKey == ttsKey && exVal.isNotEmpty) {
                 exTts = exVal;
+              } else if (_isLegacyTtsKey(exKey) && exVal.isNotEmpty) {
+                exTts ??= exVal;
               }
             }
 
@@ -375,8 +427,9 @@ String _notesText(dynamic value) {
   return value.toString().trim();
 }
 
-/// `<lang>_text` (such as `ko_text`) holds alternate text for TTS.
-bool _isTtsKey(String key) =>
+/// The old name of the `tts` field: `<lang>_text`, such as `ko_text`, or
+/// `target_text`. Still read so existing files import.
+bool _isLegacyTtsKey(String key) =>
     key.endsWith('_text') &&
     YamlParserService.knownLangKeys.contains(
       key.substring(0, key.length - '_text'.length),

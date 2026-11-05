@@ -419,9 +419,7 @@ void main() {
       );
       expect(
         firstQuestions,
-        contains(
-          'How is "学习" pronounced in pinyin, including its tones?',
-        ),
+        contains('How is "学习" pronounced in pinyin, including its tones?'),
       );
       expect(
         firstQuestions,

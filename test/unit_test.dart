@@ -160,6 +160,54 @@ vocabulary:
       expect(pear.speechText, '배');
     });
 
+    test('tts is alternate TTS text and wins over ko_text', () {
+      final parsed = YamlParserService.parseLessonYaml('''
+---
+vocabulary:
+  nouns:
+    - ko: 3개
+      tts: 세 개
+      en: three items
+      examples:
+        - ko: "**3개** 주세요"
+          tts: 세 개 주세요
+          en: Three, please
+    - ko: 4개
+      ko_text: 넷 개
+      tts: 네 개
+      en: four items
+    - ko: 5개
+      target_text: 다섯 개
+      en: five items
+---
+# Lesson 1
+''');
+      final vocab = parsed.lesson.vocabularies;
+      expect(vocab[0].ttsText, '세 개');
+      expect(parsed.sentences.single.speechText, '세 개 주세요');
+      expect(vocab[1].ttsText, '네 개');
+      expect(vocab[2].ttsText, '다섯 개');
+    });
+
+    test('splits a locale prefix off a tts value', () {
+      ({String? locale, String text}) split(String value) =>
+          YamlParserService.splitTtsLocale(value);
+
+      expect(split('zh-TW:垃圾'), (locale: 'zh-TW', text: '垃圾'));
+      expect(split('zh_tw:垃圾'), (locale: 'zh-TW', text: '垃圾'));
+      expect(split('zh-hant:垃圾'), (locale: 'zh-Hant', text: '垃圾'));
+      expect(split('ko:세 개'), (locale: 'ko', text: '세 개'));
+      expect(split('  垃圾  '), (locale: null, text: '垃圾'));
+      // A colon followed by a space is text, as in English.
+      expect(split('en: hello'), (locale: null, text: 'en: hello'));
+      expect(split('Note: hello'), (locale: null, text: 'Note: hello'));
+      // Not a known language.
+      expect(split('re:act'), (locale: null, text: 're:act'));
+      expect(split('10:30'), (locale: null, text: '10:30'));
+      // Nothing after the colon.
+      expect(split('zh-TW:'), (locale: null, text: 'zh-TW:'));
+    });
+
     test('ko_text survives a JSON round trip', () {
       final vocab = VocabItem(
         targetWord: '3개',

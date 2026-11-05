@@ -94,6 +94,44 @@ void main() {
     expect(vocab.traditional, '學生');
   });
 
+  test('exports alternate TTS text as tts, with its locale prefix', () {
+    final sentence = Sentence(
+      targetText: '垃圾在哪里？',
+      translationText: 'Where is the garbage?',
+      ttsText: '垃圾在哪儿？',
+    );
+    final lesson = Lesson(
+      title: 'Mandarin',
+      targetLanguage: 'zh-CN',
+      vocabularies: [
+        VocabItem(
+          targetWord: '垃圾',
+          translation: 'garbage',
+          pos: 'nouns',
+          ttsText: 'zh-TW:垃圾',
+          sentenceIds: [sentence.id],
+          sentenceEmphasis: {
+            sentence.id: const SentenceEmphasis(
+              target: '**垃圾**在哪里？',
+              translation: 'Where is the garbage?',
+            ),
+          },
+        ),
+      ],
+    );
+
+    final files = MarkdownArchiveService.readMarkdownFiles(
+      LessonExportService.createZip([lesson], [sentence]),
+    );
+    final contents = files.single.contents;
+    expect(contents, isNot(contains('target_text')));
+    expect(contents, contains('tts:'));
+
+    final parsed = YamlParserService.parseLessonYaml(contents);
+    expect(parsed.lesson.vocabularies.single.ttsText, 'zh-TW:垃圾');
+    expect(parsed.sentences.single.ttsText, '垃圾在哪儿？');
+  });
+
   test('exports Korean Hanja forms', () {
     final lesson = Lesson(
       title: 'Korean',

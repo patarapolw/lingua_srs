@@ -737,10 +737,7 @@ vocabulary:
       await reveal(tester);
 
       expect(find.text('Reading: xuésheng'), findsOneWidget);
-      expect(
-        find.text('Simplified: 学生 · Traditional: 學生'),
-        findsOneWidget,
-      );
+      expect(find.text('Simplified: 学生 · Traditional: 學生'), findsOneWidget);
     });
 
     testWidgets('Korean answer shows Hanja', (tester) async {
