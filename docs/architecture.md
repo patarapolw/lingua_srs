@@ -26,6 +26,7 @@ lingua_srs/
 │   │   ├── backup_service.dart        # Versioned local data backup and restore
 │   │   ├── sync_pairing.dart          # Sync account (email and password) and its `linguasrs://sync` sign-in link
 │   │   ├── sync_client.dart           # Cloudflare Worker sync and dictionary inbox client
+│   │   ├── sync_error_text.dart       # Plain messages for failed sync requests
 │   │   ├── sync_account_crypto.dart   # Password-derived sync keys and wrapped data key
 │   │   ├── sync_account_service.dart  # Sync account creation, confirmation and password changes
 │   │   ├── sync_password_policy.dart  # New-account and password-change validation
@@ -61,6 +62,7 @@ lingua_srs/
 │   │   ├── similar_meanings_dialog.dart # Review AI-suggested hints for similar words
 │   │   ├── similar_search_dialog.dart # Search similar English meanings to write a front hint
 │   │   ├── vocab_merge_dialogs.dart   # Manual and AI merge flows, merge history and undo
+│   │   ├── pairing_confirmation.dart  # Asks before a pairing link signs this device in
 │   │   └── settings_dialog.dart       # Theme, autoplay, review limits, backup, AI key and sync
 │   └── widgets/
 │       ├── adaptive_scaffold.dart     # Responsive layout (Rail vs BottomNav)

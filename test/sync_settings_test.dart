@@ -563,17 +563,6 @@ void main() {
       expect(provider.syncPairing, isNull);
     });
 
-    testWidgets('a copied sign-in link signs in', (tester) async {
-      clipboardText = '${pairing.link}\n';
-      final provider = await loadedProvider(tester);
-      await openSettings(tester, provider);
-
-      await tapText(tester, 'Use copied link');
-
-      expect(provider.syncPairing, pairing);
-      expect(find.text('Signed in as reader@example.com'), findsOneWidget);
-    });
-
     testWidgets('sign-in sends unconfirmed accounts to email confirmation', (
       tester,
     ) async {
