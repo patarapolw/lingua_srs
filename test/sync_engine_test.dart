@@ -44,9 +44,7 @@ class FakeWorker {
               ..sort((a, b) => (a['seq'] as int).compareTo(b['seq'] as int));
         final page = changed.take(limit).toList();
         return json({
-          'records': [
-            for (final row in page) Map.of(row)..remove('seq'),
-          ],
+          'records': [for (final row in page) Map.of(row)..remove('seq')],
           'cursor': page.isEmpty ? since : page.last['seq'],
           'hasMore': changed.length > limit,
         });
@@ -191,8 +189,10 @@ void main() {
 
     expect(a.store.records[_lesson], {'title': 'Food and drink'});
     expect(a.store.records.containsKey(_sentence), isFalse);
-    expect(worker.isDeleted('sentence', await cipher.recordId(_sentence)),
-        isTrue);
+    expect(
+      worker.isDeleted('sentence', await cipher.recordId(_sentence)),
+      isTrue,
+    );
   });
 
   test('when both edit offline, the later edit wins on both', () async {
