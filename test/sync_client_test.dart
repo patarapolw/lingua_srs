@@ -151,14 +151,11 @@ void main() {
         ),
       );
 
-      await expectLater(
-        client.getAccount(),
-        throwsA(isA<SyncException>()),
-      );
+      await expectLater(client.getAccount(), throwsA(isA<SyncException>()));
     });
   });
 
-    group('SyncClient.pull', () {
+  group('SyncClient.pull', () {
     test('asks for changes since the cursor with the bearer key', () async {
       late http.Request seen;
       final client = _syncClient(
