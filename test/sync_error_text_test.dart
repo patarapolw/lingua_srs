@@ -52,7 +52,10 @@ void main() {
       const error = SyncException('Sync request failed (500): oops');
 
       expect(describeSyncError(error), error.message);
-      expect(describeSyncError(const FormatException('Bad link.')), 'Bad link.');
+      expect(
+        describeSyncError(const FormatException('Bad link.')),
+        'Bad link.',
+      );
       expect(describeSyncError(StateError('boom')), contains('boom'));
     });
 

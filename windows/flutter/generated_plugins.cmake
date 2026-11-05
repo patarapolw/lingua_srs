@@ -10,6 +10,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   flutter_tts
   irondash_engine_context
   super_native_extensions
+  url_launcher_windows
   webview_all_windows
 )
 

@@ -617,7 +617,9 @@ void main() {
       expect(provider.syncPairing, pairing);
     });
 
-    testWidgets('a wrong email or password is explained plainly', (tester) async {
+    testWidgets('a wrong email or password is explained plainly', (
+      tester,
+    ) async {
       final provider = await loadedProvider(tester);
       final service = _FakeSyncAccountService(
         validateError: const SyncException(

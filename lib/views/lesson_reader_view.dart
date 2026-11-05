@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/lesson.dart';
 import '../providers/app_provider.dart';
 import '../services/lesson_ai_prompt.dart';
-import '../widgets/lesson_html_view.dart';
+import '../widgets/lesson_content_view.dart';
 import '../widgets/markdown_text_field.dart';
 import 'ai_discussion_dialog.dart';
 import 'lesson_detail_view.dart';
@@ -19,9 +19,19 @@ class LessonReaderView extends StatefulWidget {
 }
 
 class _LessonReaderViewState extends State<LessonReaderView> {
-  final LessonHtmlController _htmlController = LessonHtmlController();
+  final LessonContentController _contentController = LessonContentController();
+  String? _parsedMarkdown;
+  LessonContent? _parsed;
 
   String get lessonId => widget.lessonId;
+
+  LessonContent _contentFor(String markdown) {
+    if (_parsed == null || _parsedMarkdown != markdown) {
+      _parsedMarkdown = markdown;
+      _parsed = LessonContent.parse(markdown);
+    }
+    return _parsed!;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,9 +50,8 @@ class _LessonReaderViewState extends State<LessonReaderView> {
       );
     }
     final selectedLesson = lesson;
-    final headings = LessonHtmlView.extractHeadings(
-      selectedLesson.markdownContent,
-    );
+    final content = _contentFor(selectedLesson.markdownContent);
+    final headings = content.headings;
 
     return Scaffold(
       appBar: AppBar(
@@ -88,9 +97,10 @@ class _LessonReaderViewState extends State<LessonReaderView> {
       ),
       body: selectedLesson.markdownContent.trim().isEmpty
           ? _emptyLessonContent(context, selectedLesson)
-          : LessonHtmlView(
+          : LessonContentView(
               markdown: selectedLesson.markdownContent,
-              controller: _htmlController,
+              content: content,
+              controller: _contentController,
             ),
     );
   }
@@ -119,7 +129,7 @@ class _LessonReaderViewState extends State<LessonReaderView> {
                 title: Text(heading.text),
                 onTap: () {
                   Navigator.pop(sheetContext);
-                  _htmlController.scrollToHeading(heading.id);
+                  _contentController.scrollToHeading(heading);
                 },
               );
             },

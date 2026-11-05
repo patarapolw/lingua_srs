@@ -16,12 +16,10 @@ final _server = Uri.parse('https://sync.example.com');
 final _usable = RegExp(r'^[^\s@:]+@[^\s@:]+\.[^\s@:]+$');
 
 String _oddEmail(Random random) {
-  final local = SyncPairing.normalizeEmail(
-    oddText(random),
-  ).replaceAll(RegExp(r'[\s@:]'), 'x');
-  final label = SyncPairing.normalizeEmail(
-    oddText(random, maxLength: 8),
-  ).replaceAll(RegExp(r'[\s@:.]'), 'x');
+  final local = SyncPairing.normalizeEmail(oddText(random))
+      .replaceAll(RegExp(r'[\s@:]'), 'x');
+  final label = SyncPairing.normalizeEmail(oddText(random, maxLength: 8))
+      .replaceAll(RegExp(r'[\s@:.]'), 'x');
   return '$local@$label.example';
 }
 
@@ -314,9 +312,8 @@ void main() {
       final emoji = 'a$high${low}b';
       expect(SyncPairing(email: _email, password: emoji).password, emoji);
       expect(
-        SyncPairing.parse(
-          SyncPairing(email: _email, password: emoji).link,
-        ).password,
+        SyncPairing.parse(SyncPairing(email: _email, password: emoji).link)
+            .password,
         emoji,
       );
     });

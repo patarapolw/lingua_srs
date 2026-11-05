@@ -231,28 +231,31 @@ void main() {
       });
     }
 
-    test('a link to another server is refused unless that is allowed', () async {
-      final server = fakeServer();
-      final link = await SyncAccountService(
-        clientFactory: server,
-        allowCustomServer: true,
-      ).createPairingLink(local());
-
-      await expectLater(
-        SyncAccountService(
-          clientFactory: server,
-          allowCustomServer: false,
-        ).redeemPairingLink(link),
-        throwsFormatException,
-      );
-      expect(
-        await SyncAccountService(
+    test(
+      'a link to another server is refused unless that is allowed',
+      () async {
+        final server = fakeServer();
+        final link = await SyncAccountService(
           clientFactory: server,
           allowCustomServer: true,
-        ).redeemPairingLink(link),
-        local(),
-      );
-    });
+        ).createPairingLink(local());
+
+        await expectLater(
+          SyncAccountService(
+            clientFactory: server,
+            allowCustomServer: false,
+          ).redeemPairingLink(link),
+          throwsFormatException,
+        );
+        expect(
+          await SyncAccountService(
+            clientFactory: server,
+            allowCustomServer: true,
+          ).redeemPairingLink(link),
+          local(),
+        );
+      },
+    );
 
     test('a link to the built-in server is always followed', () async {
       final server = fakeServer();
