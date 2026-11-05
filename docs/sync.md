@@ -2,7 +2,7 @@
 
 How devices sync, and how a separately developed dictionary app sends content to LinguaSRS. Every account lives on one hosted Cloudflare Worker backed by D1, and data is end-to-end encrypted: the server only stores ciphertext. See issue #2. This also covers the content-import half of #45.
 
-Implemented so far: the Worker (`worker/`), account creation and email confirmation, sign-in, password changes, one-time device pairing, account deletion, and password-derived account keys. Records describes what will sync; building, encrypting, pulling and pushing records is implemented (`SyncEngine`), and applying pulled records to lessons, cards and the rest, and running syncs from the app, are follow-up work.
+Implemented so far: the Worker (`worker/`), account creation and email confirmation, sign-in, password changes, one-time device pairing, account deletion, and password-derived account keys. Records describes what will sync; building, encrypting, pulling, pushing and applying records is implemented (`SyncEngine`, `SyncApplier`), and running syncs from the app is follow-up work.
 
 ## Server address
 
@@ -130,7 +130,7 @@ The dictionary app signs in with the same email and password, like another devic
 
 ## Records
 
-What the app stores on the server, one record per piece of data. Building the records, noticing changes (see Change tracking), encrypting, splitting and decrypting them (`SyncRecordCipher`), and pulling and pushing them (see Sync engine) are implemented. Applying pulled records to the app's data is not yet.
+What the app stores on the server, one record per piece of data. Building the records, noticing changes (see Change tracking), encrypting, splitting and decrypting them (`SyncRecordCipher`), pulling and pushing them (see Sync engine), and applying them to the app's data (see Applying pulled records) are implemented. Nothing in the app runs a sync yet.
 
 ### What syncs
 
@@ -223,6 +223,15 @@ Changes are checked by `AppProvider.trackSyncChanges`. The sync engine calls it 
 5. Applies the pulled records through a `SyncRecordStore`, notes what they now hash to so they are not pushed back, and saves the cursor.
 6. Pushes what is still pending: whole records, or parts followed by their head, deletions as tombstones, and tombstones for parts a record no longer needs.
 
+### Applying pulled records
+
+`SyncApplier` is the reverse of `SyncSnapshot`, and `AppProvider` is the engine's store: it applies a batch, saves only what changed, and updates the screens.
+
+- A word's details (`vocab`) and its cards' progress (`card`) are changed in place, so every lesson with that word and any open study screen see the change. A lesson pulled with new words gets their details and progress from the same batch. A `vocab` or `card` record for a word that no lesson on this device uses is dropped.
+- A pulled lesson keeps this device's Markdown until a `lesson_md` record changes it.
+- Other devices' `activity` records are kept apart from this device's counts (`lingua_srs_sync_remote_activity`). The activity calendar and the rolling 24-hour review limit add them up; the new-card limit already counts every device, because it comes from the cards' first-review dates.
+- Merge history keeps the newest 20 records, as on one device.
+
 ### Write budget
 
 A review writes one `card` record. The engine merges repeated changes to a record into one push, and writes a day's `activity` record once per push rather than once per review. The Worker allows 2,000 record writes per account per day, which covers several hundred reviews a day even when each one is pushed on its own.
@@ -272,6 +281,6 @@ A stored record is changed by an upsert that only applies when the incoming `upd
 
 ## Not covered yet
 
-- Applying pulled records to lessons, cards and the rest of the app's data, running syncs from the app (when to sync, and what Settings shows), and the first sync of a device that already has data.
+- Running syncs from the app (when to sync, and what Settings shows), and the first sync of a device that already has data.
 - Resetting a forgotten password (confirmed by email, which starts a fresh account because the data cannot be decrypted without the old password), and an authenticator-app second factor.
 - Limiting failed sign-ins per address, see above.

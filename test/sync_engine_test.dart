@@ -86,7 +86,10 @@ class MemoryStore implements SyncRecordStore {
   };
 
   @override
-  Future<void> apply(Map<SyncRecordKey, Map<String, dynamic>?> changes) async {
+  Future<void> apply(
+    String deviceId,
+    Map<SyncRecordKey, Map<String, dynamic>?> changes,
+  ) async {
     applyCalls++;
     for (final entry in changes.entries) {
       if (entry.value == null) {

@@ -10,7 +10,11 @@ abstract interface class SyncRecordStore {
   Map<SyncRecordKey, Map<String, dynamic>> snapshot(String deviceId);
 
   /// Applies pulled records: new contents, or null for a deleted record.
-  Future<void> apply(Map<SyncRecordKey, Map<String, dynamic>?> changes);
+  /// [deviceId] is this device's, as in [snapshot].
+  Future<void> apply(
+    String deviceId,
+    Map<SyncRecordKey, Map<String, dynamic>?> changes,
+  );
 }
 
 enum SyncOutcome {
@@ -221,7 +225,7 @@ class SyncEngine {
       changes[key] = remote.data;
     }
 
-    if (changes.isNotEmpty) await store.apply(changes);
+    if (changes.isNotEmpty) await store.apply(tracker.deviceId, changes);
     final after = store.snapshot(tracker.deviceId);
     for (final key in changes.keys) {
       final data = after[key];
