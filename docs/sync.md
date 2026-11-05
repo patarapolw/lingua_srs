@@ -80,12 +80,9 @@ Applied only **when an account is created or the password is changed**, never at
 
 The package's `PasswordRules.nist()` preset supplies the 15-character minimum, 64-character maximum, and common-password blocklist used by Sync.
 
-## Other factors, deliberately not used
+## Other sign-in methods
 
-- **PIN**: only 10^n possibilities, so it is trivial to guess offline from anything derived from it, and easy to watch being typed. It is acceptable only as a local app lock where the device limits attempts. It must never derive the sync or encryption keys.
-- **SMS or email codes**: SMS can be intercepted or taken over by moving the number to another SIM, and an emailed code is only as safe as the mailbox. Neither can produce the data key. Email is used to confirm ownership and to start an account reset.
-- **Biometrics**: not secrets, cannot be changed once leaked, and leaks of fingerprint data have happened. At most they unlock a key kept in the device's own secure storage. The biometric itself is never sent anywhere.
-- **Later**: an authenticator-app (TOTP) code or a passkey as a second factor at the server. It protects the account from being locked or deleted, not the data, which the password already protects.
+Only the email and password sign in and derive the keys. PINs, SMS or email codes and biometrics are not used for either. An authenticator-app code may be added later as a second factor.
 
 ## Creating an account
 
@@ -136,7 +133,7 @@ The dictionary app signs in with the same email and password, like another devic
 
 ## Records
 
-What the app stores on the server, one record per piece of data. This is the design for the sync engine; nothing below is implemented yet.
+What the app stores on the server, one record per piece of data. Building the records and noticing changes is implemented (see Change tracking); encryption, splitting and sending them are not yet.
 
 ### What syncs
 
@@ -201,6 +198,14 @@ The Worker refuses `data` over 32 KB, which leaves about 24 KB of compressed con
 Deleting a lesson, sentence, merge record, discussion or Markdown pushes a tombstone for it, and for its parts.
 
 `vocab` and `card` records are never deleted because a lesson was removed. Whether a word is still used depends on every lesson on every device, and one device deleting the last lesson that it knows of while another imports the word again would lose that word's progress. An unused `vocab` or `card` record costs a few hundred bytes, and it brings the progress back if the word is imported again. Pruning them can come later, once every device is known to be in sync.
+
+### Change tracking
+
+The device notices changes by comparing contents instead of marking each edit, so no edit path can be missed. `SyncSnapshot` builds every record from the app's state, and `SyncChangeTracker` keeps a hash of each one. A record whose hash changed gets `updatedAt` set to the time the change was noticed and becomes pending. A record that is gone becomes a pending deletion, except `vocab` and `card` records. The first run after signing in sees every record as new, which is how data from before sync gets pushed. If the device clock has been set back, the new `updatedAt` is still later than the last one.
+
+The tracker also keeps the pull cursor and a random device id, which names this device's `activity` records. It is stored on the device only (`lingua_srs_sync_state`), never in a backup, and a restore leaves it alone. Signing out forgets the records and the cursor but keeps the device id, so signing in again does not count this device's activity twice. Restoring a backup on a signed-in device is seen as edits: records missing from the backup become deletions.
+
+Changes are checked by `AppProvider.trackSyncChanges`. The sync engine calls it before each sync, and calls after edits come with scheduling (steps 4 and 6 in #2).
 
 ### Write budget
 

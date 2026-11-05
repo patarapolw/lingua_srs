@@ -17,10 +17,15 @@ class BackupService {
   static const _keyPrefix = 'lingua_srs_';
   static const _keyDeepSeekApiKey = 'lingua_srs_deepseek_api_key';
   static const _keySyncPairing = 'lingua_srs_sync_pairing';
+  static const _keySyncState = 'lingua_srs_sync_state';
 
-  /// Secrets that stay on the device: never written to a backup, and left
-  /// alone by a restore.
-  static const _deviceOnlyKeys = {_keyDeepSeekApiKey, _keySyncPairing};
+  /// Secrets and sync state that stay on the device: never written to a
+  /// backup, and left alone by a restore.
+  static const _deviceOnlyKeys = {
+    _keyDeepSeekApiKey,
+    _keySyncPairing,
+    _keySyncState,
+  };
   static const _keyLessonMarkdownIds = 'lingua_srs_lesson_markdown_ids';
   static const _stringPreferenceKeys = {
     'lingua_srs_lessons',

@@ -17,6 +17,7 @@ import '../services/deepseek_service.dart';
 import '../services/srs_service.dart';
 import '../services/storage_service.dart';
 import '../services/sync_pairing.dart';
+import '../services/sync_records.dart';
 import '../services/vocab_ai_service.dart';
 import '../services/yaml_parser_service.dart';
 
@@ -447,8 +448,60 @@ class AppProvider extends ChangeNotifier {
   Future<void> setSyncPairing(SyncPairing? pairing) async {
     await StorageService.saveSyncPairing(pairing);
     _syncPairing = pairing;
+    if (pairing == null) {
+      await _queueSyncTracking(() async {
+        final tracker = await StorageService.loadSyncChangeTracker();
+        tracker.reset();
+        await StorageService.saveSyncChangeTracker(tracker);
+      });
+    }
     notifyListeners();
   }
+
+  Future<void> _syncTracking = Future.value();
+
+  /// Runs [task] after any earlier one, so two never load and save the sync
+  /// state at once.
+  Future<T> _queueSyncTracking<T>(Future<T> Function() task) {
+    final result = _syncTracking.then((_) => task());
+    _syncTracking = result.then<void>((_) {}, onError: (_) {});
+    return result;
+  }
+
+  /// Notes which synced records changed since the last call, and returns
+  /// them. Does nothing while signed out. See "Records" in `docs/sync.md`.
+  Future<List<SyncRecordKey>> trackSyncChanges({DateTime? now}) {
+    if (_syncPairing == null) return Future.value(const []);
+    return _queueSyncTracking(() async {
+      final tracker = await StorageService.loadSyncChangeTracker();
+      final changed = tracker.track(
+        syncSnapshot(tracker.deviceId),
+        now: (now ?? DateTime.now()).millisecondsSinceEpoch,
+      );
+      await StorageService.saveSyncChangeTracker(tracker);
+      return changed;
+    });
+  }
+
+  /// The contents of every synced record, with this device's activity under
+  /// [deviceId].
+  Map<SyncRecordKey, Map<String, dynamic>> syncSnapshot(String deviceId) =>
+      SyncSnapshot.build(
+        lessons: _lessons,
+        sentences: _sentences,
+        mergeHistory: _mergeHistory,
+        aiDiscussions: _aiDiscussions,
+        lessonOrder: _lessonHierarchyOrder,
+        settings: SyncSettings(
+          maxReviews24h: _maxReviews24h,
+          maxNewCards24h: _maxNewCards24h,
+          autoplayAudio: _autoplayAudio,
+          pronunciationOptions: _pronunciationOptions,
+        ),
+        dailyReviewCounts: _dailyReviewCounts,
+        reviewTimestamps: _reviewTimestamps24h,
+        deviceId: deviceId,
+      );
 
   List<AiDiscussionMessage> getAiDiscussion(String discussionId) =>
       List.unmodifiable(_aiDiscussions[discussionId] ?? const []);
