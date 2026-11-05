@@ -103,29 +103,32 @@ void main() {
     expect(tracker.deviceId, deviceId);
   });
 
-  test('keeps the data key in the keychain until the sign-in changes', () async {
-    final provider = await _loadedProvider();
-    await provider.setSyncPairing(_pairing);
-    final key = SyncDataKey(
-      endpoint: _pairing.endpoint,
-      email: _pairing.email,
-      createdAt: 42,
-      key: List<int>.filled(32, 1),
-    );
+  test(
+    'keeps the data key in the keychain until the sign-in changes',
+    () async {
+      final provider = await _loadedProvider();
+      await provider.setSyncPairing(_pairing);
+      final key = SyncDataKey(
+        endpoint: _pairing.endpoint,
+        email: _pairing.email,
+        createdAt: 42,
+        key: List<int>.filled(32, 1),
+      );
 
-    await StorageService.saveSyncDataKey(key);
-    final loaded = await StorageService.loadSyncDataKey();
-    expect(loaded?.key, key.key);
-    expect(loaded?.createdAt, 42);
-    final prefs = await SharedPreferences.getInstance();
-    expect(
-      prefs.getKeys().where((name) => name.contains('data_key')),
-      isEmpty,
-    );
+      await StorageService.saveSyncDataKey(key);
+      final loaded = await StorageService.loadSyncDataKey();
+      expect(loaded?.key, key.key);
+      expect(loaded?.createdAt, 42);
+      final prefs = await SharedPreferences.getInstance();
+      expect(
+        prefs.getKeys().where((name) => name.contains('data_key')),
+        isEmpty,
+      );
 
-    await provider.setSyncPairing(null);
-    expect(await StorageService.loadSyncDataKey(), isNull);
-  });
+      await provider.setSyncPairing(null);
+      expect(await StorageService.loadSyncDataKey(), isNull);
+    },
+  );
 
   test('an unreadable sync state starts again', () async {
     SharedPreferences.setMockInitialValues({_stateKey: 'not json'});

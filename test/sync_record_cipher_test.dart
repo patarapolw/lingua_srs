@@ -21,13 +21,12 @@ String _randomText(int length, int seed) {
   ]);
 }
 
-SyncRecord _withId(SyncRecord record, {String? kind, String? id}) =>
-    SyncRecord(
-      kind: kind ?? record.kind,
-      id: id ?? record.id,
-      updatedAt: record.updatedAt,
-      data: record.data,
-    );
+SyncRecord _withId(SyncRecord record, {String? kind, String? id}) => SyncRecord(
+  kind: kind ?? record.kind,
+  id: id ?? record.id,
+  updatedAt: record.updatedAt,
+  data: record.data,
+);
 
 void main() {
   late SyncRecordCipher cipher;
@@ -94,16 +93,18 @@ void main() {
     });
 
     test('cannot be opened with another data key', () async {
-      final record = (await cipher.encode(_word, {'a': 1}, updatedAt: 1))
-          .single;
+      final record = (await cipher.encode(_word, {
+        'a': 1,
+      }, updatedAt: 1)).single;
       final other = await SyncRecordCipher.create(_otherKey);
 
       await expectLater(other.decode(record), throwsFormatException);
     });
 
     test('cannot be moved to another id or kind', () async {
-      final record = (await cipher.encode(_word, {'a': 1}, updatedAt: 1))
-          .single;
+      final record = (await cipher.encode(_word, {
+        'a': 1,
+      }, updatedAt: 1)).single;
       final otherId = await cipher.recordId(
         const SyncRecordKey('vocab', 'other'),
       );
@@ -119,8 +120,9 @@ void main() {
     });
 
     test('rejects an unknown envelope version', () async {
-      final record = (await cipher.encode(_word, {'a': 1}, updatedAt: 1))
-          .single;
+      final record = (await cipher.encode(_word, {
+        'a': 1,
+      }, updatedAt: 1)).single;
 
       await expectLater(
         cipher.decode(
@@ -246,7 +248,10 @@ void main() {
       ).toJson();
 
       expect(
-        () => SyncDataKey.fromJson({...json, 'key': base64Url.encode([1, 2])}),
+        () => SyncDataKey.fromJson({
+          ...json,
+          'key': base64Url.encode([1, 2]),
+        }),
         throwsFormatException,
       );
     });
