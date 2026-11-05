@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:unorm_dart/unorm_dart.dart' as unorm;
 
@@ -88,16 +90,65 @@ class SyncPairing {
     }
     if (uri.scheme != scheme || uri.host != host) throw notALink;
 
-    final endpointText = uri.queryParameters['endpoint'];
+    final endpointText = _queryValue(uri, 'endpoint');
     final endpoint = endpointText == null ? null : Uri.tryParse(endpointText);
     if (endpointText != null && endpoint == null) {
       throw const FormatException('Sync link has an invalid server address.');
     }
     return SyncPairing(
       endpoint: endpoint,
-      email: uri.queryParameters['email'] ?? '',
-      password: uri.queryParameters['password'] ?? '',
+      email: _queryValue(uri, 'email') ?? '',
+      password: _queryValue(uri, 'password') ?? '',
     );
+  }
+
+  /// The value of the query parameter [name], or null if the link has none.
+  ///
+  /// [Uri.queryParameters] cannot be used: its UTF-8 decoder drops a leading
+  /// byte order mark (U+FEFF), so a password that starts with one would lose
+  /// it when the saved link is read back.
+  static String? _queryValue(Uri uri, String name) {
+    for (final pair in uri.query.split('&')) {
+      final equals = pair.indexOf('=');
+      final key = equals < 0 ? pair : pair.substring(0, equals);
+      if (_decodeQueryValue(key) != name) continue;
+      return equals < 0 ? '' : _decodeQueryValue(pair.substring(equals + 1));
+    }
+    return null;
+  }
+
+  static final _hexByte = RegExp(r'^[0-9a-fA-F]{2}$');
+
+  static String _decodeQueryValue(String raw) {
+    // A leading sentinel byte stops the decoder from treating a U+FEFF at the
+    // start of the text as a byte order mark and dropping it.
+    final bytes = <int>[0x41];
+    var literal = StringBuffer();
+    void flush() {
+      // Literal text is encoded in whole runs so a surrogate pair stays one
+      // character.
+      if (literal.isEmpty) return;
+      bytes.addAll(utf8.encode(literal.toString()));
+      literal = StringBuffer();
+    }
+
+    for (var i = 0; i < raw.length; i++) {
+      final char = raw[i];
+      if (char == '%' &&
+          i + 2 < raw.length &&
+          _hexByte.hasMatch(raw.substring(i + 1, i + 3))) {
+        flush();
+        bytes.add(int.parse(raw.substring(i + 1, i + 3), radix: 16));
+        i += 2;
+      } else if (char == '+') {
+        flush();
+        bytes.add(0x20);
+      } else {
+        literal.write(char);
+      }
+    }
+    flush();
+    return utf8.decode(bytes, allowMalformed: true).substring(1);
   }
 
   Uri toUri() => Uri(

@@ -13,6 +13,8 @@ final _server = Uri.parse('https://sync.example.com');
 /// out (whitespace, `@` and `:`). It is put in NFKC first, because that turns
 /// some characters into spaces (for example the Greek tonos), which are then
 /// ruled out too.
+final _usable = RegExp(r'^[^\s@:]+@[^\s@:]+\.[^\s@:]+$');
+
 String _oddEmail(Random random) {
   final local = SyncPairing.normalizeEmail(
     oddText(random),
@@ -225,10 +227,11 @@ void main() {
         final expected = SyncPairing.normalizeEmail(typed);
         final reason = 'seed $seed, code points ${hex(typed)}';
 
-        // The only way for this to be unusable is to lose the whole name
-        // before the @ (for example a name made of a newline-like character
-        // that trim removes).
-        if (expected.startsWith('@')) {
+        // The pattern is the one the app uses: a name, an @ and a domain with
+        // a dot, none of them holding whitespace, @ or a colon. Trimming can
+        // remove more than the generator expects (for example a name made of
+        // only U+0085), so what is accepted is decided by the normalized text.
+        if (!_usable.hasMatch(expected)) {
           rejected++;
           expect(
             () => SyncPairing(email: typed, password: _password),
@@ -247,6 +250,29 @@ void main() {
         expect(SyncPairing.parse(pairing.link), pairing, reason: reason);
       }
       expect(rejected, lessThan(30));
+    });
+
+    test('a password that starts with a byte order mark is kept', () {
+      for (final password in ['\ufeffsecret', '\ufeff', '\ufeff\ufeffa b']) {
+        final pairing = SyncPairing(email: _email, password: password);
+
+        expect(
+          SyncPairing.parse(pairing.link).password,
+          password,
+          reason: hex(password),
+        );
+      }
+    });
+
+    test('a link written by hand reads encoded and plain characters', () {
+      final parsed = SyncPairing.parse(
+        'linguasrs://sync?email=reader%40example.com'
+        '&password=%EF%BB%BFa+b%20%F0%9F%8E%8E%25&endpoint=https://sync.example.com',
+      );
+
+      expect(parsed.email, 'reader@example.com');
+      expect(parsed.password, '\ufeffa b \u{1F38E}%');
+      expect(parsed.endpoint, Uri.parse(_server.toString()));
     });
 
     test('equivalent spellings of an email are the same account', () {
