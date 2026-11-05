@@ -8,6 +8,7 @@ Flutter app (Dart, `provider` state management). See [README.md](README.md) for 
 - `flutter test`: run all tests (`flutter test test/<file>.dart` for one)
 - `dart format .`: format (the repo formats on save; keep diffs formatted)
 - `flutter analyze`: must stay free of warnings
+- `flutter test integration_test -d macos` (or `-d linux`): keychain and network checks on a real desktop build; CI runs them in `.github/workflows/desktop.yml` when platform code changes
 - `cd worker; npm test`: run the sync Worker tests (run from `worker/`; `npm run typecheck` type-checks it)
 
 ## Conventions
@@ -23,6 +24,7 @@ Flutter app (Dart, `provider` state management). See [README.md](README.md) for 
 - When the lesson syntax changes, update `docs/lesson-format.md`. `test/docs_test.dart` parses its examples and will fail if they break.
 - Keep `README.md` short; put detail in `docs/`.
 - Don't commit machine-specific paths or personal study data.
+- Don't commit secrets. Real values go in the git-ignored `env.json`, `worker/.dev.vars` and `worker/wrangler.jsonc`, or in `wrangler secret put`; commit only the `*.example*` files. GitGuardian scans every PR as a GitHub App, outside `ci.yml`. If it flags a real secret, revoke the secret at its provider; removing it from the branch is not enough.
 - Track bugs and planned work in GitHub Issues, not in the repo. Reference the issue in PRs (e.g. "Fixes #12")
 - In `testWidgets`, wrap real async work (`Future.delayed`, timers, storage I/O) in `tester.runAsync`; the fake-async zone otherwise hangs the test.
 

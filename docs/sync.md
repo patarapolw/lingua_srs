@@ -18,6 +18,16 @@ In VS Code, run the `lingua_srs (sync server)` launch configurations, and use th
 
 The address ends up inside the shipped app, so it is configuration and not a secret; keeping it out of git stops forks and test builds from pointing at the hosted server. A build without it has no Sync section in Settings. `http://` is only accepted for a local Worker (`localhost`, `127.0.0.1`, `10.0.2.2`).
 
+## Where credentials are kept
+
+Sign-in details and the DeepSeek key go in the OS keychain through `flutter_secure_storage`, not in preferences.
+
+- **Linux**: building needs `libsecret-1-dev` (`libsecret-devel` on Fedora), and running needs a Secret Service keyring, such as GNOME Keyring or KWallet, unlocked in the session. A locked or missing keyring does not crash the app.
+- **macOS**: the app uses the login keychain, so it needs no `keychain-access-groups` entitlement and no provisioning profile, and an ad-hoc signed build can store credentials. The sandbox entitlements include `com.apple.security.network.client`, without which every outgoing request fails.
+- **Android, iOS, Windows**: nothing to set up.
+
+`integration_test/platform_test.dart` stores and reads a secret and makes an HTTPS request on a real build. The Desktop workflow runs it on macOS and Linux (with GNOME Keyring under `dbus-run-session`) whenever platform code changes.
+
 ## Accounts
 
 An account is an **email** (its unique identifier, lowercase) and a **password** the user chooses. A device signs in by:

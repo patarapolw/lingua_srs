@@ -9,7 +9,17 @@ abstract interface class SecretStorage {
 class PlatformSecretStorage implements SecretStorage {
   const PlatformSecretStorage();
 
-  static const FlutterSecureStorage _storage = FlutterSecureStorage();
+  /// macOS uses the login keychain, not the data protection keychain. The
+  /// data protection keychain needs the `keychain-access-groups` entitlement,
+  /// which needs a provisioning profile, so an unsigned or ad-hoc signed build
+  /// could not store anything (`errSecMissingEntitlement`).
+  static const MacOsOptions macOsOptions = MacOsOptions(
+    usesDataProtectionKeychain: false,
+  );
+
+  static const FlutterSecureStorage _storage = FlutterSecureStorage(
+    mOptions: macOsOptions,
+  );
 
   @override
   Future<String?> read(String key) => _storage.read(key: key);
