@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -13,6 +14,7 @@ import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'odd_text.dart';
 import 'secret_storage_mock.dart';
 
 const _email = 'reader@example.com';
@@ -134,6 +136,23 @@ void main() {
       SharedPreferences.setMockInitialValues({});
 
       expect(await StorageService.loadSyncPairing(), isNull);
+    });
+
+    test('keeps a password of any characters when saved and loaded', () async {
+      SharedPreferences.setMockInitialValues({});
+      for (var seed = 0; seed < 100; seed++) {
+        final password = oddText(Random(seed));
+        if (password.trim().isEmpty) continue;
+        final saved = SyncPairing(email: _email, password: password);
+
+        await StorageService.saveSyncPairing(saved);
+
+        expect(
+          await StorageService.loadSyncPairing(),
+          saved,
+          reason: 'seed $seed, code points ${hex(password)}',
+        );
+      }
     });
 
     test('a keychain that cannot be read counts as signed out', () async {

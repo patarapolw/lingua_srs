@@ -46,11 +46,17 @@ export function timingSafeEqual(a: string, b: string): boolean {
 
 const EMAIL = /^[^\s@:]+@[^\s@:]+\.[^\s@:]+$/;
 
+/** A lone surrogate: JSON can carry one, but UTF-8 cannot, so it would not be kept. */
+const LONE_SURROGATE = /\p{Surrogate}/u;
+
 /** The email as the account key (trimmed, lowercase), or null if unusable. */
 export function normalizeEmail(value: unknown): string | null {
   if (typeof value !== 'string') return null;
-  const email = value.trim().toLowerCase();
-  return email.length <= 254 && EMAIL.test(email) ? email : null;
+  // Unicode form NFKC and lowercase, so equivalent spellings (full-width
+  // letters, an accent typed as one character or two) are the same account.
+  // The app applies the same steps in the same order.
+  const email = value.trim().normalize('NFKC').toLowerCase().normalize('NFKC');
+  return email.length <= 254 && EMAIL.test(email) && !LONE_SURROGATE.test(email) ? email : null;
 }
 
 /** A key derived on the device, as unpadded base64url. */

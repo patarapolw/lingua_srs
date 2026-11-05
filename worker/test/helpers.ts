@@ -25,8 +25,10 @@ export interface World {
   call(method: string, path: string, options?: { body?: unknown; auth?: string }): Promise<Result>;
 }
 
+/** Basic credentials the way the app builds them: UTF-8, then base64. */
 export function basic(email: string, authKey: string): string {
-  return `Basic ${btoa(`${email}:${authKey}`)}`;
+  const bytes = new TextEncoder().encode(`${email}:${authKey}`);
+  return `Basic ${btoa(String.fromCharCode(...bytes))}`;
 }
 
 export function accountBody(email = EMAIL, authKey = AUTH_KEY) {

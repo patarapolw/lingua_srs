@@ -34,6 +34,8 @@ The link contains no plaintext password. The device encrypts the pairing credent
 
 Before a pairing link signs a device in, the app shows the email and the server and asks. A link can come from anywhere (a message, a web page, a poster with a QR code), and signing in to someone else's account would sync this device's lessons into it. A release build also follows pairing links only to the built-in server, so a link cannot move the device onto another one; debug and profile builds allow a local Worker. A link that carries a password itself is not accepted.
 
+An email or a password can contain any characters, including spaces, emoji and characters from any script. The same text typed on different devices can be different characters (an accent typed as one character or as a letter and a combining mark, full-width letters and digits), and equivalent spellings must give the same account and the same keys. So the email is trimmed, put in Unicode form NFKC, lowercased and put in NFKC again, in the app and in the Worker alike, and the password is put in NFKC before key derivation. The saved password stays exactly as typed, with its spaces, and plain ASCII is unchanged, so accounts with an ASCII password are not affected. The one thing that cannot be kept is half of a surrogate pair (an invalid character with no UTF-8 form), which is refused instead of being silently changed. A text field cannot hold a newline, so one pasted into the password field is dropped. The tests build their awkward characters at random from a seed instead of writing them out, so they cover more than anyone thought of, and a failure can be replayed from its seed.
+
 ## Keys
 
 The password never leaves the device. Everything the server sees is derived from it on the device:

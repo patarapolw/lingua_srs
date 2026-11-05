@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:unorm_dart/unorm_dart.dart' as unorm;
 
 /// The credentials of a sync account: an email and a password.
 ///
@@ -55,12 +56,18 @@ class SyncPairing {
     required String email,
     required String password,
   }) {
-    final normalizedEmail = email.trim().toLowerCase();
-    if (!_emailPattern.hasMatch(normalizedEmail)) {
+    final normalizedEmail = normalizeEmail(email);
+    if (!_emailPattern.hasMatch(normalizedEmail) ||
+        !_isWellFormed(normalizedEmail)) {
       throw const FormatException('Email is missing or invalid.');
     }
     if (password.trim().isEmpty) {
       throw const FormatException('Password is missing.');
+    }
+    if (!_isWellFormed(password)) {
+      throw const FormatException(
+        'Password has characters that cannot be saved.',
+      );
     }
     final server = endpoint ?? _defaultEndpoint;
     if (server == null) {
@@ -105,6 +112,34 @@ class SyncPairing {
 
   /// The legacy credential link format, which contains the password.
   String get link => toUri().toString();
+
+  /// An email as the account knows it: trimmed, in Unicode form NFKC and
+  /// lowercase, so that equivalent spellings (full-width letters, an accent
+  /// typed as one character or two) are the same account. The Worker applies
+  /// the same steps in the same order.
+  static String normalizeEmail(String email) =>
+      unorm.nfkc(unorm.nfkc(email.trim()).toLowerCase());
+
+  /// A Dart string can hold half of a surrogate pair, which has no UTF-8 form,
+  /// so it could not be kept in a link or sent to the server. It is refused
+  /// instead of being silently changed.
+  static bool _isWellFormed(String text) {
+    final units = text.codeUnits;
+    for (var i = 0; i < units.length; i++) {
+      final unit = units[i];
+      if (unit >= 0xD800 && unit <= 0xDBFF) {
+        final paired =
+            i + 1 < units.length &&
+            units[i + 1] >= 0xDC00 &&
+            units[i + 1] <= 0xDFFF;
+        if (!paired) return false;
+        i++;
+      } else if (unit >= 0xDC00 && unit <= 0xDFFF) {
+        return false;
+      }
+    }
+    return true;
+  }
 
   /// Checks and normalizes a server address, throwing [FormatException] if it
   /// cannot be used. Plain http is only accepted for a local Worker.

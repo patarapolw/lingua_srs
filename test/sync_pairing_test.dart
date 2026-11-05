@@ -1,9 +1,27 @@
+import 'dart:math';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lingua_srs/services/sync_pairing.dart';
+
+import 'odd_text.dart';
 
 const _email = 'reader@example.com';
 const _password = 'correct horse battery staple';
 final _server = Uri.parse('https://sync.example.com');
+
+/// An email of random awkward characters, apart from the few the format rules
+/// out (whitespace, `@` and `:`). It is put in NFKC first, because that turns
+/// some characters into spaces (for example the Greek tonos), which are then
+/// ruled out too.
+String _oddEmail(Random random) {
+  final local = SyncPairing.normalizeEmail(
+    oddText(random),
+  ).replaceAll(RegExp(r'[\s@:]'), 'x');
+  final label = SyncPairing.normalizeEmail(
+    oddText(random, maxLength: 8),
+  ).replaceAll(RegExp(r'[\s@:.]'), 'x');
+  return '$local@$label.example';
+}
 
 String _link({
   String? endpoint,
@@ -147,6 +165,133 @@ void main() {
       expect(
         SyncPairing.parse(_link(endpoint: 'http://localhost:8787')).email,
         _email,
+      );
+    });
+
+    test('a password of any characters is kept exactly as typed', () {
+      var blank = 0;
+      for (var seed = 0; seed < 300; seed++) {
+        final password = oddText(Random(seed));
+        final reason = 'seed $seed, code points ${hex(password)}';
+
+        if (password.trim().isEmpty) {
+          blank++;
+          expect(
+            () => SyncPairing(email: _email, password: password),
+            throwsFormatException,
+            reason: reason,
+          );
+          continue;
+        }
+        final pairing = SyncPairing(email: _email, password: password);
+        expect(pairing.password, password, reason: reason);
+        final parsed = SyncPairing.parse(pairing.link);
+        expect(parsed.password, password, reason: reason);
+        expect(parsed, pairing, reason: reason);
+        // Safe to put in a QR code, the clipboard and secure storage.
+        expect(
+          pairing.link.codeUnits.every((unit) => unit < 128),
+          isTrue,
+          reason: reason,
+        );
+      }
+      expect(blank, lessThan(30), reason: 'the generator is mostly blank');
+    });
+
+    test('spaces and other whitespace around a password are kept', () {
+      const padding = [' ', '\t', '\u00a0', '\u3000', '\n', '\r\n'];
+      for (var seed = 0; seed < 100; seed++) {
+        final random = Random(seed);
+        final core = oddText(random, maxLength: 10);
+        if (core.trim().isEmpty) continue;
+        final password =
+            padding[random.nextInt(padding.length)] +
+            core +
+            padding[random.nextInt(padding.length)];
+        final reason = 'seed $seed, code points ${hex(password)}';
+
+        final pairing = SyncPairing(email: _email, password: password);
+
+        expect(pairing.password, password, reason: reason);
+        expect(SyncPairing.parse(pairing.link).password, password);
+      }
+    });
+
+    test('an email of any characters is normalized, once and for all', () {
+      var rejected = 0;
+      for (var seed = 0; seed < 300; seed++) {
+        final email = _oddEmail(Random(seed));
+        final typed = ' $email\t';
+        final expected = SyncPairing.normalizeEmail(typed);
+        final reason = 'seed $seed, code points ${hex(typed)}';
+
+        // The only way for this to be unusable is to lose the whole name
+        // before the @ (for example a name made of a newline-like character
+        // that trim removes).
+        if (expected.startsWith('@')) {
+          rejected++;
+          expect(
+            () => SyncPairing(email: typed, password: _password),
+            throwsFormatException,
+            reason: reason,
+          );
+          continue;
+        }
+        final pairing = SyncPairing(email: typed, password: _password);
+        expect(pairing.email, expected, reason: reason);
+        expect(
+          SyncPairing.normalizeEmail(pairing.email),
+          pairing.email,
+          reason: 'normalizing twice changes it, $reason',
+        );
+        expect(SyncPairing.parse(pairing.link), pairing, reason: reason);
+      }
+      expect(rejected, lessThan(30));
+    });
+
+    test('equivalent spellings of an email are the same account', () {
+      // An accent as one character or as a letter and a combining mark, and
+      // full-width letters, which different keyboards and platforms produce.
+      final spellings = [
+        'caf\u00e9@example.com',
+        'cafe\u0301@example.com',
+        'CAFE\u0301@Example.COM',
+        '\uff43\uff41\uff46\u00e9@example.com',
+        ' caf\u00e9@example.com\n',
+      ];
+
+      final emails = {
+        for (final spelling in spellings)
+          SyncPairing(email: spelling, password: _password).email,
+      };
+
+      expect(emails, {'caf\u00e9@example.com'});
+    });
+
+    test('half of a surrogate pair cannot be kept, so it is refused', () {
+      final high = String.fromCharCode(0xD83D);
+      final low = String.fromCharCode(0xDE00);
+      for (final bad in ['a${high}b', 'a${low}b', 'a$low${high}b', high, low]) {
+        expect(
+          () => SyncPairing(email: _email, password: bad),
+          throwsFormatException,
+          reason: 'password ${hex(bad)}',
+        );
+        expect(
+          () => SyncPairing(email: '$bad@example.com', password: _password),
+          throwsFormatException,
+          reason: 'email ${hex(bad)}',
+        );
+      }
+
+      // Both halves together are one character (an emoji) and are fine.
+      final emoji = 'a$high${low}b';
+      expect(SyncPairing(email: _email, password: emoji).password, emoji);
+      expect(
+        SyncPairing.parse(
+          SyncPairing(email: _email, password: emoji).link,
+        ).password,
+        emoji,
       );
     });
 

@@ -3,6 +3,7 @@ import 'dart:isolate';
 
 import 'package:cryptography_plus/cryptography_plus.dart';
 import 'package:cryptography_plus/dart.dart';
+import 'package:unorm_dart/unorm_dart.dart' as unorm;
 
 class SyncAccountKeys {
   final String authKey;
@@ -26,13 +27,24 @@ class SyncAccountCrypto {
   );
   static final _cipher = AesGcm.with256bits();
 
+  /// The password as key derivation sees it, in Unicode form NFKC.
+  ///
+  /// The same text typed on different devices can be different but equivalent
+  /// characters: an accented letter can be one character or a letter followed
+  /// by a combining mark (macOS and Windows keyboards differ), and full-width
+  /// digits are the same digits. Without this they would give different keys.
+  /// Plain ASCII, which most passwords are, is unchanged, and the saved
+  /// password stays exactly as typed.
+  static String normalizePassword(String password) => unorm.nfkc(password);
+
   static Future<SyncAccountKeys> deriveKeys({
     required String email,
     required String password,
   }) async {
+    final normalizedPassword = normalizePassword(password);
     final master = await Isolate.run(() async {
       final key = await _argon2.deriveKey(
-        secretKey: SecretKey(utf8.encode(password)),
+        secretKey: SecretKey(utf8.encode(normalizedPassword)),
         nonce: utf8.encode('linguasrs:$email'),
       );
       return (await key.extractBytes()).toList();
