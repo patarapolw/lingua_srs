@@ -14,6 +14,7 @@ import '../models/vocab_merge_record.dart';
 import 'secret_storage.dart';
 import 'sync_change_tracker.dart';
 import 'sync_pairing.dart';
+import 'sync_record_cipher.dart';
 
 class StorageService {
   static const String _keyLessons = 'lingua_srs_lessons';
@@ -25,6 +26,7 @@ class StorageService {
   static const String _keyDeepSeekApiKey = 'lingua_srs_deepseek_api_key';
   static const String _keySyncPairing = 'lingua_srs_sync_pairing';
   static const String _keySyncState = 'lingua_srs_sync_state';
+  static const String _keySyncDataKey = 'lingua_srs_sync_data_key';
   static const String _keyVocabMergeHistory = 'lingua_srs_vocab_merge_history';
   static const String _keyAiDiscussions = 'lingua_srs_ai_discussions';
   static const String _keyAutoplay = 'lingua_srs_autoplay';
@@ -84,6 +86,30 @@ class StorageService {
       return SyncPairing.parse(raw);
     } on FormatException {
       return null;
+    }
+  }
+
+  /// The unlocked data key of the account this device is signed in to, from
+  /// the keychain. Null when there is none, or it cannot be read; the sync
+  /// then unlocks it again with the password.
+  static Future<SyncDataKey?> loadSyncDataKey() async {
+    try {
+      final raw = await _secretStorage.read(_keySyncDataKey);
+      if (raw == null || raw.isEmpty) return null;
+      return SyncDataKey.fromJson(
+        Map<String, dynamic>.from(jsonDecode(raw) as Map),
+      );
+    } catch (error) {
+      debugPrint('Could not read the sync data key: $error');
+      return null;
+    }
+  }
+
+  static Future<void> saveSyncDataKey(SyncDataKey? key) async {
+    if (key == null) {
+      await _secretStorage.delete(_keySyncDataKey);
+    } else {
+      await _secretStorage.write(_keySyncDataKey, jsonEncode(key.toJson()));
     }
   }
 

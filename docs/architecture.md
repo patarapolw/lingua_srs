@@ -32,6 +32,7 @@ lingua_srs/
 │   │   ├── sync_password_policy.dart  # New-account and password-change validation
 │   │   ├── sync_records.dart          # The records that sync, built from the app's state
 │   │   ├── sync_change_tracker.dart   # Notices changed records; pending pushes and pull cursor
+│   │   ├── sync_record_cipher.dart    # Encrypts, splits and decrypts records; the unlocked data key
 │   │   ├── secret_storage.dart        # OS-backed secure storage for credentials
 │   │   ├── lesson_ai_prompt.dart      # Prompt, ids and suggestions for lesson AI chats
 │   │   ├── word_ai_prompt.dart        # Prompt for word AI chats, with the current example sentence
