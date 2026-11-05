@@ -6,7 +6,7 @@ Flutter app (Dart, `provider` state management). See [README.md](README.md) for 
 
 - `flutter pub get`: install dependencies
 - `flutter test`: run all tests (`flutter test test/<file>.dart` for one)
-- `dart format .`: format (the repo formats on save; keep diffs formatted)
+- `dart format lib test`: format (the same folders `ci.yml` checks; the repo formats on save)
 - `flutter analyze`: must stay free of warnings
 - `flutter test integration_test -d macos` (or `-d linux`): keychain and network checks on a real desktop build; CI runs them in `.github/workflows/desktop.yml` when platform code changes
 - `cd worker; npm test`: run the sync Worker tests (run from `worker/`; `npm run typecheck` type-checks it)
@@ -20,7 +20,7 @@ Flutter app (Dart, `provider` state management). See [README.md](README.md) for 
 
 ## Rules
 
-- Run `dart format .` before every commit and commit everything it changes, including files you didn't edit. Cloud agents often can't run the formatter, so unformatted code can reach `main`; the next local commit cleans it up.
+- Run `dart format lib test` before every commit and commit everything it changes, including files you didn't edit. Cloud agents often can't run the formatter, so unformatted code can reach `main`; the next local commit cleans it up.
 - Every behavior change or bug fix needs a test in `test/`.
 - When the lesson syntax changes, update `docs/lesson-format.md`. `test/docs_test.dart` parses its examples and will fail if they break.
 - Keep `README.md` short; put detail in `docs/`.
