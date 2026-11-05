@@ -13,6 +13,8 @@ import 'package:lingua_srs/widgets/markdown_content.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'secret_storage_mock.dart';
+
 /// Records what the buttons ask to play, without touching audio plugins.
 class _RecordingAudio extends ChangeNotifier implements AudioService {
   final spoken = <String>[];
@@ -41,6 +43,7 @@ const _ttsLabel = 'Korean TTS text (optional)';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(setUpSecretStorage);
 
   Widget harness(_RecordingAudio audio, Widget child) =>
       ChangeNotifierProvider<AudioService>.value(

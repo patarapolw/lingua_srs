@@ -13,8 +13,11 @@ import 'package:lingua_srs/views/lesson_list_view.dart';
 import 'package:lingua_srs/views/study_view.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'secret_storage_mock.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(setUpSecretStorage);
   final storageDirectory = Directory.systemTemp.createTempSync(
     'lingua_srs_new_vs_due_test_',
   );

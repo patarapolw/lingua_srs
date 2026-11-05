@@ -1,0 +1,3 @@
+# Copy to .dev.vars (git-ignored) for `npm run dev`.
+# Prints confirmation codes to the console instead of sending email.
+DEV_LOG_EMAILS=true

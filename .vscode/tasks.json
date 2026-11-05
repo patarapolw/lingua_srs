@@ -18,6 +18,48 @@
             "dependsOn": ["Flutter: build debug apk", "Flutter: adb reinstall (keep data)"],
             "dependsOrder": "sequence",
             "problemMatcher": []
+        },
+        {
+            "label": "Flutter: build debug apk (sync server)",
+            "type": "shell",
+            "command": "flutter build apk --debug --dart-define-from-file=env.json",
+            "problemMatcher": []
+        },
+        {
+            "label": "Flutter: debug update with sync server (keep data)",
+            "dependsOn": ["Flutter: build debug apk (sync server)", "Flutter: adb reinstall (keep data)"],
+            "dependsOrder": "sequence",
+            "problemMatcher": []
+        },
+        {
+            "label": "Worker: test",
+            "type": "shell",
+            "command": "npm test",
+            "options": { "cwd": "${workspaceFolder}/worker" },
+            "group": "test",
+            "problemMatcher": []
+        },
+        {
+            "label": "Worker: dev server (local, codes printed to the console)",
+            "type": "shell",
+            "command": "npm run dev",
+            "options": { "cwd": "${workspaceFolder}/worker" },
+            "isBackground": true,
+            "problemMatcher": []
+        },
+        {
+            "label": "Worker: apply migrations (remote database)",
+            "type": "shell",
+            "command": "npm run migrate",
+            "options": { "cwd": "${workspaceFolder}/worker" },
+            "problemMatcher": []
+        },
+        {
+            "label": "Worker: deploy",
+            "type": "shell",
+            "command": "npm run deploy",
+            "options": { "cwd": "${workspaceFolder}/worker" },
+            "problemMatcher": []
         }
     ]
 }

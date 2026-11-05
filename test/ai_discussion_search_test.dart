@@ -13,6 +13,8 @@ import 'package:lingua_srs/services/lesson_ai_prompt.dart';
 import 'package:lingua_srs/services/storage_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'secret_storage_mock.dart';
+
 final _base = DateTime(2026, 1, 10, 12);
 
 AiDiscussionMessage _msg(String role, String content, {int? minutes}) =>
@@ -54,6 +56,7 @@ List<String> _ids(Iterable<AiDiscussionSummary> talks) => [
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(setUpSecretStorage);
   final storageDirectory = Directory.systemTemp.createTempSync(
     'lingua_srs_ai_discussion_test_',
   );

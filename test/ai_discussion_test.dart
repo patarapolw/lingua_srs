@@ -8,8 +8,11 @@ import 'package:lingua_srs/services/deepseek_service.dart';
 import 'package:lingua_srs/services/storage_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'secret_storage_mock.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(setUpSecretStorage);
 
   group('DeepSeek discussions', () {
     test('streams saved conversation context from DeepSeek', () async {

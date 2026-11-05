@@ -11,6 +11,8 @@ import '../models/sentence.dart';
 import '../models/shared_vocab.dart';
 import '../models/vocab_item.dart';
 import '../models/vocab_merge_record.dart';
+import 'secret_storage.dart';
+import 'sync_pairing.dart';
 
 class StorageService {
   static const String _keyLessons = 'lingua_srs_lessons';
@@ -20,6 +22,7 @@ class StorageService {
   static const String _keySentences = 'lingua_srs_sentences';
   static const String _keySharedVocab = 'lingua_srs_shared_vocab';
   static const String _keyDeepSeekApiKey = 'lingua_srs_deepseek_api_key';
+  static const String _keySyncPairing = 'lingua_srs_sync_pairing';
   static const String _keyVocabMergeHistory = 'lingua_srs_vocab_merge_history';
   static const String _keyAiDiscussions = 'lingua_srs_ai_discussions';
   static const String _keyAutoplay = 'lingua_srs_autoplay';
@@ -41,6 +44,12 @@ class StorageService {
   static const int defaultMaxNewCards24h = 10;
   static final Map<String, String> _lessonMarkdownCache = {};
   static Set<String> _storedLessonMarkdownIds = {};
+  static SecretStorage _secretStorage = const PlatformSecretStorage();
+
+  @visibleForTesting
+  static set secretStorageForTesting(SecretStorage? storage) {
+    _secretStorage = storage ?? const PlatformSecretStorage();
+  }
 
   static void resetLessonMarkdownCache() {
     _lessonMarkdownCache.clear();
@@ -49,17 +58,74 @@ class StorageService {
 
   static Future<String> loadDeepSeekApiKey() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_keyDeepSeekApiKey) ?? '';
+    return (await _loadSecret(prefs, _keyDeepSeekApiKey)) ?? '';
   }
 
   static Future<void> saveDeepSeekApiKey(String apiKey) async {
     final prefs = await SharedPreferences.getInstance();
     final trimmedApiKey = apiKey.trim();
     if (trimmedApiKey.isEmpty) {
-      await prefs.remove(_keyDeepSeekApiKey);
+      await _secretStorage.delete(_keyDeepSeekApiKey);
     } else {
-      await prefs.setString(_keyDeepSeekApiKey, trimmedApiKey);
+      await _secretStorage.write(_keyDeepSeekApiKey, trimmedApiKey);
     }
+    await prefs.remove(_keyDeepSeekApiKey);
+  }
+
+  /// The sync account this device is signed in to, or null when signed out or
+  /// the stored link can no longer be read.
+  static Future<SyncPairing?> loadSyncPairing() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = await _loadSecret(prefs, _keySyncPairing);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      return SyncPairing.parse(raw);
+    } on FormatException {
+      return null;
+    }
+  }
+
+  static Future<void> saveSyncPairing(SyncPairing? pairing) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (pairing == null) {
+      await _secretStorage.delete(_keySyncPairing);
+    } else {
+      await _secretStorage.write(_keySyncPairing, pairing.link);
+    }
+    await prefs.remove(_keySyncPairing);
+  }
+
+  static Future<String?> _loadSecret(
+    SharedPreferences prefs,
+    String key,
+  ) async {
+    final String? value;
+    try {
+      value = await _secretStorage.read(key);
+    } catch (error) {
+      // For example a locked or missing keyring on Linux. Starting without the
+      // secret is better than not starting, and anything still in preferences
+      // is left for the next start.
+      debugPrint('Could not read $key from secure storage: $error');
+      return null;
+    }
+    if (value != null) {
+      await prefs.remove(key);
+      return value;
+    }
+
+    final legacyValue = prefs.getString(key);
+    if (legacyValue == null) return null;
+    if (legacyValue.isNotEmpty) {
+      try {
+        await _secretStorage.write(key, legacyValue);
+      } catch (error) {
+        debugPrint('Could not move $key to secure storage: $error');
+        return legacyValue; // keep it in preferences until that works
+      }
+    }
+    await prefs.remove(key);
+    return legacyValue;
   }
 
   static Future<List<VocabMergeRecord>> loadMergeHistory() async {

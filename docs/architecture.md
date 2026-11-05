@@ -4,6 +4,7 @@ Overview of the source layout. Lesson file syntax lives in [lesson-format.md](le
 
 ```
 lingua_srs/
+├── worker/                            # Cloudflare Worker (D1) for sync; see sync.md
 ├── lib/
 │   ├── main.dart                      # App entry point, MultiProvider, adaptive theming
 │   ├── models/
@@ -23,6 +24,13 @@ lingua_srs/
 │   │   ├── image_cache_service.dart   # Disk cache for online images in Markdown
 │   │   ├── deepseek_service.dart      # DeepSeek chat client for quiz discussions
 │   │   ├── backup_service.dart        # Versioned local data backup and restore
+│   │   ├── sync_pairing.dart          # Sync account (email and password) and its `linguasrs://sync` sign-in link
+│   │   ├── sync_client.dart           # Cloudflare Worker sync and dictionary inbox client
+│   │   ├── sync_error_text.dart       # Plain messages for failed sync requests
+│   │   ├── sync_account_crypto.dart   # Password-derived sync keys and wrapped data key
+│   │   ├── sync_account_service.dart  # Sync account creation, confirmation and password changes
+│   │   ├── sync_password_policy.dart  # New-account and password-change validation
+│   │   ├── secret_storage.dart        # OS-backed secure storage for credentials
 │   │   ├── lesson_ai_prompt.dart      # Prompt, ids and suggestions for lesson AI chats
 │   │   ├── word_ai_prompt.dart        # Prompt for word AI chats, with the current example sentence
 │   │   ├── ai_question_suggestions.dart # Fixed and AI-suggested questions offered in AI chats, per language
@@ -54,7 +62,8 @@ lingua_srs/
 │   │   ├── similar_meanings_dialog.dart # Review AI-suggested hints for similar words
 │   │   ├── similar_search_dialog.dart # Search similar English meanings to write a front hint
 │   │   ├── vocab_merge_dialogs.dart   # Manual and AI merge flows, merge history and undo
-│   │   └── settings_dialog.dart       # Theme, autoplay, review limits, backup and DeepSeek key
+│   │   ├── pairing_confirmation.dart  # Asks before a pairing link signs this device in
+│   │   └── settings_dialog.dart       # Theme, autoplay, review limits, backup, AI key and sync
 │   └── widgets/
 │       ├── adaptive_scaffold.dart     # Responsive layout (Rail vs BottomNav)
 │       ├── ai_discussion_suggestion_tile.dart # One suggested AI discussion and why

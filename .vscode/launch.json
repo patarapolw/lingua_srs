@@ -23,6 +23,28 @@
             "type": "dart",
             "flutterMode": "release"
         },
+        // The next three pass the sync server address from env.json (copy
+        // env.example.json). Without it the app has no Sync section.
+        {
+            "name": "lingua_srs (sync server)",
+            "request": "launch",
+            "type": "dart",
+            "toolArgs": ["--dart-define-from-file=env.json"]
+        },
+        {
+            "name": "lingua_srs (sync server, profile mode)",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "profile",
+            "toolArgs": ["--dart-define-from-file=env.json"]
+        },
+        {
+            "name": "lingua_srs (sync server, release mode)",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "release",
+            "toolArgs": ["--dart-define-from-file=env.json"]
+        },
         {
             "name": "lingua_srs (attach)",
             "type": "dart",

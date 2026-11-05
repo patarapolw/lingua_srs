@@ -16,7 +16,9 @@ migrate_working_dir/
 *.iml
 *.ipr
 *.iws
-.idea/
+# Ignore the rest of .idea, but share the run configurations.
+.idea/*
+!.idea/runConfigurations/
 
 # The .vscode folder contains launch configuration and tasks you configure in
 # VS Code which you may wish to be included in version control, so this line
@@ -57,3 +59,12 @@ app.*.map.json
 
 # Remove any build output, including Android build
 **/build/
+
+# Local build settings (copy env.example.json); never commit
+/env.json
+
+# Sync Worker: dependencies, local state and your real deployment settings
+/worker/node_modules/
+/worker/.wrangler/
+/worker/.dev.vars
+/worker/wrangler.jsonc

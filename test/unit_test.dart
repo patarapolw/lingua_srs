@@ -19,8 +19,11 @@ import 'package:lingua_srs/services/srs_service.dart';
 import 'package:lingua_srs/services/storage_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'secret_storage_mock.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(setUpSecretStorage);
   final markdownStorageDirectory = Directory.systemTemp.createTempSync(
     'lingua_srs_markdown_test_',
   );
