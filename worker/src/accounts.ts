@@ -177,11 +177,20 @@ export async function confirmAccount(request: Request, env: Env, deps: Deps): Pr
 }
 
 export async function getAccount(email: string, env: Env): Promise<Response> {
-  const row = await env.DB.prepare('SELECT wrapped_data_key, kdf FROM accounts WHERE email = ?1')
+  const row = await env.DB.prepare(
+    'SELECT wrapped_data_key, kdf, created_at FROM accounts WHERE email = ?1',
+  )
     .bind(email)
-    .first<{ wrapped_data_key: string; kdf: string }>();
+    .first<{ wrapped_data_key: string; kdf: string; created_at: number }>();
   if (!row) throw new HttpError(404, 'not_found');
-  return json({ wrappedDataKey: row.wrapped_data_key, kdf: JSON.parse(row.kdf) });
+  // createdAt identifies this account: signing in is deterministic, so a
+  // deleted account re-created with the same email and password accepts the
+  // old credentials, and devices tell the two apart by this value.
+  return json({
+    wrappedDataKey: row.wrapped_data_key,
+    kdf: JSON.parse(row.kdf),
+    createdAt: row.created_at,
+  });
 }
 
 /** Changes the password: a new auth key, and the data key wrapped by the new password. */

@@ -35,9 +35,11 @@ Flutter app (Dart, `provider` state management). See [README.md](README.md) for 
 
 ## Environments without Flutter/Dart (e.g. cloud agents)
 
-If `flutter` or `dart` isn't available, you can't run tests, `flutter analyze`, or `dart format`, and the CI workflow needs manual approval to run. In that case:
+If `flutter` or `dart` isn't available, you can't run tests or `flutter analyze`, and the CI workflow needs manual approval to run. In that case:
 
-- Hand-format to Dart style: 2-space indent, trailing commas on multi-line argument lists and collections, lines ≤ 80 columns.
+- Formatting does not need Flutter. Install the Dart SDK from conda-forge (`dart-sdk`, any version meeting the `sdk:` constraint in `pubspec.yaml`), e.g. `micromamba create -y -p "$HOME/.dart-env" -c conda-forge dart-sdk`, then run `"$HOME/.dart-env/bin/dart" format lib test` before committing. Do not run `dart analyze` or `dart test` with it: the app depends on Flutter, which conda-forge does not have.
+- If the Dart SDK can't be installed either, hand-format to Dart style: 2-space indent, trailing commas on multi-line argument lists and collections, lines ≤ 80 columns, and expect `dart format` to change something.
 - Still add or update tests in `test/`, written carefully since they can't be run.
 - Keep changes small and focused so they are easy to fix locally.
 - State in the PR description that tests, analyze and format were not run.
+- Before opening a PR, tell the person what to fetch and run locally first (the commands from `ci.yml` that could not run here, scoped to the changed files where possible), so the PR does not trigger a failing CI. Also list any step that needs a manual check outside CI (for example deploying the Worker, applying a migration, or trying a change in the running app), or say that none does. Open the PR only after they confirm.

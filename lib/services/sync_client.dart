@@ -170,15 +170,26 @@ class SyncClient {
     );
   }
 
-  Future<({String wrappedDataKey, Map<String, dynamic> kdf})>
+  /// The account's wrapped data key and key derivation settings, and
+  /// `createdAt`, which identifies the account. Signing in is deterministic,
+  /// so an account deleted and created again with the same email and
+  /// password accepts the old credentials; only `createdAt` changes. It is
+  /// null from a Worker that predates it.
+  Future<({String wrappedDataKey, Map<String, dynamic> kdf, int? createdAt})>
   getAccount() async {
     final json = _object(await _send('GET', ['account']));
     final wrappedDataKey = json['wrappedDataKey'];
     final kdf = json['kdf'];
-    if (wrappedDataKey is! String || kdf is! Map) throw _invalid();
+    final createdAt = json['createdAt'];
+    if (wrappedDataKey is! String ||
+        kdf is! Map ||
+        (createdAt != null && createdAt is! int)) {
+      throw _invalid();
+    }
     return (
       wrappedDataKey: wrappedDataKey,
       kdf: Map<String, dynamic>.from(kdf),
+      createdAt: createdAt as int?,
     );
   }
 

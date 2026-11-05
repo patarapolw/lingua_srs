@@ -91,6 +91,7 @@ void main() {
                 ? _json({
                     'wrappedDataKey': 'old-wrapped-key',
                     'kdf': {'alg': 'argon2id'},
+                    'createdAt': 1762171200000,
                   })
                 : _json({'status': 'ok'});
           }),
@@ -105,6 +106,7 @@ void main() {
 
         expect(account.wrappedDataKey, 'old-wrapped-key');
         expect(account.kdf['alg'], 'argon2id');
+        expect(account.createdAt, 1762171200000);
         expect(requests.map((request) => request.method), ['GET', 'PUT']);
         expect(
           requests.every(
@@ -119,6 +121,38 @@ void main() {
         });
       },
     );
+  });
+
+  group('SyncClient.getAccount createdAt', () {
+    test('is null from a Worker that does not send it', () async {
+      final client = _syncClient(
+        client: MockClient(
+          (request) async => _json({
+            'wrappedDataKey': 'wrapped-key',
+            'kdf': {'alg': 'argon2id'},
+          }),
+        ),
+      );
+
+      final account = await client.getAccount();
+
+      expect(account.wrappedDataKey, 'wrapped-key');
+      expect(account.createdAt, isNull);
+    });
+
+    test('rejects a createdAt that is not a whole number', () async {
+      final client = _syncClient(
+        client: MockClient(
+          (request) async => _json({
+            'wrappedDataKey': 'wrapped-key',
+            'kdf': {'alg': 'argon2id'},
+            'createdAt': '2026-11-03',
+          }),
+        ),
+      );
+
+      await expectLater(client.getAccount(), throwsA(isA<SyncException>()));
+    });
   });
 
   group('SyncClient.pull', () {
