@@ -9,6 +9,7 @@ import 'sync_account_crypto.dart';
 import 'sync_client.dart';
 import 'sync_pairing.dart';
 import 'sync_password_policy.dart';
+import 'sync_record_cipher.dart';
 
 class SyncAccountService {
   final http.Client Function() _clientFactory;
@@ -76,6 +77,36 @@ class SyncAccountService {
     final client = _client(pairing, keys.authKey);
     try {
       await client.getAccount();
+    } finally {
+      client.close();
+    }
+  }
+
+  /// Downloads the account's wrapped data key and unlocks it with the
+  /// password, for encrypting records. Also returns the account's `createdAt`,
+  /// which identifies it.
+  Future<SyncDataKey> unlockDataKey(SyncPairing pairing) async {
+    final keys = await SyncAccountCrypto.deriveKeys(
+      email: pairing.email,
+      password: pairing.password,
+    );
+    final client = _client(pairing, keys.authKey);
+    try {
+      final account = await client.getAccount();
+      if (!_supportsKdf(account.kdf)) {
+        throw const FormatException(
+          'This account uses an unsupported key derivation format.',
+        );
+      }
+      return SyncDataKey(
+        endpoint: pairing.endpoint,
+        email: pairing.email,
+        createdAt: account.createdAt,
+        key: await SyncAccountCrypto.unwrapDataKey(
+          wrappedDataKey: account.wrappedDataKey,
+          wrapKey: keys.wrapKey,
+        ),
+      );
     } finally {
       client.close();
     }

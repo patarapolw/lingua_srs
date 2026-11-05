@@ -164,6 +164,66 @@ void main() {
     );
   });
 
+  test('unlocks the data key and returns the account identity', () async {
+    final dataKey = List<int>.generate(32, (i) => i * 3);
+    final keys = await SyncAccountCrypto.deriveKeys(
+      email: _email,
+      password: _password,
+    );
+    final wrappedDataKey = await SyncAccountCrypto.wrapDataKey(
+      dataKey: dataKey,
+      wrapKey: keys.wrapKey,
+    );
+    final requests = <http.Request>[];
+    final service = SyncAccountService(
+      clientFactory: () => MockClient((request) async {
+        requests.add(request);
+        return _json({
+          'wrappedDataKey': wrappedDataKey,
+          'kdf': SyncAccountCrypto.kdf,
+          'createdAt': 1762171200000,
+        });
+      }),
+    );
+
+    final unlocked = await service.unlockDataKey(
+      SyncPairing(email: _email, password: _password),
+    );
+
+    expect(unlocked.key, dataKey);
+    expect(unlocked.createdAt, 1762171200000);
+    expect(unlocked.email, _email);
+    expect(unlocked.endpoint, _endpoint);
+    expect(requests.single.method, 'GET');
+    expect(requests.single.url.path, '/v1/account');
+  });
+
+  test('refuses to unlock a data key with the wrong password', () async {
+    final keys = await SyncAccountCrypto.deriveKeys(
+      email: _email,
+      password: _password,
+    );
+    final wrappedDataKey = await SyncAccountCrypto.wrapDataKey(
+      dataKey: List<int>.filled(32, 7),
+      wrapKey: keys.wrapKey,
+    );
+    final service = SyncAccountService(
+      clientFactory: () => MockClient(
+        (request) async => _json({
+          'wrappedDataKey': wrappedDataKey,
+          'kdf': SyncAccountCrypto.kdf,
+        }),
+      ),
+    );
+
+    await expectLater(
+      service.unlockDataKey(
+        SyncPairing(email: _email, password: 'a-different-test-password'),
+      ),
+      throwsFormatException,
+    );
+  });
+
   test('creates an encrypted one-time pairing link and redeems it', () async {
     final pairing = SyncPairing(email: _email, password: _password);
     String? encryptedPayload;

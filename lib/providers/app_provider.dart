@@ -447,6 +447,12 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> setSyncPairing(SyncPairing? pairing) async {
     await StorageService.saveSyncPairing(pairing);
+    // Unlocked again for the new sign-in, so a key never outlives its account.
+    try {
+      await StorageService.saveSyncDataKey(null);
+    } catch (error) {
+      debugPrint('Could not remove the sync data key: $error');
+    }
     _syncPairing = pairing;
     if (pairing == null) {
       await _queueSyncTracking(() async {

@@ -2,7 +2,7 @@
 
 How devices sync, and how a separately developed dictionary app sends content to LinguaSRS. Every account lives on one hosted Cloudflare Worker backed by D1, and data is end-to-end encrypted: the server only stores ciphertext. See issue #2. This also covers the content-import half of #45.
 
-Implemented so far: the Worker (`worker/`), account creation and email confirmation, sign-in, password changes, one-time device pairing, account deletion, and password-derived account keys. Records describes what will sync; record encryption and the sync engine are follow-up work.
+Implemented so far: the Worker (`worker/`), account creation and email confirmation, sign-in, password changes, one-time device pairing, account deletion, and password-derived account keys. Records describes what will sync; building, encrypting and decrypting records is implemented, and the sync engine that sends them is follow-up work.
 
 ## Server address
 
@@ -20,7 +20,7 @@ The address ends up inside the shipped app, so it is configuration and not a sec
 
 ## Where credentials are kept
 
-Sign-in details and the DeepSeek key go in the OS keychain through `flutter_secure_storage`, not in preferences.
+Sign-in details, the account's unlocked data key and the DeepSeek key go in the OS keychain through `flutter_secure_storage`, not in preferences.
 
 - **Linux**: building needs `libsecret-1-dev` (`libsecret-devel` on Fedora), and running needs a Secret Service keyring, such as GNOME Keyring or KWallet, unlocked in the session. A locked or missing keyring does not crash the app.
 - **macOS**: the app uses the login keychain, so it needs no `keychain-access-groups` entitlement and no provisioning profile, and an ad-hoc signed build can store credentials. The sandbox entitlements include `com.apple.security.network.client`, without which every outgoing request fails.
@@ -130,7 +130,7 @@ The dictionary app signs in with the same email and password, like another devic
 
 ## Records
 
-What the app stores on the server, one record per piece of data. Building the records and noticing changes is implemented (see Change tracking); encryption, splitting and sending them are not yet.
+What the app stores on the server, one record per piece of data. Building the records, noticing changes (see Change tracking), and encrypting, splitting and decrypting them (`SyncRecordCipher`) are implemented; sending them is not yet.
 
 ### What syncs
 
@@ -181,11 +181,15 @@ The ciphertext is `AES-256-GCM(dataKey, gzip(JSON))`, with a random 96-bit nonce
 
 A device that pulls a record with a `schema` newer than it understands keeps the record as it came and does not overwrite it, and asks for the app to be updated. Otherwise an old version would push back a record with the fields it does not know dropped.
 
+### The data key on the device
+
+A device unlocks the data key once per sign-in: it derives the keys from the password, downloads the wrapped key with `GET /account`, and unwraps it. The unlocked key is kept in the keychain with the server, the email and the account's `createdAt`, so a sync does not derive keys from the password every time. Signing in, signing out or changing the sign-in removes it, so it is unlocked again for the new sign-in.
+
 ### Large records
 
 The Worker refuses `data` over 32 KB, which leaves about 24 KB of compressed content, roughly 80–100 KB of Markdown or JSON. Lesson Markdown, a long discussion, or a lesson with several hundred words can be bigger. Such a record is split:
 
-- Parts are stored as records of the same kind, with local ids `<localId>#1`, `<localId>#2` and so on, each holding a slice of the compressed bytes.
+- Parts are stored as records of the same kind, with local ids made of the record's local id, a NUL character and the part number from 1. No id contains NUL, so a part cannot have the same id as another record. Each part holds a slice of up to 16 KB of the compressed bytes.
 - The record itself then holds `parts` (the count) and `sha256` (of the whole compressed content) instead of the contents.
 - Parts are pushed before the record that lists them. A device assembles the content only when every part is present and the hash matches; until then it keeps its own copy.
 - Parts that are no longer needed (after the content shrinks) are deleted.
