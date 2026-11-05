@@ -1077,6 +1077,7 @@ class _StudyViewState extends State<StudyView> {
     final item = _queue[_currentIndex];
     final simplified = item.vocab.simplified;
     final traditional = item.vocab.traditional;
+    final hanja = item.vocab.hanja;
     final isTargetToNative = item.isTargetToNative;
     final total = distinctCardCount(_queue);
     final currentNumber = distinctProgress(_queue, _currentIndex);
@@ -1601,13 +1602,16 @@ class _StudyViewState extends State<StudyView> {
                                             textAlign: TextAlign.center,
                                           ),
                                         if (simplified.isNotEmpty ||
-                                            traditional.isNotEmpty)
+                                            traditional.isNotEmpty ||
+                                            hanja.isNotEmpty)
                                           Text(
                                             [
                                               if (simplified.isNotEmpty)
                                                 'Simplified: $simplified',
                                               if (traditional.isNotEmpty)
                                                 'Traditional: $traditional',
+                                              if (hanja.isNotEmpty)
+                                                'Hanja: $hanja',
                                             ].join(' · '),
                                             style: theme.textTheme.bodyMedium,
                                             textAlign: TextAlign.center,

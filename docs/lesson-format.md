@@ -45,10 +45,12 @@ vocabulary:
 Each entry needs a target-language field (such as `ko`) and a translation field
 (such as `en`). `ko_text`, `audio`, `notes`, `disambiguation`, `id` and
 `examples` are optional. For Mandarin vocabulary, `pinyin` (or `reading`),
-`simplified` and `traditional` are also optional.
+`simplified` and `traditional` are also optional. For Korean vocabulary,
+`hanja` is optional.
 
 `pinyin` (or `reading`) provides the reading shown on the answer side of a
 study card. `simplified` and `traditional` can record both character forms.
+`hanja` records a Korean word's Hanja form and is shown on the answer side.
 
 ```yaml
 target: zh-CN
@@ -58,6 +60,17 @@ vocabulary:
       pinyin: xuésheng
       simplified: 学生
       traditional: 學生
+      en: student
+```
+
+For Korean vocabulary, `hanja` records the corresponding Hanja characters:
+
+```yaml
+target: ko
+vocabulary:
+  nouns:
+    - ko: 학생
+      hanja: 學生
       en: student
 ```
 

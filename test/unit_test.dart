@@ -64,6 +64,26 @@ vocabulary:
       expect(restored.traditional, vocab.traditional);
     });
 
+    test('parses and serializes Korean Hanja forms', () {
+      final parsed = YamlParserService.parseLessonYaml('''
+target: ko
+vocabulary:
+  nouns:
+    - ko: 학생
+      hanja: 學生
+      en: student
+''');
+      final lesson = parsed.lesson;
+      final vocab = lesson.vocabularies.single;
+
+      expect(lesson.targetLanguage, 'ko');
+      expect(vocab.targetWord, '학생');
+      expect(vocab.hanja, '學生');
+
+      final restored = VocabItem.fromJson(vocab.toJson());
+      expect(restored.hanja, vocab.hanja);
+    });
+
     const sampleYaml = '''
 Lesson: Unit 2::Lesson 26
 
@@ -753,6 +773,7 @@ vocabulary:
                 VocabItem(
                   targetWord: '목적지',
                   translation: 'destination',
+                  hanja: '舊',
                   pos: 'nouns',
                   sentenceIds: ['old-sentence'],
                   cardTargetToNative: SrsCard(
@@ -798,6 +819,7 @@ vocabulary:
 vocabulary:
   nouns:
     - ko: 목적지
+      hanja: 目的地
       audio: https://example.com/Lesson26v6.mp3
       en: destination
       examples:
@@ -819,6 +841,7 @@ vocabulary:
         final refreshedVocab = imported.vocabularies.firstWhere(
           (vocab) => vocab.targetWord == '목적지',
         );
+        expect(refreshedVocab.hanja, '目的地');
         final customVocab = imported.vocabularies.firstWhere(
           (vocab) => vocab.targetWord == '사용자 단어',
         );

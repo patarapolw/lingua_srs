@@ -94,6 +94,30 @@ void main() {
     expect(vocab.traditional, '學生');
   });
 
+  test('exports Korean Hanja forms', () {
+    final lesson = Lesson(
+      title: 'Korean',
+      targetLanguage: 'ko',
+      vocabularies: [
+        VocabItem(
+          targetWord: '학생',
+          translation: 'student',
+          hanja: '學生',
+          pos: 'nouns',
+        ),
+      ],
+    );
+
+    final files = MarkdownArchiveService.readMarkdownFiles(
+      LessonExportService.createZip([lesson], const []),
+    );
+    final parsed = YamlParserService.parseLessonYaml(files.single.contents);
+    final vocab = parsed.lesson.vocabularies.single;
+
+    expect(vocab.targetWord, '학생');
+    expect(vocab.hanja, '學生');
+  });
+
   test('sanitizes archive paths and disambiguates duplicate lesson names', () {
     final lessons = [
       Lesson(id: 'first', title: '../Same'),

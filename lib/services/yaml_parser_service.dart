@@ -149,6 +149,7 @@ class YamlParserService {
         String reading = '';
         String simplified = '';
         String traditional = '';
+        String hanja = '';
         String? vocabId;
         String? vocabAudio;
         String? ttsText;
@@ -199,6 +200,8 @@ class YamlParserService {
             simplified = fVal;
           } else if (fKey == 'traditional' && traditional.isEmpty) {
             traditional = fVal;
+          } else if (fKey == 'hanja' && hanja.isEmpty) {
+            hanja = fVal;
           } else if (_isTtsKey(fKey) && fVal.isNotEmpty) {
             ttsText = fVal; // e.g. ko_text: alternate text for TTS
           }
@@ -271,6 +274,7 @@ class YamlParserService {
             reading: reading,
             simplified: simplified,
             traditional: traditional,
+            hanja: hanja,
             pos: sectionPath.last,
             sectionPath: sectionPath,
             audioUrl: vocabAudio,

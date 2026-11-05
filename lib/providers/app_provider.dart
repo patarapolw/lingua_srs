@@ -995,6 +995,7 @@ class AppProvider extends ChangeNotifier {
         ..reading = importedVocab.reading
         ..simplified = importedVocab.simplified
         ..traditional = importedVocab.traditional
+        ..hanja = importedVocab.hanja
         ..pos = importedVocab.pos
         ..sectionPath = importedVocab.sectionPath
         ..sentenceIds = importedVocab.sentenceIds

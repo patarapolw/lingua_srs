@@ -60,6 +60,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
   late TextEditingController _readingCtrl;
   late TextEditingController _simplifiedCtrl;
   late TextEditingController _traditionalCtrl;
+  late TextEditingController _hanjaCtrl;
   late TextEditingController _posCtrl;
   late TextEditingController _audioCtrl;
   late bool _useAudio;
@@ -204,7 +205,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                         maintainState: true,
                         tilePadding: EdgeInsets.zero,
                         childrenPadding: const EdgeInsets.only(top: 8),
-                        title: const Text('Reading and character forms'),
+                        title: const Text('Readings and character forms'),
                         children: [
                           TextField(
                             controller: _readingCtrl,
@@ -226,6 +227,14 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                             controller: _traditionalCtrl,
                             decoration: const InputDecoration(
                               labelText: 'Traditional form',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: _hanjaCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Hanja form',
                               border: OutlineInputBorder(),
                             ),
                           ),
@@ -588,6 +597,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     _readingCtrl.dispose();
     _simplifiedCtrl.dispose();
     _traditionalCtrl.dispose();
+    _hanjaCtrl.dispose();
     _posCtrl.dispose();
     _audioCtrl.dispose();
     _ttsCtrl.dispose();
@@ -607,6 +617,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     _readingCtrl = TextEditingController(text: widget.vocab.reading);
     _simplifiedCtrl = TextEditingController(text: widget.vocab.simplified);
     _traditionalCtrl = TextEditingController(text: widget.vocab.traditional);
+    _hanjaCtrl = TextEditingController(text: widget.vocab.hanja);
     _posCtrl = TextEditingController(text: widget.vocab.pos);
     _audioCtrl = TextEditingController(text: widget.vocab.audioUrl ?? '');
     _useAudio = widget.vocab.useAudio;
@@ -1460,6 +1471,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     widget.vocab.reading = _readingCtrl.text.trim();
     widget.vocab.simplified = _simplifiedCtrl.text.trim();
     widget.vocab.traditional = _traditionalCtrl.text.trim();
+    widget.vocab.hanja = _hanjaCtrl.text.trim();
     widget.vocab.pos = _posCtrl.text.trim();
     widget.vocab.audioUrl = _audioCtrl.text.trim().isEmpty
         ? null

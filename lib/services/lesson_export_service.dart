@@ -130,6 +130,7 @@ class LessonExportService {
     if (vocab.reading.isNotEmpty) entry['reading'] = vocab.reading;
     if (vocab.simplified.isNotEmpty) entry['simplified'] = vocab.simplified;
     if (vocab.traditional.isNotEmpty) entry['traditional'] = vocab.traditional;
+    if (vocab.hanja.isNotEmpty) entry['hanja'] = vocab.hanja;
     if (vocab.audioUrl != null) entry['audio'] = vocab.audioUrl;
     if (vocab.ttsText != null) entry['target_text'] = vocab.ttsText;
     if (vocab.notes.isNotEmpty) entry['notes'] = vocab.notes;

@@ -743,6 +743,27 @@ vocabulary:
       );
     });
 
+    testWidgets('Korean answer shows Hanja', (tester) async {
+      await openStudy(
+        tester,
+        direction: CardDirection.targetToNative,
+        targetLanguage: 'ko',
+        yaml: '''
+target: ko
+vocabulary:
+  nouns:
+    - ko: 학생
+      hanja: 學生
+      en: student
+''',
+      );
+
+      expect(find.text('Hanja: 學生'), findsNothing);
+      await reveal(tester);
+
+      expect(find.text('Hanja: 學生'), findsOneWidget);
+    });
+
     testWidgets('answer and review note controls share a left margin', (
       tester,
     ) async {
@@ -2607,7 +2628,7 @@ vocabulary:
       await tester.pumpAndSettle();
     }
 
-    testWidgets('editing saves reading and character forms', (tester) async {
+    testWidgets('editing saves readings and character forms', (tester) async {
       final provider = await loadedProvider(tester);
       final lesson = await seed(
         tester,
@@ -2618,7 +2639,7 @@ vocabulary:
         'student',
       );
       await openEdit(tester, provider, lesson);
-      await tester.tap(find.text('Reading and character forms'));
+      await tester.tap(find.text('Readings and character forms'));
       await tester.pumpAndSettle();
 
       await tester.enterText(
@@ -2633,12 +2654,17 @@ vocabulary:
         find.widgetWithText(TextField, 'Traditional form'),
         '學生',
       );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Hanja form'),
+        '學生',
+      );
       await save(tester);
 
       final vocab = only(lesson);
       expect(vocab.reading, 'xuésheng');
       expect(vocab.simplified, '学生');
       expect(vocab.traditional, '學生');
+      expect(vocab.hanja, '學生');
     });
 
     testWidgets('editing keeps the Audio URL and TTS sections together', (

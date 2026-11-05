@@ -12,6 +12,7 @@ class VocabItem {
   String reading;
   String simplified;
   String traditional;
+  String hanja;
   String pos; // Part of speech or category (e.g. nouns, verbs, adjectives)
   List<String> sectionPath;
   List<String> sentenceIds; // Reference to sentences in the pool
@@ -33,6 +34,7 @@ class VocabItem {
     this.reading = '',
     this.simplified = '',
     this.traditional = '',
+    this.hanja = '',
     required this.pos,
     List<String>? sectionPath,
     String? audioUrl,
@@ -164,6 +166,7 @@ class VocabItem {
     'reading': reading,
     'simplified': simplified,
     'traditional': traditional,
+    'hanja': hanja,
     'pos': pos,
     'sectionPath': sectionPath,
     'audioUrl': audioUrl,
@@ -188,6 +191,7 @@ class VocabItem {
     reading: json['reading'] as String? ?? '',
     simplified: json['simplified'] as String? ?? '',
     traditional: json['traditional'] as String? ?? '',
+    hanja: json['hanja'] as String? ?? '',
     pos: json['pos'] as String? ?? 'general',
     sectionPath: (json['sectionPath'] as List<dynamic>?)
         ?.map((e) => e.toString())
