@@ -26,6 +26,8 @@ Sign-in details and the DeepSeek key go in the OS keychain through `flutter_secu
 - **macOS**: the app uses the login keychain, so it needs no `keychain-access-groups` entitlement and no provisioning profile, and an ad-hoc signed build can store credentials. The sandbox entitlements include `com.apple.security.network.client`, without which every outgoing request fails.
 - **Android, iOS, Windows**: nothing to set up.
 
+`integration_test/platform_test.dart` stores and reads a secret and makes an HTTPS request on a real build. The Desktop workflow runs it on macOS and Linux (with GNOME Keyring under `dbus-run-session`) whenever platform code changes.
+
 ## Accounts
 
 An account is an **email** (its unique identifier, lowercase) and a **password** the user chooses. A device signs in by:

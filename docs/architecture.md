@@ -85,5 +85,6 @@ lingua_srs/
 │       ├── review_notes_editor.dart   # Review note editable from a card's back; text-focus check for shortcuts
 │       ├── swipe_actions.dart         # Swipe-to-reveal action panel for list tiles
 │       └── youtube_embed.dart         # YouTube embed for lesson Markdown
+├── integration_test/                  # Keychain and network checks on a real desktop build
 └── test/                              # Parser, SRS, storage, import and widget tests
 ```
