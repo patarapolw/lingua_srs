@@ -103,7 +103,7 @@ To delete an account, choose *Delete account* in Settings and confirm. This perm
 
 Nothing contacts the server in the background yet, so a device that was signed in to the account keeps showing it as signed in, with its lessons and progress untouched, until something uses the server. Then the server answers `401`. It gives the same answer for an account that was deleted and for a password that was changed on another device, because it never says whether an email has an account, so the app cannot tell which happened. It says that the server no longer accepts this sign-in and that the lessons are still on the device. *Check sign-in* in Settings asks on demand. The app never signs a device out by itself: the person chooses to sign out and sign in again with the new password, or to create a new account.
 
-When the sync engine exists it must handle a rejected sign-in the same way: stop syncing, keep the local data, and say so. It must also notice an account that was **re-created**. Signing in is deterministic (the keys come from the email and password), so if an account is deleted and a new one is created with the same email and password, a device that was signed in to the old one would be accepted by the new one. The new account has a different data key and its own change numbers. The engine therefore has to compare an identity of the account (for example its creation time, returned by `GET /account`) every time it connects, and when it differs, stop and ask instead of carrying on with the old data key and pull cursor.
+When the sync engine exists it must handle a rejected sign-in the same way: stop syncing, keep the local data, and say so. It must also notice an account that was **re-created**. Signing in is deterministic (the keys come from the email and password), so if an account is deleted and a new one is created with the same email and password, a device that was signed in to the old one would be accepted by the new one. The new account has a different data key and its own change numbers. The engine therefore has to compare an identity of the account every time it connects, and when it differs, stop and ask instead of carrying on with the old data key and pull cursor. That identity is `createdAt` from `GET /account`: the time the signup started, fixed once the email is confirmed, kept through password changes, and different for a re-created account. `SyncClient.getAccount` returns it, as `null` from an older Worker that does not send it.
 
 ## Worker API
 
@@ -113,7 +113,7 @@ Routes live under `/v1`. Except for the first two, they need `Authorization: Bas
 | --- | --- |
 | `POST /accounts` | Starts an account, see above. `400 invalid_account`, `429 signups_paused`, `502 email_failed`. |
 | `POST /accounts/confirm` | Body `{email, authKey, code}`. Returns `{status: "verified"}`; every failure is `400 invalid_code`. |
-| `GET /account` | Returns `{wrappedDataKey, kdf}`. |
+| `GET /account` | Returns `{wrappedDataKey, kdf, createdAt}`. `createdAt` (milliseconds) identifies the account, see below. |
 | `PUT /account` | Changes the password with `{authKey, wrappedDataKey, kdf?}`; the data is untouched. |
 | `DELETE /account` | Deletes the account and everything in it. Also available to an unconfirmed account with the correct credentials. |
 | `POST /account/pairing` | Creates a short-lived one-time pairing invite and returns its token. The body contains only the encrypted pairing payload. |

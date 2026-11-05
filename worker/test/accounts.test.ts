@@ -9,6 +9,7 @@ import {
   MINUTE,
   OTHER_AUTH_KEY,
   OTHER_EMAIL,
+  START,
   accountBody,
   basic,
   clearDatabase,
@@ -284,7 +285,7 @@ describe('signing in', () => {
 });
 
 describe('the account', () => {
-  it('returns the wrapped data key and the kdf settings', async () => {
+  it('returns the wrapped data key, the kdf settings and when it was created', async () => {
     const world = createWorld();
     const auth = await createConfirmedAccount(world);
 
@@ -293,7 +294,40 @@ describe('the account', () => {
     expect(result.body).toEqual({
       wrappedDataKey: accountBody().wrappedDataKey,
       kdf: accountBody().kdf,
+      createdAt: START,
     });
+  });
+
+  it('keeps its createdAt across a password change', async () => {
+    const world = createWorld();
+    const auth = await createConfirmedAccount(world);
+
+    world.clock.now += DAY;
+    await world.call('PUT', '/v1/account', {
+      auth,
+      body: { authKey: OTHER_AUTH_KEY, wrappedDataKey: 'bmV3LXdyYXBwZWQta2V5' },
+    });
+    const account = await world.call('GET', '/v1/account', {
+      auth: basic(EMAIL, OTHER_AUTH_KEY),
+    });
+
+    expect(account.body.createdAt).toBe(START);
+  });
+
+  it('gets a new createdAt when deleted and created again with the same credentials', async () => {
+    const world = createWorld();
+    const auth = await createConfirmedAccount(world);
+    const before = await world.call('GET', '/v1/account', { auth });
+
+    expect((await world.call('DELETE', '/v1/account', { auth })).status).toBe(204);
+    world.clock.now += 11 * MINUTE;
+    await createConfirmedAccount(world);
+    const after = await world.call('GET', '/v1/account', { auth });
+
+    // The old credentials still sign in, so only createdAt shows the change.
+    expect(after.status).toBe(200);
+    expect(after.body.createdAt).toBe(START + 11 * MINUTE);
+    expect(after.body.createdAt).not.toBe(before.body.createdAt);
   });
 
   it('changes the password without touching the data', async () => {
