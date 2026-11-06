@@ -4,8 +4,10 @@ import 'package:flutter/widgets.dart';
 
 /// Runs syncs while the app is open: once when it starts (or a device signs
 /// in), when it comes back to the foreground, and [editDelay] after the last
-/// change, if a record actually changed. Each sync is a call to [sync]; this
-/// widget only decides when.
+/// change, if a record actually changed. While [shouldRetry] says the last
+/// sync could not reach the server, it tries again after [retryDelay],
+/// doubling the wait up to [maxRetryDelay]. Each sync is a call to [sync];
+/// this widget only decides when.
 class SyncScheduler extends StatefulWidget {
   const SyncScheduler({
     super.key,
@@ -14,7 +16,10 @@ class SyncScheduler extends StatefulWidget {
     required this.hasChanges,
     required this.sync,
     required this.child,
+    this.shouldRetry,
     this.editDelay = const Duration(seconds: 20),
+    this.retryDelay = const Duration(seconds: 30),
+    this.maxRetryDelay = const Duration(minutes: 5),
   });
 
   /// Notifies on every change to the app's data, such as the app provider.
@@ -27,7 +32,14 @@ class SyncScheduler extends StatefulWidget {
   /// Notes local changes and says whether any record changed.
   final Future<bool> Function() hasChanges;
   final Future<void> Function() sync;
+
+  /// After a sync, whether it failed in a way worth trying again, such as no
+  /// connection. Without it, a failed sync waits for the next start, return
+  /// to the foreground or edit.
+  final bool Function()? shouldRetry;
   final Duration editDelay;
+  final Duration retryDelay;
+  final Duration maxRetryDelay;
   final Widget child;
 
   @override
@@ -37,6 +49,8 @@ class SyncScheduler extends StatefulWidget {
 class _SyncSchedulerState extends State<SyncScheduler> {
   late final AppLifecycleListener _lifecycle;
   Timer? _afterEdits;
+  Timer? _retry;
+  Duration? _nextRetry;
   bool _synced = false;
 
   @override
@@ -81,12 +95,25 @@ class _SyncSchedulerState extends State<SyncScheduler> {
     if (!mounted || !widget.canSync()) return;
     _synced = true;
     _afterEdits?.cancel();
+    _retry?.cancel();
     await widget.sync();
+    if (!mounted) return;
+    if (widget.shouldRetry?.call() != true) {
+      _nextRetry = null;
+      return;
+    }
+    final wait = _nextRetry ?? widget.retryDelay;
+    final doubled = wait * 2;
+    _nextRetry = doubled > widget.maxRetryDelay
+        ? widget.maxRetryDelay
+        : doubled;
+    _retry = Timer(wait, _syncNow);
   }
 
   @override
   void dispose() {
     _afterEdits?.cancel();
+    _retry?.cancel();
     _lifecycle.dispose();
     widget.changes.removeListener(_changed);
     super.dispose();

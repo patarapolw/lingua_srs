@@ -125,6 +125,34 @@ void main() {
     provider.dispose();
   });
 
+  test('an import keeps the pooled copy every device keeps', () async {
+    // A sentence pulled from another device, with an id that sorts first, is
+    // already in the pool. Importing the same sentence here must not replace
+    // it with a new copy: the other device keeps the smallest id, so this
+    // device would delete the copy it keeps and push that deletion.
+    final provider = await _load(_lesson(['0-pulled']), [
+      _sentence('0-pulled'),
+    ]);
+
+    await provider.importYaml('''
+vocabulary:
+  nouns:
+    - ko: "배"
+      en: "boat"
+      examples:
+        - ko: "저는 **배**를 탔어요"
+          en: "I took the boat."
+''', defaultTitle: 'Boats again');
+
+    expect(provider.sentences.map((s) => s.id), ['0-pulled']);
+    for (final lesson in provider.lessons) {
+      expect(lesson.vocabularies.single.sentenceIds, [
+        '0-pulled',
+      ], reason: lesson.title);
+    }
+    provider.dispose();
+  });
+
   test('fits the emphasis to a sentence edited on another device', () async {
     final lesson = _lesson(['s1']);
     lesson.vocabularies.single.sentenceEmphasis = {

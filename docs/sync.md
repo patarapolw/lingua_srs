@@ -239,7 +239,8 @@ While a device is signed in, the app syncs on its own (`SyncScheduler`, in `main
 
 - when it starts, or right after signing in;
 - when it comes back to the foreground;
-- 20 seconds after the last change in the app, if a record actually changed. Each change restarts the wait, so a study session syncs once it pauses, not after every card.
+- 20 seconds after the last change in the app, if a record actually changed. Each change restarts the wait, so a study session syncs once it pauses, not after every card;
+- again on its own after a sync that could not reach the server, or that the server failed (5xx): after 30 seconds, then waiting twice as long each time, up to 5 minutes, until a sync goes through. A rejected sign-in or a re-created account is not retried.
 
 *Sync now* in Settings syncs at once. Settings also shows when this device last synced and, if the last sync stopped or was incomplete, why: no connection, a sign-in the server no longer accepts, a re-created account, records from a newer version of the app, or records that could not be read. None of these change the data on the device, and the app keeps working offline.
 

@@ -155,6 +155,7 @@ class _LinguaSrsAppState extends State<LinguaSrsApp> {
             hasChanges: () async =>
                 (await provider.trackSyncChanges()).isNotEmpty,
             sync: provider.syncNow,
+            shouldRetry: () => provider.syncShouldRetry,
             child: AdaptiveScaffold(
               isDarkMode: isDark,
               onToggleTheme: () => setState(() {

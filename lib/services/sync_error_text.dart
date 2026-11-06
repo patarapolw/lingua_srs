@@ -45,3 +45,16 @@ String describeSyncError(Object error, {bool signedIn = false}) {
   }
   return '$error';
 }
+
+/// Whether a sync that failed with [error] is worth trying again on its own:
+/// the server could not be reached, or it failed on its side. A rejected
+/// sign-in or a bad request would fail the same way again.
+bool isSyncRetryable(Object error) {
+  if (error is SyncException) {
+    final status = error.statusCode;
+    return status != null && status >= 500;
+  }
+  return error is SocketException ||
+      error is TimeoutException ||
+      error is http.ClientException;
+}
