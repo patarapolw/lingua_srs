@@ -538,8 +538,9 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     notifyListeners();
     SyncResult? result;
     try {
-      result = await _queueSyncTracking(() => _runSync(pairing));
-      _syncProblem = switch (result.outcome) {
+      final synced = await _queueSyncTracking(() => _runSync(pairing));
+      result = synced;
+      _syncProblem = switch (synced.outcome) {
         SyncOutcome.signInRejected => describeSyncError(
           const SyncException('invalid_credentials', statusCode: 401),
           signedIn: true,
@@ -549,14 +550,14 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
               'and password. Sync is paused so the two are not mixed. Your '
               'lessons and progress are still on this device. Sign out and '
               'sign in again to use the new account.',
-        SyncOutcome.synced when result.needsAppUpdate.isNotEmpty =>
-          '${result.needsAppUpdate.length} items were changed by a newer '
+        SyncOutcome.synced when synced.needsAppUpdate.isNotEmpty =>
+          '${synced.needsAppUpdate.length} items were changed by a newer '
               'version of the app. Update the app to sync them.',
-        SyncOutcome.synced when result.unreadable > 0 =>
-          '${result.unreadable} items from the server could not be read.',
+        SyncOutcome.synced when synced.unreadable > 0 =>
+          '${synced.unreadable} items from the server could not be read.',
         SyncOutcome.synced => null,
       };
-      if (result.outcome == SyncOutcome.synced) {
+      if (synced.outcome == SyncOutcome.synced) {
         _lastSyncedAt = DateTime.now();
         await StorageService.saveLastSyncedAt(_lastSyncedAt);
       }
@@ -572,9 +573,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   Future<SyncResult> _runSync(SyncPairing pairing) async {
     var key = await StorageService.loadSyncDataKey();
     if (key == null || !key.belongsTo(pairing) || key.authKey == null) {
-      key = await (syncAccounts ?? SyncAccountService()).unlockDataKey(
-        pairing,
-      );
+      key = await (syncAccounts ?? SyncAccountService()).unlockDataKey(pairing);
       await StorageService.saveSyncDataKey(key);
     }
     final tracker = await StorageService.loadSyncChangeTracker();

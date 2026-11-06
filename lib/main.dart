@@ -151,8 +151,7 @@ class _LinguaSrsAppState extends State<LinguaSrsApp> {
           final provider = context.read<AppProvider>();
           return SyncScheduler(
             changes: provider,
-            canSync: () =>
-                !provider.isLoading && provider.syncPairing != null,
+            canSync: () => !provider.isLoading && provider.syncPairing != null,
             hasChanges: () async =>
                 (await provider.trackSyncChanges()).isNotEmpty,
             sync: provider.syncNow,
