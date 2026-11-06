@@ -83,7 +83,12 @@ void main() {
         _daysAgo(30): {SrsRating.again: 50}, // 31 days ago with today
         DateTime(2026, 11, 7): {SrsRating.again: 50}, // tomorrow
       };
-      expect(recentRightWrong(counts, _now), (right: 6, wrong: 2));
+      expect(recentRatings(counts, _now), {
+        SrsRating.again: 1,
+        SrsRating.hard: 1,
+        SrsRating.good: 4,
+        SrsRating.easy: 2,
+      });
     });
   });
 

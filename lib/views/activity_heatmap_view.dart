@@ -192,7 +192,7 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                   streak: studyStreak(counts, today),
                   todayReviews: counts[todayDate] ?? 0,
                   todayNew: newCardCounts[todayDate] ?? 0,
-                  recent: recentRightWrong(ratingCounts, today),
+                  recent: recentRatings(ratingCounts, today),
                 ),
                 const SizedBox(height: 20),
                 Text(
@@ -495,17 +495,17 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
     SrsStatus.review => 'Review',
   };
 
-  /// Streak, today's reviews, and right and wrong over the last 30 days as a
-  /// red and green bar.
+  /// Streak and today's reviews on one line, then right and wrong over the
+  /// last 30 days as a ring.
   Widget _summary(
     BuildContext context, {
     required int streak,
     required int todayReviews,
     required int todayNew,
-    required ({int right, int wrong}) recent,
+    required Map<SrsRating, int> recent,
   }) {
     final theme = Theme.of(context);
-    final answered = recent.right + recent.wrong;
+    final (:right, :wrong) = rightWrongOf(recent);
     final parts = [
       if (streak > 0) '$streak-day streak',
       'Today $todayReviews ${todayReviews == 1 ? 'review' : 'reviews'}'
@@ -515,8 +515,8 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(parts.join(' · '), style: theme.textTheme.titleMedium),
-        if (answered > 0) ...[
-          const SizedBox(height: 12),
+        if (right + wrong > 0) ...[
+          const SizedBox(height: 16),
           _rightWrongRing(context, recent),
         ],
       ],
@@ -524,30 +524,48 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
   }
 
   /// A ring of right (green) and wrong (red) answers with the percentage
-  /// right in the middle, and a legend with the counts.
-  Widget _rightWrongRing(
-    BuildContext context,
-    ({int right, int wrong}) recent,
-  ) {
+  /// right in the middle, then a line each for right and wrong, with the
+  /// counts of its two ratings at the far end, so it shows whether Good or
+  /// Easy, and Again or Hard, made up more.
+  Widget _rightWrongRing(BuildContext context, Map<SrsRating, int> recent) {
     final theme = Theme.of(context);
-    final answered = recent.right + recent.wrong;
-    final percent = (recent.right * 100 / answered).round();
+    final (:right, :wrong) = rightWrongOf(recent);
+    final answered = right + wrong;
+    final percent = (right * 100 / answered).round();
     final quiet = theme.textTheme.bodySmall?.copyWith(
       color: theme.colorScheme.onSurfaceVariant,
     );
-    Widget legend(Color color, String text, String ratings) => Row(
+    String ratings(
+      SrsRating first,
+      String firstName,
+      SrsRating second,
+      String secondName,
+    ) =>
+        '$firstName ${recent[first] ?? 0} · '
+        '$secondName ${recent[second] ?? 0}';
+    TableRow legend(Color color, String text, String ratings) => TableRow(
       children: [
-        Icon(Icons.circle, size: 10, color: color),
-        const SizedBox(width: 6),
-        Text(text),
-        const SizedBox(width: 8),
-        Flexible(child: Text(ratings, style: quiet)),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.circle, size: 10, color: color),
+              const SizedBox(width: 6),
+              Text(text),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(left: 16),
+          child: Text(ratings, style: quiet),
+        ),
       ],
     );
     return Semantics(
       label:
-          '$percent% right in the last 30 days: ${recent.right} right, '
-          '${recent.wrong} wrong',
+          '$percent% right in the last 30 days: $right right, '
+          '$wrong wrong',
       excludeSemantics: true,
       child: Row(
         children: [
@@ -559,7 +577,7 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                 // The same colours as the study session's progress bar.
                 SizedBox.expand(
                   child: CircularProgressIndicator(
-                    value: recent.right / answered,
+                    value: right / answered,
                     strokeWidth: 6,
                     color: _rightColor,
                     backgroundColor: _wrongColor,
@@ -574,10 +592,28 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                legend(_rightColor, '${recent.right} right', 'Good, Easy'),
-                const SizedBox(height: 2),
-                legend(_wrongColor, '${recent.wrong} wrong', 'Again, Hard'),
-                const SizedBox(height: 2),
+                // A table, so the ratings start in line after the longer
+                // count, close to both.
+                Table(
+                  columnWidths: const {
+                    0: IntrinsicColumnWidth(),
+                    1: FlexColumnWidth(),
+                  },
+                  defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                  children: [
+                    legend(
+                      _rightColor,
+                      '$right right',
+                      ratings(SrsRating.good, 'Good', SrsRating.easy, 'Easy'),
+                    ),
+                    legend(
+                      _wrongColor,
+                      '$wrong wrong',
+                      ratings(SrsRating.again, 'Again', SrsRating.hard, 'Hard'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
                 Text('Last 30 days', style: quiet),
               ],
             ),

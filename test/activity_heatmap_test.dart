@@ -266,8 +266,9 @@ void main() {
     expect(find.text('50%'), findsOneWidget);
     expect(find.text('2 right'), findsOneWidget);
     expect(find.text('2 wrong'), findsOneWidget);
-    expect(find.text('Good, Easy'), findsOneWidget);
-    expect(find.text('Again, Hard'), findsOneWidget);
+    // Each rating's count, so it shows which of the two made up more.
+    expect(find.text('Good 1 · Easy 1'), findsOneWidget);
+    expect(find.text('Again 1 · Hard 1'), findsOneWidget);
     // A ring of right in green over wrong in red, as in the study session.
     final ring = tester.widget<CircularProgressIndicator>(
       find.byType(CircularProgressIndicator),

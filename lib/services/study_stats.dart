@@ -30,23 +30,23 @@ int studyStreak(Map<DateTime, int> dailyReviewCounts, DateTime now) {
   wrong: (ratings[SrsRating.again] ?? 0) + (ratings[SrsRating.hard] ?? 0),
 );
 
-/// [rightWrongOf] summed over the [days] days up to today.
-({int right, int wrong}) recentRightWrong(
+/// Answers of each rating over the [days] days up to today, Again first.
+/// [rightWrongOf] splits them into right and wrong.
+Map<SrsRating, int> recentRatings(
   Map<DateTime, Map<SrsRating, int>> dailyRatingCounts,
   DateTime now, {
   int days = 30,
 }) {
   final today = _day(now);
   final first = _addDays(today, -(days - 1));
-  var right = 0;
-  var wrong = 0;
+  final totals = {for (final rating in SrsRating.values) rating: 0};
   for (final entry in dailyRatingCounts.entries) {
     if (entry.key.isBefore(first) || entry.key.isAfter(today)) continue;
-    final day = rightWrongOf(entry.value);
-    right += day.right;
-    wrong += day.wrong;
+    for (final MapEntry(key: rating, value: count) in entry.value.entries) {
+      totals[rating] = totals[rating]! + count;
+    }
   }
-  return (right: right, wrong: wrong);
+  return totals;
 }
 
 /// Cards coming due on each of the next [days] days, today first. Cards
