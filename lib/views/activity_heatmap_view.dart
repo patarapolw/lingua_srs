@@ -237,7 +237,11 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                               padding: const EdgeInsets.only(right: 4),
                               child: Column(
                                 children: [
-                                  for (var dayIndex = 0; dayIndex < 7; dayIndex++)
+                                  for (
+                                    var dayIndex = 0;
+                                    dayIndex < 7;
+                                    dayIndex++
+                                  )
                                     _dayCell(
                                       context,
                                       DateTime(
