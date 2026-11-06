@@ -303,7 +303,6 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       StorageService.loadLessonFolderExpansion(),
       StorageService.loadPronunciationOptions(),
       StorageService.loadMaxNewCards24h(),
-      StorageService.loadShowAi(),
     ).wait;
     _autoplayAudio = results.$1;
     _deepSeekApiKey = results.$2;
@@ -317,7 +316,8 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     _lessonFolderExpansion = results.$7;
     _pronunciationOptions = results.$8;
     _maxNewCards24h = results.$9;
-    _showAi = results.$10;
+    // Records only have `.wait` up to nine fields, so this loads on its own.
+    _showAi = await StorageService.loadShowAi();
     _dailyReviewCounts = await StorageService.loadDailyReviewCounts();
     _dailyRatingCounts = await StorageService.loadDailyRatingCounts();
     _dailyNewCardCounts = await StorageService.loadDailyNewCardCounts();
