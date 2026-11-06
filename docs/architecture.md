@@ -92,6 +92,7 @@ lingua_srs/
 │       ├── sync_scheduler.dart        # Runs syncs at start, on resume and after edits
 │       └── youtube_embed.dart         # YouTube embed for lesson Markdown
 ├── linux/runner/my_application.cc    # Linux entry point; a second start brings the open window forward instead of opening another copy on the same data
+├── windows/runner/main.cpp           # Windows entry point; a second start brings the open window forward instead of opening another copy on the same data
 ├── integration_test/                  # Keychain and network checks on a real desktop build
 └── test/                              # Parser, SRS, storage, import and widget tests
 ```
