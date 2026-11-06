@@ -17,6 +17,7 @@ Flutter app (Dart, `provider` state management). See [README.md](README.md) for 
 - Lesson/vocabulary parsing lives only in `lib/services/yaml_parser_service.dart`. Do not parse lesson syntax elsewhere.
 - SRS scheduling lives in `lib/services/srs_service.dart`.
 - Make commits using a conventional commit message and a detailed body.
+- Name branches after what they change, in a few lowercase hyphenated words. Claude agents prefix the name with `claude/`, e.g. `claude/undo-review-count`. This applies even when the session suggests a generated name such as `ccr-…`.
 
 ## Rules
 
