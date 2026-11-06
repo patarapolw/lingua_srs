@@ -30,13 +30,15 @@ jobs:
       # The .deb files are cached per runner image: the Ubuntu mirror
       # sometimes takes minutes to send them.
       - id: image
-        run: echo "key=$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "os=$ImageOS" >> "$GITHUB_OUTPUT"
+          echo "key=$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
       - name: Cache Linux build packages
         uses: actions/cache@v6
         with:
           path: ~/apt-cache
           key: apt-${{ steps.image.outputs.key }}-gtk3
-          restore-keys: apt-${{ runner.os }}-
+          restore-keys: apt-${{ steps.image.outputs.os }}-
       - name: Install Linux build libraries
         run: |
           mkdir -p ~/apt-cache/partial
