@@ -33,6 +33,15 @@ void main() {
     provider.dispose();
   });
 
+  // The ListView builds lazily, so a view tall enough for every section lets
+  // the tests find the stage line and the leeches below the summary.
+  void useTallView(WidgetTester tester) {
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+  }
+
   testWidgets('shows a non-scrollable empty state when there are no reviews', (
     tester,
   ) async {
@@ -231,9 +240,7 @@ void main() {
     });
   });
 
-  testWidgets('sums up the streak, today and right and wrong', (
-    tester,
-  ) async {
+  testWidgets('sums up the streak, today and right and wrong', (tester) async {
     for (final rating in [SrsRating.again, SrsRating.good, SrsRating.easy]) {
       await provider.recordCardReview(
         SrsCard(direction: CardDirection.targetToNative),
@@ -254,10 +261,7 @@ void main() {
       ),
     );
 
-    expect(
-      find.text('2-day streak · Today 3 reviews, 3 new'),
-      findsOneWidget,
-    );
+    expect(find.text('2-day streak · Today 3 reviews, 3 new'), findsOneWidget);
     // Good and Easy are right; Again and Hard are wrong: 2 of 4.
     expect(
       find.text('50% right (Good or Easy) in the last 30 days'),
@@ -266,6 +270,7 @@ void main() {
   });
 
   testWidgets('shows the next 7 days and stages on one line', (tester) async {
+    useTallView(tester);
     final now = DateTime.now();
     SrsCard due(DateTime date) => SrsCard(
       direction: CardDirection.targetToNative,
@@ -316,6 +321,7 @@ void main() {
   testWidgets('a leech can be suspended, and the suspension undone', (
     tester,
   ) async {
+    useTallView(tester);
     final card = SrsCard(
       direction: CardDirection.targetToNative,
       lapses: 8,
@@ -510,6 +516,7 @@ void main() {
   testWidgets('shows unique enabled leeches at the lapse threshold', (
     tester,
   ) async {
+    useTallView(tester);
     final leech = SrsCard(
       id: 'leech-card',
       direction: CardDirection.targetToNative,

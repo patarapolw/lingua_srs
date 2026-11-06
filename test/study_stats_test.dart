@@ -111,10 +111,7 @@ void main() {
             'new',
             SrsCard(id: 'new', direction: CardDirection.targetToNative),
           ),
-          _word(
-            'suspended',
-            _due('suspended', _today, suspended: true),
-          ),
+          _word('suspended', _due('suspended', _today, suspended: true)),
           _word('hidden', _due('hidden', _today)..isEnabled = false),
         ],
       );
