@@ -16,8 +16,14 @@ String describeSyncError(Object error, {bool signedIn = false}) {
   if (error is SyncException) {
     switch (error.statusCode) {
       case 400 when error.message.contains('invalid_code'):
-        return 'That code is wrong or has expired. Use the code from the '
-            'newest email, or create the account again to get a new one.';
+        // The server gives the same answer whatever the reason, so name
+        // them all (#103).
+        return "That code didn't confirm this signup. It may be mistyped, "
+            'more than 30 minutes old, or cancelled after five wrong tries, '
+            'or the account was created again on another device since. '
+            'Check the newest email. If its code fails too, create the '
+            'account again: a new code is sent once 10 minutes have passed '
+            'since the last one.';
       case 401:
         return signedIn
             ? 'The server no longer accepts this sign-in. The account may '

@@ -42,10 +42,17 @@ void main() {
       expect(describeSyncError(_error(502)), contains('email could not'));
     });
 
-    test('a refused code is a wrong or expired code', () {
+    test('a refused code names every reason the server cannot tell', () {
       final text = describeSyncError(_error(400, '{"error":"invalid_code"}'));
 
-      expect(text, contains('wrong or has expired'));
+      // The server answers the same for all of these (#103).
+      expect(text, contains('mistyped'));
+      expect(text, contains('30 minutes'));
+      expect(text, contains('five wrong tries'));
+      expect(text, contains('another device'));
+      // Signing up again within 10 minutes reuses the code instead.
+      expect(text, contains('10 minutes'));
+      expect(text, isNot(contains('wrong or has expired')));
     });
 
     test('other errors keep the message from the client', () {

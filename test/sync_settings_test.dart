@@ -733,7 +733,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('wrong or has expired'), findsOneWidget);
+      expect(find.textContaining("didn't confirm this signup"), findsOneWidget);
       expect(provider.syncPairing, isNull);
     });
 
