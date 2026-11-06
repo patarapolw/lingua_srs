@@ -249,4 +249,130 @@ void main() {
       isFalse,
     );
   });
+
+  group('a word studied on two devices', () {
+    /// This device's copy of word `w1`, with its own card ids, last reviewed
+    /// at [reviewed].
+    SyncAppData local(DateTime? reviewed) {
+      final data = _empty('device-b');
+      data.lessons = [
+        Lesson(
+          id: 'l1',
+          title: 'Food',
+          vocabularies: [
+            VocabItem(
+              id: 'w1',
+              targetWord: 'word-w1',
+              translation: 'meaning-w1',
+              pos: 'nouns',
+              cardTargetToNative: SrsCard(
+                id: 'local-tn',
+                direction: CardDirection.targetToNative,
+                interval: 7,
+                lastReviewed: reviewed,
+                status: SrsStatus.review,
+              ),
+            ),
+          ],
+        ),
+      ];
+      return data;
+    }
+
+    /// The other device's records for `w1`, last reviewed on 2026-11-04.
+    Map<SyncRecordKey, Map<String, dynamic>> pulled() {
+      final records = _snapshot(_filled());
+      return {
+        for (final entry in records.entries)
+          if (entry.key == const SyncRecordKey('vocab', 'w1') ||
+              entry.key.localId.startsWith('w1-'))
+            entry.key: entry.value,
+      };
+    }
+
+    test('keeps the progress reviewed here more recently', () {
+      final data = local(DateTime.utc(2026, 11, 5));
+
+      SyncApplier.apply(data, pulled());
+
+      final card = data.lessons.single.vocabularies.single.cardTargetToNative;
+      expect(card.id, 'w1-tn');
+      expect(card.interval, 7);
+      expect(card.lastReviewed, DateTime.utc(2026, 11, 5));
+    });
+
+    test('takes the progress reviewed there more recently', () {
+      final data = local(DateTime.utc(2026, 11, 1));
+
+      SyncApplier.apply(data, pulled());
+
+      final card = data.lessons.single.vocabularies.single.cardTargetToNative;
+      expect(card.id, 'w1-tn');
+      expect(card.interval, 2);
+    });
+
+    test('takes pulled progress for a card never reviewed here', () {
+      final data = local(null);
+
+      SyncApplier.apply(data, pulled());
+
+      final card = data.lessons.single.vocabularies.single.cardTargetToNative;
+      expect(card.interval, 2);
+    });
+  });
+
+  group('the first sync', () {
+    SyncAppData withLocalFood() {
+      final data = _empty('device-b');
+      data.lessons = [
+        Lesson(
+          id: 'local-food',
+          title: 'food',
+          markdownContent: '# My notes',
+          vocabularies: [_word('w1'), _word('only-here')],
+        ),
+      ];
+      return data;
+    }
+
+    Map<SyncRecordKey, Map<String, dynamic>> pulledFood() {
+      final records = _snapshot(_filled());
+      return {
+        const SyncRecordKey('lesson', 'l1'):
+            records[const SyncRecordKey('lesson', 'l1')]!,
+      };
+    }
+
+    test('merges a lesson of the same name into the pulled one', () {
+      final data = withLocalFood();
+
+      SyncApplier.apply(data, pulledFood(), firstSync: true);
+
+      final lesson = data.lessons.single;
+      expect(lesson.id, 'l1');
+      expect(lesson.title, 'Food');
+      expect(
+        lesson.vocabularies.map((vocab) => vocab.id),
+        ['w1', 'w2', 'only-here'],
+      );
+      expect(lesson.markdownContent, '# My notes');
+    });
+
+    test('keeps both lessons after the first sync', () {
+      final data = withLocalFood();
+
+      SyncApplier.apply(data, pulledFood());
+
+      expect(data.lessons.map((lesson) => lesson.id), ['local-food', 'l1']);
+    });
+
+    test('does not merge lessons in different folders', () {
+      final data = withLocalFood();
+      data.lessons.single.unitTitle = 'Unit 2';
+
+      SyncApplier.apply(data, pulledFood(), firstSync: true);
+
+      expect(data.lessons, hasLength(2));
+    });
+  });
 }

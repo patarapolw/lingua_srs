@@ -2,7 +2,7 @@
 
 How devices sync, and how a separately developed dictionary app sends content to LinguaSRS. Every account lives on one hosted Cloudflare Worker backed by D1, and data is end-to-end encrypted: the server only stores ciphertext. See issue #2. This also covers the content-import half of #45.
 
-Implemented so far: the Worker (`worker/`), account creation and email confirmation, sign-in, password changes, one-time device pairing, account deletion, and password-derived account keys. Records describes what will sync; building, encrypting, pulling, pushing and applying records is implemented (`SyncEngine`, `SyncApplier`), and the app syncs on its own while signed in (see When the app syncs). The first sync of a device that already has data is follow-up work.
+Implemented so far: the Worker (`worker/`), account creation and email confirmation, sign-in, password changes, one-time device pairing, account deletion, and password-derived account keys. Records describes what will sync; building, encrypting, pulling, pushing and applying records is implemented (`SyncEngine`, `SyncApplier`), and the app syncs on its own while signed in (see When the app syncs). A device that already has data merges it with the account's on its first sync (see Joining an account with data).
 
 ## Server address
 
@@ -244,6 +244,17 @@ While a device is signed in, the app syncs on its own (`SyncScheduler`, in `main
 
 A sync unlocks the data key only when it has none for this sign-in. The key is kept with the auth key, so later syncs do not derive keys from the password. Signing out or into another account clears the sync state and the last sync time; a new password for the same account keeps them.
 
+### Joining an account with data
+
+Signing in on a device that already has lessons and progress merges them with what the account has, on that device's first sync:
+
+- **Stamps.** Until a device has pulled once, a record it sees for the first time is stamped with when it last really changed, not with the time of signing in: a card's last review, or a discussion's latest message. Anything else is stamped 0, so the account's copy wins. Edits made after that are stamped as usual.
+- **Words.** A word imported on both devices without an explicit `id` has the same generated id on both, so it is one `vocab` record, but its cards have different ids. The card reviewed more recently keeps its progress, under the account's card id, and it is pushed back if it came from this device.
+- **Lessons.** Each device gives a lesson its own id. On the first sync, a local lesson with the same title (ignoring case) and folder as a pulled lesson is merged into the pulled one, keeping the words and Markdown only this device has. Lessons that only one side has stay as they are. After the first sync, lessons with the same name are kept apart.
+- **Anything the app keeps of its own** instead of a pulled copy, such as a newer card or a merged lesson, is pushed back with a newer `updatedAt`, so the other devices get it too.
+
+Sentences and AI discussions are matched by id only, so the same sentence imported separately on two devices appears twice.
+
 ### Write budget
 
 A review writes one `card` record. The engine merges repeated changes to a record into one push, and writes a day's `activity` record once per push rather than once per review. The Worker allows 2,000 record writes per account per day, which covers several hundred reviews a day even when each one is pushed on its own.
@@ -293,6 +304,6 @@ A stored record is changed by an upsert that only applies when the incoming `upd
 
 ## Not covered yet
 
-- The first sync of a device that already has data, when the account already has data too: words without an explicit `id` match by their generated id, but other duplicates are not merged yet.
+- Merging sentences imported separately on two devices.
 - Resetting a forgotten password (confirmed by email, which starts a fresh account because the data cannot be decrypted without the old password), and an authenticator-app second factor.
 - Limiting failed sign-ins per address, see above.

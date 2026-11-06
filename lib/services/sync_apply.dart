@@ -61,10 +61,17 @@ abstract final class SyncApplier {
   /// id, so they are updated in place, and a lesson pulled in the same batch
   /// as its words gets their details and progress. A `vocab` or `card` record
   /// for a word that no lesson on this device uses is dropped.
+  ///
+  /// When a word was studied on two devices before they synced, its cards
+  /// have different ids; the card reviewed more recently keeps its progress,
+  /// under the pulled card's id. On [firstSync], a local lesson with the same
+  /// title and folder as a pulled one it does not have is merged into the
+  /// pulled one, keeping the words only this device has.
   static Set<SyncAppPart> apply(
     SyncAppData data,
-    Map<SyncRecordKey, Map<String, dynamic>?> changes,
-  ) {
+    Map<SyncRecordKey, Map<String, dynamic>?> changes, {
+    bool firstSync = false,
+  }) {
     final changed = <SyncAppPart>{};
     Map<String, Map<String, dynamic>?> ofKind(String kind) => {
       for (final entry in changes.entries)
@@ -92,11 +99,11 @@ abstract final class SyncApplier {
         final id = setting['id'] as String? ?? current?.id;
         final progress = id == null ? null : cards[id];
         if (id != null) usedCards.add(id);
-        final base =
-            progress ??
-            (current != null && current.id == id
-                ? current.toJson()
-                : <String, dynamic>{});
+        final base = current == null
+            ? progress ?? <String, dynamic>{}
+            : current.id == id
+            ? progress ?? current.toJson()
+            : _newerProgress(current, progress);
         return _card(current, {
           ...base,
           ...setting,
@@ -159,7 +166,9 @@ abstract final class SyncApplier {
           ? owner.cardTargetToNative
           : owner.cardNativeToTarget;
       final next = _card(current, {
-        ...json,
+        ...(current.id == entry.key ? json : _newerProgress(current, json)),
+        'id': entry.key,
+        'direction': json['direction'],
         'isEnabled': current.isEnabled,
         'frontHint': current.frontHint,
         'backNotes': current.backNotes,
@@ -184,8 +193,22 @@ abstract final class SyncApplier {
         if (index >= 0) next.removeAt(index);
         continue;
       }
-      final previous = index >= 0 ? next[index] : null;
+      var previous = index >= 0 ? next[index] : null;
+      var at = index;
       final lesson = Lesson.fromJson({...json, 'id': entry.key});
+      if (previous == null && firstSync) {
+        at = next.indexWhere(
+          (local) =>
+              !lessons.containsKey(local.id) && _sameLesson(local, lesson),
+        );
+        if (at >= 0) {
+          previous = next[at];
+          final pulled = {for (final vocab in lesson.vocabularies) vocab.id};
+          lesson.vocabularies.addAll(
+            previous.vocabularies.where((vocab) => !pulled.contains(vocab.id)),
+          );
+        }
+      }
       lesson.markdownContent = previous?.markdownContent ?? '';
       for (final vocab in lesson.vocabularies) {
         final existing = shared[vocab.id];
@@ -195,8 +218,8 @@ abstract final class SyncApplier {
           shared[vocab.id] = vocab.shared;
         }
       }
-      if (index >= 0) {
-        next[index] = lesson;
+      if (at >= 0) {
+        next[at] = lesson;
       } else {
         next.add(lesson);
       }
@@ -293,6 +316,27 @@ abstract final class SyncApplier {
     }
     return changed;
   }
+
+  /// The progress to keep for a card studied on two devices: this device's
+  /// [current] card if it was reviewed more recently than [pulled], or if
+  /// [pulled] is not known, else [pulled].
+  static Map<String, dynamic> _newerProgress(
+    SrsCard current,
+    Map<String, dynamic>? pulled,
+  ) {
+    if (pulled == null) return current.toJson();
+    final theirs = DateTime.tryParse('${pulled['lastReviewed']}');
+    final mine = current.lastReviewed;
+    return mine != null && (theirs == null || mine.isAfter(theirs))
+        ? current.toJson()
+        : pulled;
+  }
+
+  /// Two lessons with the same title in the same folder, ignoring case.
+  static bool _sameLesson(Lesson a, Lesson b) =>
+      a.displayTitle.trim().toLowerCase() ==
+          b.displayTitle.trim().toLowerCase() &&
+      isSameHierarchyPath(a.folderPath, b.folderPath);
 
   /// [current] with every field from [json], or a new card when the ids
   /// differ. Changing the card in place keeps screens that hold it in step.

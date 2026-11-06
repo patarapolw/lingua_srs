@@ -616,6 +616,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       final changed = tracker.track(
         syncSnapshot(tracker.deviceId),
         now: (now ?? DateTime.now()).millisecondsSinceEpoch,
+        stampNew: SyncSnapshot.knownChangeTime,
       );
       await StorageService.saveSyncChangeTracker(tracker);
       return changed;
@@ -630,8 +631,9 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   @override
   Future<void> apply(
     String deviceId,
-    Map<SyncRecordKey, Map<String, dynamic>?> changes,
-  ) async {
+    Map<SyncRecordKey, Map<String, dynamic>?> changes, {
+    bool firstSync = false,
+  }) async {
     final data = SyncAppData(
       deviceId: deviceId,
       lessons: _lessons,
@@ -645,7 +647,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       pronunciationOptions: _pronunciationOptions,
       remoteActivity: {..._remoteActivity},
     );
-    final changed = SyncApplier.apply(data, changes);
+    final changed = SyncApplier.apply(data, changes, firstSync: firstSync);
 
     _lessons = data.lessons;
     _sentences = data.sentences;

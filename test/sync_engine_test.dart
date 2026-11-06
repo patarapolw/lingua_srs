@@ -25,8 +25,9 @@ class MemoryStore implements SyncRecordStore {
   @override
   Future<void> apply(
     String deviceId,
-    Map<SyncRecordKey, Map<String, dynamic>?> changes,
-  ) async {
+    Map<SyncRecordKey, Map<String, dynamic>?> changes, {
+    bool firstSync = false,
+  }) async {
     applyCalls++;
     for (final entry in changes.entries) {
       if (entry.value == null) {
@@ -42,14 +43,39 @@ class Clock {
   int now = 1000000;
 }
 
+/// Keeps its own copy of [kept] instead of the pulled one, as the app does
+/// with a card reviewed more recently on this device.
+class KeepingStore extends MemoryStore {
+  KeepingStore(this.kept);
+
+  final SyncRecordKey kept;
+
+  @override
+  Future<void> apply(
+    String deviceId,
+    Map<SyncRecordKey, Map<String, dynamic>?> changes, {
+    bool firstSync = false,
+  }) => super.apply(
+    deviceId,
+    {...changes}..remove(kept),
+    firstSync: firstSync,
+  );
+}
+
 class Device {
-  Device(this.worker, this.cipher, this.clock, {this.createdAt = 1000});
+  Device(
+    this.worker,
+    this.cipher,
+    this.clock, {
+    this.createdAt = 1000,
+    MemoryStore? store,
+  }) : store = store ?? MemoryStore();
 
   final FakeWorker worker;
   final SyncRecordCipher cipher;
   final Clock clock;
   final int? createdAt;
-  final store = MemoryStore();
+  final MemoryStore store;
   final tracker = SyncChangeTracker();
 
   Future<SyncResult> sync() => SyncEngine(
@@ -299,6 +325,41 @@ void main() {
 
     expect(result.unreadable, 1);
     expect(b.store.records, isEmpty);
+  });
+
+  test('joining an account keeps its copy unless this one is newer', () async {
+    const card = SyncRecordKey('card', 'c1');
+    a.store.records[_lesson] = {'title': 'On the account'};
+    a.store.records[card] = {'lastReviewed': '2026-11-01T00:00:00.000Z'};
+    await a.sync();
+
+    clock.now += 100000;
+    // B has studied too before signing in: its lesson edit has no known
+    // time, but its card was reviewed after A's.
+    b.store.records[_lesson] = {'title': 'On the new device'};
+    b.store.records[card] = {'lastReviewed': '2026-11-03T00:00:00.000Z'};
+    await b.sync();
+    await a.sync();
+
+    expect(b.store.records[_lesson], {'title': 'On the account'});
+    expect(a.store.records[card], {
+      'lastReviewed': '2026-11-03T00:00:00.000Z',
+    });
+    expect(b.tracker.hasPulled, isTrue);
+  });
+
+  test('pushes back what the store kept instead of the pulled copy', () async {
+    a.store.records[_lesson] = {'title': 'Food'};
+    await a.sync();
+    final keeper = Device(worker, cipher, clock, store: KeepingStore(_lesson));
+    keeper.store.records[_lesson] = {'title': 'Kept here'};
+    await keeper.sync();
+
+    clock.now += 1000;
+    await a.sync();
+
+    expect(keeper.store.records[_lesson], {'title': 'Kept here'});
+    expect(a.store.records[_lesson], {'title': 'Kept here'});
   });
 
   group('mergeDiscussions', () {

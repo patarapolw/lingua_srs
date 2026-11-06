@@ -83,6 +83,7 @@ class SyncChangeTracker {
     Map<SyncRecordKey, SyncRecordState>? records,
     Map<SyncRecordKey, Map<int, String>>? heldParts,
     this.cursor = 0,
+    this.hasPulled = false,
   }) : deviceId = deviceId ?? const Uuid().v4(),
        _records = records ?? {},
        _heldParts = heldParts ?? {};
@@ -94,6 +95,11 @@ class SyncChangeTracker {
 
   /// The `cursor` of the last pull: the next pull asks for changes after it.
   int cursor;
+
+  /// This device has pulled from the account at least once since signing
+  /// in. Until then its records are stamped with when they last really
+  /// changed, so joining an account does not make them all the newest.
+  bool hasPulled;
 
   final Map<SyncRecordKey, SyncRecordState> _records;
 
@@ -122,10 +128,13 @@ class SyncChangeTracker {
   /// [SyncKinds.keptWhenUnused].
   ///
   /// The first run sees every record as new, which is how data from before
-  /// sync was set up gets pushed.
+  /// sync was set up gets pushed. Before [hasPulled], a record seen for the
+  /// first time is stamped by [stampNew] (when it last really changed, or 0
+  /// when that is not known) instead of [now], if given.
   List<SyncRecordKey> track(
     Map<SyncRecordKey, Map<String, dynamic>> snapshot, {
     required int now,
+    int Function(SyncRecordKey key, Map<String, dynamic> data)? stampNew,
   }) {
     final changed = <SyncRecordKey>[];
     int stamp(SyncRecordState? previous) =>
@@ -142,7 +151,9 @@ class SyncChangeTracker {
       }
       _records[entry.key] = SyncRecordState(
         hash: hash,
-        updatedAt: stamp(previous),
+        updatedAt: previous == null && !hasPulled && stampNew != null
+            ? stampNew(entry.key, entry.value)
+            : stamp(previous),
         parts: previous?.parts ?? 0,
         blocked: previous?.blocked ?? false,
       );
@@ -242,12 +253,14 @@ class SyncChangeTracker {
     _records.clear();
     _heldParts.clear();
     cursor = 0;
+    hasPulled = false;
   }
 
   Map<String, dynamic> toJson() => {
     'version': _version,
     'deviceId': deviceId,
     'cursor': cursor,
+    if (hasPulled) 'pulled': true,
     'records': {
       for (final entry in _records.entries)
         entry.key.storageKey: entry.value.toJson(),
@@ -278,6 +291,8 @@ class SyncChangeTracker {
     return SyncChangeTracker(
       deviceId: deviceId,
       cursor: cursor,
+      // Saved before this was kept: a device that had pulled has a cursor.
+      hasPulled: json['pulled'] == true || cursor > 0,
       records: {
         for (final entry in records.entries)
           SyncRecordKey.parse(entry.key as String): SyncRecordState.fromJson(

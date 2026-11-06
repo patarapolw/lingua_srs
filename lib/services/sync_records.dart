@@ -179,6 +179,28 @@ abstract final class SyncSnapshot {
     return records;
   }
 
+  /// When the record [key] with [data] last really changed, in milliseconds,
+  /// as far as its contents tell: a card's last review, or a discussion's
+  /// last message. 0 when they do not tell, so a copy already on the server
+  /// wins over it.
+  static int knownChangeTime(SyncRecordKey key, Map<String, dynamic> data) {
+    int at(Object? value) => value is String
+        ? DateTime.tryParse(value)?.millisecondsSinceEpoch ?? 0
+        : 0;
+    switch (key.kind) {
+      case SyncKinds.card:
+        return at(data['lastReviewed']);
+      case SyncKinds.discussion:
+        final messages = data['messages'];
+        if (messages is! List) return 0;
+        return messages
+            .map((message) => message is Map ? at(message['createdAt']) : 0)
+            .fold(0, (latest, time) => time > latest ? time : latest);
+      default:
+        return 0;
+    }
+  }
+
   /// A hash of [data] that does not depend on the order of map keys.
   static String hash(Map<String, dynamic> data) =>
       sha256.convert(utf8.encode(jsonEncode(_canonical(data)))).toString();
