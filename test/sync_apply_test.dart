@@ -359,6 +359,31 @@ void main() {
       expect(lesson.markdownContent, '# My notes');
     });
 
+    test('keeps its own Markdown when the pulled lesson has Markdown', () {
+      final data = withLocalFood();
+      final records = _snapshot(_filled());
+
+      SyncApplier.apply(data, {
+        ...pulledFood(),
+        const SyncRecordKey('lesson_md', 'l1'):
+            records[const SyncRecordKey('lesson_md', 'l1')]!,
+      }, firstSync: true);
+
+      expect(data.lessons.single.markdownContent, '# Food\n\n# My notes');
+    });
+
+    test('adds only the Markdown blocks the pulled lesson lacks', () {
+      final data = withLocalFood();
+      data.lessons.single.markdownContent = '# Food\n\nOnly here.\n';
+
+      SyncApplier.apply(data, {
+        ...pulledFood(),
+        const SyncRecordKey('lesson_md', 'l1'): {'markdown': '# Food\n'},
+      }, firstSync: true);
+
+      expect(data.lessons.single.markdownContent, '# Food\n\nOnly here.\n');
+    });
+
     test('keeps both lessons after the first sync', () {
       final data = withLocalFood();
 

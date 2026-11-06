@@ -66,7 +66,7 @@ abstract final class SyncApplier {
   /// have different ids; the card reviewed more recently keeps its progress,
   /// under the pulled card's id. On [firstSync], a local lesson with the same
   /// title and folder as a pulled one it does not have is merged into the
-  /// pulled one, keeping the words only this device has.
+  /// pulled one, keeping the words and Markdown blocks only this device has.
   static Set<SyncAppPart> apply(
     SyncAppData data,
     Map<SyncRecordKey, Map<String, dynamic>?> changes, {
@@ -186,6 +186,8 @@ abstract final class SyncApplier {
       changed.add(SyncAppPart.lessons);
     }
     final next = [...data.lessons];
+    // Markdown of local lessons merged into a pulled one, by the pulled id.
+    final mergedMarkdown = <String, String>{};
     for (final entry in lessons.entries) {
       final index = next.indexWhere((lesson) => lesson.id == entry.key);
       final json = entry.value;
@@ -207,6 +209,7 @@ abstract final class SyncApplier {
           lesson.vocabularies.addAll(
             previous.vocabularies.where((vocab) => !pulled.contains(vocab.id)),
           );
+          mergedMarkdown[entry.key] = previous.markdownContent;
         }
       }
       lesson.markdownContent = previous?.markdownContent ?? '';
@@ -227,7 +230,11 @@ abstract final class SyncApplier {
     for (final entry in markdown.entries) {
       for (final lesson in next) {
         if (lesson.id == entry.key) {
-          lesson.markdownContent = entry.value?['markdown'] as String? ?? '';
+          final pulled = entry.value?['markdown'] as String? ?? '';
+          final own = mergedMarkdown[entry.key];
+          lesson.markdownContent = own == null
+              ? pulled
+              : _mergeMarkdown(pulled, own);
         }
       }
     }
@@ -330,6 +337,22 @@ abstract final class SyncApplier {
     return mine != null && (theirs == null || mine.isAfter(theirs))
         ? current.toJson()
         : pulled;
+  }
+
+  /// The [pulled] Markdown of a lesson merged on the first sync, followed by
+  /// the blocks (text between blank lines) of this device's [own] Markdown
+  /// that [pulled] does not have, in their order.
+  static String _mergeMarkdown(String pulled, String own) {
+    List<String> blocks(String markdown) => [
+      for (final block in markdown.split(RegExp(r'\n[ \t]*\n')))
+        if (block.trim().isNotEmpty) block.trim(),
+    ];
+    final known = blocks(pulled).toSet();
+    final extra = blocks(own).where((block) => !known.contains(block));
+    if (extra.isEmpty) return pulled;
+    if (pulled.trim().isEmpty) return own;
+    return '${pulled.trimRight()}\n\n${extra.join('\n\n')}'
+        '${own.endsWith('\n') ? '\n' : ''}';
   }
 
   /// Two lessons with the same title in the same folder, ignoring case.
