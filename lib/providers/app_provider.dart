@@ -2389,13 +2389,20 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     return _dailyReviewCounts.isNotEmpty;
   }
 
-  // Answer SRS review
-  Future<void> recordCardReview(SrsCard card, SrsRating rating) async {
+  /// Answers an SRS review and counts it: one review on the day of [at]
+  /// (default: now) and, unless the card was on a sub-24h interval, a review
+  /// toward the 24-hour limit. Pass the same [at] to [undoCardReview] to take
+  /// the count back.
+  Future<void> recordCardReview(
+    SrsCard card,
+    SrsRating rating, {
+    DateTime? at,
+  }) async {
     // Decide before processReview reschedules the card: reviewing a card that
     // was on a sub-24h interval does not count toward the 24 h review limit.
     final countsTowardLimit = !card.isShortInterval;
     SrsService.processReview(card, rating);
-    final now = DateTime.now();
+    final now = at ?? DateTime.now();
     final date = DateTime(now.year, now.month, now.day);
     _dailyReviewCounts[date] = (_dailyReviewCounts[date] ?? 0) + 1;
     await StorageService.saveDailyReviewCounts(_dailyReviewCounts);
@@ -2405,6 +2412,26 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       await StorageService.saveReviewTimestamps(_reviewTimestamps24h);
     }
     await saveState();
+  }
+
+  /// Takes back what [recordCardReview] counted for the review made [at],
+  /// when its rating is undone: one review on that day, and its entry toward
+  /// the 24-hour limit if it had one. The card itself is restored by the
+  /// caller.
+  Future<void> undoCardReview(DateTime at) async {
+    final date = DateTime(at.year, at.month, at.day);
+    final count = _dailyReviewCounts[date] ?? 0;
+    if (count <= 1) {
+      _dailyReviewCounts.remove(date);
+    } else {
+      _dailyReviewCounts[date] = count - 1;
+    }
+    final hadTimestamp = _reviewTimestamps24h.remove(at);
+    notifyListeners();
+    await StorageService.saveDailyReviewCounts(_dailyReviewCounts);
+    if (hadTimestamp) {
+      await StorageService.saveReviewTimestamps(_reviewTimestamps24h);
+    }
   }
 
   Future<void> saveState() async {

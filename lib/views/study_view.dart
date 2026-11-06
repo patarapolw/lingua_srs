@@ -43,6 +43,11 @@ class ReviewHistoryRecord {
   final DateTime? oldMistakesClearedAt;
   final DateTime? oldIntroducedAt;
 
+  /// When this rating was counted by [AppProvider.recordCardReview], so that
+  /// undo can take the count back. Null when it was not counted (a repeat in
+  /// the session, or mistakes practice).
+  DateTime? countedAt;
+
   ReviewHistoryRecord({
     required this.queueIndex,
     required this.card,
@@ -577,7 +582,8 @@ class _StudyViewState extends State<StudyView> {
       if (_isPracticeOnly) {
         // Mistakes practice never touches SRS state.
       } else if (isFirstSessionRating) {
-        provider.recordCardReview(card, SrsRating.again);
+        final countedAt = record.countedAt = DateTime.now();
+        provider.recordCardReview(card, SrsRating.again, at: countedAt);
       }
 
       // Interleaved re-queuing:
@@ -613,7 +619,8 @@ class _StudyViewState extends State<StudyView> {
         card.mistakesClearedAt = DateTime.now();
         provider.saveState();
       } else if (isFirstSessionRating) {
-        provider.recordCardReview(card, rating);
+        final countedAt = record.countedAt = DateTime.now();
+        provider.recordCardReview(card, rating, at: countedAt);
       }
     }
 
@@ -688,6 +695,10 @@ class _StudyViewState extends State<StudyView> {
     // Restore previous SRS state
     record.restore();
     provider.saveState();
+    // And take back the review it counted, or rating the card again would
+    // count it twice.
+    final countedAt = record.countedAt;
+    if (countedAt != null) provider.undoCardReview(countedAt);
 
     setState(() {
       _currentIndex = record.queueIndex;
