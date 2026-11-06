@@ -227,6 +227,118 @@ void main() {
     });
   });
 
+  group('activityLevel', () {
+    test('is 0 without reviews', () {
+      expect(activityLevel(0, 100), 0);
+      expect(activityLevel(0, 0), 0);
+    });
+
+    test('splits the busiest day into quarters', () {
+      expect(activityLevel(1, 100), 1);
+      expect(activityLevel(25, 100), 1);
+      expect(activityLevel(26, 100), 2);
+      expect(activityLevel(50, 100), 2);
+      expect(activityLevel(75, 100), 3);
+      expect(activityLevel(76, 100), 4);
+      expect(activityLevel(100, 100), 4);
+    });
+
+    test('gives a quiet calendar the darkest shade on its busiest day', () {
+      expect(activityLevel(1, 1), 4);
+      expect(activityLevel(1, 2), 2);
+      expect(activityLevel(2, 2), 4);
+    });
+
+    test('ranges match the levels, and skip levels no count gets', () {
+      expect(activityLevelRange(1, 100), (1, 25));
+      expect(activityLevelRange(4, 100), (76, 100));
+      expect(activityLevelRange(1, 2), isNull);
+      expect(activityLevelRange(2, 2), (1, 1));
+      expect(activityLevelRange(4, 2), (2, 2));
+      for (var busiest = 1; busiest <= 12; busiest++) {
+        for (var count = 1; count <= busiest; count++) {
+          final range = activityLevelRange(
+            activityLevel(count, busiest),
+            busiest,
+          )!;
+          expect(count, inInclusiveRange(range.$1, range.$2));
+        }
+      }
+    });
+  });
+
+  testWidgets('shades days by the busiest day shown', (tester) async {
+    final today = DateTime.now();
+    final day = DateTime(today.year, today.month, today.day);
+    final earlier = DateTime(today.year, today.month, today.day - 1);
+    late AppProvider fresh;
+    await tester.runAsync(() async {
+      await StorageService.saveDailyReviewCounts({day: 100, earlier: 40});
+      fresh = AppProvider();
+      for (var attempt = 0; attempt < 100 && fresh.isLoading; attempt++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    });
+    addTearDown(fresh.dispose);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppProvider>.value(
+        value: fresh,
+        child: const MaterialApp(home: ActivityHeatmapView()),
+      ),
+    );
+
+    Color? cellColor(String message) {
+      final box = tester.widget<Container>(
+        find
+            .descendant(
+              of: find.byTooltip(message),
+              matching: find.byType(Container),
+            )
+            .last,
+      );
+      return (box.decoration as BoxDecoration?)?.color;
+    }
+
+    // At fixed thresholds, both days were the darkest shade.
+    expect(
+      cellColor('${dayLabel(day)}: 100 reviews'),
+      isNot(cellColor('${dayLabel(earlier)}: 40 reviews')),
+    );
+    expect(find.byTooltip('1–25 reviews'), findsOneWidget);
+    expect(find.byTooltip('76–100 reviews'), findsOneWidget);
+    expect(find.byTooltip('No reviews'), findsOneWidget);
+  });
+
+  testWidgets('shows the cards waiting before the first review', (
+    tester,
+  ) async {
+    provider.lessons.add(
+      Lesson(
+        title: 'New words',
+        vocabularies: [
+          VocabItem(targetWord: 'a', translation: 'b', pos: 'nouns'),
+          VocabItem(targetWord: 'c', translation: 'd', pos: 'nouns'),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppProvider>.value(
+        value: provider,
+        child: const MaterialApp(home: ActivityHeatmapView()),
+      ),
+    );
+
+    expect(find.text('No study activity yet'), findsOneWidget);
+    expect(find.text('Cards by stage'), findsOneWidget);
+    // Nouns study KO ➔ EN only by default: one card each.
+    expect(find.byTooltip('New: 2 cards'), findsOneWidget);
+    expect(find.text('Less'), findsNothing);
+    expect(find.textContaining('in the past year'), findsNothing);
+    expect(dayCells(), findsNothing);
+  });
+
   testWidgets('backfills activity from last review dates on first load', (
     tester,
   ) async {

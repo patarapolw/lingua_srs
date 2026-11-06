@@ -93,10 +93,10 @@ Full feature reference. For a short overview see the [README](../README.md).
 
 12. **Study Activity**:
    - Open **Study activity** from the ⋮ menu on the lessons screen.
-   - A calendar heatmap shows reviews per day over the past year, one column per week starting on Monday, with the total above it. Darker cells mean more reviews that day (1, 2 to 3, 4 to 6, or 7 and more).
+   - A calendar heatmap shows reviews per day over the past year, one column per week starting on Monday, with the total above it. Darker cells mean more reviews that day. The four shades are quarters of the busiest day shown, so heavy days stand out even at 100 reviews a day; each legend square's tooltip gives its range.
    - **Cards by stage** charts the enabled cards that are New, Learning or Review. A card shared by several lessons is counted once.
    - **Leeches** lists cards with at least 8 lapses, showing the word, its meaning and the lapse count, since they may need a new approach.
-   - Until you have reviewed something (and have no leeches), the screen shows *No study activity yet*.
+   - Until you have reviewed something (and have no leeches), *No study activity yet* takes the calendar's place, and Cards by stage still shows the cards waiting. With no cards at all, the screen shows only *No study activity yet*.
 
 13. **Answer Pad**:
    - Each card in a review, front and back, has a collapsed *Your answer* button that opens a pad for writing the answer before you reveal it.
