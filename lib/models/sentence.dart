@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:uuid/uuid.dart';
 
+import 'shared_vocab.dart';
+
 /// One word's own `**` marking of a pool sentence.
 ///
 /// A pool [Sentence] is plain text and may be shared by several words, but the
@@ -298,7 +300,7 @@ class Sentence {
     'translationText': translationText,
     'audioUrl': audioUrl,
     'useAudio': useAudio,
-    'ttsText': ttsText,
+    SharedVocab.ttsField: ttsText,
     'notes': notes,
     'lessonId': lessonId,
   };
@@ -309,7 +311,7 @@ class Sentence {
     translationText: json['translationText'] as String? ?? '',
     audioUrl: json['audioUrl'] as String?,
     useAudio: json['useAudio'] as bool? ?? true,
-    ttsText: json['ttsText'] as String?,
+    ttsText: SharedVocab.ttsFromJson(json),
     notes: json['notes'] as String? ?? '',
     lessonId: json['lessonId'] as String?,
   );

@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import '../models/ai_discussion_message.dart';
 import '../models/lesson.dart';
 import '../models/sentence.dart';
+import '../models/shared_vocab.dart';
 import '../models/srs_card.dart';
 import '../models/vocab_merge_record.dart';
 
@@ -95,7 +96,7 @@ abstract final class SyncSnapshot {
   static const _sharedEntryFields = {
     'audioUrl',
     'useAudio',
-    'ttsText',
+    SharedVocab.ttsField,
     'notes',
     'disambiguation',
     'cardTargetToNative',

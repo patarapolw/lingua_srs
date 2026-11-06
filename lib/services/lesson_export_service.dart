@@ -128,7 +128,7 @@ class LessonExportService {
       'meaning': vocab.translation,
     };
     if (vocab.audioUrl != null) entry['audio'] = vocab.audioUrl;
-    if (vocab.ttsText != null) entry['target_text'] = vocab.ttsText;
+    if (vocab.ttsText != null) entry['tts'] = vocab.ttsText;
     if (vocab.notes.isNotEmpty) entry['notes'] = vocab.notes;
     if (vocab.disambiguation.isNotEmpty) {
       entry['disambiguation'] = vocab.disambiguation;
@@ -154,7 +154,7 @@ class LessonExportService {
       final translation = vocab.translationTextFor(sentence);
       if (translation.isNotEmpty) example['translation'] = translation;
       if (sentence.audioUrl != null) example['audio'] = sentence.audioUrl!;
-      if (sentence.ttsText != null) example['target_text'] = sentence.ttsText!;
+      if (sentence.ttsText != null) example['tts'] = sentence.ttsText!;
       if (sentence.notes.isNotEmpty) example['notes'] = sentence.notes;
       examples.add(example);
     }

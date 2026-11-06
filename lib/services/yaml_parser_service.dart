@@ -185,7 +185,7 @@ class YamlParserService {
               nativeLang = 'en';
             }
           } else if (_isTtsKey(fKey) && fVal.isNotEmpty) {
-            ttsText = fVal; // e.g. ko_text: alternate text for TTS
+            ttsText = fVal; // tts: alternate text for TTS
           }
         }
 
@@ -353,9 +353,11 @@ String _notesText(dynamic value) {
   return value.toString().trim();
 }
 
-/// `<lang>_text` (such as `ko_text`) holds alternate text for TTS.
+/// `tts` holds alternate text for TTS. The old names `<lang>_text` (such as
+/// `ko_text`) and `target_text` (written by older exports) are still read.
 bool _isTtsKey(String key) =>
-    key.endsWith('_text') &&
-    YamlParserService.knownLangKeys.contains(
-      key.substring(0, key.length - '_text'.length),
-    );
+    key == 'tts' ||
+    (key.endsWith('_text') &&
+        YamlParserService.knownLangKeys.contains(
+          key.substring(0, key.length - '_text'.length),
+        ));

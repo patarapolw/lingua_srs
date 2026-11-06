@@ -115,6 +115,38 @@ void main() {
       );
     });
 
+    test('keeps TTS text in vocab and sentence records under tts', () {
+      final lesson = Lesson(
+        id: 'lesson-1',
+        title: 'L1',
+        vocabularies: [_vocab()..ttsText = '목적 지'],
+      );
+      final sentence = Sentence(
+        id: 'sentence-1',
+        targetText: '3개 주세요',
+        translationText: 'Three, please',
+        ttsText: '세 개 주세요',
+      );
+
+      final records = _build(lessons: [lesson], sentences: [sentence]);
+      final vocab = records[const SyncRecordKey('vocab', 'word')]!;
+      final sentenceRecord =
+          records[const SyncRecordKey('sentence', 'sentence-1')]!;
+      final entry =
+          (records[const SyncRecordKey('lesson', 'lesson-1')]!['vocabularies']
+                      as List)
+                  .single
+              as Map;
+
+      expect(vocab['tts'], '목적 지');
+      expect(vocab.containsKey('ttsText'), isFalse);
+      expect((vocab['meta'] as Map).keys, contains('tts'));
+      expect(sentenceRecord['tts'], '세 개 주세요');
+      expect(sentenceRecord.containsKey('ttsText'), isFalse);
+      expect(entry.containsKey('tts'), isFalse);
+      expect(entry.containsKey('ttsText'), isFalse);
+    });
+
     test('stores a word used by two lessons once', () {
       final first = Lesson(id: 'a', title: 'A', vocabularies: [_vocab()]);
       final second = Lesson(id: 'b', title: 'B', vocabularies: [_vocab()]);
