@@ -74,8 +74,7 @@ flutter test
 - [Lesson format](docs/lesson-format.md)
 - [Keyboard shortcuts](docs/hotkeys.md)
 - [Architecture](docs/architecture.md)
-- [Using sync](docs/sync-guide.md)
-- [Sync and dictionary import](docs/sync.md)
+- [Using sync](docs/sync-guide.md), and its design: [sync and dictionary import](docs/sync.md)
 - [Sync server administration](docs/admin.md)
 - [Issues](https://github.com/patarapolw/lingua_srs/issues): bugs, ideas and planned work
 - [AGENTS.md](AGENTS.md): conventions for contributors and coding agents
