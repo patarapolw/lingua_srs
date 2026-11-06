@@ -149,8 +149,8 @@ void main() {
     ];
 
     test('leaves the card out of study until it is unsuspended', () async {
-      final card = provider.lessons.single.vocabularies.single
-          .cardTargetToNative;
+      final card =
+          provider.lessons.single.vocabularies.single.cardTargetToNative;
       expect(queuedCardIds(), contains('a-tn'));
 
       await provider.setCardSuspended(card, true);
@@ -163,8 +163,8 @@ void main() {
     });
 
     test('is saved', () async {
-      final card = provider.lessons.single.vocabularies.single
-          .cardTargetToNative;
+      final card =
+          provider.lessons.single.vocabularies.single.cardTargetToNative;
       await provider.setCardSuspended(card, true);
 
       final reloaded = await load();

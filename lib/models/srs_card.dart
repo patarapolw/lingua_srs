@@ -90,9 +90,7 @@ class SrsCard {
 
   /// Already learned or being learned, and scheduled for now or earlier.
   bool get isDue =>
-      isActive &&
-      status != SrsStatus.isNew &&
-      !dueDate.isAfter(DateTime.now());
+      isActive && status != SrsStatus.isNew && !dueDate.isAfter(DateTime.now());
 
   /// Can be studied now: due, or new.
   bool get isAvailable => isNewCard || isDue;
