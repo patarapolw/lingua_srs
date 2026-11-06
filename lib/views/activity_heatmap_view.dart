@@ -353,7 +353,7 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
     final seenCardIds = <String>{};
     for (final vocab in lessons.expand((lesson) => lesson.vocabularies)) {
       for (final card in [vocab.cardTargetToNative, vocab.cardNativeToTarget]) {
-        if (!card.isEnabled || !seenCardIds.add(card.id)) continue;
+        if (!card.isActive || !seenCardIds.add(card.id)) continue;
         counts[card.status] = counts[card.status]! + 1;
       }
     }
@@ -413,7 +413,7 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
     final cardsById = <String, _LeechCard>{};
     for (final vocab in lessons.expand((lesson) => lesson.vocabularies)) {
       for (final card in [vocab.cardTargetToNative, vocab.cardNativeToTarget]) {
-        if (card.isEnabled && card.lapses >= _leechLapseThreshold) {
+        if (card.isActive && card.lapses >= _leechLapseThreshold) {
           cardsById.putIfAbsent(
             card.id,
             () => _LeechCard(vocab: vocab, card: card),

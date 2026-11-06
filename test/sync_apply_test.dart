@@ -183,6 +183,47 @@ void main() {
     expect(word.cardTargetToNative.interval, 2);
   });
 
+  test('a pulled suspension changes the card and keeps its progress', () {
+    final data = _filled();
+    final vocab = _snapshot(data)[const SyncRecordKey('vocab', 'w1')]!;
+    final cards = Map<String, dynamic>.from(vocab['cards'] as Map);
+    final tn = Map<String, dynamic>.from(cards['targetToNative'] as Map);
+    expect(tn['isSuspended'], isFalse);
+
+    SyncApplier.apply(data, {
+      const SyncRecordKey('vocab', 'w1'): {
+        ...vocab,
+        'cards': {
+          ...cards,
+          'targetToNative': {...tn, 'isSuspended': true},
+        },
+      },
+    });
+
+    final card = data.lessons.first.vocabularies.first.cardTargetToNative;
+    expect(card.isSuspended, isTrue);
+    expect(card.isActive, isFalse);
+    expect(card.interval, 2);
+  });
+
+  test('a vocab record from before suspension leaves cards unsuspended', () {
+    final data = _filled();
+    final vocab = _snapshot(data)[const SyncRecordKey('vocab', 'w1')]!;
+    final cards = Map<String, dynamic>.from(vocab['cards'] as Map);
+    final tn = Map<String, dynamic>.from(cards['targetToNative'] as Map)
+      ..remove('isSuspended');
+
+    SyncApplier.apply(data, {
+      const SyncRecordKey('vocab', 'w1'): {
+        ...vocab,
+        'cards': {...cards, 'targetToNative': tn},
+      },
+    });
+
+    final card = data.lessons.first.vocabularies.first.cardTargetToNative;
+    expect(card.isSuspended, isFalse);
+  });
+
   test('a deleted lesson, sentence and discussion are removed', () {
     final data = _filled();
 

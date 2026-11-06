@@ -97,12 +97,14 @@ void main() {
         'targetToNative': {
           'id': 'card-tn',
           'isEnabled': true,
+          'isSuspended': false,
           'frontHint': '',
           'backNotes': 'Back note',
         },
         'nativeToTarget': {
           'id': 'card-nt',
           'isEnabled': false,
+          'isSuspended': false,
           'frontHint': '',
           'backNotes': '',
         },
@@ -111,6 +113,7 @@ void main() {
       expect(card['vocabId'], 'word');
       expect(card.containsKey('backNotes'), isFalse);
       expect(card.containsKey('isEnabled'), isFalse);
+      expect(card.containsKey('isSuspended'), isFalse);
       expect(
         records.containsKey(const SyncRecordKey('card', 'card-nt')),
         isTrue,

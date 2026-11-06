@@ -170,6 +170,7 @@ abstract final class SyncApplier {
         'id': entry.key,
         'direction': json['direction'],
         'isEnabled': current.isEnabled,
+        'isSuspended': current.isSuspended,
         'frontHint': current.frontHint,
         'backNotes': current.backNotes,
       });
@@ -368,6 +369,7 @@ abstract final class SyncApplier {
     if (current == null || current.id != incoming.id) return incoming;
     return current
       ..isEnabled = incoming.isEnabled
+      ..isSuspended = incoming.isSuspended
       ..backNotes = incoming.backNotes
       ..frontHint = incoming.frontHint
       ..interval = incoming.interval

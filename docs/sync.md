@@ -146,7 +146,7 @@ Everything a backup contains syncs, except what only makes sense on one device:
 | --- | --- | --- | --- |
 | `lesson` | lesson | Title, unit, languages, and the vocabulary entries as `VocabItem.toJson()` writes them, without the shared fields (details and cards). | Newest wins. |
 | `lesson_md` | lesson with Markdown | The lesson's Markdown. | Newest wins. |
-| `vocab` | vocab id | The `SharedVocab` details (audio, TTS text, notes, disambiguation, their provenance and alternates), and each card's settings: enabled, front hint, back notes, card id. | Newest wins. |
+| `vocab` | vocab id | The `SharedVocab` details (audio, TTS text, notes, disambiguation, their provenance and alternates), and each card's settings: enabled, suspended, front hint, back notes, card id. | Newest wins. |
 | `card` | SRS card | Scheduling only: interval, repetitions, ease, due date, status, lapses and the review and mistake dates, plus the vocab id and direction. | Newest wins. |
 | `sentence` | sentence | `Sentence.toJson()`. | Newest wins. |
 | `merge` | merge record | `VocabMergeRecord.toJson()`. Undoing a merge deletes its record. | Newest wins. |

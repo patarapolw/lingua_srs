@@ -38,6 +38,12 @@ class SrsCard {
   final String id;
   final CardDirection direction;
   bool isEnabled;
+
+  /// Taken out of reviews by the learner, keeping its progress, until it is
+  /// unsuspended. Unlike [isEnabled], which says whether this direction of
+  /// the word is studied at all (off by default for some words), this marks
+  /// one card set aside, for example a leech.
+  bool isSuspended;
   String backNotes;
   String frontHint;
   int interval; // in days
@@ -59,6 +65,7 @@ class SrsCard {
     String? id,
     required this.direction,
     this.isEnabled = true,
+    this.isSuspended = false,
     this.backNotes = '',
     this.frontHint = '',
     this.interval = 0,
@@ -75,14 +82,15 @@ class SrsCard {
   }) : id = id ?? const Uuid().v4(),
        dueDate = dueDate ?? DateTime.now();
 
+  /// Studied: its direction is enabled and it is not suspended.
+  bool get isActive => isEnabled && !isSuspended;
+
   /// Never reviewed. New cards are not "due": they have their own daily limit.
-  bool get isNewCard => isEnabled && status == SrsStatus.isNew;
+  bool get isNewCard => isActive && status == SrsStatus.isNew;
 
   /// Already learned or being learned, and scheduled for now or earlier.
   bool get isDue =>
-      isEnabled &&
-      status != SrsStatus.isNew &&
-      !dueDate.isAfter(DateTime.now());
+      isActive && status != SrsStatus.isNew && !dueDate.isAfter(DateTime.now());
 
   /// Can be studied now: due, or new.
   bool get isAvailable => isNewCard || isDue;
@@ -100,7 +108,7 @@ class SrsCard {
   }
 
   bool get hasRecentMistake {
-    if (!isEnabled) return false;
+    if (!isActive) return false;
     bool counts(DateTime d) =>
         mistakesClearedAt == null || d.isAfter(mistakesClearedAt!);
     if (lastMistakeDate != null && counts(lastMistakeDate!)) {
@@ -137,6 +145,7 @@ class SrsCard {
     'id': id,
     'direction': direction.name,
     'isEnabled': isEnabled,
+    'isSuspended': isSuspended,
     'backNotes': backNotes,
     'frontHint': frontHint,
     'interval': interval,
@@ -165,6 +174,7 @@ class SrsCard {
       orElse: () => CardDirection.targetToNative,
     ),
     isEnabled: json['isEnabled'] as bool? ?? true,
+    isSuspended: json['isSuspended'] as bool? ?? false,
     backNotes: json['backNotes'] as String? ?? '',
     frontHint: json['frontHint'] as String? ?? '',
     interval: json['interval'] as int? ?? 0,

@@ -1571,9 +1571,18 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
         return false;
       }
       return direction == CardDirection.targetToNative
-          ? candidate.cardTargetToNative.isEnabled
-          : candidate.cardNativeToTarget.isEnabled;
+          ? candidate.cardTargetToNative.isActive
+          : candidate.cardNativeToTarget.isActive;
     }).toList();
+  }
+
+  /// Suspends [card], taking it out of reviews with its progress kept, or
+  /// unsuspends it.
+  Future<void> setCardSuspended(SrsCard card, bool suspended) async {
+    if (card.isSuspended == suspended) return;
+    card.isSuspended = suspended;
+    notifyListeners(); // Screens update before the save finishes.
+    await saveState();
   }
 
   // Toggle card directions
@@ -2232,7 +2241,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
             : vocab.pos.trim().toLowerCase();
 
         // KO -> EN Card
-        if (vocab.cardTargetToNative.isEnabled) {
+        if (vocab.cardTargetToNative.isActive) {
           final card = vocab.cardTargetToNative;
           final isEligible = mistakesOnly
               ? card.hasRecentMistake
@@ -2252,7 +2261,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
         }
 
         // EN -> KO Card
-        if (vocab.cardNativeToTarget.isEnabled) {
+        if (vocab.cardNativeToTarget.isActive) {
           final card = vocab.cardNativeToTarget;
           final isEligible = mistakesOnly
               ? card.hasRecentMistake
