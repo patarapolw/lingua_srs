@@ -2,7 +2,7 @@
 
 How devices sync, and how a separately developed dictionary app sends content to LinguaSRS. Every account lives on one hosted Cloudflare Worker backed by D1, and data is end-to-end encrypted: the server only stores ciphertext. See issue #2. This also covers the content-import half of #45.
 
-Implemented so far: the Worker (`worker/`), account creation and email confirmation, sign-in, password changes, one-time device pairing, account deletion, and password-derived account keys. Records describes what will sync; building, encrypting, pulling, pushing and applying records is implemented (`SyncEngine`, `SyncApplier`), and running syncs from the app is follow-up work.
+Implemented so far: the Worker (`worker/`), account creation and email confirmation, sign-in, password changes, one-time device pairing, account deletion, and password-derived account keys. Records describes what will sync; building, encrypting, pulling, pushing and applying records is implemented (`SyncEngine`, `SyncApplier`), and the app syncs on its own while signed in (see When the app syncs). The first sync of a device that already has data is follow-up work.
 
 ## Server address
 
@@ -95,7 +95,7 @@ To delete an account, choose *Delete account* in Settings and confirm. This perm
 
 ### Other devices after a deletion or a password change
 
-Nothing contacts the server in the background yet, so a device that was signed in to the account keeps showing it as signed in, with its lessons and progress untouched, until something uses the server. Then the server answers `401`. It gives the same answer for an account that was deleted and for a password that was changed on another device, because it never says whether an email has an account, so the app cannot tell which happened. It says that the server no longer accepts this sign-in and that the lessons are still on the device. *Check sign-in* in Settings asks on demand. The app never signs a device out by itself: the person chooses to sign out and sign in again with the new password, or to create a new account.
+A device that was signed in to the account finds out at its next sync, or when *Check sign-in* is used: the server answers `401`. It gives the same answer for an account that was deleted and for a password that was changed on another device, because it never says whether an email has an account, so the app cannot tell which happened. It says that the server no longer accepts this sign-in and that the lessons are still on the device. *Check sign-in* in Settings asks on demand. The app never signs a device out by itself: the person chooses to sign out and sign in again with the new password, or to create a new account.
 
 When the sync engine exists it must handle a rejected sign-in the same way: stop syncing, keep the local data, and say so. It must also notice an account that was **re-created**. Signing in is deterministic (the keys come from the email and password), so if an account is deleted and a new one is created with the same email and password, a device that was signed in to the old one would be accepted by the new one. The new account has a different data key and its own change numbers. The engine therefore has to compare an identity of the account every time it connects, and when it differs, stop and ask instead of carrying on with the old data key and pull cursor. That identity is `createdAt` from `GET /account`: the time the signup started, fixed once the email is confirmed, kept through password changes, and different for a re-created account. `SyncClient.getAccount` returns it, as `null` from an older Worker that does not send it.
 
@@ -130,7 +130,7 @@ The dictionary app signs in with the same email and password, like another devic
 
 ## Records
 
-What the app stores on the server, one record per piece of data. Building the records, noticing changes (see Change tracking), encrypting, splitting and decrypting them (`SyncRecordCipher`), pulling and pushing them (see Sync engine), and applying them to the app's data (see Applying pulled records) are implemented. Nothing in the app runs a sync yet.
+What the app stores on the server, one record per piece of data. Building the records, noticing changes (see Change tracking), encrypting, splitting and decrypting them (`SyncRecordCipher`), pulling and pushing them (see Sync engine), applying them to the app's data (see Applying pulled records), and running syncs (see When the app syncs) are implemented.
 
 ### What syncs
 
@@ -232,6 +232,18 @@ Changes are checked by `AppProvider.trackSyncChanges`. The sync engine calls it 
 - Other devices' `activity` records are kept apart from this device's counts (`lingua_srs_sync_remote_activity`). The activity calendar and the rolling 24-hour review limit add them up; the new-card limit already counts every device, because it comes from the cards' first-review dates.
 - Merge history keeps the newest 20 records, as on one device.
 
+### When the app syncs
+
+While a device is signed in, the app syncs on its own (`SyncScheduler`, in `main.dart`):
+
+- when it starts, or right after signing in;
+- when it comes back to the foreground;
+- 20 seconds after the last change in the app, if a record actually changed. Each change restarts the wait, so a study session syncs once it pauses, not after every card.
+
+*Sync now* in Settings syncs at once. Settings also shows when this device last synced and, if the last sync stopped or was incomplete, why: no connection, a sign-in the server no longer accepts, a re-created account, records from a newer version of the app, or records that could not be read. None of these change the data on the device, and the app keeps working offline.
+
+A sync unlocks the data key only when it has none for this sign-in. The key is kept with the auth key, so later syncs do not derive keys from the password. Signing out or into another account clears the sync state and the last sync time; a new password for the same account keeps them.
+
 ### Write budget
 
 A review writes one `card` record. The engine merges repeated changes to a record into one push, and writes a day's `activity` record once per push rather than once per review. The Worker allows 2,000 record writes per account per day, which covers several hundred reviews a day even when each one is pushed on its own.
@@ -281,6 +293,6 @@ A stored record is changed by an upsert that only applies when the incoming `upd
 
 ## Not covered yet
 
-- Running syncs from the app (when to sync, and what Settings shows), and the first sync of a device that already has data.
+- The first sync of a device that already has data, when the account already has data too: words without an explicit `id` match by their generated id, but other duplicates are not merged yet.
 - Resetting a forgotten password (confirmed by email, which starts a fresh account because the data cannot be decrypted without the old password), and an authenticator-app second factor.
 - Limiting failed sign-ins per address, see above.

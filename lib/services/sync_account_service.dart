@@ -106,6 +106,7 @@ class SyncAccountService {
           wrappedDataKey: account.wrappedDataKey,
           wrapKey: keys.wrapKey,
         ),
+        authKey: keys.authKey,
       );
     } finally {
       client.close();

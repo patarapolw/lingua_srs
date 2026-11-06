@@ -229,9 +229,11 @@ void main() {
         email: 'reader@example.com',
         createdAt: 42,
         key: _dataKey,
+        authKey: 'derived-auth-key',
       );
 
       final restored = SyncDataKey.fromJson(key.toJson());
+      expect(restored.authKey, 'derived-auth-key');
 
       expect(restored.endpoint, endpoint);
       expect(restored.email, 'reader@example.com');

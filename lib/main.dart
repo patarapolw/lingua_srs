@@ -10,6 +10,7 @@ import 'services/sync_account_service.dart';
 import 'services/sync_pairing.dart';
 import 'views/pairing_confirmation.dart';
 import 'widgets/adaptive_scaffold.dart';
+import 'widgets/sync_scheduler.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -147,11 +148,20 @@ class _LinguaSrsAppState extends State<LinguaSrsApp> {
       home: Builder(
         builder: (context) {
           final isDark = _isDark(context);
-          return AdaptiveScaffold(
-            isDarkMode: isDark,
-            onToggleTheme: () => setState(() {
-              _themeMode = isDark ? ThemeMode.light : ThemeMode.dark;
-            }),
+          final provider = context.read<AppProvider>();
+          return SyncScheduler(
+            changes: provider,
+            canSync: () =>
+                !provider.isLoading && provider.syncPairing != null,
+            hasChanges: () async =>
+                (await provider.trackSyncChanges()).isNotEmpty,
+            sync: provider.syncNow,
+            child: AdaptiveScaffold(
+              isDarkMode: isDark,
+              onToggleTheme: () => setState(() {
+                _themeMode = isDark ? ThemeMode.light : ThemeMode.dark;
+              }),
+            ),
           );
         },
       ),

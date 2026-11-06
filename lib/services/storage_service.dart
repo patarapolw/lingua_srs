@@ -27,6 +27,7 @@ class StorageService {
   static const String _keySyncPairing = 'lingua_srs_sync_pairing';
   static const String _keySyncState = 'lingua_srs_sync_state';
   static const String _keySyncDataKey = 'lingua_srs_sync_data_key';
+  static const String _keySyncLastSyncedAt = 'lingua_srs_sync_last_synced_at';
   static const String _keySyncRemoteActivity =
       'lingua_srs_sync_remote_activity';
   static const String _keyVocabMergeHistory = 'lingua_srs_vocab_merge_history';
@@ -112,6 +113,22 @@ class StorageService {
       await _secretStorage.delete(_keySyncDataKey);
     } else {
       await _secretStorage.write(_keySyncDataKey, jsonEncode(key.toJson()));
+    }
+  }
+
+  /// When this device last finished a sync, or null.
+  static Future<DateTime?> loadLastSyncedAt() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_keySyncLastSyncedAt);
+    return raw == null ? null : DateTime.tryParse(raw);
+  }
+
+  static Future<void> saveLastSyncedAt(DateTime? time) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (time == null) {
+      await prefs.remove(_keySyncLastSyncedAt);
+    } else {
+      await prefs.setString(_keySyncLastSyncedAt, time.toIso8601String());
     }
   }
 

@@ -89,6 +89,7 @@ lingua_srs/
 │       ├── pronunciation_toggle.dart  # RR and IPA toggles in the review menu
 │       ├── review_notes_editor.dart   # Review note editable from a card's back; text-focus check for shortcuts
 │       ├── swipe_actions.dart         # Swipe-to-reveal action panel for list tiles
+│       ├── sync_scheduler.dart        # Runs syncs at start, on resume and after edits
 │       └── youtube_embed.dart         # YouTube embed for lesson Markdown
 ├── integration_test/                  # Keychain and network checks on a real desktop build
 └── test/                              # Parser, SRS, storage, import and widget tests
