@@ -19,6 +19,7 @@ Map<SyncRecordKey, Map<String, dynamic>> _build({
   Map<String, List<AiDiscussionMessage>> aiDiscussions = const {},
   Map<String, int> lessonOrder = const {},
   Map<DateTime, int> dailyReviewCounts = const {},
+  Map<DateTime, Map<SrsRating, int>> dailyRatingCounts = const {},
   List<DateTime> reviewTimestamps = const [],
 }) => SyncSnapshot.build(
   lessons: lessons,
@@ -28,6 +29,7 @@ Map<SyncRecordKey, Map<String, dynamic>> _build({
   lessonOrder: lessonOrder,
   settings: _settings,
   dailyReviewCounts: dailyReviewCounts,
+  dailyRatingCounts: dailyRatingCounts,
   reviewTimestamps: reviewTimestamps,
   deviceId: 'device-a',
 );
@@ -222,6 +224,27 @@ void main() {
         'day': '2026-11-05',
         'count': 7,
         'reviews': [review.toUtc().toIso8601String()],
+      });
+    });
+
+    test('adds the per-rating counts of days that have them', () {
+      final day = DateTime(2026, 11, 5);
+      final olderDay = DateTime(2026, 11, 4);
+
+      final records = _build(
+        dailyReviewCounts: {day: 4, olderDay: 2},
+        dailyRatingCounts: {
+          day: {SrsRating.good: 3, SrsRating.again: 1},
+        },
+      );
+
+      const withRatings = SyncRecordKey('activity', 'device-a:2026-11-05');
+      expect(records[withRatings]!['ratings'], {'again': 1, 'good': 3});
+      // Counted before ratings were: the record stays as it was.
+      expect(records[const SyncRecordKey('activity', 'device-a:2026-11-04')], {
+        'day': '2026-11-04',
+        'count': 2,
+        'reviews': <String>[],
       });
     });
   });

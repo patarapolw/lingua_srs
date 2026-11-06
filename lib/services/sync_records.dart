@@ -115,6 +115,7 @@ abstract final class SyncSnapshot {
     required Map<String, int> lessonOrder,
     required SyncSettings settings,
     required Map<DateTime, int> dailyReviewCounts,
+    Map<DateTime, Map<SrsRating, int>> dailyRatingCounts = const {},
     required List<DateTime> reviewTimestamps,
     required String deviceId,
   }) {
@@ -171,9 +172,15 @@ abstract final class SyncSnapshot {
 
     for (final entry in dailyReviewCounts.entries) {
       final day = _dayKey(entry.key);
+      final ratings = ratingCountsToJson(
+        dailyRatingCounts[entry.key] ?? const {},
+      );
       add(SyncKinds.activity, '$deviceId:$day', {
         'day': day,
         'count': entry.value,
+        // Left out for days counted before ratings were, so their records
+        // do not change.
+        if (ratings.isNotEmpty) 'ratings': ratings,
         'reviews': [
           for (final time in reviewTimestamps)
             if (_dayKey(time) == day) time.toUtc().toIso8601String(),

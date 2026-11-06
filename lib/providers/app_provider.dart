@@ -100,6 +100,11 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   List<DateTime> _reviewTimestamps24h = [];
   Map<DateTime, int> _dailyReviewCounts = {};
 
+  /// This device's reviews per day and rating. Only reviews made since
+  /// ratings were counted are here, so a day's total in [_dailyReviewCounts]
+  /// can be larger than the sum of its ratings.
+  Map<DateTime, Map<SrsRating, int>> _dailyRatingCounts = {};
+
   /// Other devices' activity records, pulled by sync. This device's own
   /// counts stay in [_dailyReviewCounts] and [_reviewTimestamps24h].
   Map<String, Map<String, dynamic>> _remoteActivity = {};
@@ -136,6 +141,33 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       counts[date] = (counts[date] ?? 0) + count.toInt();
     }
     return Map.unmodifiable(counts);
+  }
+
+  /// Reviews per day and rating on every device. Reviews counted before
+  /// ratings were recorded, here or on a device with an older app, are only
+  /// in [dailyReviewCounts], so a day's ratings can add up to less than its
+  /// total.
+  Map<DateTime, Map<SrsRating, int>> get dailyRatingCounts {
+    final counts = {
+      for (final entry in _dailyRatingCounts.entries)
+        entry.key: {...entry.value},
+    };
+    for (final activity in _remoteActivity.values) {
+      final day = DateTime.tryParse('${activity['day']}');
+      final ratings = ratingCountsFromJson(activity['ratings']);
+      if (day == null || ratings.isEmpty) continue;
+      final dayCounts = counts.putIfAbsent(
+        DateTime(day.year, day.month, day.day),
+        () => {},
+      );
+      for (final entry in ratings.entries) {
+        dayCounts[entry.key] = (dayCounts[entry.key] ?? 0) + entry.value;
+      }
+    }
+    return Map.unmodifiable({
+      for (final entry in counts.entries)
+        entry.key: Map<SrsRating, int>.unmodifiable(entry.value),
+    });
   }
 
   Map<String, List<AiDiscussionMessage>> get aiDiscussions => Map.unmodifiable(
@@ -259,6 +291,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     _pronunciationOptions = results.$8;
     _maxNewCards24h = results.$9;
     _dailyReviewCounts = await StorageService.loadDailyReviewCounts();
+    _dailyRatingCounts = await StorageService.loadDailyRatingCounts();
     _remoteActivity = await StorageService.loadSyncRemoteActivity();
     _lessons = await StorageService.loadLessons();
     if (_dailyReviewCounts.isEmpty && _backfillDailyReviewCounts()) {
@@ -737,6 +770,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
           pronunciationOptions: _pronunciationOptions,
         ),
         dailyReviewCounts: _dailyReviewCounts,
+        dailyRatingCounts: _dailyRatingCounts,
         reviewTimestamps: _reviewTimestamps24h,
         deviceId: deviceId,
       );
@@ -2390,9 +2424,10 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   }
 
   /// Answers an SRS review and counts it: one review on the day of [at]
-  /// (default: now) and, unless the card was on a sub-24h interval, a review
-  /// toward the 24-hour limit. Pass the same [at] to [undoCardReview] to take
-  /// the count back.
+  /// (default: now), under its [rating] too, and, unless the card was on a
+  /// sub-24h interval, a review toward the 24-hour limit. Pass the same [at]
+  /// to [undoCardReview] to take the count back, or to [recountCardReview]
+  /// when the rating changes.
   Future<void> recordCardReview(
     SrsCard card,
     SrsRating rating, {
@@ -2405,7 +2440,9 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     final now = at ?? DateTime.now();
     final date = DateTime(now.year, now.month, now.day);
     _dailyReviewCounts[date] = (_dailyReviewCounts[date] ?? 0) + 1;
+    _addRatingCount(date, rating, 1);
     await StorageService.saveDailyReviewCounts(_dailyReviewCounts);
+    await StorageService.saveDailyRatingCounts(_dailyRatingCounts);
     if (countsTowardLimit) {
       _reviewTimestamps24h.removeWhere((t) => now.difference(t).inHours >= 24);
       _reviewTimestamps24h.add(now);
@@ -2414,11 +2451,11 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     await saveState();
   }
 
-  /// Takes back what [recordCardReview] counted for the review made [at],
-  /// when its rating is undone: one review on that day, and its entry toward
-  /// the 24-hour limit if it had one. The card itself is restored by the
-  /// caller.
-  Future<void> undoCardReview(DateTime at) async {
+  /// Takes back what [recordCardReview] counted for the review made [at] and
+  /// rated [rating], when its rating is undone: one review on that day and
+  /// under that rating, and its entry toward the 24-hour limit if it had one.
+  /// The card itself is restored by the caller.
+  Future<void> undoCardReview(DateTime at, SrsRating rating) async {
     final date = DateTime(at.year, at.month, at.day);
     final count = _dailyReviewCounts[date] ?? 0;
     if (count <= 1) {
@@ -2426,12 +2463,42 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     } else {
       _dailyReviewCounts[date] = count - 1;
     }
+    _addRatingCount(date, rating, -1);
     final hadTimestamp = _reviewTimestamps24h.remove(at);
     notifyListeners();
     await StorageService.saveDailyReviewCounts(_dailyReviewCounts);
+    await StorageService.saveDailyRatingCounts(_dailyRatingCounts);
     if (hadTimestamp) {
       await StorageService.saveReviewTimestamps(_reviewTimestamps24h);
     }
+  }
+
+  /// Moves the review made [at] from rating [from] to [to], when an answered
+  /// card is re-rated. It is still one review, so no total changes.
+  Future<void> recountCardReview(
+    DateTime at,
+    SrsRating from,
+    SrsRating to,
+  ) async {
+    if (from == to) return;
+    final date = DateTime(at.year, at.month, at.day);
+    _addRatingCount(date, from, -1);
+    _addRatingCount(date, to, 1);
+    notifyListeners();
+    await StorageService.saveDailyRatingCounts(_dailyRatingCounts);
+  }
+
+  /// Adds [delta] to [rating]'s count on [date], dropping counts and days that
+  /// reach zero.
+  void _addRatingCount(DateTime date, SrsRating rating, int delta) {
+    final day = _dailyRatingCounts.putIfAbsent(date, () => {});
+    final count = (day[rating] ?? 0) + delta;
+    if (count > 0) {
+      day[rating] = count;
+    } else {
+      day.remove(rating);
+    }
+    if (day.isEmpty) _dailyRatingCounts.remove(date);
   }
 
   Future<void> saveState() async {

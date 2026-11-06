@@ -9,6 +9,7 @@ import '../models/ai_discussion_message.dart';
 import '../models/lesson.dart';
 import '../models/sentence.dart';
 import '../models/shared_vocab.dart';
+import '../models/srs_card.dart';
 import '../models/vocab_item.dart';
 import '../models/vocab_merge_record.dart';
 import 'secret_storage.dart';
@@ -45,6 +46,7 @@ class StorageService {
   static const String _keyMaxNewCards24h = 'lingua_srs_max_new_cards_24h';
   static const String _keyReviewTimestamps = 'lingua_srs_review_timestamps_24h';
   static const String _keyDailyReviewCounts = 'lingua_srs_daily_review_counts';
+  static const String _keyDailyRatingCounts = 'lingua_srs_daily_rating_counts';
 
   /// Defaults for the rolling 24-hour limits. 0 means unlimited.
   static const int defaultMaxReviews24h = 100;
@@ -456,6 +458,47 @@ class StorageService {
                   '${entry.key.month.toString().padLeft(2, '0')}-'
                   '${entry.key.day.toString().padLeft(2, '0')}':
               entry.value,
+      }),
+    );
+  }
+
+  /// Reviews per day and rating, recorded since ratings were first counted.
+  /// Saved as `{"YYYY-MM-DD": {"good": 3, "again": 1}}`.
+  static Future<Map<DateTime, Map<SrsRating, int>>>
+  loadDailyRatingCounts() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_keyDailyRatingCounts);
+    if (raw == null || raw.isEmpty) return {};
+
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return {};
+      final counts = <DateTime, Map<SrsRating, int>>{};
+      for (final entry in decoded.entries) {
+        final date = DateTime.tryParse(entry.key.toString());
+        final ratings = ratingCountsFromJson(entry.value);
+        if (date != null && ratings.isNotEmpty) {
+          counts[DateTime(date.year, date.month, date.day)] = ratings;
+        }
+      }
+      return counts;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  static Future<void> saveDailyRatingCounts(
+    Map<DateTime, Map<SrsRating, int>> counts,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _keyDailyRatingCounts,
+      jsonEncode({
+        for (final entry in counts.entries)
+          '${entry.key.year.toString().padLeft(4, '0')}-'
+                  '${entry.key.month.toString().padLeft(2, '0')}-'
+                  '${entry.key.day.toString().padLeft(2, '0')}':
+              ratingCountsToJson(entry.value),
       }),
     );
   }
