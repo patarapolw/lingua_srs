@@ -8,6 +8,25 @@ import '../providers/app_provider.dart';
 
 const _leechLapseThreshold = 8;
 
+/// The shade, 0 to 4, of a day with [count] reviews, when the busiest day
+/// shown had [busiest]. Shades are quarters of the busiest day, so a calendar
+/// of 100-review days still shows which days were heavier. 0 is no reviews.
+@visibleForTesting
+int activityLevel(int count, int busiest) {
+  if (count <= 0 || busiest <= 0) return 0;
+  return (count * 4 / busiest).ceil().clamp(1, 4);
+}
+
+/// The review counts that get shade [level] (1 to 4), as `(lowest, highest)`,
+/// or null when no count does (with a quiet busiest day, some shades are
+/// skipped).
+@visibleForTesting
+(int, int)? activityLevelRange(int level, int busiest) {
+  final lowest = (level - 1) * busiest ~/ 4 + 1;
+  final highest = level * busiest ~/ 4;
+  return lowest > highest ? null : (lowest, highest);
+}
+
 /// The Monday of [day]'s week, at midnight. Built from the day number rather
 /// than by subtracting days, so a clock change in between can't land it on
 /// the Sunday before.
@@ -92,17 +111,22 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
             0,
             (maximum, count) => count > maximum ? count : maximum,
           );
-          final total = counts.entries
-              .where(
-                (entry) =>
-                    !entry.key.isBefore(firstDay) &&
-                    !entry.key.isAfter(
-                      DateTime(today.year, today.month, today.day),
-                    ),
-              )
-              .fold(0, (sum, entry) => sum + entry.value);
+          final todayDate = DateTime(today.year, today.month, today.day);
+          final shownCounts = [
+            for (final entry in counts.entries)
+              if (!entry.key.isBefore(firstDay) &&
+                  !entry.key.isAfter(todayDate))
+                entry.value,
+          ];
+          final total = shownCounts.fold(0, (sum, count) => sum + count);
+          final busiest = shownCounts.fold(
+            0,
+            (maximum, count) => count > maximum ? count : maximum,
+          );
+          final hasActivity = total > 0 || leeches.isNotEmpty;
+          final hasCards = maxStageCount > 0;
 
-          if (total == 0 && leeches.isEmpty) {
+          if (!hasActivity && !hasCards) {
             return const Center(
               child: Padding(
                 padding: EdgeInsets.all(24),
@@ -120,113 +144,148 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
             );
           }
 
-          _scrollToEnd();
+          if (hasActivity) _scrollToEnd();
           return ListView(
             padding: const EdgeInsets.all(20),
             children: [
-              Text(
-                '$total ${total == 1 ? 'review' : 'reviews'} in the past year',
-                style: theme.textTheme.titleMedium,
-              ),
-              const SizedBox(height: 16),
-              SingleChildScrollView(
-                controller: _scrollController,
-                scrollDirection: Axis.horizontal,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              // Before the first review, the cards waiting are still worth
+              // showing, under a note in place of the calendar.
+              if (!hasActivity) ...[
+                Row(
                   children: [
-                    Row(
-                      children: [
-                        const SizedBox(width: 32),
-                        for (var index = 0; index < weeks.length; index++)
-                          SizedBox(
-                            width: 16,
-                            height: 56,
-                            child: Center(
-                              child: RotatedBox(
-                                quarterTurns: 3,
-                                child: Text(
-                                  _monthLabel(weeks, index),
-                                  maxLines: 1,
-                                  style: theme.textTheme.labelSmall,
-                                ),
-                              ),
-                            ),
+                    const Icon(Icons.calendar_month_outlined),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'No study activity yet',
+                            style: theme.textTheme.titleMedium,
                           ),
-                      ],
+                          const Text(
+                            'Review vocabulary to see your activity here.',
+                          ),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 4),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(
-                          width: 28,
-                          child: Column(
-                            children: [
-                              for (final label in const [
-                                '',
-                                'Mon',
-                                '',
-                                'Wed',
-                                '',
-                                'Fri',
-                                '',
-                              ])
-                                SizedBox(
-                                  height: 16,
+                  ],
+                ),
+                const SizedBox(height: 24),
+              ] else ...[
+                Text(
+                  '$total ${total == 1 ? 'review' : 'reviews'} '
+                  'in the past year',
+                  style: theme.textTheme.titleMedium,
+                ),
+                const SizedBox(height: 16),
+                SingleChildScrollView(
+                  controller: _scrollController,
+                  scrollDirection: Axis.horizontal,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const SizedBox(width: 32),
+                          for (var index = 0; index < weeks.length; index++)
+                            SizedBox(
+                              width: 16,
+                              height: 56,
+                              child: Center(
+                                child: RotatedBox(
+                                  quarterTurns: 3,
                                   child: Text(
-                                    label,
+                                    _monthLabel(weeks, index),
+                                    maxLines: 1,
                                     style: theme.textTheme.labelSmall,
                                   ),
                                 ),
-                            ],
-                          ),
-                        ),
-                        for (final week in weeks)
-                          Padding(
-                            padding: const EdgeInsets.only(right: 4),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            width: 28,
                             child: Column(
                               children: [
-                                for (var dayIndex = 0; dayIndex < 7; dayIndex++)
-                                  _dayCell(
-                                    context,
-                                    DateTime(
-                                      week.year,
-                                      week.month,
-                                      week.day + dayIndex,
+                                for (final label in const [
+                                  '',
+                                  'Mon',
+                                  '',
+                                  'Wed',
+                                  '',
+                                  'Fri',
+                                  '',
+                                ])
+                                  SizedBox(
+                                    height: 16,
+                                    child: Text(
+                                      label,
+                                      style: theme.textTheme.labelSmall,
                                     ),
-                                    firstDay,
-                                    today,
-                                    counts,
                                   ),
                               ],
                             ),
                           ),
-                      ],
-                    ),
+                          for (final week in weeks)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 4),
+                              child: Column(
+                                children: [
+                                  for (
+                                    var dayIndex = 0;
+                                    dayIndex < 7;
+                                    dayIndex++
+                                  )
+                                    _dayCell(
+                                      context,
+                                      DateTime(
+                                        week.year,
+                                        week.month,
+                                        week.day + dayIndex,
+                                      ),
+                                      firstDay,
+                                      today,
+                                      counts,
+                                      busiest,
+                                    ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Text('Less', style: theme.textTheme.labelSmall),
+                    const SizedBox(width: 6),
+                    for (var level = 0; level <= 4; level++)
+                      Tooltip(
+                        message: _legendLabel(level, busiest),
+                        child: Container(
+                          width: 12,
+                          height: 12,
+                          margin: const EdgeInsets.only(right: 4),
+                          decoration: BoxDecoration(
+                            color: _activityColor(theme.colorScheme, level),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                    Text('More', style: theme.textTheme.labelSmall),
                   ],
                 ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Text('Less', style: theme.textTheme.labelSmall),
-                  const SizedBox(width: 6),
-                  for (var level = 0; level <= 4; level++)
-                    Container(
-                      width: 12,
-                      height: 12,
-                      margin: const EdgeInsets.only(right: 4),
-                      decoration: BoxDecoration(
-                        color: _activityColor(theme.colorScheme, level),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  Text('More', style: theme.textTheme.labelSmall),
-                ],
-              ),
-              const SizedBox(height: 24),
+                const SizedBox(height: 24),
+              ],
               Text('Cards by stage', style: theme.textTheme.titleMedium),
               const SizedBox(height: 12),
               SizedBox(
@@ -306,6 +365,7 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
     DateTime firstDay,
     DateTime today,
     Map<DateTime, int> counts,
+    int busiest,
   ) {
     final isInRange =
         !date.isBefore(firstDay) &&
@@ -330,7 +390,7 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
             decoration: BoxDecoration(
               color: _activityColor(
                 Theme.of(context).colorScheme,
-                _level(count),
+                activityLevel(count, busiest),
               ),
               borderRadius: BorderRadius.circular(2),
             ),
@@ -340,13 +400,22 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
     );
   }
 
-  int _level(int count) => switch (count) {
-    0 => 0,
-    1 => 1,
-    2 || 3 => 2,
-    >= 4 && <= 6 => 3,
-    _ => 4,
-  };
+  /// What a legend square's shade stands for, with the calendar's busiest
+  /// day at [busiest].
+  String _legendLabel(int level, int busiest) {
+    if (level == 0) return 'No reviews';
+    final range = activityLevelRange(level, busiest);
+    if (range == null) {
+      if (busiest <= 0) return 'Not used yet';
+      return 'Not used: the busiest day had '
+          '$busiest ${busiest == 1 ? 'review' : 'reviews'}';
+    }
+    final (lowest, highest) = range;
+    if (lowest == highest) {
+      return '$lowest ${lowest == 1 ? 'review' : 'reviews'}';
+    }
+    return '$lowest–$highest reviews';
+  }
 
   Map<SrsStatus, int> _studyStageCounts(List<Lesson> lessons) {
     final counts = {for (final status in SrsStatus.values) status: 0};
