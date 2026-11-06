@@ -267,6 +267,17 @@ void main() {
       find.text('50% right (Good or Easy) in the last 30 days'),
       findsOneWidget,
     );
+    // Right first, then wrong, in the study session's colours.
+    final barColors = tester
+        .widgetList<ColoredBox>(
+          find.descendant(
+            of: find.byType(ClipRRect),
+            matching: find.byType(ColoredBox),
+          ),
+        )
+        .map((box) => box.color)
+        .toList();
+    expect(barColors, [Colors.green.shade600, Colors.red.shade600]);
   });
 
   testWidgets('shows the next 7 days and stages on one line', (tester) async {
@@ -316,6 +327,26 @@ void main() {
     expect(find.text('1 new'), findsOneWidget);
     expect(find.text('2 review'), findsOneWidget);
     expect(find.byTooltip('Review: 2 cards'), findsOneWidget);
+
+    // Today's bar in the Due badge's amber, and "new" in the New badge's
+    // colour.
+    final todayBar = tester.widget<Container>(
+      find
+          .descendant(
+            of: find.byTooltip('Today: 1 due'),
+            matching: find.byType(Container),
+          )
+          .last,
+    );
+    expect(
+      (todayBar.decoration as BoxDecoration?)?.color,
+      Colors.amber.shade800,
+    );
+    final newCount = find.text('1 new');
+    expect(
+      tester.widget<Text>(newCount).style?.color,
+      Theme.of(tester.element(newCount)).colorScheme.tertiary,
+    );
   });
 
   testWidgets('a leech can be suspended, and the suspension undone', (

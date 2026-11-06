@@ -9,6 +9,12 @@ import '../services/study_stats.dart';
 
 const _leechLapseThreshold = 8;
 
+/// Colours shared with other screens: right and wrong as in the study
+/// session's progress bar, and due as in the lesson list's Due badge.
+final _rightColor = Colors.green.shade600;
+final _wrongColor = Colors.red.shade600;
+final _dueColor = Colors.amber.shade800;
+
 /// The shade, 0 to 4, of a day with [count] reviews, when the busiest day
 /// shown had [busiest]. Shades are quarters of the busiest day, so a calendar
 /// of 100-review days still shows which days were heavier. 0 is no reviews.
@@ -318,6 +324,8 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                             label: _forecastLabel(today, index),
                             count: forecast[index],
                             maximum: maxDue,
+                            // Today's bar is the lesson list's Due count.
+                            color: index == 0 ? _dueColor : null,
                             tooltip:
                                 '${_forecastLabel(today, index)}: '
                                 '${forecast[index]} due',
@@ -519,15 +527,16 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                 height: 8,
                 child: Row(
                   children: [
-                    if (recent.wrong > 0)
-                      Expanded(
-                        flex: recent.wrong,
-                        child: ColoredBox(color: theme.colorScheme.error),
-                      ),
+                    // The same colours and order as the study session's bar.
                     if (recent.right > 0)
                       Expanded(
                         flex: recent.right,
-                        child: const ColoredBox(color: Colors.green),
+                        child: ColoredBox(color: _rightColor),
+                      ),
+                    if (recent.wrong > 0)
+                      Expanded(
+                        flex: recent.wrong,
+                        child: ColoredBox(color: _wrongColor),
                       ),
                   ],
                 ),
@@ -545,12 +554,18 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
     );
   }
 
-  /// One stage in the Cards by stage line, such as "45 learning".
+  /// One stage in the Cards by stage line, such as "45 learning". New is in
+  /// the colour of the lesson list's New badge.
   Widget _stageCount(SrsStatus status, int count) {
     final label = _stageLabel(status);
     return Tooltip(
       message: '$label: $count ${count == 1 ? 'card' : 'cards'}',
-      child: Text('$count ${label.toLowerCase()}'),
+      child: Text(
+        '$count ${label.toLowerCase()}',
+        style: status == SrsStatus.isNew
+            ? TextStyle(color: Theme.of(context).colorScheme.tertiary)
+            : null,
+      ),
     );
   }
 
@@ -584,6 +599,7 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
     required int count,
     required int maximum,
     required String tooltip,
+    Color? color,
   }) {
     final barHeight = maximum == 0 ? 2.0 : 60.0 * count / maximum;
     return Semantics(
@@ -599,7 +615,7 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                   width: 16,
                   height: barHeight,
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primary,
+                    color: color ?? Theme.of(context).colorScheme.primary,
                     borderRadius: const BorderRadius.vertical(
                       top: Radius.circular(3),
                     ),
