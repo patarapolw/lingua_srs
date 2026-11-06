@@ -1,6 +1,6 @@
 # Sync and dictionary import (design)
 
-How devices sync, and how a separately developed dictionary app sends content to LinguaSRS. Every account lives on one hosted Cloudflare Worker backed by D1, and data is end-to-end encrypted: the server only stores ciphertext. See issue #2. This also covers the content-import half of #45.
+How devices sync, and how a separately developed dictionary app sends content to LinguaSRS. For how to use it, see [Using sync](sync-guide.md). Every account lives on one hosted Cloudflare Worker backed by D1, and data is end-to-end encrypted: the server only stores ciphertext. See issue #2. This also covers the content-import half of #45.
 
 Implemented so far: the Worker (`worker/`), account creation and email confirmation, sign-in, password changes, one-time device pairing, account deletion, and password-derived account keys. Records describes what will sync; building, encrypting, pulling, pushing and applying records is implemented (`SyncEngine`, `SyncApplier`), and the app syncs on its own while signed in (see When the app syncs). A device that already has data merges it with the account's on its first sync (see Joining an account with data).
 
