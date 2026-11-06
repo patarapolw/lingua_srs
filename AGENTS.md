@@ -32,7 +32,7 @@ Flutter app (Dart, `provider` state management). See [README.md](README.md) for 
 
 ## Debug sessions and hot restart
 
-- Don't start a Flutter debug session and don't try to hot restart the running app. VS Code doesn't start a Flutter debug session by itself, the Dart MCP server needs one, and a session that an agent starts is never ended by the agent. This is waiting for an upstream fix from Microsoft.
+- If the person has a Flutter debug session running and the Dart MCP server is connected to it, hot reload after your change passes `flutter analyze` (hot restart after changing state or `main`). Don't start a second session for an app that is already running; if you start one, end it before you finish.
 - A Dart MCP server that is missing or fails to start is expected, not a failure to report. Don't write it into commit messages or PR descriptions (for example "The Dart MCP server failed to start, so hot restart was never done"), and don't list hot restart as unverified. Verify with `flutter analyze` and `flutter test`; checking the running app is left to the person.
 
 ## Environments without Flutter/Dart (e.g. cloud agents)
