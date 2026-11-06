@@ -10,11 +10,14 @@ abstract interface class SyncRecordStore {
   Map<SyncRecordKey, Map<String, dynamic>> snapshot(String deviceId);
 
   /// Applies pulled records: new contents, or null for a deleted record.
-  /// [deviceId] is this device's, as in [snapshot].
+  /// [deviceId] is this device's, as in [snapshot]. [firstSync] is set on
+  /// this device's first pull from the account, when what it already had is
+  /// merged with what the account has.
   Future<void> apply(
     String deviceId,
-    Map<SyncRecordKey, Map<String, dynamic>?> changes,
-  );
+    Map<SyncRecordKey, Map<String, dynamic>?> changes, {
+    bool firstSync = false,
+  });
 }
 
 enum SyncOutcome {
@@ -110,7 +113,7 @@ class SyncEngine {
         return const SyncResult(SyncOutcome.accountChanged);
       }
 
-      tracker.track(store.snapshot(tracker.deviceId), now: _clock());
+      _track(store.snapshot(tracker.deviceId));
       final pulled = await _pull();
       final pushed = await _push();
       return SyncResult(
@@ -225,7 +228,13 @@ class SyncEngine {
       changes[key] = remote.data;
     }
 
-    if (changes.isNotEmpty) await store.apply(tracker.deviceId, changes);
+    if (changes.isNotEmpty) {
+      await store.apply(
+        tracker.deviceId,
+        changes,
+        firstSync: !tracker.hasPulled,
+      );
+    }
     final after = store.snapshot(tracker.deviceId);
     for (final key in changes.keys) {
       final data = after[key];
@@ -233,17 +242,33 @@ class SyncEngine {
       final mergedAt = merged[key];
       if (mergedAt != null) {
         tracker.recordLocal(key, hash: hash, updatedAt: mergedAt);
-      } else {
-        tracker.acceptRemote(
+        continue;
+      }
+      final remote = incoming[key]!;
+      tracker.acceptRemote(
+        key,
+        hash: hash,
+        updatedAt: remote.updatedAt,
+        deleted: data == null,
+        parts: remote.parts,
+      );
+      // The store kept something of its own, such as a card reviewed more
+      // recently here, or a lesson merged with one of the same name: push
+      // that back as a newer version.
+      final pulledData = changes[key];
+      if (data != null &&
+          pulledData != null &&
+          hash != SyncSnapshot.hash(pulledData)) {
+        final now = _clock();
+        tracker.recordLocal(
           key,
           hash: hash,
-          updatedAt: incoming[key]!.updatedAt,
-          deleted: data == null,
-          parts: incoming[key]!.parts,
+          updatedAt: now > remote.updatedAt ? now : remote.updatedAt + 1,
         );
       }
     }
     tracker.cursor = page.cursor;
+    tracker.hasPulled = true;
     await save();
     return (
       changed: changes.length,
@@ -256,7 +281,7 @@ class SyncEngine {
     final snapshot = store.snapshot(tracker.deviceId);
     // Applying pulled records can change others, such as vocab added with a
     // lesson; those are pushed too.
-    tracker.track(snapshot, now: _clock());
+    _track(snapshot);
 
     final records = <SyncRecord>[];
     final sent = <({SyncRecordKey key, int updatedAt, int parts})>[];
@@ -295,6 +320,13 @@ class SyncEngine {
     await save();
     return sent.length;
   }
+
+  /// Notes local changes. Before this device's first pull, records are
+  /// stamped with when they last really changed (see
+  /// [SyncSnapshot.knownChangeTime]), so what the account already has wins
+  /// unless this device's copy is known to be newer.
+  void _track(Map<SyncRecordKey, Map<String, dynamic>> snapshot) => tracker
+      .track(snapshot, now: _clock(), stampNew: SyncSnapshot.knownChangeTime);
 
   /// Server ids of every record this device knows, to recognize pulled
   /// deletions, which carry no contents.

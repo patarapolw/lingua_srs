@@ -27,8 +27,41 @@ jobs:
       - run: dart format --output=none --set-exit-if-changed lib test
       - run: flutter analyze
       # super_clipboard's build hook compiles Rust, which links GTK on Linux.
+      # The .deb files are cached per runner image: the Ubuntu mirror
+      # sometimes takes minutes to send them.
+      - id: image
+        run: |
+          echo "os=$ImageOS" >> "$GITHUB_OUTPUT"
+          echo "key=$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+      - name: Cache Linux build packages
+        uses: actions/cache@v6
+        with:
+          path: ~/apt-cache
+          key: apt-${{ steps.image.outputs.key }}-gtk3
+          restore-keys: apt-${{ steps.image.outputs.os }}-
       - name: Install Linux build libraries
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config libgtk-3-dev
+        run: |
+          mkdir -p ~/apt-cache/partial
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            -o Dir::Cache::Archives="$HOME/apt-cache" \
+            pkg-config libgtk-3-dev
+          sudo chown -R "$(id -u):$(id -g)" ~/apt-cache
+      # The hook downloads the crate's pinned Rust toolchain, with every
+      # target in its rust-toolchain.toml, and compiles the crate. Keep both.
+      - name: Cache Rust toolchain and build hook output
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.rustup/toolchains/*
+            !~/.rustup/toolchains/stable-*
+            ~/.rustup/update-hashes
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            .dart_tool/hooks_runner
+          key: hooks-test-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: hooks-test-${{ runner.os }}-
       - run: flutter test
 
   worker:

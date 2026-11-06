@@ -225,4 +225,51 @@ void main() {
       expect(() => SyncRecordKey.parse('nokind'), throwsFormatException);
     });
   });
+
+  group('SyncSnapshot.knownChangeTime', () {
+    test("is a card's last review", () {
+      expect(
+        SyncSnapshot.knownChangeTime(const SyncRecordKey('card', 'c'), {
+          'lastReviewed': '2026-11-05T10:00:00.000Z',
+        }),
+        DateTime.utc(2026, 11, 5, 10).millisecondsSinceEpoch,
+      );
+      expect(
+        SyncSnapshot.knownChangeTime(const SyncRecordKey('card', 'c'), {
+          'lastReviewed': null,
+        }),
+        0,
+      );
+    });
+
+    test("is a discussion's latest message", () {
+      expect(
+        SyncSnapshot.knownChangeTime(const SyncRecordKey('discussion', 'd'), {
+          'messages': [
+            {
+              'role': 'user',
+              'content': 'a',
+              'createdAt': '2026-11-05T12:00:00.000Z',
+            },
+            {
+              'role': 'user',
+              'content': 'b',
+              'createdAt': '2026-11-05T09:00:00.000Z',
+            },
+            {'role': 'user', 'content': 'c'},
+          ],
+        }),
+        DateTime.utc(2026, 11, 5, 12).millisecondsSinceEpoch,
+      );
+    });
+
+    test('is 0 when the contents do not tell', () {
+      expect(
+        SyncSnapshot.knownChangeTime(const SyncRecordKey('lesson', 'l'), {
+          'title': 'Food',
+        }),
+        0,
+      );
+    });
+  });
 }
