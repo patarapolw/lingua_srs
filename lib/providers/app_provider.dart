@@ -414,11 +414,15 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   /// After [sentence] was edited, fits every word's emphasis of it to the new
   /// text: what the edit did not touch stays emphasized, and a word whose
   /// emphasis was edited away gets a fresh suggestion from its own text.
-  void _carryEmphasisTo(Sentence sentence) {
+  ///
+  /// Returns whether any word's emphasis changed. Emphasis that already fits
+  /// the text is left as it is.
+  bool _carryEmphasisTo(Sentence sentence) {
+    var changed = false;
     for (final vocab in _lessons.expand((lesson) => lesson.vocabularies)) {
       final emphasis = vocab.sentenceEmphasis[sentence.id];
       if (emphasis == null) continue;
-      vocab.sentenceEmphasis[sentence.id] = SentenceEmphasis(
+      final carried = SentenceEmphasis(
         target:
             Sentence.carryEmphasis(emphasis.target, sentence.targetText) ??
             Sentence.suggestEmphasis(
@@ -436,7 +440,11 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
               vocab.translation,
             ),
       );
+      if (carried == emphasis) continue;
+      vocab.sentenceEmphasis[sentence.id] = carried;
+      changed = true;
     }
+    return changed;
   }
 
   void selectLesson(String? lessonId) {
@@ -653,6 +661,17 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     _autoplayAudio = data.autoplayAudio;
     _pronunciationOptions = data.pronunciationOptions;
     _remoteActivity = data.remoteActivity;
+    // A pulled sentence's text may have been edited on another device, while
+    // its words' emphasis came in an older lesson record (one edited here won
+    // the conflict). Fit the emphasis to the text, as an edit here would.
+    final byId = {for (final sentence in _sentences) sentence.id: sentence};
+    var carried = false;
+    for (final entry in changes.entries) {
+      if (entry.key.kind != SyncKinds.sentence || entry.value == null) continue;
+      final sentence = byId[entry.key.localId];
+      if (sentence != null && _carryEmphasisTo(sentence)) carried = true;
+    }
+    if (carried) changed.add(SyncAppPart.lessons);
     // A pulled sentence can be one this device imported separately: merge
     // them now, the same way on every device, rather than at the next start.
     if (changed.contains(SyncAppPart.sentences) ||

@@ -202,6 +202,19 @@ class SyncEngine {
       }
       if (state != null && state.pending && !state.blocked) {
         final mine = local[key];
+        if (remote.data == null &&
+            mine != null &&
+            SyncKinds.editsBeatDeletion.contains(key.kind)) {
+          // Keep this device's edit, stamped after the deletion so it wins
+          // on the server and comes back on the device that deleted it.
+          final now = _clock();
+          tracker.recordLocal(
+            key,
+            hash: state.hash,
+            updatedAt: now > remote.updatedAt ? now : remote.updatedAt + 1,
+          );
+          continue;
+        }
         if (key.kind == SyncKinds.discussion &&
             remote.data != null &&
             mine != null) {

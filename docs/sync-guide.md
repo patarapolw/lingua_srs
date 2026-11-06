@@ -49,7 +49,7 @@ While you are signed in, the app syncs by itself:
 
 **Settings → Sync** shows when this device last synced. **Sync now** syncs at once. The app works the same offline, and catches up the next time it can reach the server.
 
-If you change the same thing on two devices before they sync, the later change wins. AI discussions are the exception: messages from both devices are kept.
+If you change the same thing on two devices before they sync, the later change wins, with two exceptions: AI discussions keep the messages from both devices, and an edited sentence is kept even if another device deleted it.
 
 ## What syncs
 

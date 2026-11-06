@@ -219,7 +219,7 @@ Changes are checked by `AppProvider.trackSyncChanges`. The sync engine calls it 
 4. Decides each pulled record:
    - its own push coming back, or a version it already has: nothing to do;
    - written by a newer app (a newer `schema`): left alone here and never pushed over, and reported;
-   - changed on this device too: the newer `updatedAt` wins, except AI discussions, whose messages are merged and pushed;
+   - changed on this device too: the newer `updatedAt` wins, except AI discussions, whose messages are merged and pushed, and a sentence this device edited that another device deleted, whose edit is kept and pushed with a newer `updatedAt` (another device deletes a sentence when it merges duplicates, #90);
    - otherwise applied.
 5. Applies the pulled records through a `SyncRecordStore`, notes what they now hash to so they are not pushed back, and saves the cursor.
 6. Pushes what is still pending: whole records, or parts followed by their head, deletions as tombstones, and tombstones for parts a record no longer needs.
@@ -254,7 +254,7 @@ Signing in on a device that already has lessons and progress merges them with wh
 - **Lessons.** Each device gives a lesson its own id. On the first sync, a local lesson with the same title (ignoring case) and folder as a pulled lesson is merged into the pulled one, keeping the words only this device has. Its Markdown keeps the account's text and adds, at the end, each block (text between blank lines) that only this device has. Lessons that only one side has stay as they are. After the first sync, lessons with the same name are kept apart.
 - **Anything the app keeps of its own** instead of a pulled copy, such as a newer card or a merged lesson, is pushed back with a newer `updatedAt`, so the other devices get it too.
 
-The same sentence imported separately on two devices arrives as two records with different ids. As soon as a sync applies it, the app merges sentences with the same text into one and points the words at it, as it does at startup. Every device keeps the same copy (the one with a recording, then the smallest id), so the copy removed on one device is the one removed on the others too. Choosing by list order instead made each device keep its own copy and delete the other's, losing the sentence everywhere (#90).
+The same sentence imported separately on two devices arrives as two records with different ids. As soon as a sync applies it, the app merges sentences with the same text into one and points the words at it, as it does at startup. Every device keeps the same copy (the one with a recording, then the smallest id), so the copy removed on one device is the one removed on the others too. Choosing by list order instead made each device keep its own copy and delete the other's, losing the sentence everywhere (#90). A pulled sentence's text also gets each word's emphasis fitted to it, as an edit on this device would, in case the lesson record holding that emphasis is older.
 
 ### Write budget
 

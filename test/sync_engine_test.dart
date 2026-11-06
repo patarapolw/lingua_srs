@@ -356,6 +356,44 @@ void main() {
     expect(a.store.records[_lesson], {'title': 'Kept here'});
   });
 
+  test('an edit of a sentence beats its deletion on another device', () async {
+    a.store.records[_sentence] = {'text': 'Old'};
+    await a.sync();
+    await b.sync();
+
+    clock.now += 1000;
+    // B edits the sentence, but has not synced yet when A deletes it later,
+    // as A does when it merges a duplicate.
+    b.store.records[_sentence] = {'text': 'Edited on B'};
+    b.tracker.track(b.store.snapshot(b.tracker.deviceId), now: clock.now);
+    clock.now += 1000;
+    a.store.records.remove(_sentence);
+    await a.sync();
+
+    clock.now += 1000;
+    await b.sync();
+    await a.sync();
+
+    expect(b.store.records[_sentence], {'text': 'Edited on B'});
+    expect(a.store.records[_sentence], {'text': 'Edited on B'});
+  });
+
+  test('a newer deletion of a lesson still wins over an older edit', () async {
+    a.store.records[_lesson] = {'title': 'Food'};
+    await a.sync();
+    await b.sync();
+
+    clock.now += 1000;
+    b.store.records[_lesson] = {'title': 'Edited on B'};
+    b.tracker.track(b.store.snapshot(b.tracker.deviceId), now: clock.now);
+    clock.now += 1000;
+    a.store.records.remove(_lesson);
+    await a.sync();
+    await b.sync();
+
+    expect(b.store.records.containsKey(_lesson), isFalse);
+  });
+
   group('mergeDiscussions', () {
     test('keeps messages without a time before timed ones', () {
       final merged = SyncEngine.mergeDiscussions(

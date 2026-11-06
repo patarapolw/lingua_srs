@@ -122,4 +122,40 @@ void main() {
     expect(saved.map((s) => (s as Map)['id']), ['a-pulled']);
     provider.dispose();
   });
+
+  test('fits the emphasis to a sentence edited on another device', () async {
+    final lesson = _lesson(['s1']);
+    lesson.vocabularies.single.sentenceEmphasis = {
+      's1': const SentenceEmphasis(
+        target: '저는 **배**를 탔어요',
+        translation: 'I took the **boat**.',
+      ),
+    };
+    final provider = await _load(lesson, [_sentence('s1')]);
+
+    // Only the sentence is pulled: this device's lesson record, with the
+    // emphasis for the old text, won the conflict.
+    await provider.apply('this-device', {
+      const SyncRecordKey('sentence', 's1'): Sentence(
+        id: 's1',
+        targetText: '저는 어제 배를 탔어요',
+        translationText: 'Yesterday I took the boat.',
+      ).toJson(),
+    });
+
+    final emphasis = provider
+        .lessons
+        .single
+        .vocabularies
+        .single
+        .sentenceEmphasis['s1']!;
+    expect(Sentence.withoutEmphasis(emphasis.target), '저는 어제 배를 탔어요');
+    expect(emphasis.target, contains('**배**'));
+    expect(
+      Sentence.withoutEmphasis(emphasis.translation),
+      'Yesterday I took the boat.',
+    );
+    expect(emphasis.translation, contains('**boat**'));
+    provider.dispose();
+  });
 }
