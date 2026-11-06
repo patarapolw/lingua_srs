@@ -151,7 +151,7 @@ Everything a backup contains syncs, except what only makes sense on one device:
 | `sentence` | sentence | `Sentence.toJson()`. | Newest wins. |
 | `merge` | merge record | `VocabMergeRecord.toJson()`. Undoing a merge deletes its record. | Newest wins. |
 | `discussion` | saved AI discussion | Its messages. | Merged: the union of both sides' messages, by time. |
-| `activity` | device and day | That device's review count for the day, and its review times while they still count toward the rolling 24-hour limits. | None: only that device writes it. |
+| `activity` | device and day | That device's review count for the day, the same reviews counted per rating (`ratings`, such as `{"good": 3, "again": 1}`), and its review times while they still count toward the rolling 24-hour limits. Days counted before ratings were recorded, and records from older app versions, have no `ratings`, so a day's ratings can add up to less than its count. | None: only that device writes it. |
 | `lesson_order` | account (one record) | The lesson tree's manual order. | Newest wins. |
 | `settings` | account (one record) | Review limits per 24 hours, autoplay, and the pronunciation lines shown. | Newest wins. |
 

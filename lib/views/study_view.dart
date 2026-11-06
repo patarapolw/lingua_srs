@@ -653,6 +653,7 @@ class _StudyViewState extends State<StudyView> {
     }
     context.read<AudioService>().stop();
     final provider = context.read<AppProvider>();
+    final previousRating = record.ratingGiven;
     reRateRecord(
       record: record,
       rating: rating,
@@ -668,6 +669,11 @@ class _StudyViewState extends State<StudyView> {
         sentence: provider.getRandomSentenceForVocab(source.vocab),
       ),
     );
+    // Still one review, now under the new rating.
+    final countedAt = record.countedAt;
+    if (countedAt != null) {
+      provider.recountCardReview(countedAt, previousRating, rating);
+    }
     provider.saveState();
     _navigateForward();
   }
@@ -698,7 +704,9 @@ class _StudyViewState extends State<StudyView> {
     // And take back the review it counted, or rating the card again would
     // count it twice.
     final countedAt = record.countedAt;
-    if (countedAt != null) provider.undoCardReview(countedAt);
+    if (countedAt != null) {
+      provider.undoCardReview(countedAt, record.ratingGiven);
+    }
 
     setState(() {
       _currentIndex = record.queueIndex;

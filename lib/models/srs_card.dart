@@ -12,6 +12,26 @@ enum SrsRating {
   easy, // 4
 }
 
+/// Review counts per rating as JSON, such as `{"good": 3, "again": 1}`.
+/// Ratings without reviews are left out.
+Map<String, int> ratingCountsToJson(Map<SrsRating, int> counts) => {
+  for (final rating in SrsRating.values)
+    if ((counts[rating] ?? 0) > 0) rating.name: counts[rating]!,
+};
+
+/// Reads [ratingCountsToJson]'s format. Unknown ratings and anything that is
+/// not a positive count are ignored, so data from another app version can't
+/// break it.
+Map<SrsRating, int> ratingCountsFromJson(Object? json) {
+  if (json is! Map) return {};
+  final counts = <SrsRating, int>{};
+  for (final rating in SrsRating.values) {
+    final count = json[rating.name];
+    if (count is num && count > 0) counts[rating] = count.toInt();
+  }
+  return counts;
+}
+
 enum SrsStatus { isNew, learning, review }
 
 class SrsCard {

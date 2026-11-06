@@ -7,6 +7,7 @@ import 'package:lingua_srs/models/srs_card.dart';
 import 'package:lingua_srs/providers/app_provider.dart';
 import 'package:lingua_srs/services/audio_service.dart';
 import 'package:lingua_srs/services/storage_service.dart';
+import 'package:lingua_srs/services/sync_records.dart';
 import 'package:lingua_srs/views/study_view.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -87,30 +88,37 @@ void main() {
       final at = DateTime.now();
       await provider.recordCardReview(_seenCard(), SrsRating.good, at: at);
       expect(provider.dailyReviewCounts[_today()], 1);
+      expect(provider.dailyRatingCounts[_today()], {SrsRating.good: 1});
       expect(provider.reviewsInLast24Hours, 1);
+      expect(await StorageService.loadDailyRatingCounts(), {
+        _today(): {SrsRating.good: 1},
+      });
 
-      await provider.undoCardReview(at);
+      await provider.undoCardReview(at, SrsRating.good);
 
       expect(provider.dailyReviewCounts.containsKey(_today()), isFalse);
+      expect(provider.dailyRatingCounts.containsKey(_today()), isFalse);
       expect(provider.reviewsInLast24Hours, 0);
       expect(provider.remainingReviews24h, provider.maxReviews24h);
       expect(
         (await StorageService.loadDailyReviewCounts()).containsKey(_today()),
         isFalse,
       );
+      expect(await StorageService.loadDailyRatingCounts(), isEmpty);
       expect(await StorageService.loadReviewTimestamps(), isEmpty);
     });
 
     test('undo and rating again counts the review once', () async {
       final first = DateTime.now();
       await provider.recordCardReview(_seenCard(), SrsRating.again, at: first);
-      await provider.undoCardReview(first);
+      await provider.undoCardReview(first, SrsRating.again);
       // Undo also restores the card (the study view does that), so rate it
       // as it was: `again` put it on a sub-24h interval.
       final second = first.add(const Duration(seconds: 5));
       await provider.recordCardReview(_seenCard(), SrsRating.good, at: second);
 
       expect(provider.dailyReviewCounts[_today()], 1);
+      expect(provider.dailyRatingCounts[_today()], {SrsRating.good: 1});
       expect(provider.reviewsInLast24Hours, 1);
     });
 
@@ -127,11 +135,50 @@ void main() {
       expect(provider.reviewsInLast24Hours, 1);
 
       // The short-interval review had no 24-hour entry to take back.
-      await provider.undoCardReview(shortAt);
+      await provider.undoCardReview(shortAt, SrsRating.good);
 
       expect(provider.dailyReviewCounts[_today()], 1);
+      expect(provider.dailyRatingCounts[_today()], {SrsRating.good: 1});
       expect(provider.reviewsInLast24Hours, 1);
       expect(await StorageService.loadReviewTimestamps(), [seenAt]);
+    });
+
+    test('re-rating moves the review to the new rating', () async {
+      final at = DateTime.now();
+      await provider.recordCardReview(_seenCard(), SrsRating.good, at: at);
+
+      await provider.recountCardReview(at, SrsRating.good, SrsRating.again);
+
+      expect(provider.dailyReviewCounts[_today()], 1);
+      expect(provider.dailyRatingCounts[_today()], {SrsRating.again: 1});
+      expect(provider.reviewsInLast24Hours, 1);
+      expect(await StorageService.loadDailyRatingCounts(), {
+        _today(): {SrsRating.again: 1},
+      });
+    });
+
+    test("counts other devices' ratings, and old records without", () async {
+      final day = DateTime(2026, 11, 5);
+      await provider.apply('device-a', {
+        const SyncRecordKey(SyncKinds.activity, 'device-b:2026-11-05'): {
+          'day': '2026-11-05',
+          'count': 4,
+          'ratings': {'good': 3, 'again': 1},
+          'reviews': <String>[],
+        },
+        // From an app version that did not count ratings yet.
+        const SyncRecordKey(SyncKinds.activity, 'device-c:2026-11-05'): {
+          'day': '2026-11-05',
+          'count': 2,
+          'reviews': <String>[],
+        },
+      });
+
+      expect(provider.dailyReviewCounts[day], 6);
+      expect(provider.dailyRatingCounts[day], {
+        SrsRating.good: 3,
+        SrsRating.again: 1,
+      });
     });
   });
 
@@ -178,7 +225,65 @@ void main() {
       return provider;
     }
 
-    for (final label in ['Good', 'Again']) {
+    Future<void> openLesson(
+      WidgetTester tester,
+      AppProvider provider,
+      String yaml,
+    ) async {
+      final lesson = (await tester.runAsync(() => provider.importYaml(yaml)))!;
+      for (final vocab in lesson.vocabularies) {
+        vocab.cardNativeToTarget.isEnabled = false;
+      }
+
+      tester.view.physicalSize = const Size(800, 1280);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AppProvider>.value(value: provider),
+            ChangeNotifierProvider<AudioService>(
+              create: (_) => _SilentAudioService(),
+            ),
+          ],
+          child: MaterialApp(home: StudyView(lessonId: lesson.id)),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('re-rating an answered card moves its rating count', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      await openLesson(
+        tester,
+        provider,
+        '---\nvocabulary:\n  nouns:\n    - ko: 단어\n      en: word\n'
+        '    - ko: 문장\n      en: sentence\n---\n# Lesson\n',
+      );
+
+      await tester.tap(find.textContaining('Show Answer'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Good'));
+      await tester.pumpAndSettle();
+      expect(provider.dailyRatingCounts[_today()], {SrsRating.good: 1});
+
+      // Back to the answered card, and mark it Again instead.
+      await tester.tap(find.byIcon(Icons.chevron_left));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Again'));
+      await tester.pumpAndSettle();
+
+      expect(provider.dailyReviewCounts[_today()], 1);
+      expect(provider.dailyRatingCounts[_today()], {SrsRating.again: 1});
+    });
+
+    for (final (label, rating) in [
+      ('Good', SrsRating.good),
+      ('Again', SrsRating.again),
+    ]) {
       testWidgets('rating $label, undoing and rating again counts once', (
         tester,
       ) async {
@@ -213,17 +318,20 @@ void main() {
         await tester.tap(find.textContaining(label));
         await tester.pumpAndSettle();
         expect(provider.dailyReviewCounts[_today()], 1);
+        expect(provider.dailyRatingCounts[_today()], {rating: 1});
         expect(provider.reviewsInLast24Hours, 1);
 
         // The only card is done, so the session is over; undo brings it back.
         await tester.tap(find.textContaining('Undo Last Card'));
         await tester.pumpAndSettle();
         expect(provider.dailyReviewCounts.containsKey(_today()), isFalse);
+        expect(provider.dailyRatingCounts.containsKey(_today()), isFalse);
         expect(provider.reviewsInLast24Hours, 0);
 
         await tester.tap(find.textContaining(label));
         await tester.pumpAndSettle();
         expect(provider.dailyReviewCounts[_today()], 1);
+        expect(provider.dailyRatingCounts[_today()], {rating: 1});
         expect(provider.reviewsInLast24Hours, 1);
       });
     }
