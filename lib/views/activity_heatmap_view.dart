@@ -196,7 +196,7 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                 ),
                 const SizedBox(height: 20),
                 Text(
-                  '$total ${total == 1 ? 'review' : 'reviews'} '
+                  '${formatCount(total)} ${total == 1 ? 'review' : 'reviews'} '
                   'in the past year',
                   style: theme.textTheme.titleSmall,
                 ),
@@ -312,6 +312,17 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
               ],
               if (maxDue > 0) ...[
                 Text('Next 7 days', style: theme.textTheme.titleMedium),
+                // The Study button counts fewer when the 24-hour limit
+                // holds some back, so say these are all the cards due.
+                if (provider.maxReviews24h > 0)
+                  Text(
+                    'All cards coming due, before your limit of '
+                    '${formatCount(provider.maxReviews24h)} reviews '
+                    'per 24 hours',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
                 const SizedBox(height: 12),
                 SizedBox(
                   height: 100,
@@ -328,7 +339,7 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                             color: index == 0 ? _dueColor : null,
                             tooltip:
                                 '${_forecastLabel(today, index)}: '
-                                '${forecast[index]} due',
+                                '${formatCount(forecast[index])} due',
                           ),
                         ),
                     ],
@@ -433,10 +444,10 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
     final label = [
       '${date.year}-${date.month.toString().padLeft(2, '0')}-'
           '${date.day.toString().padLeft(2, '0')}: '
-          '$count ${count == 1 ? 'review' : 'reviews'}',
+          '${formatCount(count)} ${count == 1 ? 'review' : 'reviews'}',
       // Days counted before ratings were have only the total.
-      if (ratings != null) '${rightWrongOf(ratings).right} right',
-      if (newCards > 0) '$newCards new',
+      if (ratings != null) '${formatCount(rightWrongOf(ratings).right)} right',
+      if (newCards > 0) '${formatCount(newCards)} new',
     ].join(', ');
     return SizedBox(
       width: 12,
@@ -468,13 +479,13 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
     if (range == null) {
       if (busiest <= 0) return 'Not used yet';
       return 'Not used: the busiest day had '
-          '$busiest ${busiest == 1 ? 'review' : 'reviews'}';
+          '${formatCount(busiest)} ${busiest == 1 ? 'review' : 'reviews'}';
     }
     final (lowest, highest) = range;
     if (lowest == highest) {
-      return '$lowest ${lowest == 1 ? 'review' : 'reviews'}';
+      return '${formatCount(lowest)} ${lowest == 1 ? 'review' : 'reviews'}';
     }
-    return '$lowest–$highest reviews';
+    return '${formatCount(lowest)}–${formatCount(highest)} reviews';
   }
 
   Map<SrsStatus, int> _studyStageCounts(List<Lesson> lessons) {
@@ -508,8 +519,9 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
     final (:right, :wrong) = rightWrongOf(recent);
     final parts = [
       if (streak > 0) '$streak-day streak',
-      'Today $todayReviews ${todayReviews == 1 ? 'review' : 'reviews'}'
-          '${todayNew > 0 ? ', $todayNew new' : ''}',
+      'Today ${formatCount(todayReviews)} '
+          '${todayReviews == 1 ? 'review' : 'reviews'}'
+          '${todayNew > 0 ? ', ${formatCount(todayNew)} new' : ''}',
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -541,8 +553,8 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
       SrsRating second,
       String secondName,
     ) =>
-        '$firstName ${recent[first] ?? 0} · '
-        '$secondName ${recent[second] ?? 0}';
+        '$firstName ${formatCount(recent[first] ?? 0)} · '
+        '$secondName ${formatCount(recent[second] ?? 0)}';
     TableRow legend(Color color, String text, String ratings) => TableRow(
       children: [
         Padding(
@@ -564,8 +576,8 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
     );
     return Semantics(
       label:
-          '$percent% right in the last 30 days: $right right, '
-          '$wrong wrong',
+          '$percent% right in the last 30 days: ${formatCount(right)} right, '
+          '${formatCount(wrong)} wrong',
       excludeSemantics: true,
       child: Row(
         children: [
@@ -603,12 +615,12 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                   children: [
                     legend(
                       _rightColor,
-                      '$right right',
+                      '${formatCount(right)} right',
                       ratings(SrsRating.good, 'Good', SrsRating.easy, 'Easy'),
                     ),
                     legend(
                       _wrongColor,
-                      '$wrong wrong',
+                      '${formatCount(wrong)} wrong',
                       ratings(SrsRating.again, 'Again', SrsRating.hard, 'Hard'),
                     ),
                   ],
@@ -627,8 +639,8 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
   Widget _stageCount(SrsStatus status, int count) {
     final label = _stageLabel(status);
     return Tooltip(
-      message: '$label: $count ${count == 1 ? 'card' : 'cards'}',
-      child: Text('$count ${label.toLowerCase()}'),
+      message: '$label: ${formatCount(count)} ${count == 1 ? 'card' : 'cards'}',
+      child: Text('${formatCount(count)} ${label.toLowerCase()}'),
     );
   }
 

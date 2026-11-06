@@ -73,3 +73,14 @@ List<int> dueForecast(Iterable<Lesson> lessons, DateTime now, {int days = 7}) {
   }
   return counts;
 }
+
+/// [count] with commas between thousands, such as "1,234".
+String formatCount(int count) {
+  final digits = count.abs().toString();
+  final buffer = StringBuffer(count < 0 ? '-' : '');
+  for (var index = 0; index < digits.length; index++) {
+    if (index > 0 && (digits.length - index) % 3 == 0) buffer.write(',');
+    buffer.write(digits[index]);
+  }
+  return buffer.toString();
+}

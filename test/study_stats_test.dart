@@ -142,4 +142,14 @@ void main() {
       expect(dueForecast([first, second], _now).first, 1);
     });
   });
+
+  test('formatCount puts commas between thousands', () {
+    expect(formatCount(0), '0');
+    expect(formatCount(999), '999');
+    expect(formatCount(1000), '1,000');
+    expect(formatCount(1234), '1,234');
+    expect(formatCount(123456), '123,456');
+    expect(formatCount(1234567), '1,234,567');
+    expect(formatCount(-1234), '-1,234');
+  });
 }

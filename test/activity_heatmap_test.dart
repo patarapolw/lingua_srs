@@ -321,6 +321,13 @@ void main() {
     );
 
     expect(find.text('Next 7 days'), findsOneWidget);
+    expect(
+      find.text(
+        'All cards coming due, before your limit of 100 reviews '
+        'per 24 hours',
+      ),
+      findsOneWidget,
+    );
     expect(find.byTooltip('Today: 1 due'), findsOneWidget);
     expect(find.text('1 new'), findsOneWidget);
     expect(find.text('2 review'), findsOneWidget);
@@ -465,6 +472,31 @@ void main() {
     expect(find.byTooltip('1–25 reviews'), findsOneWidget);
     expect(find.byTooltip('76–100 reviews'), findsOneWidget);
     expect(find.byTooltip('No reviews'), findsOneWidget);
+  });
+
+  testWidgets('puts commas in large counts', (tester) async {
+    final today = DateTime.now();
+    final day = DateTime(today.year, today.month, today.day);
+    late AppProvider fresh;
+    await tester.runAsync(() async {
+      await StorageService.saveDailyReviewCounts({day: 1234});
+      fresh = AppProvider();
+      for (var attempt = 0; attempt < 100 && fresh.isLoading; attempt++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    });
+    addTearDown(fresh.dispose);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppProvider>.value(
+        value: fresh,
+        child: const MaterialApp(home: ActivityHeatmapView()),
+      ),
+    );
+
+    expect(find.text('1,234 reviews in the past year'), findsOneWidget);
+    expect(find.byTooltip('${dayLabel(day)}: 1,234 reviews'), findsOneWidget);
+    expect(find.byTooltip('926–1,234 reviews'), findsOneWidget);
   });
 
   testWidgets('shows the cards waiting before the first review', (
