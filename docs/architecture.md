@@ -91,6 +91,7 @@ lingua_srs/
 │       ├── swipe_actions.dart         # Swipe-to-reveal action panel for list tiles
 │       ├── sync_scheduler.dart        # Runs syncs at start, on resume and after edits
 │       └── youtube_embed.dart         # YouTube embed for lesson Markdown
+├── windows/runner/main.cpp           # Windows entry point; a second start brings the open window forward instead of opening another copy on the same data
 ├── integration_test/                  # Keychain and network checks on a real desktop build
 └── test/                              # Parser, SRS, storage, import and widget tests
 ```
