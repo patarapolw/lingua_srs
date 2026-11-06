@@ -8,6 +8,13 @@ import '../providers/app_provider.dart';
 
 const _leechLapseThreshold = 8;
 
+/// The Monday of [day]'s week, at midnight. Built from the day number rather
+/// than by subtracting days, so a clock change in between can't land it on
+/// the Sunday before.
+@visibleForTesting
+DateTime calendarWeekStart(DateTime day) =>
+    DateTime(day.year, day.month, day.day - (day.weekday - DateTime.monday));
+
 class ActivityHeatmapView extends StatefulWidget {
   const ActivityHeatmapView({super.key});
 
@@ -27,11 +34,15 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
 
   void _scrollToEnd() {
     if (_scrolledToEnd) return;
-    _scrolledToEnd = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+      if (!mounted || _scrolledToEnd) return;
+      if (!_scrollController.hasClients) {
+        // Not laid out yet: try again after the next frame.
+        _scrollToEnd();
+        return;
       }
+      _scrolledToEnd = true;
+      _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
     });
   }
 
@@ -55,9 +66,7 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                 (min, date) => min == null || date.isBefore(min) ? date : min,
               );
           final firstDay = earliest ?? yearStart;
-          final calendarStart = firstDay.subtract(
-            Duration(days: firstDay.weekday - DateTime.monday),
-          );
+          final calendarStart = calendarWeekStart(firstDay);
           final calendarDays = DateTime.utc(today.year, today.month, today.day)
               .difference(
                 DateTime.utc(
@@ -301,10 +310,14 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
     final isInRange =
         !date.isBefore(firstDay) &&
         !date.isAfter(DateTime(today.year, today.month, today.day));
-    final count = isInRange ? counts[date] ?? 0 : 0;
+    // Days before the first one shown, or after today, are blank space: no
+    // tooltip, and nothing for a screen reader to read out.
+    if (!isInRange) return const SizedBox(width: 12, height: 16);
+    final count = counts[date] ?? 0;
     final label =
         '${date.year}-${date.month.toString().padLeft(2, '0')}-'
-        '${date.day.toString().padLeft(2, '0')}: $count reviews';
+        '${date.day.toString().padLeft(2, '0')}: '
+        '$count ${count == 1 ? 'review' : 'reviews'}';
     return SizedBox(
       width: 12,
       height: 16,
@@ -315,9 +328,10 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
           child: Container(
             margin: const EdgeInsets.only(bottom: 4),
             decoration: BoxDecoration(
-              color: isInRange
-                  ? _activityColor(Theme.of(context).colorScheme, _level(count))
-                  : Colors.transparent,
+              color: _activityColor(
+                Theme.of(context).colorScheme,
+                _level(count),
+              ),
               borderRadius: BorderRadius.circular(2),
             ),
           ),

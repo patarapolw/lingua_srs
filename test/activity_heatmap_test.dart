@@ -121,6 +121,112 @@ void main() {
     );
   });
 
+  String dayLabel(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-'
+      '${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
+
+  Finder dayCells() => find.byWidgetPredicate(
+    (widget) =>
+        widget is Tooltip &&
+        RegExp(r'^\d{4}-\d{2}-\d{2}: ').hasMatch(widget.message ?? ''),
+  );
+
+  testWidgets('a day with one review says "1 review"', (tester) async {
+    await provider.recordCardReview(
+      SrsCard(direction: CardDirection.targetToNative),
+      SrsRating.good,
+    );
+    final today = DateTime.now();
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppProvider>.value(
+        value: provider,
+        child: const MaterialApp(home: ActivityHeatmapView()),
+      ),
+    );
+
+    expect(find.byTooltip('${dayLabel(today)}: 1 review'), findsOneWidget);
+    expect(find.text('1 review in the past year'), findsOneWidget);
+  });
+
+  testWidgets('days outside the calendar range have no tooltip', (
+    tester,
+  ) async {
+    await provider.recordCardReview(
+      SrsCard(direction: CardDirection.targetToNative),
+      SrsRating.good,
+    );
+    final today = DateTime.now();
+    final tomorrow = DateTime(today.year, today.month, today.day + 1);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppProvider>.value(
+        value: provider,
+        child: const MaterialApp(home: ActivityHeatmapView()),
+      ),
+    );
+
+    // The only reviews are today's, so today is the only day in range, even
+    // though the week's other days take up space in its column.
+    expect(dayCells(), findsOneWidget);
+    expect(find.byTooltip('${dayLabel(tomorrow)}: 0 reviews'), findsNothing);
+  });
+
+  testWidgets('opens scrolled to the newest week', (tester) async {
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final now = DateTime.now();
+    await provider.recordCardReview(
+      SrsCard(direction: CardDirection.targetToNative),
+      SrsRating.good,
+      at: now.subtract(const Duration(days: 200)),
+    );
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppProvider>.value(
+        value: provider,
+        child: const MaterialApp(home: ActivityHeatmapView()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final calendar = tester.state<ScrollableState>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Scrollable && widget.axisDirection == AxisDirection.right,
+      ),
+    );
+    expect(calendar.position.maxScrollExtent, greaterThan(0));
+    expect(calendar.position.pixels, calendar.position.maxScrollExtent);
+  });
+
+  group('calendarWeekStart', () {
+    test('is the Monday of the week, at midnight', () {
+      expect(calendarWeekStart(DateTime(2026, 11, 2)), DateTime(2026, 11, 2));
+      expect(
+        calendarWeekStart(DateTime(2026, 11, 4, 15, 30)),
+        DateTime(2026, 11, 2),
+      );
+      expect(calendarWeekStart(DateTime(2026, 11, 8)), DateTime(2026, 11, 2));
+    });
+
+    test('crosses month and year boundaries', () {
+      expect(calendarWeekStart(DateTime(2026, 12, 1)), DateTime(2026, 11, 30));
+      expect(calendarWeekStart(DateTime(2027, 1, 3)), DateTime(2026, 12, 28));
+    });
+
+    test('is the Monday after a clock change mid-week', () {
+      // Egypt moves its clocks forward on Friday 2026-04-24; the week still
+      // starts on Monday the 20th wherever the test runs.
+      final monday = calendarWeekStart(DateTime(2026, 4, 25));
+      expect(monday, DateTime(2026, 4, 20));
+      expect(monday.weekday, DateTime.monday);
+    });
+  });
+
   testWidgets('backfills activity from last review dates on first load', (
     tester,
   ) async {
