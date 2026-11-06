@@ -288,63 +288,55 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     notifyListeners();
   }
 
+  /// Merges sentences with the same text into one, and points every word at
+  /// it. Every device must keep the same copy, or two devices that imported
+  /// the same sentence would each delete the other's and lose it when they
+  /// sync (#90). So the copy kept does not depend on the order of the list:
+  /// the one with a recording, then the smallest id. The others' notes, TTS
+  /// text, recording and lesson fill in what it lacks, in that same order.
+  /// Returns whether anything changed.
   bool _canonicalizeSentencePool() {
-    final canonicalBySignature = <String, Sentence>{};
-    final canonicalIndexes = <String, int>{};
-    final canonicalSentences = <Sentence>[];
-    final redirectedIds = <String, String>{};
-
+    final groups = <String, List<Sentence>>{};
     for (final sentence in _sentences) {
-      final signature = _sentenceSignature(sentence);
-      final canonical = canonicalBySignature[signature];
-      if (canonical == null) {
-        canonicalBySignature[signature] = sentence;
-        canonicalIndexes[signature] = canonicalSentences.length;
-        canonicalSentences.add(sentence);
-        continue;
-      }
-
-      final canonicalHasAudio = canonical.audioUrl?.trim().isNotEmpty == true;
-      final sentenceHasAudio = sentence.audioUrl?.trim().isNotEmpty == true;
-      if (canonical.notes.trim().isEmpty && sentence.notes.trim().isNotEmpty) {
-        canonical.notes = sentence.notes;
-      }
-      final mergedTts = canonical.ttsText?.trim().isNotEmpty == true
-          ? canonical.ttsText
-          : sentence.ttsText;
-      canonical.ttsText = mergedTts;
-      sentence.ttsText = mergedTts;
-      if (!canonicalHasAudio && sentenceHasAudio) {
-        sentence.lessonId ??= canonical.lessonId;
-        sentence.notes = canonical.notes;
-        canonicalSentences[canonicalIndexes[signature]!] = sentence;
-        canonicalBySignature[signature] = sentence;
-        redirectedIds[canonical.id] = sentence.id;
-      } else {
-        canonical.audioUrl ??= sentence.audioUrl;
-        canonical.lessonId ??= sentence.lessonId;
-        redirectedIds[sentence.id] = canonical.id;
-      }
+      groups.putIfAbsent(_sentenceSignature(sentence), () => []).add(sentence);
     }
+    if (groups.values.every((group) => group.length == 1)) return false;
 
-    if (redirectedIds.isEmpty) return false;
-
-    // A sentence that was the canonical one can lose that place to a later
-    // duplicate with a recording (A -> B, then B -> C). Follow each id to the
-    // sentence that stayed, or a word keeps the id of one that is gone.
-    for (final id in redirectedIds.keys.toList()) {
-      var target = redirectedIds[id]!;
-      for (var hops = 0; redirectedIds.containsKey(target); hops++) {
-        if (hops > redirectedIds.length) break;
-        target = redirectedIds[target]!;
+    bool hasAudio(Sentence sentence) =>
+        sentence.audioUrl?.trim().isNotEmpty == true;
+    bool hasText(String? text) => text?.trim().isNotEmpty == true;
+    final kept = <Sentence>{};
+    final redirectedIds = <String, String>{};
+    for (final group in groups.values) {
+      final ranked = [...group]
+        ..sort((a, b) {
+          final byAudio = (hasAudio(b) ? 1 : 0).compareTo(hasAudio(a) ? 1 : 0);
+          return byAudio != 0 ? byAudio : a.id.compareTo(b.id);
+        });
+      final canonical = ranked.first;
+      kept.add(canonical);
+      for (final other in ranked.skip(1)) {
+        if (!hasText(canonical.notes) && hasText(other.notes)) {
+          canonical.notes = other.notes;
+        }
+        if (!hasText(canonical.ttsText) && hasText(other.ttsText)) {
+          canonical.ttsText = other.ttsText;
+        }
+        if (!hasAudio(canonical) && hasAudio(other)) {
+          canonical.audioUrl = other.audioUrl;
+        }
+        canonical.lessonId ??= other.lessonId;
+        redirectedIds[other.id] = canonical.id;
       }
-      redirectedIds[id] = target;
     }
 
     for (final vocab in _lessons.expand((lesson) => lesson.vocabularies)) {
       _redirectSentences(vocab, redirectedIds);
     }
-    _sentences = canonicalSentences;
+    _sentences = [
+      for (final sentence in _sentences)
+        if (kept.contains(sentence)) sentence,
+    ];
     return true;
   }
 
@@ -422,11 +414,15 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   /// After [sentence] was edited, fits every word's emphasis of it to the new
   /// text: what the edit did not touch stays emphasized, and a word whose
   /// emphasis was edited away gets a fresh suggestion from its own text.
-  void _carryEmphasisTo(Sentence sentence) {
+  ///
+  /// Returns whether any word's emphasis changed. Emphasis that already fits
+  /// the text is left as it is.
+  bool _carryEmphasisTo(Sentence sentence) {
+    var changed = false;
     for (final vocab in _lessons.expand((lesson) => lesson.vocabularies)) {
       final emphasis = vocab.sentenceEmphasis[sentence.id];
       if (emphasis == null) continue;
-      vocab.sentenceEmphasis[sentence.id] = SentenceEmphasis(
+      final carried = SentenceEmphasis(
         target:
             Sentence.carryEmphasis(emphasis.target, sentence.targetText) ??
             Sentence.suggestEmphasis(
@@ -444,7 +440,11 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
               vocab.translation,
             ),
       );
+      if (carried == emphasis) continue;
+      vocab.sentenceEmphasis[sentence.id] = carried;
+      changed = true;
     }
+    return changed;
   }
 
   void selectLesson(String? lessonId) {
@@ -647,7 +647,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       pronunciationOptions: _pronunciationOptions,
       remoteActivity: {..._remoteActivity},
     );
-    final changed = SyncApplier.apply(data, changes, firstSync: firstSync);
+    final changed = {...SyncApplier.apply(data, changes, firstSync: firstSync)};
 
     _lessons = data.lessons;
     _sentences = data.sentences;
@@ -659,6 +659,29 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     _autoplayAudio = data.autoplayAudio;
     _pronunciationOptions = data.pronunciationOptions;
     _remoteActivity = data.remoteActivity;
+    // A pulled sentence's text may have been edited on another device, while
+    // its words' emphasis came in an older lesson record (one edited here won
+    // the conflict). Fit the emphasis to the text, as an edit here would.
+    final byId = {for (final sentence in _sentences) sentence.id: sentence};
+    var carried = false;
+    for (final entry in changes.entries) {
+      if (entry.key.kind != SyncKinds.sentence || entry.value == null) continue;
+      final sentence = byId[entry.key.localId];
+      if (sentence != null && _carryEmphasisTo(sentence)) carried = true;
+    }
+    if (carried) changed.add(SyncAppPart.lessons);
+    // A pulled sentence can be one this device imported separately: merge
+    // them now, the same way on every device, rather than at the next start.
+    if (changed.contains(SyncAppPart.sentences) ||
+        changed.contains(SyncAppPart.lessons)) {
+      final merged = _canonicalizeSentencePool();
+      final deduped = _dedupeSentenceLinks();
+      if (merged || deduped) {
+        changed
+          ..add(SyncAppPart.sentences)
+          ..add(SyncAppPart.lessons);
+      }
+    }
     if (_selectedLessonId != null &&
         !_lessons.any((lesson) => lesson.id == _selectedLessonId)) {
       _selectedLessonId = _lessons.isEmpty ? null : _lessons.first.id;

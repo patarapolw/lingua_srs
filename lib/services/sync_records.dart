@@ -58,6 +58,12 @@ abstract final class SyncKinds {
   /// Kept when nothing uses them any more: whether a word is still used
   /// depends on every device, so removing one could lose progress.
   static const keptWhenUnused = {vocab, card};
+
+  /// A change made on this device and not pushed yet is kept over a pulled
+  /// deletion, however their times compare. Another device deletes a
+  /// sentence when it merges duplicates, and an edit of the copy it removed
+  /// must not be lost.
+  static const editsBeatDeletion = {sentence};
 }
 
 /// Study settings that sync. Device-only preferences are not in here.
