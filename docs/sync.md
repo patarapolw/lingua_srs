@@ -254,7 +254,7 @@ Signing in on a device that already has lessons and progress merges them with wh
 - **Lessons.** Each device gives a lesson its own id. On the first sync, a local lesson with the same title (ignoring case) and folder as a pulled lesson is merged into the pulled one, keeping the words only this device has. Its Markdown keeps the account's text and adds, at the end, each block (text between blank lines) that only this device has. Lessons that only one side has stay as they are. After the first sync, lessons with the same name are kept apart.
 - **Anything the app keeps of its own** instead of a pulled copy, such as a newer card or a merged lesson, is pushed back with a newer `updatedAt`, so the other devices get it too.
 
-Sentences and AI discussions are matched by id only, so the same sentence imported separately on two devices appears twice.
+The same sentence imported separately on two devices arrives as two records with different ids. As soon as a sync applies it, the app merges sentences with the same text into one and points the words at it, as it does at startup. Every device keeps the same copy (the one with a recording, then the smallest id), so the copy removed on one device is the one removed on the others too. Choosing by list order instead made each device keep its own copy and delete the other's, losing the sentence everywhere (#90).
 
 ### Write budget
 
@@ -305,6 +305,5 @@ A stored record is changed by an upsert that only applies when the incoming `upd
 
 ## Not covered yet
 
-- Merging sentences imported separately on two devices.
 - Resetting a forgotten password (confirmed by email, which starts a fresh account because the data cannot be decrypted without the old password), and an authenticator-app second factor.
 - Limiting failed sign-ins per address, see above.

@@ -37,7 +37,7 @@ If the new device already has lessons, they are merged with the account's on its
 - For a word you studied on both devices, the progress from the more recent review is kept.
 - Everything else is added.
 
-Sentences that were imported separately on both devices appear twice.
+A sentence imported separately on both devices becomes one sentence, with the words from both pointing at it.
 
 ## Day to day
 
