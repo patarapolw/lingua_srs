@@ -17,6 +17,7 @@ Flutter app (Dart, `provider` state management). See [README.md](README.md) for 
 - Lesson/vocabulary parsing lives only in `lib/services/yaml_parser_service.dart`. Do not parse lesson syntax elsewhere.
 - SRS scheduling lives in `lib/services/srs_service.dart`.
 - Make commits using a conventional commit message and a detailed body.
+- Name branches `<type>-<issue>-<what-it-does>`: the conventional commit type, the issue number when there is one, and a few lowercase hyphenated words, e.g. `fix-92-undo-review-count` or `docs-agents-branch-naming`. Claude agents prefix the name with `claude/` (`claude/fix-92-undo-review-count`), even when the session suggests a generated name such as `ccr-…`. Use one branch per PR; after a merge, start a new branch.
 
 ## Rules
 
