@@ -516,56 +516,83 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
       children: [
         Text(parts.join(' · '), style: theme.textTheme.titleMedium),
         if (answered > 0) ...[
-          const SizedBox(height: 8),
-          Semantics(
-            label:
-                '${recent.right} right and ${recent.wrong} wrong '
-                'in the last 30 days',
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: SizedBox(
-                height: 8,
-                child: Row(
-                  children: [
-                    // The same colours and order as the study session's bar.
-                    if (recent.right > 0)
-                      Expanded(
-                        flex: recent.right,
-                        child: ColoredBox(color: _rightColor),
-                      ),
-                    if (recent.wrong > 0)
-                      Expanded(
-                        flex: recent.wrong,
-                        child: ColoredBox(color: _wrongColor),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '${(recent.right * 100 / answered).round()}% right '
-            '(Good or Easy) in the last 30 days',
-            style: theme.textTheme.bodySmall,
-          ),
+          const SizedBox(height: 12),
+          _rightWrongRing(context, recent),
         ],
       ],
     );
   }
 
-  /// One stage in the Cards by stage line, such as "45 learning". New is in
-  /// the colour of the lesson list's New badge.
+  /// A ring of right (green) and wrong (red) answers with the percentage
+  /// right in the middle, and a legend with the counts.
+  Widget _rightWrongRing(
+    BuildContext context,
+    ({int right, int wrong}) recent,
+  ) {
+    final theme = Theme.of(context);
+    final answered = recent.right + recent.wrong;
+    final percent = (recent.right * 100 / answered).round();
+    final quiet = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    Widget legend(Color color, String text, String ratings) => Row(
+      children: [
+        Icon(Icons.circle, size: 10, color: color),
+        const SizedBox(width: 6),
+        Text(text),
+        const SizedBox(width: 8),
+        Flexible(child: Text(ratings, style: quiet)),
+      ],
+    );
+    return Semantics(
+      label:
+          '$percent% right in the last 30 days: ${recent.right} right, '
+          '${recent.wrong} wrong',
+      excludeSemantics: true,
+      child: Row(
+        children: [
+          SizedBox.square(
+            dimension: 56,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // The same colours as the study session's progress bar.
+                SizedBox.expand(
+                  child: CircularProgressIndicator(
+                    value: recent.right / answered,
+                    strokeWidth: 6,
+                    color: _rightColor,
+                    backgroundColor: _wrongColor,
+                  ),
+                ),
+                Text('$percent%', style: theme.textTheme.labelLarge),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                legend(_rightColor, '${recent.right} right', 'Good, Easy'),
+                const SizedBox(height: 2),
+                legend(_wrongColor, '${recent.wrong} wrong', 'Again, Hard'),
+                const SizedBox(height: 2),
+                Text('Last 30 days', style: quiet),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// One stage in the Cards by stage line, such as "45 learning".
   Widget _stageCount(SrsStatus status, int count) {
     final label = _stageLabel(status);
     return Tooltip(
       message: '$label: $count ${count == 1 ? 'card' : 'cards'}',
-      child: Text(
-        '$count ${label.toLowerCase()}',
-        style: status == SrsStatus.isNew
-            ? TextStyle(color: Theme.of(context).colorScheme.tertiary)
-            : null,
-      ),
+      child: Text('$count ${label.toLowerCase()}'),
     );
   }
 

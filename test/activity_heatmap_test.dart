@@ -263,21 +263,18 @@ void main() {
 
     expect(find.text('2-day streak · Today 3 reviews, 3 new'), findsOneWidget);
     // Good and Easy are right; Again and Hard are wrong: 2 of 4.
-    expect(
-      find.text('50% right (Good or Easy) in the last 30 days'),
-      findsOneWidget,
+    expect(find.text('50%'), findsOneWidget);
+    expect(find.text('2 right'), findsOneWidget);
+    expect(find.text('2 wrong'), findsOneWidget);
+    expect(find.text('Good, Easy'), findsOneWidget);
+    expect(find.text('Again, Hard'), findsOneWidget);
+    // A ring of right in green over wrong in red, as in the study session.
+    final ring = tester.widget<CircularProgressIndicator>(
+      find.byType(CircularProgressIndicator),
     );
-    // Right first, then wrong, in the study session's colours.
-    final barColors = tester
-        .widgetList<ColoredBox>(
-          find.descendant(
-            of: find.byType(ClipRRect),
-            matching: find.byType(ColoredBox),
-          ),
-        )
-        .map((box) => box.color)
-        .toList();
-    expect(barColors, [Colors.green.shade600, Colors.red.shade600]);
+    expect(ring.value, 0.5);
+    expect(ring.color, Colors.green.shade600);
+    expect(ring.backgroundColor, Colors.red.shade600);
   });
 
   testWidgets('shows the next 7 days and stages on one line', (tester) async {
@@ -328,8 +325,7 @@ void main() {
     expect(find.text('2 review'), findsOneWidget);
     expect(find.byTooltip('Review: 2 cards'), findsOneWidget);
 
-    // Today's bar in the Due badge's amber, and "new" in the New badge's
-    // colour.
+    // Today's bar in the Due badge's amber.
     final todayBar = tester.widget<Container>(
       find
           .descendant(
@@ -341,11 +337,6 @@ void main() {
     expect(
       (todayBar.decoration as BoxDecoration?)?.color,
       Colors.amber.shade800,
-    );
-    final newCount = find.text('1 new');
-    expect(
-      tester.widget<Text>(newCount).style?.color,
-      Theme.of(tester.element(newCount)).colorScheme.tertiary,
     );
   });
 
