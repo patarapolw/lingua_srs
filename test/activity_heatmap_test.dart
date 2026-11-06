@@ -146,7 +146,11 @@ void main() {
       ),
     );
 
-    expect(find.byTooltip('${dayLabel(today)}: 1 review'), findsOneWidget);
+    // A new card answered Good: right, and a new card started.
+    expect(
+      find.byTooltip('${dayLabel(today)}: 1 review, 1 right, 1 new'),
+      findsOneWidget,
+    );
     expect(find.text('1 review in the past year'), findsOneWidget);
   });
 
@@ -225,6 +229,130 @@ void main() {
       expect(monday, DateTime(2026, 4, 20));
       expect(monday.weekday, DateTime.monday);
     });
+  });
+
+  testWidgets('sums up the streak, today and right and wrong', (
+    tester,
+  ) async {
+    for (final rating in [SrsRating.again, SrsRating.good, SrsRating.easy]) {
+      await provider.recordCardReview(
+        SrsCard(direction: CardDirection.targetToNative),
+        rating,
+      );
+    }
+    final yesterday = DateTime.now().subtract(const Duration(days: 1));
+    await provider.recordCardReview(
+      SrsCard(direction: CardDirection.targetToNative),
+      SrsRating.hard,
+      at: yesterday,
+    );
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppProvider>.value(
+        value: provider,
+        child: const MaterialApp(home: ActivityHeatmapView()),
+      ),
+    );
+
+    expect(
+      find.text('2-day streak · Today 3 reviews, 3 new'),
+      findsOneWidget,
+    );
+    // Good and Easy are right; Again and Hard are wrong: 2 of 4.
+    expect(
+      find.text('50% right (Good or Easy) in the last 30 days'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('shows the next 7 days and stages on one line', (tester) async {
+    final now = DateTime.now();
+    SrsCard due(DateTime date) => SrsCard(
+      direction: CardDirection.targetToNative,
+      status: SrsStatus.review,
+      interval: 3,
+      lastReviewed: date.subtract(const Duration(days: 3)),
+      dueDate: date,
+    );
+    provider.lessons.add(
+      Lesson(
+        title: 'L',
+        vocabularies: [
+          VocabItem(
+            targetWord: 'a',
+            translation: 'a',
+            pos: 'nouns',
+            cardTargetToNative: due(now.subtract(const Duration(days: 2))),
+          ),
+          VocabItem(
+            targetWord: 'b',
+            translation: 'b',
+            pos: 'nouns',
+            cardTargetToNative: due(now.add(const Duration(days: 1))),
+          ),
+          VocabItem(targetWord: 'c', translation: 'c', pos: 'nouns'),
+        ],
+      ),
+    );
+    await provider.recordCardReview(
+      SrsCard(direction: CardDirection.targetToNative),
+      SrsRating.good,
+    );
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppProvider>.value(
+        value: provider,
+        child: const MaterialApp(home: ActivityHeatmapView()),
+      ),
+    );
+
+    expect(find.text('Next 7 days'), findsOneWidget);
+    expect(find.byTooltip('Today: 1 due'), findsOneWidget);
+    expect(find.text('1 new'), findsOneWidget);
+    expect(find.text('2 review'), findsOneWidget);
+    expect(find.byTooltip('Review: 2 cards'), findsOneWidget);
+  });
+
+  testWidgets('a leech can be suspended, and the suspension undone', (
+    tester,
+  ) async {
+    final card = SrsCard(
+      direction: CardDirection.targetToNative,
+      lapses: 8,
+      status: SrsStatus.review,
+    );
+    provider.lessons.add(
+      Lesson(
+        title: 'L',
+        vocabularies: [
+          VocabItem(
+            targetWord: 'word',
+            translation: 'meaning',
+            pos: 'nouns',
+            cardTargetToNative: card,
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppProvider>.value(
+        value: provider,
+        child: const MaterialApp(home: ActivityHeatmapView()),
+      ),
+    );
+    expect(find.text('Leeches (1)'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Suspend'));
+    await tester.pumpAndSettle();
+    expect(card.isSuspended, isTrue);
+    expect(find.text('Leeches (1)'), findsNothing);
+    expect(find.text('Suspended "word"'), findsOneWidget);
+
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+    expect(card.isSuspended, isFalse);
+    expect(find.text('Leeches (1)'), findsOneWidget);
   });
 
   group('activityLevel', () {

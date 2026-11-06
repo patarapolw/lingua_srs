@@ -5,6 +5,7 @@ import '../models/lesson.dart';
 import '../models/srs_card.dart';
 import '../models/vocab_item.dart';
 import '../providers/app_provider.dart';
+import '../services/study_stats.dart';
 
 const _leechLapseThreshold = 8;
 
@@ -123,6 +124,13 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
             0,
             (maximum, count) => count > maximum ? count : maximum,
           );
+          final ratingCounts = provider.dailyRatingCounts;
+          final newCardCounts = provider.dailyNewCardCounts;
+          final forecast = dueForecast(provider.lessons, today);
+          final maxDue = forecast.fold(
+            0,
+            (maximum, count) => count > maximum ? count : maximum,
+          );
           final hasActivity = total > 0 || leeches.isNotEmpty;
           final hasCards = maxStageCount > 0;
 
@@ -173,10 +181,18 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                 ),
                 const SizedBox(height: 24),
               ] else ...[
+                _summary(
+                  context,
+                  streak: studyStreak(counts, today),
+                  todayReviews: counts[todayDate] ?? 0,
+                  todayNew: newCardCounts[todayDate] ?? 0,
+                  recent: recentRightWrong(ratingCounts, today),
+                ),
+                const SizedBox(height: 20),
                 Text(
                   '$total ${total == 1 ? 'review' : 'reviews'} '
                   'in the past year',
-                  style: theme.textTheme.titleMedium,
+                  style: theme.textTheme.titleSmall,
                 ),
                 const SizedBox(height: 16),
                 SingleChildScrollView(
@@ -252,6 +268,8 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                                       firstDay,
                                       today,
                                       counts,
+                                      ratingCounts,
+                                      newCardCounts,
                                       busiest,
                                     ),
                                 ],
@@ -286,23 +304,39 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                 ),
                 const SizedBox(height: 24),
               ],
-              Text('Cards by stage', style: theme.textTheme.titleMedium),
-              const SizedBox(height: 12),
-              SizedBox(
-                height: 120,
-                child: Row(
-                  children: [
-                    for (final entry in stageCounts.entries)
-                      Expanded(
-                        child: _stageBar(
-                          context,
-                          _stageLabel(entry.key),
-                          entry.value,
-                          maxStageCount,
+              if (maxDue > 0) ...[
+                Text('Next 7 days', style: theme.textTheme.titleMedium),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 100,
+                  child: Row(
+                    children: [
+                      for (var index = 0; index < forecast.length; index++)
+                        Expanded(
+                          child: _bar(
+                            context,
+                            label: _forecastLabel(today, index),
+                            count: forecast[index],
+                            maximum: maxDue,
+                            tooltip:
+                                '${_forecastLabel(today, index)}: '
+                                '${forecast[index]} due',
+                          ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
+                const SizedBox(height: 24),
+              ],
+              Text('Cards by stage', style: theme.textTheme.titleMedium),
+              const SizedBox(height: 8),
+              Wrap(
+                children: [
+                  for (final (index, entry) in stageCounts.entries.indexed) ...[
+                    if (index > 0) const Text(' · '),
+                    _stageCount(entry.key, entry.value),
+                  ],
+                ],
               ),
               if (leeches.isNotEmpty) ...[
                 const SizedBox(height: 24),
@@ -330,7 +364,17 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                           ? leech.vocab.translation
                           : leech.vocab.targetWord,
                     ),
-                    trailing: Text('${leech.card.lapses} lapses'),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('${leech.card.lapses} lapses'),
+                        IconButton(
+                          tooltip: 'Suspend',
+                          icon: const Icon(Icons.pause_circle_outline),
+                          onPressed: () => _suspendLeech(provider, leech),
+                        ),
+                      ],
+                    ),
                   ),
               ],
             ],
@@ -365,6 +409,8 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
     DateTime firstDay,
     DateTime today,
     Map<DateTime, int> counts,
+    Map<DateTime, Map<SrsRating, int>> ratingCounts,
+    Map<DateTime, int> newCardCounts,
     int busiest,
   ) {
     final isInRange =
@@ -374,10 +420,16 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
     // tooltip, and nothing for a screen reader to read out.
     if (!isInRange) return const SizedBox(width: 12, height: 16);
     final count = counts[date] ?? 0;
-    final label =
-        '${date.year}-${date.month.toString().padLeft(2, '0')}-'
-        '${date.day.toString().padLeft(2, '0')}: '
-        '$count ${count == 1 ? 'review' : 'reviews'}';
+    final ratings = ratingCounts[date];
+    final newCards = newCardCounts[date] ?? 0;
+    final label = [
+      '${date.year}-${date.month.toString().padLeft(2, '0')}-'
+          '${date.day.toString().padLeft(2, '0')}: '
+          '$count ${count == 1 ? 'review' : 'reviews'}',
+      // Days counted before ratings were have only the total.
+      if (ratings != null) '${rightWrongOf(ratings).right} right',
+      if (newCards > 0) '$newCards new',
+    ].join(', ');
     return SizedBox(
       width: 12,
       height: 16,
@@ -435,9 +487,105 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
     SrsStatus.review => 'Review',
   };
 
-  Widget _stageBar(BuildContext context, String label, int count, int maximum) {
-    final tooltip = '$label: $count ${count == 1 ? 'card' : 'cards'}';
-    final barHeight = maximum == 0 ? 2.0 : 80.0 * count / maximum;
+  /// Streak, today's reviews, and right and wrong over the last 30 days as a
+  /// red and green bar.
+  Widget _summary(
+    BuildContext context, {
+    required int streak,
+    required int todayReviews,
+    required int todayNew,
+    required ({int right, int wrong}) recent,
+  }) {
+    final theme = Theme.of(context);
+    final answered = recent.right + recent.wrong;
+    final parts = [
+      if (streak > 0) '$streak-day streak',
+      'Today $todayReviews ${todayReviews == 1 ? 'review' : 'reviews'}'
+          '${todayNew > 0 ? ', $todayNew new' : ''}',
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(parts.join(' · '), style: theme.textTheme.titleMedium),
+        if (answered > 0) ...[
+          const SizedBox(height: 8),
+          Semantics(
+            label:
+                '${recent.right} right and ${recent.wrong} wrong '
+                'in the last 30 days',
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: SizedBox(
+                height: 8,
+                child: Row(
+                  children: [
+                    if (recent.wrong > 0)
+                      Expanded(
+                        flex: recent.wrong,
+                        child: ColoredBox(color: theme.colorScheme.error),
+                      ),
+                    if (recent.right > 0)
+                      Expanded(
+                        flex: recent.right,
+                        child: const ColoredBox(color: Colors.green),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${(recent.right * 100 / answered).round()}% right '
+            '(Good or Easy) in the last 30 days',
+            style: theme.textTheme.bodySmall,
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// One stage in the Cards by stage line, such as "45 learning".
+  Widget _stageCount(SrsStatus status, int count) {
+    final label = _stageLabel(status);
+    return Tooltip(
+      message: '$label: $count ${count == 1 ? 'card' : 'cards'}',
+      child: Text('$count ${label.toLowerCase()}'),
+    );
+  }
+
+  /// "Today", then the weekday of each day after it.
+  String _forecastLabel(DateTime today, int daysAhead) {
+    if (daysAhead == 0) return 'Today';
+    const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    final day = DateTime(today.year, today.month, today.day + daysAhead);
+    return weekdays[day.weekday - 1];
+  }
+
+  /// Suspends a leech, with a snackbar to undo it.
+  void _suspendLeech(AppProvider provider, _LeechCard leech) {
+    provider.setCardSuspended(leech.card, true);
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('Suspended "${leech.vocab.targetWord}"'),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () => provider.setCardSuspended(leech.card, false),
+        ),
+      ),
+    );
+  }
+
+  Widget _bar(
+    BuildContext context, {
+    required String label,
+    required int count,
+    required int maximum,
+    required String tooltip,
+  }) {
+    final barHeight = maximum == 0 ? 2.0 : 60.0 * count / maximum;
     return Semantics(
       label: tooltip,
       child: Tooltip(
