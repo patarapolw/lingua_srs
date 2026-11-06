@@ -54,9 +54,7 @@ void main() {
       final json = s.toJson()
         ..remove('tts')
         ..['ttsText'] = '세 개'
-        ..['meta'] = {
-          'ttsText': const DetailMeta(DetailOrigin.manual).toJson(),
-        }
+        ..['meta'] = {'ttsText': const DetailMeta(DetailOrigin.manual).toJson()}
         ..['alternates'] = {
           'ttsText': ['셋 개'],
         };
