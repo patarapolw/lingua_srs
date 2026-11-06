@@ -20,6 +20,7 @@ Map<SyncRecordKey, Map<String, dynamic>> _build({
   Map<String, int> lessonOrder = const {},
   Map<DateTime, int> dailyReviewCounts = const {},
   Map<DateTime, Map<SrsRating, int>> dailyRatingCounts = const {},
+  Map<DateTime, int> dailyNewCardCounts = const {},
   List<DateTime> reviewTimestamps = const [],
 }) => SyncSnapshot.build(
   lessons: lessons,
@@ -30,6 +31,7 @@ Map<SyncRecordKey, Map<String, dynamic>> _build({
   settings: _settings,
   dailyReviewCounts: dailyReviewCounts,
   dailyRatingCounts: dailyRatingCounts,
+  dailyNewCardCounts: dailyNewCardCounts,
   reviewTimestamps: reviewTimestamps,
   deviceId: 'device-a',
 );
@@ -228,6 +230,21 @@ void main() {
         'count': 7,
         'reviews': [review.toUtc().toIso8601String()],
       });
+    });
+
+    test('adds the new cards started on days that have them', () {
+      final day = DateTime(2026, 11, 5);
+      final olderDay = DateTime(2026, 11, 4);
+
+      final records = _build(
+        dailyReviewCounts: {day: 4, olderDay: 2},
+        dailyNewCardCounts: {day: 3},
+      );
+
+      const withNew = SyncRecordKey('activity', 'device-a:2026-11-05');
+      const withoutNew = SyncRecordKey('activity', 'device-a:2026-11-04');
+      expect(records[withNew]!['newCards'], 3);
+      expect(records[withoutNew]!.containsKey('newCards'), isFalse);
     });
 
     test('adds the per-rating counts of days that have them', () {

@@ -105,6 +105,10 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   /// can be larger than the sum of its ratings.
   Map<DateTime, Map<SrsRating, int>> _dailyRatingCounts = {};
 
+  /// This device's new cards started per day: reviews of a card that was
+  /// still new. They are also in [_dailyReviewCounts].
+  Map<DateTime, int> _dailyNewCardCounts = {};
+
   /// Other devices' activity records, pulled by sync. This device's own
   /// counts stay in [_dailyReviewCounts] and [_reviewTimestamps24h].
   Map<String, Map<String, dynamic>> _remoteActivity = {};
@@ -168,6 +172,20 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       for (final entry in counts.entries)
         entry.key: Map<SrsRating, int>.unmodifiable(entry.value),
     });
+  }
+
+  /// New cards started per day on every device. Days from before this was
+  /// counted, here or on a device with an older app, have none.
+  Map<DateTime, int> get dailyNewCardCounts {
+    final counts = {..._dailyNewCardCounts};
+    for (final activity in _remoteActivity.values) {
+      final day = DateTime.tryParse('${activity['day']}');
+      final count = activity['newCards'];
+      if (day == null || count is! num || count <= 0) continue;
+      final date = DateTime(day.year, day.month, day.day);
+      counts[date] = (counts[date] ?? 0) + count.toInt();
+    }
+    return Map.unmodifiable(counts);
   }
 
   Map<String, List<AiDiscussionMessage>> get aiDiscussions => Map.unmodifiable(
@@ -292,6 +310,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     _maxNewCards24h = results.$9;
     _dailyReviewCounts = await StorageService.loadDailyReviewCounts();
     _dailyRatingCounts = await StorageService.loadDailyRatingCounts();
+    _dailyNewCardCounts = await StorageService.loadDailyNewCardCounts();
     _remoteActivity = await StorageService.loadSyncRemoteActivity();
     _lessons = await StorageService.loadLessons();
     if (_dailyReviewCounts.isEmpty && _backfillDailyReviewCounts()) {
@@ -771,6 +790,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
         ),
         dailyReviewCounts: _dailyReviewCounts,
         dailyRatingCounts: _dailyRatingCounts,
+        dailyNewCardCounts: _dailyNewCardCounts,
         reviewTimestamps: _reviewTimestamps24h,
         deviceId: deviceId,
       );
@@ -2433,8 +2453,9 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   }
 
   /// Answers an SRS review and counts it: one review on the day of [at]
-  /// (default: now), under its [rating] too, and, unless the card was on a
-  /// sub-24h interval, a review toward the 24-hour limit. Pass the same [at]
+  /// (default: now), under its [rating] too, as a new card started if the
+  /// card was new, and, unless the card was on a sub-24h interval, a review
+  /// toward the 24-hour limit. Pass the same [at]
   /// to [undoCardReview] to take the count back, or to [recountCardReview]
   /// when the rating changes.
   Future<void> recordCardReview(
@@ -2445,13 +2466,20 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     // Decide before processReview reschedules the card: reviewing a card that
     // was on a sub-24h interval does not count toward the 24 h review limit.
     final countsTowardLimit = !card.isShortInterval;
+    final startsNewCard = card.status == SrsStatus.isNew;
     SrsService.processReview(card, rating);
     final now = at ?? DateTime.now();
     final date = DateTime(now.year, now.month, now.day);
     _dailyReviewCounts[date] = (_dailyReviewCounts[date] ?? 0) + 1;
     _addRatingCount(date, rating, 1);
+    if (startsNewCard) {
+      _dailyNewCardCounts[date] = (_dailyNewCardCounts[date] ?? 0) + 1;
+    }
     await StorageService.saveDailyReviewCounts(_dailyReviewCounts);
     await StorageService.saveDailyRatingCounts(_dailyRatingCounts);
+    if (startsNewCard) {
+      await StorageService.saveDailyNewCardCounts(_dailyNewCardCounts);
+    }
     if (countsTowardLimit) {
       _reviewTimestamps24h.removeWhere((t) => now.difference(t).inHours >= 24);
       _reviewTimestamps24h.add(now);
@@ -2462,21 +2490,25 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
 
   /// Takes back what [recordCardReview] counted for the review made [at] and
   /// rated [rating], when its rating is undone: one review on that day and
-  /// under that rating, and its entry toward the 24-hour limit if it had one.
-  /// The card itself is restored by the caller.
-  Future<void> undoCardReview(DateTime at, SrsRating rating) async {
+  /// under that rating, the new card started if [startedNewCard], and its
+  /// entry toward the 24-hour limit if it had one. The card itself is
+  /// restored by the caller.
+  Future<void> undoCardReview(
+    DateTime at,
+    SrsRating rating, {
+    bool startedNewCard = false,
+  }) async {
     final date = DateTime(at.year, at.month, at.day);
-    final count = _dailyReviewCounts[date] ?? 0;
-    if (count <= 1) {
-      _dailyReviewCounts.remove(date);
-    } else {
-      _dailyReviewCounts[date] = count - 1;
-    }
+    _decrementDayCount(_dailyReviewCounts, date);
     _addRatingCount(date, rating, -1);
+    if (startedNewCard) _decrementDayCount(_dailyNewCardCounts, date);
     final hadTimestamp = _reviewTimestamps24h.remove(at);
     notifyListeners();
     await StorageService.saveDailyReviewCounts(_dailyReviewCounts);
     await StorageService.saveDailyRatingCounts(_dailyRatingCounts);
+    if (startedNewCard) {
+      await StorageService.saveDailyNewCardCounts(_dailyNewCardCounts);
+    }
     if (hadTimestamp) {
       await StorageService.saveReviewTimestamps(_reviewTimestamps24h);
     }
@@ -2495,6 +2527,16 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     _addRatingCount(date, to, 1);
     notifyListeners();
     await StorageService.saveDailyRatingCounts(_dailyRatingCounts);
+  }
+
+  /// Takes one off [date] in [counts], dropping the day when it reaches zero.
+  static void _decrementDayCount(Map<DateTime, int> counts, DateTime date) {
+    final count = counts[date] ?? 0;
+    if (count <= 1) {
+      counts.remove(date);
+    } else {
+      counts[date] = count - 1;
+    }
   }
 
   /// Adds [delta] to [rating]'s count on [date], dropping counts and days that

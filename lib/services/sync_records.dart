@@ -121,6 +121,7 @@ abstract final class SyncSnapshot {
     required SyncSettings settings,
     required Map<DateTime, int> dailyReviewCounts,
     Map<DateTime, Map<SrsRating, int>> dailyRatingCounts = const {},
+    Map<DateTime, int> dailyNewCardCounts = const {},
     required List<DateTime> reviewTimestamps,
     required String deviceId,
   }) {
@@ -183,9 +184,11 @@ abstract final class SyncSnapshot {
       add(SyncKinds.activity, '$deviceId:$day', {
         'day': day,
         'count': entry.value,
-        // Left out for days counted before ratings were, so their records
-        // do not change.
+        // Left out when there are none, as on days counted before these
+        // were, so those records do not change.
         if (ratings.isNotEmpty) 'ratings': ratings,
+        if ((dailyNewCardCounts[entry.key] ?? 0) > 0)
+          'newCards': dailyNewCardCounts[entry.key],
         'reviews': [
           for (final time in reviewTimestamps)
             if (_dayKey(time) == day) time.toUtc().toIso8601String(),

@@ -143,6 +143,30 @@ void main() {
       expect(await StorageService.loadReviewTimestamps(), [seenAt]);
     });
 
+    test('counts a new card started, and undo takes it back', () async {
+      final newAt = DateTime.now();
+      final newCard = SrsCard(direction: CardDirection.targetToNative);
+      await provider.recordCardReview(newCard, SrsRating.good, at: newAt);
+      final seenAt = newAt.add(const Duration(seconds: 5));
+      await provider.recordCardReview(_seenCard(), SrsRating.good, at: seenAt);
+
+      expect(provider.dailyReviewCounts[_today()], 2);
+      expect(provider.dailyNewCardCounts[_today()], 1);
+      expect(await StorageService.loadDailyNewCardCounts(), {_today(): 1});
+
+      // The seen card's review started no new card.
+      await provider.undoCardReview(seenAt, SrsRating.good);
+      expect(provider.dailyNewCardCounts[_today()], 1);
+
+      await provider.undoCardReview(
+        newAt,
+        SrsRating.good,
+        startedNewCard: true,
+      );
+      expect(provider.dailyNewCardCounts.containsKey(_today()), isFalse);
+      expect(await StorageService.loadDailyNewCardCounts(), isEmpty);
+    });
+
     test('re-rating moves the review to the new rating', () async {
       final at = DateTime.now();
       await provider.recordCardReview(_seenCard(), SrsRating.good, at: at);
@@ -164,6 +188,7 @@ void main() {
           'day': '2026-11-05',
           'count': 4,
           'ratings': {'good': 3, 'again': 1},
+          'newCards': 2,
           'reviews': <String>[],
         },
         // From an app version that did not count ratings yet.
@@ -179,6 +204,7 @@ void main() {
         SrsRating.good: 3,
         SrsRating.again: 1,
       });
+      expect(provider.dailyNewCardCounts[day], 2);
     });
   });
 
@@ -319,6 +345,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(provider.dailyReviewCounts[_today()], 1);
         expect(provider.dailyRatingCounts[_today()], {rating: 1});
+        expect(provider.dailyNewCardCounts[_today()], 1);
         expect(provider.reviewsInLast24Hours, 1);
 
         // The only card is done, so the session is over; undo brings it back.
@@ -326,12 +353,14 @@ void main() {
         await tester.pumpAndSettle();
         expect(provider.dailyReviewCounts.containsKey(_today()), isFalse);
         expect(provider.dailyRatingCounts.containsKey(_today()), isFalse);
+        expect(provider.dailyNewCardCounts.containsKey(_today()), isFalse);
         expect(provider.reviewsInLast24Hours, 0);
 
         await tester.tap(find.textContaining(label));
         await tester.pumpAndSettle();
         expect(provider.dailyReviewCounts[_today()], 1);
         expect(provider.dailyRatingCounts[_today()], {rating: 1});
+        expect(provider.dailyNewCardCounts[_today()], 1);
         expect(provider.reviewsInLast24Hours, 1);
       });
     }

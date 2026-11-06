@@ -705,7 +705,11 @@ class _StudyViewState extends State<StudyView> {
     // count it twice.
     final countedAt = record.countedAt;
     if (countedAt != null) {
-      provider.undoCardReview(countedAt, record.ratingGiven);
+      provider.undoCardReview(
+        countedAt,
+        record.ratingGiven,
+        startedNewCard: record.oldStatus == SrsStatus.isNew,
+      );
     }
 
     setState(() {
