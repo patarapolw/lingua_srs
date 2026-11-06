@@ -77,6 +77,9 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   List<Sentence> _sentences = [];
   bool _autoplayAudio = true;
 
+  /// Whether AI features are shown. A device-only preference, not synced.
+  bool _showAi = true;
+
   /// Enabled options as `<target>_romanization` / `<target>_ipa`.
   Set<String> _pronunciationOptions = {};
   String _deepSeekApiKey = '';
@@ -116,6 +119,10 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   List<Lesson> get lessons => _lessons;
   List<Sentence> get sentences => _sentences;
   bool get autoplayAudio => _autoplayAudio;
+
+  /// False when the learner turned AI features off in Settings: the
+  /// Discussions tab, Ask AI and the AI buttons are hidden.
+  bool get showAi => _showAi;
   bool showRomanization(PronunciationTarget target) =>
       _pronunciationOptions.contains('${target.name}_romanization');
   bool showIpa(PronunciationTarget target) =>
@@ -125,9 +132,10 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   /// The sync account this device is signed in to, if any.
   SyncPairing? get syncPairing => _syncPairing;
 
-  /// False without a key, and after DeepSeek rejected it (until it changes).
+  /// False without a key, after DeepSeek rejected it (until it changes), and
+  /// while AI features are turned off.
   bool get canUseAi =>
-      _deepSeekApiKey.trim().isNotEmpty && !_deepSeekKeyRejected;
+      _showAi && _deepSeekApiKey.trim().isNotEmpty && !_deepSeekKeyRejected;
   List<VocabMergeRecord> get mergeHistory => List.unmodifiable(_mergeHistory);
   bool get isLoading => _isLoading;
   String? get selectedLessonId => _selectedLessonId;
@@ -295,6 +303,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       StorageService.loadLessonFolderExpansion(),
       StorageService.loadPronunciationOptions(),
       StorageService.loadMaxNewCards24h(),
+      StorageService.loadShowAi(),
     ).wait;
     _autoplayAudio = results.$1;
     _deepSeekApiKey = results.$2;
@@ -308,6 +317,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     _lessonFolderExpansion = results.$7;
     _pronunciationOptions = results.$8;
     _maxNewCards24h = results.$9;
+    _showAi = results.$10;
     _dailyReviewCounts = await StorageService.loadDailyReviewCounts();
     _dailyRatingCounts = await StorageService.loadDailyRatingCounts();
     _dailyNewCardCounts = await StorageService.loadDailyNewCardCounts();
@@ -507,6 +517,13 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   Future<void> toggleAutoplay() async {
     _autoplayAudio = !_autoplayAudio;
     await StorageService.saveAutoplay(_autoplayAudio);
+    notifyListeners();
+  }
+
+  Future<void> setShowAi(bool value) async {
+    if (_showAi == value) return;
+    _showAi = value;
+    await StorageService.saveShowAi(value);
     notifyListeners();
   }
 

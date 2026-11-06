@@ -1227,50 +1227,67 @@ class _SettingsDialogState extends State<SettingsDialog> {
                 ],
                 const SizedBox(height: 24),
               ],
-              Text('AI discussions', style: theme.textTheme.titleSmall),
-              const SizedBox(height: 8),
-              const Text(
-                'Add your DeepSeek API key to ask questions about vocabulary and example sentences during quizzes.',
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'AI features',
+                      style: theme.textTheme.titleSmall,
+                    ),
+                  ),
+                  Switch(value: provider.showAi, onChanged: provider.setShowAi),
+                ],
               ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _apiKeyController,
-                obscureText: _obscureApiKey,
-                autocorrect: false,
-                enableSuggestions: false,
-                decoration: InputDecoration(
-                  labelText: 'DeepSeek API key',
-                  hintText: 'sk-...',
-                  suffixIcon: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (provider.deepSeekApiKey.isNotEmpty)
+              const SizedBox(height: 8),
+              if (!provider.showAi)
+                const Text(
+                  'AI features are hidden: the Discussions tab, Ask AI and '
+                  'the AI suggestion buttons. Saved discussions are kept.',
+                ),
+              if (provider.showAi) ...[
+                const Text(
+                  'Add your DeepSeek API key to ask questions about vocabulary and example sentences during quizzes.',
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _apiKeyController,
+                  obscureText: _obscureApiKey,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  decoration: InputDecoration(
+                    labelText: 'DeepSeek API key',
+                    hintText: 'sk-...',
+                    suffixIcon: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (provider.deepSeekApiKey.isNotEmpty)
+                          IconButton(
+                            tooltip: 'Remove API key',
+                            icon: const Icon(Icons.delete_outline),
+                            onPressed: _saving ? null : _removeApiKey,
+                          ),
                         IconButton(
-                          tooltip: 'Remove API key',
-                          icon: const Icon(Icons.delete_outline),
-                          onPressed: _saving ? null : _removeApiKey,
+                          tooltip: _obscureApiKey
+                              ? 'Show API key'
+                              : 'Hide API key',
+                          icon: Icon(
+                            _obscureApiKey
+                                ? Icons.visibility
+                                : Icons.visibility_off,
+                          ),
+                          onPressed: () =>
+                              setState(() => _obscureApiKey = !_obscureApiKey),
                         ),
-                      IconButton(
-                        tooltip: _obscureApiKey
-                            ? 'Show API key'
-                            : 'Hide API key',
-                        icon: Icon(
-                          _obscureApiKey
-                              ? Icons.visibility
-                              : Icons.visibility_off,
-                        ),
-                        onPressed: () =>
-                            setState(() => _obscureApiKey = !_obscureApiKey),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'The key is stored in this device’s secure storage. DeepSeek receives your questions, and for the merge and hint buttons the Korean and English of your vocabulary (for hints, every word of the same type).',
-                style: theme.textTheme.bodySmall,
-              ),
+                const SizedBox(height: 10),
+                Text(
+                  'The key is stored in this device’s secure storage. DeepSeek receives your questions, and for the merge and hint buttons the Korean and English of your vocabulary (for hints, every word of the same type).',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ],
             ],
           ),
         ),

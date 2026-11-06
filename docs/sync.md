@@ -138,7 +138,7 @@ What the app stores on the server, one record per piece of data. Building the re
 Everything a backup contains syncs, except what only makes sense on one device:
 
 - **Syncs:** lessons and their Markdown, vocabulary entries, word details and SRS progress, the Sentence Pool, merge history, saved AI discussions, the lesson tree's order, study activity, and the study settings listed below.
-- **Stays on the device:** the DeepSeek key and the sync sign-in (secrets), which folders are expanded, the fingerprints of imported Markdown files (they are keyed by a path on this device), the audio and image caches, and one-off migration flags.
+- **Stays on the device:** the DeepSeek key and the sync sign-in (secrets), whether AI features are shown, which folders are expanded, the fingerprints of imported Markdown files (they are keyed by a path on this device), the audio and image caches, and one-off migration flags.
 
 ### Kinds
 

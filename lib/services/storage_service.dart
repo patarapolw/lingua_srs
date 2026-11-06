@@ -34,6 +34,7 @@ class StorageService {
   static const String _keyVocabMergeHistory = 'lingua_srs_vocab_merge_history';
   static const String _keyAiDiscussions = 'lingua_srs_ai_discussions';
   static const String _keyAutoplay = 'lingua_srs_autoplay';
+  static const String _keyShowAi = 'lingua_srs_show_ai';
   static const String _keyPronunciation = 'lingua_srs_pronunciation';
   static const String _keyLessonHierarchyOrder =
       'lingua_srs_lesson_hierarchy_order';
@@ -326,6 +327,17 @@ class StorageService {
   static Future<void> saveAutoplay(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyAutoplay, value);
+  }
+
+  /// Whether AI features are shown on this device. On by default.
+  static Future<bool> loadShowAi() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyShowAi) ?? true;
+  }
+
+  static Future<void> saveShowAi(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyShowAi, value);
   }
 
   static Future<Set<String>> loadPronunciationOptions() async {

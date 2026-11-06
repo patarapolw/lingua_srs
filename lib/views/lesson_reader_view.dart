@@ -35,8 +35,9 @@ class _LessonReaderViewState extends State<LessonReaderView> {
 
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<AppProvider>();
     Lesson? lesson;
-    for (final candidate in context.watch<AppProvider>().lessons) {
+    for (final candidate in provider.lessons) {
       if (candidate.id == lessonId) {
         lesson = candidate;
         break;
@@ -71,11 +72,12 @@ class _LessonReaderViewState extends State<LessonReaderView> {
               icon: const Icon(Icons.toc),
               onPressed: () => _showToc(context, headings),
             ),
-          IconButton(
-            tooltip: 'Ask AI about lesson',
-            icon: const Icon(Icons.forum_outlined),
-            onPressed: () => _openAiDiscussion(context, selectedLesson),
-          ),
+          if (provider.showAi)
+            IconButton(
+              tooltip: 'Ask AI about lesson',
+              icon: const Icon(Icons.forum_outlined),
+              onPressed: () => _openAiDiscussion(context, selectedLesson),
+            ),
           IconButton(
             tooltip: 'Edit Markdown',
             icon: const Icon(Icons.edit_outlined),

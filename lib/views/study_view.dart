@@ -1277,12 +1277,13 @@ class _StudyViewState extends State<StudyView> {
                     enabled: _isAnswerRevealed,
                   ),
                 ],
-                moreItem(
-                  'ai',
-                  Icons.forum_outlined,
-                  'Ask AI',
-                  enabled: _isAnswerRevealed,
-                ),
+                if (provider.showAi)
+                  moreItem(
+                    'ai',
+                    Icons.forum_outlined,
+                    'Ask AI',
+                    enabled: _isAnswerRevealed,
+                  ),
                 const PopupMenuDivider(),
                 moreItem(
                   'reset',

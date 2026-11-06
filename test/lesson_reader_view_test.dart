@@ -60,9 +60,13 @@ void main() {
     }
   });
 
-  Future<AppProvider> loadedProvider(WidgetTester tester) async {
+  Future<AppProvider> loadedProvider(
+    WidgetTester tester, {
+    bool showAi = true,
+  }) async {
     SharedPreferences.setMockInitialValues({
       'lingua_srs_windows_legacy_migration_complete': true,
+      'lingua_srs_show_ai': showAi,
     });
     final provider = AppProvider();
     addTearDown(provider.dispose);
@@ -77,8 +81,12 @@ void main() {
   }
 
   /// Opens a lesson with headings, so every app bar action is shown.
-  Future<Lesson> openReader(WidgetTester tester, Size size) async {
-    final provider = await loadedProvider(tester);
+  Future<Lesson> openReader(
+    WidgetTester tester,
+    Size size, {
+    bool showAi = true,
+  }) async {
+    final provider = await loadedProvider(tester, showAi: showAi);
     const markdown =
         '---\nvocabulary:\n  nouns:\n    - ko: 단어\n      en: word\n---\n'
         '# Greetings\n\n## First part\n\nSome text.\n';
@@ -130,5 +138,16 @@ void main() {
 
     expect(find.text('View Vocabulary'), findsOneWidget);
     expect(appBarTitle(lesson), findsOneWidget);
+  });
+
+  testWidgets('offers Ask AI about lesson while AI is on', (tester) async {
+    await openReader(tester, const Size(1200, 800));
+    expect(find.byTooltip('Ask AI about lesson'), findsOneWidget);
+  });
+
+  testWidgets('hides Ask AI about lesson when AI is off', (tester) async {
+    await openReader(tester, const Size(1200, 800), showAi: false);
+    expect(find.byTooltip('Ask AI about lesson'), findsNothing);
+    expect(find.byTooltip('Edit Markdown'), findsOneWidget);
   });
 }
