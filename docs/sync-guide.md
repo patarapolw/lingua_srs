@@ -20,6 +20,8 @@ flutter build apk --dart-define-from-file=env.json
 3. Choose **Create account**. An email with an 8-digit code arrives.
 4. Type the code and choose **Confirm email**. Saving the password in a password manager does not confirm the account.
 
+A code works for 30 minutes, only on the device that signed up last, and stops working after five wrong tries. If it's refused, check the newest email. Creating the account again sends a new code once 10 minutes have passed since the last one; before that, the same code is used.
+
 Keep the password safe. Your data is encrypted with it on your devices, and nobody, the server included, can reset it or read your data without it. If you forget it while no device is signed in, the data on the server is lost. The lessons on your devices stay.
 
 ## Add another device
