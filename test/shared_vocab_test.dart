@@ -31,6 +31,70 @@ void main() {
       expect(SharedVocab.fromJson(s.toJson()).ttsText, '셋 개');
       expect(s.detachedCopy().ttsText, '셋 개');
     });
+
+    test('is saved under tts, with its provenance and alternates', () {
+      expect(SharedVocab.ttsField, 'tts');
+      final s = sv();
+      s.mergeImport(SharedVocab.ttsField, '세 개', lessonId: 'L1');
+      s.mergeImport(SharedVocab.ttsField, '셋 개', lessonId: 'L2');
+
+      final json = s.toJson();
+      expect(json['tts'], '세 개');
+      expect(json.containsKey('ttsText'), isFalse);
+      expect((json['meta'] as Map).keys, ['tts']);
+      expect(json['alternates'], {
+        'tts': ['셋 개'],
+      });
+    });
+
+    test('reads data saved under the old ttsText key', () {
+      final s = sv();
+      s.mergeImport(SharedVocab.ttsField, '세 개', lessonId: 'L1');
+      s.mergeImport(SharedVocab.ttsField, '셋 개', lessonId: 'L2');
+      final json = s.toJson()
+        ..remove('tts')
+        ..['ttsText'] = '세 개'
+        ..['meta'] = {'ttsText': const DetailMeta(DetailOrigin.manual).toJson()}
+        ..['alternates'] = {
+          'ttsText': ['셋 개'],
+        };
+
+      final restored = SharedVocab.fromJson(json);
+      expect(restored.ttsText, '세 개');
+      expect(restored.meta.keys, [SharedVocab.ttsField]);
+      expect(restored.meta[SharedVocab.ttsField]!.origin, DetailOrigin.manual);
+      expect(restored.alternates, {
+        SharedVocab.ttsField: ['셋 개'],
+      });
+      // The provenance still applies: an import does not replace a manual edit.
+      expect(
+        restored.mergeImport(SharedVocab.ttsField, '삼 개', lessonId: 'L1'),
+        isFalse,
+      );
+      expect(restored.ttsText, '세 개');
+    });
+
+    test('prefers the tts key when old and new keys are both present', () {
+      final json = sv().toJson()
+        ..['tts'] = '새'
+        ..['ttsText'] = '옛'
+        ..['meta'] = {
+          'tts': const DetailMeta(DetailOrigin.manual).toJson(),
+          'ttsText': const DetailMeta(DetailOrigin.imported, 'L1').toJson(),
+        }
+        ..['alternates'] = {
+          'tts': ['새 2'],
+          'ttsText': ['옛 2'],
+        };
+
+      final restored = SharedVocab.fromJson(json);
+      expect(restored.ttsText, '새');
+      expect(restored.meta.keys, [SharedVocab.ttsField]);
+      expect(restored.meta[SharedVocab.ttsField]!.origin, DetailOrigin.manual);
+      expect(restored.alternates, {
+        SharedVocab.ttsField: ['새 2'],
+      });
+    });
   });
 
   group('SharedVocab.setManual', () {

@@ -89,7 +89,48 @@ vocabulary:
       expect(parsed.lesson.vocabularies[1].notes, 'Single note.');
     });
 
-    test('ko_text is alternate TTS text for vocabulary and examples', () {
+    test('tts is alternate TTS text for vocabulary and examples', () {
+      final parsed = YamlParserService.parseLessonYaml('''
+---
+vocabulary:
+  nouns:
+    - ko: 3개
+      tts: 세 개
+      en: three items
+      examples:
+        - ko: "**3개** 주세요"
+          tts: 세 개 주세요
+          en: Three, please
+---
+# Lesson 1
+''');
+      final three = parsed.lesson.vocabularies.single;
+      expect(three.ttsText, '세 개');
+      expect(three.speechText, '세 개');
+      expect(parsed.sentences.single.ttsText, '세 개 주세요');
+      expect(parsed.sentences.single.speechText, '세 개 주세요');
+    });
+
+    test('target_text from older exports is still read as TTS text', () {
+      final parsed = YamlParserService.parseLessonYaml('''
+---
+vocabulary:
+  nouns:
+    - target: 3개
+      target_text: 세 개
+      meaning: three items
+      examples:
+        - target: "**3개** 주세요"
+          target_text: 세 개 주세요
+          translation: Three, please
+---
+# Lesson 1
+''');
+      expect(parsed.lesson.vocabularies.single.ttsText, '세 개');
+      expect(parsed.sentences.single.ttsText, '세 개 주세요');
+    });
+
+    test('ko_text (old name) is TTS text for vocabulary and examples', () {
       final parsed = YamlParserService.parseLessonYaml('''
 ---
 vocabulary:
@@ -118,21 +159,48 @@ vocabulary:
       expect(pear.speechText, '배');
     });
 
-    test('ko_text survives a JSON round trip', () {
+    test('TTS text survives a JSON round trip under the tts key', () {
       final vocab = VocabItem(
         targetWord: '3개',
         translation: 'three items',
         pos: 'nouns',
         ttsText: '세 개',
       );
-      expect(VocabItem.fromJson(vocab.toJson()).ttsText, '세 개');
+      final vocabJson = vocab.toJson();
+      expect(vocabJson['tts'], '세 개');
+      expect(vocabJson.containsKey('ttsText'), isFalse);
+      expect(VocabItem.fromJson(vocabJson).ttsText, '세 개');
 
       final sentence = Sentence(
         targetText: '3개 주세요',
         translationText: 'Three, please',
         ttsText: '세 개 주세요',
       );
-      expect(Sentence.fromJson(sentence.toJson()).speechText, '세 개 주세요');
+      final sentenceJson = sentence.toJson();
+      expect(sentenceJson['tts'], '세 개 주세요');
+      expect(sentenceJson.containsKey('ttsText'), isFalse);
+      expect(Sentence.fromJson(sentenceJson).speechText, '세 개 주세요');
+    });
+
+    test('TTS text saved under the old ttsText key is still read', () {
+      final vocabJson = VocabItem(
+        targetWord: '3개',
+        translation: 'three items',
+        pos: 'nouns',
+      ).toJson()..remove('tts');
+      vocabJson['ttsText'] = '세 개';
+      expect(VocabItem.fromJson(vocabJson).ttsText, '세 개');
+
+      final sentenceJson = Sentence(
+        targetText: '3개 주세요',
+        translationText: 'Three, please',
+      ).toJson()..remove('tts');
+      sentenceJson['ttsText'] = '세 개 주세요';
+      expect(Sentence.fromJson(sentenceJson).ttsText, '세 개 주세요');
+
+      // A tts key written after the rename wins, even when it is empty.
+      final both = {...sentenceJson, 'tts': null};
+      expect(Sentence.fromJson(both).ttsText, isNull);
     });
 
     test('Parses lesson title, categories and cards', () {

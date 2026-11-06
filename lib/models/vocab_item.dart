@@ -159,7 +159,7 @@ class VocabItem {
     'sectionPath': sectionPath,
     'audioUrl': audioUrl,
     'useAudio': useAudio,
-    'ttsText': ttsText,
+    SharedVocab.ttsField: ttsText,
     'notes': notes,
     'disambiguation': disambiguation,
     'sentenceIds': sentenceIds,
@@ -182,7 +182,7 @@ class VocabItem {
         .toList(),
     audioUrl: json['audioUrl'] as String?,
     useAudio: json['useAudio'] as bool? ?? true,
-    ttsText: json['ttsText'] as String?,
+    ttsText: SharedVocab.ttsFromJson(json),
     notes: json['notes'] as String? ?? '',
     disambiguation: json['disambiguation'] as String? ?? '',
     sentenceIds:

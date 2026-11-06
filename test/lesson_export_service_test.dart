@@ -15,6 +15,7 @@ void main() {
         id: 'sentence-id',
         targetText: 'I eat an apple.',
         translationText: 'I eat fruit.',
+        ttsText: 'I eat an apple, slowly.',
       );
       final vocab = VocabItem(
         id: 'vocab-id',
@@ -23,6 +24,7 @@ void main() {
         pos: 'food',
         sectionPath: ['nouns', 'food'],
         notes: 'A note',
+        ttsText: 'an apple',
         sentenceIds: [sentence.id],
         sentenceEmphasis: {
           sentence.id: const SentenceEmphasis(
@@ -64,6 +66,10 @@ void main() {
         'I eat an **apple**.',
       );
       expect(parsed.sentences.single.translationText, 'I eat fruit.');
+      expect(files.single.contents, contains('"tts":"an apple"'));
+      expect(files.single.contents, isNot(contains('target_text')));
+      expect(parsed.lesson.vocabularies.single.ttsText, 'an apple');
+      expect(parsed.sentences.single.ttsText, 'I eat an apple, slowly.');
     },
   );
 

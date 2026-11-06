@@ -26,7 +26,11 @@ class SharedVocab {
   static const audioField = 'audioUrl';
   static const notesField = 'notes';
   static const disambiguationField = 'disambiguation';
-  static const ttsField = 'ttsText';
+  static const ttsField = 'tts';
+
+  /// The old name of [ttsField], still read from data saved before the
+  /// rename: local storage, backups, merge history and sync records.
+  static const legacyTtsField = 'ttsText';
   static const detailFields = [
     audioField,
     notesField,
@@ -63,6 +67,22 @@ class SharedVocab {
        alternates = alternates ?? {};
 
   static bool isBlank(String? value) => value == null || value.trim().isEmpty;
+
+  /// The TTS text in a saved vocab or sentence, under [ttsField] or, in data
+  /// saved before the rename, [legacyTtsField].
+  static String? ttsFromJson(Map<String, dynamic> json) {
+    final key = json.containsKey(ttsField) ? ttsField : legacyTtsField;
+    return json[key] as String?;
+  }
+
+  /// Renames a [legacyTtsField] key of [json] to [ttsField], unless [json]
+  /// already has a [ttsField] key, which wins.
+  static Map<String, V> _renameLegacyTtsKey<V>(Map<String, V> json) {
+    if (!json.containsKey(legacyTtsField)) return json;
+    final legacy = json.remove(legacyTtsField) as V;
+    json.putIfAbsent(ttsField, () => legacy);
+    return json;
+  }
 
   String? valueOf(String field) {
     switch (field) {
@@ -197,7 +217,7 @@ class SharedVocab {
   Map<String, dynamic> toJson() => {
     'audioUrl': audioUrl,
     'useAudio': useAudio,
-    'ttsText': ttsText,
+    ttsField: ttsText,
     'notes': notes,
     'disambiguation': disambiguation,
     'cardTargetToNative': cardTargetToNative.toJson(),
@@ -209,7 +229,7 @@ class SharedVocab {
   factory SharedVocab.fromJson(Map<String, dynamic> json) => SharedVocab(
     audioUrl: json['audioUrl'] as String?,
     useAudio: json['useAudio'] as bool? ?? true,
-    ttsText: json['ttsText'] as String?,
+    ttsText: ttsFromJson(json),
     notes: json['notes'] as String? ?? '',
     disambiguation: json['disambiguation'] as String? ?? '',
     cardTargetToNative: SrsCard.fromJson(
@@ -218,15 +238,15 @@ class SharedVocab {
     cardNativeToTarget: SrsCard.fromJson(
       Map<String, dynamic>.from(json['cardNativeToTarget'] as Map),
     ),
-    meta: {
+    meta: _renameLegacyTtsKey({
       for (final e in (json['meta'] as Map? ?? const {}).entries)
         e.key as String: DetailMeta.fromJson(
           Map<String, dynamic>.from(e.value as Map),
         ),
-    },
-    alternates: {
+    }),
+    alternates: _renameLegacyTtsKey({
       for (final e in (json['alternates'] as Map? ?? const {}).entries)
         e.key as String: (e.value as List).map((x) => x.toString()).toList(),
-    },
+    }),
   );
 }
