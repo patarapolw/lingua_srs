@@ -159,8 +159,10 @@ void main() {
     });
 
     expect(changed, contains(SyncAppPart.lessons));
-    expect(identical(data.lessons.first.vocabularies.first.cardTargetToNative,
-        card), isTrue);
+    expect(
+      identical(data.lessons.first.vocabularies.first.cardTargetToNative, card),
+      isTrue,
+    );
     expect(card.interval, 9);
     expect(card.lapses, 1);
     // Settings come from the vocab record, so they stay.

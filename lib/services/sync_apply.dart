@@ -92,7 +92,8 @@ abstract final class SyncApplier {
         final id = setting['id'] as String? ?? current?.id;
         final progress = id == null ? null : cards[id];
         if (id != null) usedCards.add(id);
-        final base = progress ??
+        final base =
+            progress ??
             (current != null && current.id == id
                 ? current.toJson()
                 : <String, dynamic>{});
@@ -108,10 +109,14 @@ abstract final class SyncApplier {
       if (existing == null) {
         shared[entry.key] = SharedVocab.fromJson({
           ...details,
-          'cardTargetToNative': card(CardDirection.targetToNative, null)
-              .toJson(),
-          'cardNativeToTarget': card(CardDirection.nativeToTarget, null)
-              .toJson(),
+          'cardTargetToNative': card(
+            CardDirection.targetToNative,
+            null,
+          ).toJson(),
+          'cardNativeToTarget': card(
+            CardDirection.nativeToTarget,
+            null,
+          ).toJson(),
         });
         continue;
       }
@@ -148,7 +153,8 @@ abstract final class SyncApplier {
       if (json == null || usedCards.contains(entry.key)) continue;
       final owner = shared[json['vocabId']];
       if (owner == null) continue;
-      final targetToNative = json['direction'] == CardDirection.targetToNative.name;
+      final targetToNative =
+          json['direction'] == CardDirection.targetToNative.name;
       final current = targetToNative
           ? owner.cardTargetToNative
           : owner.cardNativeToTarget;
@@ -258,7 +264,9 @@ abstract final class SyncApplier {
       }
     }
 
-    final order = ofKind(SyncKinds.lessonOrder)[SyncKinds.lessonOrder]?['order'];
+    final order = ofKind(
+      SyncKinds.lessonOrder,
+    )[SyncKinds.lessonOrder]?['order'];
     if (order is Map) {
       changed.add(SyncAppPart.lessonOrder);
       data.lessonOrder = {
@@ -275,7 +283,8 @@ abstract final class SyncApplier {
             (settings['maxReviews24h'] as num?)?.toInt() ?? data.maxReviews24h
         ..maxNewCards24h =
             (settings['maxNewCards24h'] as num?)?.toInt() ?? data.maxNewCards24h
-        ..autoplayAudio = settings['autoplayAudio'] as bool? ?? data.autoplayAudio
+        ..autoplayAudio =
+            settings['autoplayAudio'] as bool? ?? data.autoplayAudio
         ..pronunciationOptions = {
           for (final option
               in settings['pronunciationOptions'] as List? ?? const [])

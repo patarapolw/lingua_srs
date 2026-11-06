@@ -120,6 +120,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   String? get selectedLessonId => _selectedLessonId;
   int get maxReviews24h => _maxReviews24h;
   int get maxNewCards24h => _maxNewCards24h;
+
   /// Reviews per day on every device: this one's and those pulled by sync.
   Map<DateTime, int> get dailyReviewCounts {
     final counts = {..._dailyReviewCounts};
@@ -132,6 +133,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     }
     return Map.unmodifiable(counts);
   }
+
   Map<String, List<AiDiscussionMessage>> get aiDiscussions => Map.unmodifiable(
     _aiDiscussions.map<String, List<AiDiscussionMessage>>(
       (id, messages) =>
