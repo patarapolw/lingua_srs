@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../providers/app_provider.dart';
 import '../views/recent_ai_discussions_view.dart';
 import '../views/lesson_list_view.dart';
 import '../views/sentence_pool_view.dart';
@@ -44,6 +46,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
   Widget build(BuildContext context) {
     final isDesktop = MediaQuery.of(context).size.width >= 800;
     final theme = Theme.of(context);
+    final showAi = context.select<AppProvider, bool>((p) => p.showAi);
 
     final pages = [
       LessonListView(
@@ -52,8 +55,10 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
       ),
       const VocabPoolView(),
       const SentencePoolView(),
-      const RecentAiDiscussionsView(),
+      if (showAi) const RecentAiDiscussionsView(),
     ];
+    // The Discussions tab goes away when AI features are turned off.
+    if (_selectedIndex >= pages.length) _selectedIndex = 0;
 
     if (isDesktop) {
       return Scaffold(
@@ -112,27 +117,28 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
                   ),
                 ),
               ),
-              destinations: const [
-                NavigationRailDestination(
+              destinations: [
+                const NavigationRailDestination(
                   icon: Icon(Icons.library_books_outlined),
                   selectedIcon: Icon(Icons.library_books),
                   label: Text('Lessons'),
                 ),
-                NavigationRailDestination(
+                const NavigationRailDestination(
                   icon: Icon(Icons.translate_outlined),
                   selectedIcon: Icon(Icons.translate),
                   label: Text('Vocab Pool'),
                 ),
-                NavigationRailDestination(
+                const NavigationRailDestination(
                   icon: Icon(Icons.format_quote_outlined),
                   selectedIcon: Icon(Icons.format_quote),
                   label: Text('Sentence Pool'),
                 ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.forum_outlined),
-                  selectedIcon: Icon(Icons.forum),
-                  label: Text('Recent Discussions'),
-                ),
+                if (showAi)
+                  const NavigationRailDestination(
+                    icon: Icon(Icons.forum_outlined),
+                    selectedIcon: Icon(Icons.forum),
+                    label: Text('Recent Discussions'),
+                  ),
               ],
             ),
             const VerticalDivider(width: 1),
@@ -152,27 +158,28 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
         onDestinationSelected: (idx) => _selectTab(idx, isDesktop: false),
-        destinations: const [
-          NavigationDestination(
+        destinations: [
+          const NavigationDestination(
             icon: Icon(Icons.library_books_outlined),
             selectedIcon: Icon(Icons.library_books),
             label: 'Lessons',
           ),
-          NavigationDestination(
+          const NavigationDestination(
             icon: Icon(Icons.translate_outlined),
             selectedIcon: Icon(Icons.translate),
             label: 'Vocab',
           ),
-          NavigationDestination(
+          const NavigationDestination(
             icon: Icon(Icons.format_quote_outlined),
             selectedIcon: Icon(Icons.format_quote),
             label: 'Sentences',
           ),
-          NavigationDestination(
-            icon: Icon(Icons.forum_outlined),
-            selectedIcon: Icon(Icons.forum),
-            label: 'Discussions',
-          ),
+          if (showAi)
+            const NavigationDestination(
+              icon: Icon(Icons.forum_outlined),
+              selectedIcon: Icon(Icons.forum),
+              label: 'Discussions',
+            ),
         ],
       ),
     );

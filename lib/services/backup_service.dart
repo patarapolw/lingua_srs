@@ -269,6 +269,7 @@ class BackupService {
       return value is int;
     }
     if (key == 'lingua_srs_autoplay' ||
+        key == 'lingua_srs_show_ai' ||
         key == 'lingua_srs_windows_legacy_migration_complete') {
       return value is bool;
     }

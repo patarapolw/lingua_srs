@@ -426,6 +426,76 @@ void main() {
     expect(find.text('Suggest merges with AI'), findsOneWidget);
   });
 
+  group('AI features setting', () {
+    Finder discussionsTab() => find.descendant(
+      of: find.byType(NavigationRail),
+      matching: find.byIcon(Icons.forum_outlined),
+    );
+
+    testWidgets('turning AI off hides the tab, buttons and key field', (
+      tester,
+    ) async {
+      final provider = await pumpApp(tester, {
+        'lingua_srs_deepseek_api_key': 'test-key',
+      });
+      expect(provider.showAi, isTrue);
+      expect(provider.canUseAi, isTrue);
+      expect(discussionsTab(), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Settings'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('AI features'));
+      await tester.pumpAndSettle();
+      final aiSwitch = find.descendant(
+        of: find.ancestor(
+          of: find.text('AI features'),
+          matching: find.byType(Row),
+        ),
+        matching: find.byType(Switch),
+      );
+      await tester.tap(aiSwitch.first);
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(provider.showAi, isFalse);
+      expect(provider.canUseAi, isFalse);
+      expect(find.text('DeepSeek API key'), findsNothing);
+      final prefs = await tester.runAsync(SharedPreferences.getInstance);
+      expect(prefs!.getBool('lingua_srs_show_ai'), isFalse);
+
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(discussionsTab(), findsNothing);
+
+      await tester.tap(find.byTooltip('More options'));
+      await tester.pumpAndSettle();
+      expect(find.text('Suggest merges with AI'), findsNothing);
+    });
+
+    testWidgets('hides the edit dialog AI buttons even with a key', (
+      tester,
+    ) async {
+      await pumpApp(tester, {
+        'lingua_srs_deepseek_api_key': 'test-key',
+        'lingua_srs_show_ai': false,
+      });
+      expect(discussionsTab(), findsNothing);
+      unawaited(
+        VocabEditDialog.show(
+          tester.element(find.byType(Scaffold).first),
+          VocabItem(targetWord: '배', translation: 'pear', pos: 'nouns'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byIcon(Icons.auto_awesome, skipOffstage: false),
+        findsNothing,
+      );
+    });
+  });
+
   group('Study progress label', () {
     Future<Lesson> openStudy(
       WidgetTester tester, {
