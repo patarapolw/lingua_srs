@@ -69,4 +69,18 @@ void main() {
       }
     });
   });
+
+  group('isSyncRetryable', () {
+    test('a lost connection or a failing server is tried again', () {
+      expect(isSyncRetryable(const SocketException('offline')), isTrue);
+      expect(isSyncRetryable(TimeoutException('slow')), isTrue);
+      expect(isSyncRetryable(_error(503)), isTrue);
+    });
+
+    test('a rejected sign-in or a bad request is not', () {
+      expect(isSyncRetryable(_error(401)), isFalse);
+      expect(isSyncRetryable(_error(400)), isFalse);
+      expect(isSyncRetryable(const FormatException('bad')), isFalse);
+    });
+  });
 }

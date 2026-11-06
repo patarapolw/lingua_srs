@@ -528,6 +528,11 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   /// on; null when it went through.
   String? get syncProblem => _syncProblem;
 
+  /// Whether the last sync failed in a way that is worth trying again on its
+  /// own: the server could not be reached, or it failed on its side.
+  bool get syncShouldRetry => _syncShouldRetry;
+  bool _syncShouldRetry = false;
+
   /// Syncs with the server now: pulls, applies and pushes. Returns null when
   /// signed out or when a sync is already running. Never throws: a failure is
   /// kept in [syncProblem] and the local data stays as it is.
@@ -537,6 +542,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     _syncing = true;
     notifyListeners();
     SyncResult? result;
+    _syncShouldRetry = false;
     try {
       final synced = await _queueSyncTracking(() => _runSync(pairing));
       result = synced;
@@ -563,6 +569,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       }
     } catch (error) {
       _syncProblem = describeSyncError(error, signedIn: true);
+      _syncShouldRetry = isSyncRetryable(error);
     } finally {
       _syncing = false;
       notifyListeners();
