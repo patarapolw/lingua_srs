@@ -24,7 +24,8 @@ Sign-in details, the account's unlocked data key and the DeepSeek key go in the 
 
 - **Linux**: building needs `libsecret-1-dev` (`libsecret-devel` on Fedora), and running needs a Secret Service keyring, such as GNOME Keyring or KWallet, unlocked in the session. A locked or missing keyring does not crash the app.
 - **macOS**: the app uses the login keychain, so it needs no `keychain-access-groups` entitlement and no provisioning profile, and an ad-hoc signed build can store credentials. The sandbox entitlements include `com.apple.security.network.client`, without which every outgoing request fails.
-- **Android, iOS, Windows**: nothing to set up.
+- **Windows**: nothing to set up. They are not in Credential Manager: they go in `flutter_secure_storage.dat` in the app's data folder (`%APPDATA%\cc.polv\lingua.srs`), next to the preferences, encrypted with DPAPI for the signed-in Windows user. A copy of that folder includes them, but only the same Windows user can decrypt them.
+- **Android, iOS**: nothing to set up.
 
 `integration_test/platform_test.dart` stores and reads a secret and makes an HTTPS request on a real build. The Desktop workflow runs it on macOS and Linux (with GNOME Keyring under `dbus-run-session`) whenever platform code changes.
 
