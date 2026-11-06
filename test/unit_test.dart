@@ -42,6 +42,51 @@ void main() {
   });
 
   group('YAML Parser & Vocabulary Models', () {
+    test('parses and serializes Mandarin readings and character forms', () {
+      final parsed = YamlParserService.parseLessonYaml('''
+target: zh-TW
+vocabulary:
+  nouns:
+    - zh: 學生
+      pinyin: xuésheng
+      simplified: 学生
+      traditional: 學生
+      en: student
+''');
+      final lesson = parsed.lesson;
+      final vocab = lesson.vocabularies.single;
+
+      expect(lesson.targetLanguage, 'zh-TW');
+      expect(vocab.reading, 'xuésheng');
+      expect(vocab.simplified, '学生');
+      expect(vocab.traditional, '學生');
+
+      final restored = VocabItem.fromJson(vocab.toJson());
+      expect(restored.reading, vocab.reading);
+      expect(restored.simplified, vocab.simplified);
+      expect(restored.traditional, vocab.traditional);
+    });
+
+    test('parses and serializes Korean Hanja forms', () {
+      final parsed = YamlParserService.parseLessonYaml('''
+target: ko
+vocabulary:
+  nouns:
+    - ko: 학생
+      hanja: 學生
+      en: student
+''');
+      final lesson = parsed.lesson;
+      final vocab = lesson.vocabularies.single;
+
+      expect(lesson.targetLanguage, 'ko');
+      expect(vocab.targetWord, '학생');
+      expect(vocab.hanja, '學生');
+
+      final restored = VocabItem.fromJson(vocab.toJson());
+      expect(restored.hanja, vocab.hanja);
+    });
+
     const sampleYaml = '''
 Lesson: Unit 2::Lesson 26
 
@@ -116,6 +161,54 @@ vocabulary:
       final pear = parsed.lesson.vocabularies[1];
       expect(pear.ttsText, isNull);
       expect(pear.speechText, '배');
+    });
+
+    test('tts is alternate TTS text and wins over ko_text', () {
+      final parsed = YamlParserService.parseLessonYaml('''
+---
+vocabulary:
+  nouns:
+    - ko: 3개
+      tts: 세 개
+      en: three items
+      examples:
+        - ko: "**3개** 주세요"
+          tts: 세 개 주세요
+          en: Three, please
+    - ko: 4개
+      ko_text: 넷 개
+      tts: 네 개
+      en: four items
+    - ko: 5개
+      target_text: 다섯 개
+      en: five items
+---
+# Lesson 1
+''');
+      final vocab = parsed.lesson.vocabularies;
+      expect(vocab[0].ttsText, '세 개');
+      expect(parsed.sentences.single.speechText, '세 개 주세요');
+      expect(vocab[1].ttsText, '네 개');
+      expect(vocab[2].ttsText, '다섯 개');
+    });
+
+    test('splits a locale prefix off a tts value', () {
+      ({String? locale, String text}) split(String value) =>
+          YamlParserService.splitTtsLocale(value);
+
+      expect(split('zh-TW:垃圾'), (locale: 'zh-TW', text: '垃圾'));
+      expect(split('zh_tw:垃圾'), (locale: 'zh-TW', text: '垃圾'));
+      expect(split('zh-hant:垃圾'), (locale: 'zh-Hant', text: '垃圾'));
+      expect(split('ko:세 개'), (locale: 'ko', text: '세 개'));
+      expect(split('  垃圾  '), (locale: null, text: '垃圾'));
+      // A colon followed by a space is text, as in English.
+      expect(split('en: hello'), (locale: null, text: 'en: hello'));
+      expect(split('Note: hello'), (locale: null, text: 'Note: hello'));
+      // Not a known language.
+      expect(split('re:act'), (locale: null, text: 're:act'));
+      expect(split('10:30'), (locale: null, text: '10:30'));
+      // Nothing after the colon.
+      expect(split('zh-TW:'), (locale: null, text: 'zh-TW:'));
     });
 
     test('ko_text survives a JSON round trip', () {
@@ -731,6 +824,7 @@ vocabulary:
                 VocabItem(
                   targetWord: '목적지',
                   translation: 'destination',
+                  hanja: '舊',
                   pos: 'nouns',
                   sentenceIds: ['old-sentence'],
                   cardTargetToNative: SrsCard(
@@ -776,6 +870,7 @@ vocabulary:
 vocabulary:
   nouns:
     - ko: 목적지
+      hanja: 目的地
       audio: https://example.com/Lesson26v6.mp3
       en: destination
       examples:
@@ -797,6 +892,7 @@ vocabulary:
         final refreshedVocab = imported.vocabularies.firstWhere(
           (vocab) => vocab.targetWord == '목적지',
         );
+        expect(refreshedVocab.hanja, '目的地');
         final customVocab = imported.vocabularies.firstWhere(
           (vocab) => vocab.targetWord == '사용자 단어',
         );

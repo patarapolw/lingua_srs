@@ -54,7 +54,8 @@ Full feature reference. For a short overview see the [README](../README.md).
    - **Windows and other platforms** use online streamed TTS with local caching. Windows does not fall back to SAPI.
    - **Brackets are not spoken**: text in round brackets, such as `먹다 (to eat)`, is skipped, or the voice would stumble over the note. Cloze blanks and Markdown marks are skipped too. The pronunciation line still shows bracketed text.
    - **Voices vary**: when an Android language has several installed offline voices, each utterance picks one at random.
-   - **Alternate TTS text** (`ko_text`) is used for review autoplay and replay as well as for the audio buttons.
+   - **Alternate TTS text** (`tts`, formerly `ko_text`) is used for review autoplay and replay as well as for the audio buttons. It can start with a locale (`zh-TW:垃圾`) to use another voice for that word; see [lesson-format.md](lesson-format.md).
+   - **Chinese regions**: `zh-TW` (or `zh-Hant`) keeps a Taiwan voice, and `zh`, `zh-CN` (or `zh-Hans`) use a mainland voice. On Android, a voice of the requested region is preferred, with any installed Chinese voice as a fallback.
    - **Recording or TTS**: every word and sentence with an audio URL has a *Use this recording* checkbox in its editor. Unticking it speaks with TTS instead, and keeps the URL.
    - **Preview in the editors**: the vocabulary editor, the *Add Example* dialog and the Sentence Pool editor all have a button on the Audio URL (plays the URL as typed) and one in the header of the collapsible *Text-to-speech* section (speaks the TTS text, or the word or sentence while that is blank), so TTS can be previewed without opening the section. The Sentence Pool list itself has no audio buttons.
    - **Order**: in every editor the Audio URL comes first, with its *Use this recording* checkbox directly under it, followed by the collapsible *Text-to-speech* section that is used when there is no recording or it is switched off.

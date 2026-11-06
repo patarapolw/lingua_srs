@@ -11,6 +11,7 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 import '../models/sentence.dart';
+import 'yaml_parser_service.dart';
 
 class AudioService extends ChangeNotifier {
   final AudioPlayer _player;
@@ -185,10 +186,17 @@ class AudioService extends ChangeNotifier {
 
   String _resolveLanguageCode(String? lang) {
     if (lang == null || lang.isEmpty) return 'ko';
-    final lower = lang.toLowerCase().trim();
+    final lower = lang.toLowerCase().trim().replaceAll('_', '-');
     if (lower == 'ko' || lower == 'korean') return 'ko';
     if (lower == 'ja' || lower == 'japanese') return 'ja';
-    if (lower == 'zh' || lower == 'chinese') return 'zh-CN';
+    if (lower == 'zh' ||
+        lower == 'chinese' ||
+        lower == 'zh-cn' ||
+        lower == 'zh-hans') {
+      return 'zh-CN';
+    }
+    // Taiwan readings differ from mainland ones (垃圾, 和), so keep the region.
+    if (lower == 'zh-tw' || lower == 'zh-hant') return 'zh-TW';
     if (lower == 'es' || lower == 'spanish') return 'es';
     if (lower == 'fr' || lower == 'french') return 'fr';
     if (lower == 'de' || lower == 'german') return 'de';
@@ -197,10 +205,12 @@ class AudioService extends ChangeNotifier {
     return lower;
   }
 
-  /// Generates an audio stream URL for TTS
+  /// Generates an audio stream URL for TTS. A locale prefix on [text]
+  /// (`zh-TW:垃圾`) overrides [language].
   String getTtsUrl(String text, {String? language}) {
-    final clean = Sentence.cleanForSpeech(text);
-    final lang = _resolveLanguageCode(language);
+    final split = YamlParserService.splitTtsLocale(text);
+    final clean = Sentence.cleanForSpeech(split.text);
+    final lang = _resolveLanguageCode(split.locale ?? language);
     final encoded = Uri.encodeComponent(clean);
     return 'https://translate.google.com/translate_tts?ie=UTF-8&tl=$lang&client=tw-ob&q=$encoded';
   }
@@ -214,7 +224,9 @@ class AudioService extends ChangeNotifier {
   }
 
   Future<void> _speak(String text, int session, {String? language}) async {
-    final clean = Sentence.cleanForSpeech(text);
+    // A `tts` value can name its own locale: `zh-TW:垃圾`.
+    final split = YamlParserService.splitTtsLocale(text);
+    final clean = Sentence.cleanForSpeech(split.text);
     if (clean.isEmpty) return;
 
     if (usesOfflineTts) {
@@ -224,12 +236,12 @@ class AudioService extends ChangeNotifier {
         clean,
         text,
         session,
-        language: language,
+        language: split.locale ?? language,
       );
       return;
     }
 
-    final ttsUrl = getTtsUrl(clean, language: language);
+    final ttsUrl = getTtsUrl(text, language: language);
     await _playAudio(ttsUrl, session, playingKey: 'tts_${text.trim()}');
   }
 
@@ -240,10 +252,8 @@ class AudioService extends ChangeNotifier {
     String? language,
   }) async {
     try {
-      final requestedLanguage = _resolveLanguageCode(language)
-          .toLowerCase()
-          .split('-')
-          .first;
+      final requestedLocale = _resolveLanguageCode(language).toLowerCase();
+      final requestedLanguage = requestedLocale.split('-').first;
       final availableVoices = await _tts.getVoices;
       if (!_isCurrent(session)) return;
       if (availableVoices is! List) {
@@ -251,15 +261,27 @@ class AudioService extends ChangeNotifier {
         return;
       }
 
-      final offlineVoices = availableVoices
+      String voiceLocale(Map<String, dynamic> voice) =>
+          (voice['locale']?.toString().toLowerCase() ?? '').replaceAll(
+            '_',
+            '-',
+          );
+      var offlineVoices = availableVoices
           .whereType<Map>()
           .map((voice) => Map<String, dynamic>.from(voice))
           .where((voice) {
-            final locale = voice['locale']?.toString().toLowerCase() ?? '';
-            return locale.split('-').first == requestedLanguage &&
+            return voiceLocale(voice).split('-').first == requestedLanguage &&
                 voice['network_required']?.toString() == '0';
           })
           .toList();
+      // A region (zh-TW) prefers that region's voices, and falls back to any
+      // voice of the language when none is installed.
+      if (requestedLocale.contains('-')) {
+        final sameRegion = offlineVoices
+            .where((voice) => voiceLocale(voice) == requestedLocale)
+            .toList();
+        if (sameRegion.isNotEmpty) offlineVoices = sameRegion;
+      }
       // A language can have several installed voices. Varying them keeps
       // reviews from sounding monotonous; any that fails is skipped below.
       offlineVoices.shuffle(_random);

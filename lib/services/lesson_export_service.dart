@@ -5,6 +5,7 @@ import 'package:archive/archive.dart';
 import '../models/lesson.dart';
 import '../models/sentence.dart';
 import '../models/vocab_item.dart';
+import 'yaml_parser_service.dart';
 
 class LessonExportService {
   static List<int> createZip(List<Lesson> lessons, List<Sentence> sentences) {
@@ -127,8 +128,12 @@ class LessonExportService {
       'target': vocab.targetWord,
       'meaning': vocab.translation,
     };
+    if (vocab.reading.isNotEmpty) entry['reading'] = vocab.reading;
+    if (vocab.simplified.isNotEmpty) entry['simplified'] = vocab.simplified;
+    if (vocab.traditional.isNotEmpty) entry['traditional'] = vocab.traditional;
+    if (vocab.hanja.isNotEmpty) entry['hanja'] = vocab.hanja;
     if (vocab.audioUrl != null) entry['audio'] = vocab.audioUrl;
-    if (vocab.ttsText != null) entry['target_text'] = vocab.ttsText;
+    if (vocab.ttsText != null) entry[YamlParserService.ttsKey] = vocab.ttsText;
     if (vocab.notes.isNotEmpty) entry['notes'] = vocab.notes;
     if (vocab.disambiguation.isNotEmpty) {
       entry['disambiguation'] = vocab.disambiguation;
@@ -154,7 +159,8 @@ class LessonExportService {
       final translation = vocab.translationTextFor(sentence);
       if (translation.isNotEmpty) example['translation'] = translation;
       if (sentence.audioUrl != null) example['audio'] = sentence.audioUrl!;
-      if (sentence.ttsText != null) example['target_text'] = sentence.ttsText!;
+      if (sentence.ttsText != null)
+        example[YamlParserService.ttsKey] = sentence.ttsText!;
       if (sentence.notes.isNotEmpty) example['notes'] = sentence.notes;
       examples.add(example);
     }

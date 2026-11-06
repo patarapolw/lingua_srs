@@ -7,8 +7,8 @@ import '../models/vocab_item.dart';
 ///
 /// What is asked depends on the language being learned, so each language has
 /// its own set of questions, and a language without one gets no word questions
-/// and no AI suggestions. Korean is the only one the app supports. To add a
-/// language, extend [_LanguageQuestions] and list it in [_languages].
+/// and no AI suggestions. To add a language, extend [_LanguageQuestions] and
+/// list it in [_languages].
 ///
 /// After an answer, a few of the fixed questions are swapped for questions the
 /// AI suggests from that answer, and the result never has more than
@@ -32,6 +32,7 @@ class AiQuestionSuggestions {
 
   static const Map<String, _LanguageQuestions> _languages = {
     'ko': _KoreanQuestions(),
+    'zh': _MandarinQuestions(),
   };
 
   /// Whether there are questions for [language], a code like `ko` (a region
@@ -266,6 +267,7 @@ class AiQuestionSuggestions {
   /// The questions for [language], or null if there are none.
   static _LanguageQuestions? _forLanguage(String language) {
     final code = language.trim().toLowerCase().split(RegExp(r'[-_]')).first;
+    if (code == 'chinese' || code == 'mandarin') return _languages['zh'];
     for (final entry in _languages.entries) {
       if (entry.key == code || entry.value.name.toLowerCase() == code) {
         return entry.value;
@@ -433,4 +435,92 @@ class _KoreanQuestions extends _LanguageQuestions {
 
   static String _anotherExample(String word) =>
       'Show me more example sentences with "$word".';
+}
+
+class _MandarinQuestions extends _LanguageQuestions {
+  const _MandarinQuestions();
+
+  @override
+  String get name => 'Mandarin Chinese';
+
+  @override
+  String get practicalFocus =>
+      'Favor practical, natural Mandarin usage. Explain pinyin and tones, '
+      'character components when useful, common collocations, measure words, '
+      'and aspect particles or complements for verbs. Do not describe Mandarin '
+      'verbs or adjectives as conjugating for person or tense.';
+
+  @override
+  bool looksLikeVerbOrAdjective(String word) => false;
+
+  @override
+  List<String> get exampleQuestions => const [
+    'How do I pronounce this in pinyin, including the tones?',
+    'What does each character contribute to the meaning?',
+    'What measure word is commonly used with it?',
+    'How is it different from a similar word?',
+    'Show me a short, natural dialogue using it.',
+  ];
+
+  @override
+  List<String> wordFirst({
+    required String word,
+    required bool hasSentence,
+    required bool verbOrAdjective,
+  }) => [
+    _characters(word),
+    _pronunciation(word),
+    if (hasSentence) _sentenceGrammar,
+    if (verbOrAdjective) _verbUsage(word) else _measureWord(word),
+    if (hasSentence) _sentencePhrase,
+    _anotherExample(word),
+  ];
+
+  @override
+  List<String> wordFollowUps({
+    required String word,
+    required bool hasSentence,
+    required bool verbOrAdjective,
+  }) => [
+    if (hasSentence) _sentenceGrammar,
+    if (hasSentence) _sentencePhrase,
+    _otherUses(word),
+    _anotherExample(word),
+    _pronunciation(word),
+    _characters(word),
+    if (verbOrAdjective) _verbUsage(word) else _measureWord(word),
+    _similarWords(word),
+    _quiz(word),
+  ];
+
+  static String _characters(String word) =>
+      'What does each character in "$word" contribute to its meaning?';
+
+  static String _pronunciation(String word) =>
+      'How is "$word" pronounced in pinyin, including its tones?';
+
+  static const _sentenceGrammar =
+      "Break down this sentence's word order and grammar.";
+
+  static const _sentencePhrase =
+      'Which short phrase from this sentence is useful, and how else is it '
+      'used?';
+
+  static String _verbUsage(String word) =>
+      'How is "$word" used with aspect particles or result complements?';
+
+  static String _measureWord(String word) =>
+      'What measure word is commonly used with "$word"?';
+
+  static String _otherUses(String word) =>
+      'What are common collocations or other uses of "$word"?';
+
+  static String _anotherExample(String word) =>
+      'Show me a natural example sentence with "$word".';
+
+  static String _similarWords(String word) =>
+      'How is "$word" different from similar Mandarin words?';
+
+  static String _quiz(String word) =>
+      'Quiz me on "$word" with 3 short questions.';
 }

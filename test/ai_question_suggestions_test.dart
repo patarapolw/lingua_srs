@@ -325,6 +325,13 @@ void main() {
       expect(check('먹다', ['verbs'], language: 'ja'), isFalse);
       expect(check('먹다', const [], language: 'ja'), isFalse);
     });
+
+    test('Chinese relies on category labels, not word endings', () {
+      expect(check('学习', ['verbs'], language: 'zh'), isTrue);
+      expect(check('漂亮', ['adjectives'], language: 'zh'), isTrue);
+      expect(check('学习', const [], language: 'zh'), isFalse);
+      expect(check('学习', ['nouns'], language: 'zh'), isFalse);
+    });
   });
 
   group('AiQuestionSuggestions language check', () {
@@ -347,8 +354,28 @@ void main() {
       }
     });
 
+    test('supports Mandarin Chinese by code, region and name', () {
+      for (final language in [
+        'zh',
+        'ZH',
+        ' zh ',
+        'zh-CN',
+        'zh_TW',
+        'Chinese',
+        'Mandarin',
+        'Mandarin Chinese',
+      ]) {
+        expect(
+          AiQuestionSuggestions.supports(language),
+          isTrue,
+          reason: language,
+        );
+        expect(first(language), isNotEmpty, reason: language);
+      }
+    });
+
     test('does not support another language yet', () {
-      for (final language in ['ja', 'es', 'fr', 'zh-CN', '', 'kor']) {
+      for (final language in ['ja', 'es', 'fr', '', 'kor']) {
         expect(
           AiQuestionSuggestions.supports(language),
           isFalse,
@@ -366,6 +393,76 @@ void main() {
           reason: language,
         );
       }
+    });
+
+    test('names Mandarin subjects and lessons', () {
+      expect(
+        AiQuestionSuggestions.wordSubject(
+          language: 'zh-TW',
+          word: '學生',
+          translation: 'student',
+        ),
+        'the Mandarin Chinese word "學生" (student)',
+      );
+      expect(
+        AiQuestionSuggestions.lessonSubject(language: 'zh-CN', title: 'Food'),
+        'the Mandarin Chinese lesson "Food"',
+      );
+    });
+
+    test('asks Mandarin learners about readings, characters and usage', () {
+      final firstQuestions = AiQuestionSuggestions.wordFirstQuestions(
+        language: 'zh',
+        word: '学习',
+        hasSentence: true,
+        verbOrAdjective: true,
+      );
+      expect(
+        firstQuestions,
+        contains('How is "学习" pronounced in pinyin, including its tones?'),
+      );
+      expect(
+        firstQuestions,
+        contains("Break down this sentence's word order and grammar."),
+      );
+      expect(
+        firstQuestions,
+        contains(
+          'How is "学习" used with aspect particles or result complements?',
+        ),
+      );
+
+      final followUps = AiQuestionSuggestions.wordFollowUps(
+        language: 'zh-CN',
+        word: '苹果',
+        hasSentence: false,
+        verbOrAdjective: false,
+      );
+      expect(
+        followUps,
+        contains('What measure word is commonly used with "苹果"?'),
+      );
+      expect(followUps, isNot(contains('conjugate')));
+    });
+
+    test('uses Mandarin guidance in AI-generated question requests', () {
+      final prompt = AiQuestionSuggestions.aiRequest(
+        language: 'zh-TW',
+        subject: AiQuestionSuggestions.wordSubject(
+          language: 'zh-TW',
+          word: '學生',
+          translation: 'student',
+        ),
+        nativeLanguage: 'en',
+        question: 'How is it used?',
+        answer: 'It is a noun.',
+        asked: const [],
+      ).first.content;
+
+      expect(prompt, contains('learner of Mandarin Chinese'));
+      expect(prompt, contains('pinyin and tones'));
+      expect(prompt, contains('Do not describe Mandarin'));
+      expect(prompt, contains('tones?'));
     });
 
     test('names the subject in the language', () {
