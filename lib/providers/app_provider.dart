@@ -939,10 +939,19 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
             .where((sentence) => !identical(sentence, incoming))
             .toList();
     final candidates = [incoming, ...duplicates];
-    final canonical = candidates.firstWhere(
-      (sentence) => sentence.audioUrl?.trim().isNotEmpty == true,
-      orElse: () => incoming,
-    );
+    // Keep the copy _canonicalizeSentencePool keeps, which every device
+    // agrees on: a recording first, then the smallest id. Keeping the incoming
+    // copy instead made an import delete a copy pulled from another device,
+    // which that device keeps, and push the deletion (#102).
+    bool hasAudio(Sentence sentence) =>
+        sentence.audioUrl?.trim().isNotEmpty == true;
+    final canonical = candidates.reduce((best, sentence) {
+      final byAudio = (hasAudio(sentence) ? 1 : 0).compareTo(
+        hasAudio(best) ? 1 : 0,
+      );
+      if (byAudio != 0) return byAudio > 0 ? sentence : best;
+      return sentence.id.compareTo(best.id) < 0 ? sentence : best;
+    });
     final audioUrl = candidates
         .map((sentence) => sentence.audioUrl)
         .firstWhere(
