@@ -351,10 +351,11 @@ void main() {
       final lesson = data.lessons.single;
       expect(lesson.id, 'l1');
       expect(lesson.title, 'Food');
-      expect(
-        lesson.vocabularies.map((vocab) => vocab.id),
-        ['w1', 'w2', 'only-here'],
-      );
+      expect(lesson.vocabularies.map((vocab) => vocab.id), [
+        'w1',
+        'w2',
+        'only-here',
+      ]);
       expect(lesson.markdownContent, '# My notes');
     });
 

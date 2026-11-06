@@ -286,33 +286,48 @@ void main() {
     test('stamps new records with when they really changed', () {
       final tracker = SyncChangeTracker(deviceId: 'device');
 
-      tracker.track({
-        _lesson: {'title': 'A'},
-        _card: {'changedAt': 700},
-      }, now: 5000, stampNew: stampNew);
+      tracker.track(
+        {
+          _lesson: {'title': 'A'},
+          _card: {'changedAt': 700},
+        },
+        now: 5000,
+        stampNew: stampNew,
+      );
 
       expect(tracker.records[_lesson]!.updatedAt, 0);
       expect(tracker.records[_card]!.updatedAt, 700);
       expect(tracker.pending, unorderedEquals([_lesson, _card]));
     });
 
-    test('stamps later edits, and anything after the first pull, with now',
-        () {
+    test('stamps later edits, and anything after the first pull, with now', () {
       final tracker = SyncChangeTracker(deviceId: 'device');
-      tracker.track({
-        _lesson: {'title': 'A'},
-      }, now: 5000, stampNew: stampNew);
+      tracker.track(
+        {
+          _lesson: {'title': 'A'},
+        },
+        now: 5000,
+        stampNew: stampNew,
+      );
 
-      tracker.track({
-        _lesson: {'title': 'B'},
-      }, now: 6000, stampNew: stampNew);
+      tracker.track(
+        {
+          _lesson: {'title': 'B'},
+        },
+        now: 6000,
+        stampNew: stampNew,
+      );
       expect(tracker.records[_lesson]!.updatedAt, 6000);
 
       tracker.hasPulled = true;
-      tracker.track({
-        _lesson: {'title': 'B'},
-        _sentence: {'text': 'new'},
-      }, now: 7000, stampNew: stampNew);
+      tracker.track(
+        {
+          _lesson: {'title': 'B'},
+          _sentence: {'text': 'new'},
+        },
+        now: 7000,
+        stampNew: stampNew,
+      );
       expect(tracker.records[_sentence]!.updatedAt, 7000);
     });
 
@@ -328,8 +343,7 @@ void main() {
       expect(restored.hasPulled, isFalse);
     });
 
-    test('state saved before it was kept counts a cursor as having pulled',
-        () {
+    test('state saved before it was kept counts a cursor as having pulled', () {
       final json = SyncChangeTracker(deviceId: 'device').toJson()
         ..['cursor'] = 5;
 

@@ -55,11 +55,7 @@ class KeepingStore extends MemoryStore {
     String deviceId,
     Map<SyncRecordKey, Map<String, dynamic>?> changes, {
     bool firstSync = false,
-  }) => super.apply(
-    deviceId,
-    {...changes}..remove(kept),
-    firstSync: firstSync,
-  );
+  }) => super.apply(deviceId, {...changes}..remove(kept), firstSync: firstSync);
 }
 
 class Device {
@@ -342,9 +338,7 @@ void main() {
     await a.sync();
 
     expect(b.store.records[_lesson], {'title': 'On the account'});
-    expect(a.store.records[card], {
-      'lastReviewed': '2026-11-03T00:00:00.000Z',
-    });
+    expect(a.store.records[card], {'lastReviewed': '2026-11-03T00:00:00.000Z'});
     expect(b.tracker.hasPulled, isTrue);
   });
 

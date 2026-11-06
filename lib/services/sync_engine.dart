@@ -325,12 +325,8 @@ class SyncEngine {
   /// stamped with when they last really changed (see
   /// [SyncSnapshot.knownChangeTime]), so what the account already has wins
   /// unless this device's copy is known to be newer.
-  void _track(Map<SyncRecordKey, Map<String, dynamic>> snapshot) =>
-      tracker.track(
-        snapshot,
-        now: _clock(),
-        stampNew: SyncSnapshot.knownChangeTime,
-      );
+  void _track(Map<SyncRecordKey, Map<String, dynamic>> snapshot) => tracker
+      .track(snapshot, now: _clock(), stampNew: SyncSnapshot.knownChangeTime);
 
   /// Server ids of every record this device knows, to recognize pulled
   /// deletions, which carry no contents.

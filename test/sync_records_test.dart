@@ -244,16 +244,21 @@ void main() {
 
     test("is a discussion's latest message", () {
       expect(
-        SyncSnapshot.knownChangeTime(
-          const SyncRecordKey('discussion', 'd'),
-          {
-            'messages': [
-              {'role': 'user', 'content': 'a', 'createdAt': '2026-11-05T12:00:00.000Z'},
-              {'role': 'user', 'content': 'b', 'createdAt': '2026-11-05T09:00:00.000Z'},
-              {'role': 'user', 'content': 'c'},
-            ],
-          },
-        ),
+        SyncSnapshot.knownChangeTime(const SyncRecordKey('discussion', 'd'), {
+          'messages': [
+            {
+              'role': 'user',
+              'content': 'a',
+              'createdAt': '2026-11-05T12:00:00.000Z',
+            },
+            {
+              'role': 'user',
+              'content': 'b',
+              'createdAt': '2026-11-05T09:00:00.000Z',
+            },
+            {'role': 'user', 'content': 'c'},
+          ],
+        }),
         DateTime.utc(2026, 11, 5, 12).millisecondsSinceEpoch,
       );
     });
