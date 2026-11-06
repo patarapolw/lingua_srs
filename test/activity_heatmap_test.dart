@@ -102,7 +102,14 @@ void main() {
       'Nov',
       'Dec',
     ];
-    expect(find.text(months[today.month - 1]), findsOneWidget);
+    // Only today has reviews, so the calendar is this week's column, which is
+    // labelled with the month of its Monday: on Dec 1–6, 2026 that is Nov.
+    final weekStart = DateTime(
+      today.year,
+      today.month,
+      today.day - (today.weekday - DateTime.monday),
+    );
+    expect(find.text(months[weekStart.month - 1]), findsOneWidget);
     expect(find.byType(RotatedBox), findsWidgets);
     expect(find.text('Cards by stage'), findsOneWidget);
     expect(find.byTooltip('New: 0 cards'), findsOneWidget);
