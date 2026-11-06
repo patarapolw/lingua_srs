@@ -90,26 +90,28 @@ void main() {
     }
   });
 
-  test('keeps the copy with a recording, with the notes of the other', () async {
-    final provider = await _load(_lesson(['a-plain', 'z-recorded']), [
-      _sentence('a-plain', notes: 'Said on a ferry.'),
-      _sentence('z-recorded', audioUrl: 'https://example.com/boat.mp3'),
-    ]);
+  test(
+    'keeps the copy with a recording, with the notes of the other',
+    () async {
+      final provider = await _load(_lesson(['a-plain', 'z-recorded']), [
+        _sentence('a-plain', notes: 'Said on a ferry.'),
+        _sentence('z-recorded', audioUrl: 'https://example.com/boat.mp3'),
+      ]);
 
-    final kept = provider.sentences.single;
-    expect(kept.id, 'z-recorded');
-    expect(kept.audioUrl, 'https://example.com/boat.mp3');
-    expect(kept.notes, 'Said on a ferry.');
-    provider.dispose();
-  });
+      final kept = provider.sentences.single;
+      expect(kept.id, 'z-recorded');
+      expect(kept.audioUrl, 'https://example.com/boat.mp3');
+      expect(kept.notes, 'Said on a ferry.');
+      provider.dispose();
+    },
+  );
 
   test('merges a pulled duplicate at once, onto the same copy', () async {
     final provider = await _load(_lesson(['z-local']), [_sentence('z-local')]);
 
     await provider.apply('this-device', {
-      const SyncRecordKey('sentence', 'a-pulled'): _sentence(
-        'a-pulled',
-      ).toJson(),
+      const SyncRecordKey('sentence', 'a-pulled'): _sentence('a-pulled')
+          .toJson(),
     });
 
     expect(provider.sentences.map((s) => s.id), ['a-pulled']);
@@ -143,12 +145,8 @@ void main() {
       ).toJson(),
     });
 
-    final emphasis = provider
-        .lessons
-        .single
-        .vocabularies
-        .single
-        .sentenceEmphasis['s1']!;
+    final emphasis =
+        provider.lessons.single.vocabularies.single.sentenceEmphasis['s1']!;
     expect(Sentence.withoutEmphasis(emphasis.target), '저는 어제 배를 탔어요');
     expect(emphasis.target, contains('**배**'));
     expect(

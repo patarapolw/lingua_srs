@@ -647,9 +647,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       pronunciationOptions: _pronunciationOptions,
       remoteActivity: {..._remoteActivity},
     );
-    final changed = {
-      ...SyncApplier.apply(data, changes, firstSync: firstSync),
-    };
+    final changed = {...SyncApplier.apply(data, changes, firstSync: firstSync)};
 
     _lessons = data.lessons;
     _sentences = data.sentences;
