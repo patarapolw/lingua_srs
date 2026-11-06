@@ -390,6 +390,21 @@ class _SettingsDialogState extends State<SettingsDialog> {
   /// Asks the server whether it still accepts this device's sign-in. Nothing
   /// else contacts it until sync exists, so this is how a device that was
   /// signed in elsewhere finds out that the account is gone.
+  /// When a sync finished, in local time: just the time today, else the date
+  /// and time.
+  static String _syncTime(DateTime time) {
+    final local = time.toLocal();
+    final now = DateTime.now();
+    String two(int n) => n.toString().padLeft(2, '0');
+    final clock = '${two(local.hour)}:${two(local.minute)}';
+    if (local.year == now.year &&
+        local.month == now.month &&
+        local.day == now.day) {
+      return 'at $clock';
+    }
+    return 'on ${local.year}-${two(local.month)}-${two(local.day)} at $clock';
+  }
+
   Future<void> _checkSignIn(SyncPairing pairing) async {
     setState(() {
       _syncError = null;
@@ -1040,6 +1055,20 @@ class _SettingsDialogState extends State<SettingsDialog> {
                       'Server ${syncPairing.endpoint}',
                       style: theme.textTheme.bodySmall,
                     ),
+                  const SizedBox(height: 4),
+                  Text(
+                    provider.isSyncing
+                        ? 'Syncing…'
+                        : provider.lastSyncedAt == null
+                        ? 'Not synced yet on this device.'
+                        : 'Last synced ${_syncTime(provider.lastSyncedAt!)}.',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  if (provider.syncProblem != null)
+                    Text(
+                      provider.syncProblem!,
+                      style: TextStyle(color: theme.colorScheme.error),
+                    ),
                   if (_changingSyncPassword) ...[
                     const SizedBox(height: 12),
                     TextField(
@@ -1150,6 +1179,13 @@ class _SettingsDialogState extends State<SettingsDialog> {
                   Wrap(
                     spacing: 8,
                     children: [
+                      FilledButton.icon(
+                        onPressed: _saving || provider.isSyncing
+                            ? null
+                            : provider.syncNow,
+                        icon: const Icon(Icons.sync),
+                        label: const Text('Sync now'),
+                      ),
                       OutlinedButton.icon(
                         onPressed: _saving
                             ? null

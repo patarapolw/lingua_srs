@@ -16,9 +16,13 @@ import '../services/ai_discussion_search.dart';
 import '../services/deepseek_service.dart';
 import '../services/srs_service.dart';
 import '../services/storage_service.dart';
+import '../services/sync_account_service.dart';
 import '../services/sync_apply.dart';
+import '../services/sync_client.dart';
 import '../services/sync_engine.dart';
+import '../services/sync_error_text.dart';
 import '../services/sync_pairing.dart';
+import '../services/sync_record_cipher.dart';
 import '../services/sync_records.dart';
 import '../services/vocab_ai_service.dart';
 import '../services/yaml_parser_service.dart';
@@ -245,6 +249,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     _autoplayAudio = results.$1;
     _deepSeekApiKey = results.$2;
     _syncPairing = await StorageService.loadSyncPairing();
+    _lastSyncedAt = await StorageService.loadLastSyncedAt();
     _mergeHistory = await StorageService.loadMergeHistory();
     _aiDiscussions = results.$3;
     _maxReviews24h = results.$4;
@@ -476,6 +481,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   }
 
   Future<void> setSyncPairing(SyncPairing? pairing) async {
+    final previous = _syncPairing;
     await StorageService.saveSyncPairing(pairing);
     // Unlocked again for the new sign-in, so a key never outlives its account.
     try {
@@ -484,14 +490,111 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       debugPrint('Could not remove the sync data key: $error');
     }
     _syncPairing = pairing;
-    if (pairing == null) {
+    // Signing out, or into another account, starts the sync state again; a
+    // new password for the same account keeps it.
+    if (pairing == null ||
+        previous == null ||
+        previous.email != pairing.email ||
+        previous.endpoint != pairing.endpoint) {
       await _queueSyncTracking(() async {
         final tracker = await StorageService.loadSyncChangeTracker();
         tracker.reset();
         await StorageService.saveSyncChangeTracker(tracker);
       });
+      _lastSyncedAt = null;
+      _syncProblem = null;
+      await StorageService.saveLastSyncedAt(null);
     }
     notifyListeners();
+  }
+
+  bool _syncing = false;
+  DateTime? _lastSyncedAt;
+  String? _syncProblem;
+
+  /// Test hooks: where a sync unlocks the data key and sends its requests.
+  @visibleForTesting
+  SyncAccountService? syncAccounts;
+  @visibleForTesting
+  http.Client Function()? syncHttpClient;
+
+  /// A sync is running.
+  bool get isSyncing => _syncing;
+
+  /// When the last sync finished, on this device.
+  DateTime? get lastSyncedAt => _lastSyncedAt;
+
+  /// Why the last sync stopped or was incomplete, in words a person can act
+  /// on; null when it went through.
+  String? get syncProblem => _syncProblem;
+
+  /// Syncs with the server now: pulls, applies and pushes. Returns null when
+  /// signed out or when a sync is already running. Never throws: a failure is
+  /// kept in [syncProblem] and the local data stays as it is.
+  Future<SyncResult?> syncNow() async {
+    final pairing = _syncPairing;
+    if (pairing == null || _syncing) return null;
+    _syncing = true;
+    notifyListeners();
+    SyncResult? result;
+    try {
+      final synced = await _queueSyncTracking(() => _runSync(pairing));
+      result = synced;
+      _syncProblem = switch (synced.outcome) {
+        SyncOutcome.signInRejected => describeSyncError(
+          const SyncException('invalid_credentials', statusCode: 401),
+          signedIn: true,
+        ),
+        SyncOutcome.accountChanged =>
+          'This account was deleted and created again with the same email '
+              'and password. Sync is paused so the two are not mixed. Your '
+              'lessons and progress are still on this device. Sign out and '
+              'sign in again to use the new account.',
+        SyncOutcome.synced when synced.needsAppUpdate.isNotEmpty =>
+          '${synced.needsAppUpdate.length} items were changed by a newer '
+              'version of the app. Update the app to sync them.',
+        SyncOutcome.synced when synced.unreadable > 0 =>
+          '${synced.unreadable} items from the server could not be read.',
+        SyncOutcome.synced => null,
+      };
+      if (synced.outcome == SyncOutcome.synced) {
+        _lastSyncedAt = DateTime.now();
+        await StorageService.saveLastSyncedAt(_lastSyncedAt);
+      }
+    } catch (error) {
+      _syncProblem = describeSyncError(error, signedIn: true);
+    } finally {
+      _syncing = false;
+      notifyListeners();
+    }
+    return result;
+  }
+
+  Future<SyncResult> _runSync(SyncPairing pairing) async {
+    var key = await StorageService.loadSyncDataKey();
+    if (key == null || !key.belongsTo(pairing) || key.authKey == null) {
+      key = await (syncAccounts ?? SyncAccountService()).unlockDataKey(pairing);
+      await StorageService.saveSyncDataKey(key);
+    }
+    final tracker = await StorageService.loadSyncChangeTracker();
+    final client = SyncClient(
+      endpoint: pairing.endpoint,
+      email: pairing.email,
+      authKey: key.authKey!,
+      client: syncHttpClient?.call(),
+    );
+    try {
+      return await SyncEngine(
+        client: client,
+        cipher: await SyncRecordCipher.create(key.key),
+        store: this,
+        tracker: tracker,
+        accountCreatedAt: key.createdAt,
+        save: () => StorageService.saveSyncChangeTracker(tracker),
+      ).sync();
+    } finally {
+      client.close();
+    }
   }
 
   Future<void> _syncTracking = Future.value();

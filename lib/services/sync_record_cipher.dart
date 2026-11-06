@@ -16,6 +16,7 @@ class SyncDataKey {
     required this.email,
     required this.createdAt,
     required this.key,
+    this.authKey,
   });
 
   final Uri endpoint;
@@ -26,6 +27,11 @@ class SyncDataKey {
   final int? createdAt;
   final List<int> key;
 
+  /// The derived key the server checks at sign-in, kept so a sync does not
+  /// derive keys from the password every time. Null in a key saved before it
+  /// was kept; the key is then unlocked again.
+  final String? authKey;
+
   /// Whether this key was unlocked for [pairing]'s server and email.
   bool belongsTo(SyncPairing pairing) =>
       endpoint == pairing.endpoint && email == pairing.email;
@@ -35,6 +41,7 @@ class SyncDataKey {
     'email': email,
     'createdAt': createdAt,
     'key': base64Url.encode(key),
+    if (authKey != null) 'authKey': authKey,
   };
 
   factory SyncDataKey.fromJson(Map<String, dynamic> json) {
@@ -42,10 +49,12 @@ class SyncDataKey {
     final email = json['email'];
     final createdAt = json['createdAt'];
     final key = json['key'];
+    final authKey = json['authKey'];
     if (endpoint is! String ||
         email is! String ||
         (createdAt != null && createdAt is! int) ||
-        key is! String) {
+        key is! String ||
+        (authKey != null && authKey is! String)) {
       throw const FormatException('Invalid sync data key.');
     }
     final bytes = base64Url.decode(base64Url.normalize(key));
@@ -57,6 +66,7 @@ class SyncDataKey {
       email: email,
       createdAt: createdAt as int?,
       key: bytes,
+      authKey: authKey as String?,
     );
   }
 }
