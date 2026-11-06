@@ -52,6 +52,14 @@ class _LessonReaderViewState extends State<LessonReaderView> {
     final selectedLesson = lesson;
     final content = _contentFor(selectedLesson.markdownContent);
     final headings = content.headings;
+    // On a phone, a labelled button leaves no room for the title.
+    final compact = MediaQuery.sizeOf(context).width < 700;
+    void openVocabulary() => Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LessonDetailView(lessonId: selectedLesson.id),
+      ),
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -80,19 +88,19 @@ class _LessonReaderViewState extends State<LessonReaderView> {
               );
             },
           ),
-          TextButton.icon(
-            icon: const Icon(Icons.menu_book_outlined),
-            label: const Text('View Vocabulary'),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => LessonDetailView(lessonId: selectedLesson.id),
-                ),
-              );
-            },
-          ),
-          const SizedBox(width: 12),
+          if (compact)
+            IconButton(
+              tooltip: 'View Vocabulary',
+              icon: const Icon(Icons.menu_book_outlined),
+              onPressed: openVocabulary,
+            )
+          else
+            TextButton.icon(
+              icon: const Icon(Icons.menu_book_outlined),
+              label: const Text('View Vocabulary'),
+              onPressed: openVocabulary,
+            ),
+          SizedBox(width: compact ? 4 : 12),
         ],
       ),
       body: selectedLesson.markdownContent.trim().isEmpty

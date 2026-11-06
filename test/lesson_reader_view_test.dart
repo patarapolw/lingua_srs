@@ -1,0 +1,134 @@
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:lingua_srs/models/lesson.dart';
+import 'package:lingua_srs/providers/app_provider.dart';
+import 'package:lingua_srs/services/audio_service.dart';
+import 'package:lingua_srs/views/lesson_detail_view.dart';
+import 'package:lingua_srs/views/lesson_reader_view.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'secret_storage_mock.dart';
+
+/// Touches no audio plugin.
+class _SilentAudioService extends ChangeNotifier implements AudioService {
+  @override
+  bool get isPlaying => false;
+  @override
+  String? get currentlyPlayingKey => null;
+  @override
+  bool get usesOfflineTts => true;
+  @override
+  void prefetchAudios(List<String?> urls) {}
+  @override
+  String getTtsUrl(String text, {String? language}) => '';
+  @override
+  Future<void> stop() async {}
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => Future<void>.value();
+}
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(setUpSecretStorage);
+
+  const pathProviderChannel = MethodChannel('plugins.flutter.io/path_provider');
+  late Directory storageDirectory;
+
+  setUp(() {
+    storageDirectory = Directory.systemTemp.createTempSync(
+      'lingua_srs_lesson_reader_view_test_',
+    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(pathProviderChannel, (call) async {
+          if (call.method == 'getApplicationSupportDirectory') {
+            return storageDirectory.path;
+          }
+          throw MissingPluginException('Unexpected method: ${call.method}');
+        });
+  });
+
+  tearDown(() async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(pathProviderChannel, null);
+    if (storageDirectory.existsSync()) {
+      await storageDirectory.delete(recursive: true);
+    }
+  });
+
+  Future<AppProvider> loadedProvider(WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({
+      'lingua_srs_windows_legacy_migration_complete': true,
+    });
+    final provider = AppProvider();
+    addTearDown(provider.dispose);
+    for (var i = 0; i < 100 && provider.isLoading; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump(const Duration(milliseconds: 20));
+    }
+    expect(provider.isLoading, isFalse, reason: 'provider never loaded');
+    return provider;
+  }
+
+  /// Opens a lesson with headings, so every app bar action is shown.
+  Future<Lesson> openReader(WidgetTester tester, Size size) async {
+    final provider = await loadedProvider(tester);
+    const markdown =
+        '---\nvocabulary:\n  nouns:\n    - ko: 단어\n      en: word\n---\n'
+        '# Greetings\n\n## First part\n\nSome text.\n';
+    final lesson = (await tester.runAsync(
+      () => provider.importYaml(markdown),
+    ))!;
+
+    tester.view.physicalSize = size;
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<AppProvider>.value(value: provider),
+          ChangeNotifierProvider<AudioService>(
+            create: (_) => _SilentAudioService(),
+          ),
+        ],
+        child: MaterialApp(home: LessonReaderView(lessonId: lesson.id)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    return lesson;
+  }
+
+  Finder appBarTitle(Lesson lesson) => find.descendant(
+    of: find.byType(AppBar),
+    matching: find.text(lesson.displayTitle),
+  );
+
+  testWidgets('keeps room for the title on a phone', (tester) async {
+    final lesson = await openReader(tester, const Size(360, 800));
+
+    expect(find.byTooltip('Table of contents'), findsOneWidget);
+    expect(find.byTooltip('View Vocabulary'), findsOneWidget);
+    expect(find.text('View Vocabulary'), findsNothing);
+    // Before, the labelled button left the title about 20 px.
+    expect(tester.getSize(appBarTitle(lesson)).width, greaterThan(100));
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byTooltip('View Vocabulary'));
+    await tester.pumpAndSettle();
+    expect(find.byType(LessonDetailView), findsOneWidget);
+  });
+
+  testWidgets('labels View Vocabulary on a wide screen', (tester) async {
+    final lesson = await openReader(tester, const Size(1200, 800));
+
+    expect(find.text('View Vocabulary'), findsOneWidget);
+    expect(appBarTitle(lesson), findsOneWidget);
+  });
+}

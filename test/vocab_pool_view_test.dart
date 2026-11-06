@@ -399,6 +399,27 @@ void main() {
       await tester.pumpAndSettle();
     }
 
+    testWidgets('says "1 vocab" for one word and "2 vocabs" for two', (
+      tester,
+    ) async {
+      final provider = await withSentences(tester);
+      expect(find.text('1 vocab'), findsOneWidget);
+      expect(find.text('1 vocabs'), findsNothing);
+
+      await tester.runAsync(() async {
+        final apple = provider.sentences.firstWhere(
+          (sentence) => sentence.targetText == '사과를 먹어요',
+        );
+        final airport = provider.lessons
+            .expand((lesson) => lesson.vocabularies)
+            .firstWhere((vocab) => vocab.targetWord == '공항');
+        await provider.linkSentenceToVocab(airport, apple.id);
+      });
+      await tester.pumpAndSettle();
+
+      expect(find.text('2 vocabs'), findsOneWidget);
+    });
+
     testWidgets('reveals Delete without asking', (tester) async {
       await withSentences(tester);
 

@@ -339,6 +339,9 @@ class _SentencePoolViewState extends State<SentencePoolView> {
                       final item = filtered[index];
 
                       final vocabUsageCount = _usageCount(provider, item);
+                      final usageLabel = vocabUsageCount == 1
+                          ? '1 vocab'
+                          : '$vocabUsageCount vocabs';
 
                       final actions = [
                         SwipeAction(
@@ -417,9 +420,7 @@ class _SentencePoolViewState extends State<SentencePoolView> {
                                               WrapCrossAlignment.center,
                                           children: [
                                             Badge(
-                                              label: Text(
-                                                '$vocabUsageCount vocabs',
-                                              ),
+                                              label: Text(usageLabel),
                                               backgroundColor: theme
                                                   .colorScheme
                                                   .secondaryContainer,
