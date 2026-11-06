@@ -58,11 +58,11 @@ class Lesson {
     int count = 0;
     final countedCards = <String>{};
     for (final v in vocabularies) {
-      if (v.cardTargetToNative.isEnabled &&
+      if (v.cardTargetToNative.isActive &&
           countedCards.add(v.cardTargetToNative.id)) {
         count++;
       }
-      if (v.cardNativeToTarget.isEnabled &&
+      if (v.cardNativeToTarget.isActive &&
           countedCards.add(v.cardNativeToTarget.id)) {
         count++;
       }
@@ -74,12 +74,12 @@ class Lesson {
     int count = 0;
     final countedCards = <String>{};
     for (final v in vocabularies) {
-      if (v.cardTargetToNative.isEnabled &&
+      if (v.cardTargetToNative.isActive &&
           v.cardTargetToNative.isDue &&
           countedCards.add(v.cardTargetToNative.id)) {
         count++;
       }
-      if (v.cardNativeToTarget.isEnabled &&
+      if (v.cardNativeToTarget.isActive &&
           v.cardNativeToTarget.isDue &&
           countedCards.add(v.cardNativeToTarget.id)) {
         count++;
@@ -92,12 +92,12 @@ class Lesson {
     int count = 0;
     final countedCards = <String>{};
     for (final v in vocabularies) {
-      if (v.cardTargetToNative.isEnabled &&
+      if (v.cardTargetToNative.isActive &&
           v.cardTargetToNative.status == SrsStatus.isNew &&
           countedCards.add(v.cardTargetToNative.id)) {
         count++;
       }
-      if (v.cardNativeToTarget.isEnabled &&
+      if (v.cardNativeToTarget.isActive &&
           v.cardNativeToTarget.status == SrsStatus.isNew &&
           countedCards.add(v.cardNativeToTarget.id)) {
         count++;

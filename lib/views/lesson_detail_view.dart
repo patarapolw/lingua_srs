@@ -16,6 +16,7 @@ import 'yaml_import_view.dart';
 /// Short state shown on a card chip: Hidden, New, Due, or its interval.
 String cardStatusLabel(SrsCard card) {
   if (!card.isEnabled) return 'Hidden';
+  if (card.isSuspended) return 'Suspended';
   if (card.isNewCard) return 'New';
   if (card.isDue) return 'Due';
   // Again and Hard come back within 24 h; their interval in days is hidden.
@@ -23,6 +24,17 @@ String cardStatusLabel(SrsCard card) {
     return SrsService.formatDuration(card.dueDate.difference(DateTime.now()));
   }
   return '${card.interval}d';
+}
+
+/// A shown card that is suspended: tapping its chip unsuspends it. A hidden
+/// card's chip shows it first, as it would without the suspension.
+bool _isUnsuspendable(SrsCard card) => card.isEnabled && card.isSuspended;
+
+/// Icon of a direction chip: shown, hidden, or suspended.
+IconData _directionChipIcon(SrsCard card) {
+  if (!card.isEnabled) return Icons.visibility_off;
+  if (card.isSuspended) return Icons.pause_circle_outline;
+  return Icons.visibility;
 }
 
 /// Label of a lesson's Study button: how many cards the session will hold.
@@ -227,6 +239,32 @@ class _LessonDetailViewState extends State<LessonDetailView> {
 
   /// Warns when an enabled card has the same front prompt as another card.
   /// Uses the same check as the edit dialog; tapping opens it to add a hint.
+  /// Shows, hides, or unsuspends one direction of [vocab].
+  Widget _directionChip(
+    AppProvider provider,
+    VocabItem vocab,
+    CardDirection direction,
+    String name,
+  ) {
+    final card = direction == CardDirection.targetToNative
+        ? vocab.cardTargetToNative
+        : vocab.cardNativeToTarget;
+    final unsuspendable = _isUnsuspendable(card);
+    return FilterChip(
+      avatar: Icon(_directionChipIcon(card), size: 16),
+      tooltip: unsuspendable ? 'Suspended: tap to unsuspend' : null,
+      label: Text('$name (${cardStatusLabel(card)})'),
+      selected: card.isActive,
+      onSelected: (_) {
+        if (unsuspendable) {
+          provider.setCardSuspended(card, false);
+        } else {
+          provider.toggleCardDirection(vocab, direction);
+        }
+      },
+    );
+  }
+
   List<Widget> _duplicateFrontNotices(
     AppProvider provider,
     Lesson lesson,
@@ -237,7 +275,7 @@ class _LessonDetailViewState extends State<LessonDetailView> {
     for (final direction in CardDirection.values) {
       final toNative = direction == CardDirection.targetToNative;
       if (!(toNative ? vocab.cardTargetToNative : vocab.cardNativeToTarget)
-          .isEnabled) {
+          .isActive) {
         continue;
       }
       final duplicates = provider.getDuplicateFrontVocabularies(
@@ -899,46 +937,17 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                                   runSpacing: 8,
                                   crossAxisAlignment: WrapCrossAlignment.center,
                                   children: [
-                                    // KO -> EN toggle
-                                    FilterChip(
-                                      avatar: Icon(
-                                        vocab.cardTargetToNative.isEnabled
-                                            ? Icons.visibility
-                                            : Icons.visibility_off,
-                                        size: 16,
-                                      ),
-                                      label: Text(
-                                        'KO ➔ EN (${cardStatusLabel(vocab.cardTargetToNative)})',
-                                      ),
-                                      selected:
-                                          vocab.cardTargetToNative.isEnabled,
-                                      onSelected: (_) {
-                                        provider.toggleCardDirection(
-                                          vocab,
-                                          CardDirection.targetToNative,
-                                        );
-                                      },
+                                    _directionChip(
+                                      provider,
+                                      vocab,
+                                      CardDirection.targetToNative,
+                                      'KO ➔ EN',
                                     ),
-
-                                    // EN -> KO toggle
-                                    FilterChip(
-                                      avatar: Icon(
-                                        vocab.cardNativeToTarget.isEnabled
-                                            ? Icons.visibility
-                                            : Icons.visibility_off,
-                                        size: 16,
-                                      ),
-                                      label: Text(
-                                        'EN ➔ KO Cloze (${cardStatusLabel(vocab.cardNativeToTarget)})',
-                                      ),
-                                      selected:
-                                          vocab.cardNativeToTarget.isEnabled,
-                                      onSelected: (_) {
-                                        provider.toggleCardDirection(
-                                          vocab,
-                                          CardDirection.nativeToTarget,
-                                        );
-                                      },
+                                    _directionChip(
+                                      provider,
+                                      vocab,
+                                      CardDirection.nativeToTarget,
+                                      'EN ➔ KO Cloze',
                                     ),
                                   ],
                                 ),

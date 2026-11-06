@@ -598,7 +598,7 @@ class LessonListView extends StatelessWidget {
           vocab.cardTargetToNative,
           vocab.cardNativeToTarget,
         ]) {
-          if (!card.isEnabled) continue;
+          if (!card.isActive) continue;
           if (card.isNewCard) {
             if (newCardIds.add(card.id)) totalNew++;
           } else if (card.isDue) {

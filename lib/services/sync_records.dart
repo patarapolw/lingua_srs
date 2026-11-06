@@ -105,7 +105,12 @@ abstract final class SyncSnapshot {
 
   /// Card fields that are settings, kept in [SyncKinds.vocab] so that editing
   /// them does not conflict with a review.
-  static const _cardSettingFields = {'isEnabled', 'frontHint', 'backNotes'};
+  static const _cardSettingFields = {
+    'isEnabled',
+    'isSuspended',
+    'frontHint',
+    'backNotes',
+  };
 
   static Map<SyncRecordKey, Map<String, dynamic>> build({
     required List<Lesson> lessons,
@@ -222,6 +227,7 @@ abstract final class SyncSnapshot {
   static Map<String, dynamic> _cardSettings(SrsCard card) => {
     'id': card.id,
     'isEnabled': card.isEnabled,
+    'isSuspended': card.isSuspended,
     'frontHint': card.frontHint,
     'backNotes': card.backNotes,
   };

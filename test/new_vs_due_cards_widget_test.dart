@@ -511,6 +511,26 @@ void main() {
       expect(find.text('KO ➔ EN (New)', skipOffstage: false), findsNWidgets(2));
       expect(find.text('KO ➔ EN (Due)', skipOffstage: false), findsOneWidget);
     });
+
+    testWidgets('a suspended card says Suspended, and its chip unsuspends it', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      final lesson = await seedLesson(tester, provider, total: 2, due: 1);
+      final card = lesson.vocabularies.first.cardTargetToNative;
+      card.isSuspended = true;
+      await pumpWith(tester, provider, LessonDetailView(lessonId: lesson.id));
+
+      expect(find.text('KO ➔ EN (Suspended)'), findsOneWidget);
+      expect(find.byTooltip('Suspended: tap to unsuspend'), findsOneWidget);
+
+      await tester.tap(find.text('KO ➔ EN (Suspended)'));
+      await tester.pumpAndSettle();
+
+      expect(card.isSuspended, isFalse);
+      expect(card.isEnabled, isTrue, reason: 'unsuspending does not hide it');
+      expect(find.text('KO ➔ EN (Due)'), findsOneWidget);
+    });
   });
 
   group('Study ratings', () {
