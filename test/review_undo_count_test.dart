@@ -102,12 +102,13 @@ void main() {
     });
 
     test('undo and rating again counts the review once', () async {
-      final card = _seenCard();
       final first = DateTime.now();
-      await provider.recordCardReview(card, SrsRating.again, at: first);
+      await provider.recordCardReview(_seenCard(), SrsRating.again, at: first);
       await provider.undoCardReview(first);
+      // Undo also restores the card (the study view does that), so rate it
+      // as it was: `again` put it on a sub-24h interval.
       final second = first.add(const Duration(seconds: 5));
-      await provider.recordCardReview(card, SrsRating.good, at: second);
+      await provider.recordCardReview(_seenCard(), SrsRating.good, at: second);
 
       expect(provider.dailyReviewCounts[_today()], 1);
       expect(provider.reviewsInLast24Hours, 1);
