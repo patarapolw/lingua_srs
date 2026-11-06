@@ -47,6 +47,8 @@ class StorageService {
   static const String _keyReviewTimestamps = 'lingua_srs_review_timestamps_24h';
   static const String _keyDailyReviewCounts = 'lingua_srs_daily_review_counts';
   static const String _keyDailyRatingCounts = 'lingua_srs_daily_rating_counts';
+  static const String _keyDailyNewCardCounts =
+      'lingua_srs_daily_new_card_counts';
 
   /// Defaults for the rolling 24-hour limits. 0 means unlimited.
   static const int defaultMaxReviews24h = 100;
@@ -426,9 +428,24 @@ class StorageService {
     await prefs.setStringList(_keyReviewTimestamps, strings);
   }
 
-  static Future<Map<DateTime, int>> loadDailyReviewCounts() async {
+  static Future<Map<DateTime, int>> loadDailyReviewCounts() =>
+      _loadDayCounts(_keyDailyReviewCounts);
+
+  static Future<void> saveDailyReviewCounts(Map<DateTime, int> counts) =>
+      _saveDayCounts(_keyDailyReviewCounts, counts);
+
+  /// New cards started (given their first review) per day, counted since
+  /// this was added.
+  static Future<Map<DateTime, int>> loadDailyNewCardCounts() =>
+      _loadDayCounts(_keyDailyNewCardCounts);
+
+  static Future<void> saveDailyNewCardCounts(Map<DateTime, int> counts) =>
+      _saveDayCounts(_keyDailyNewCardCounts, counts);
+
+  /// A count per day, saved as `{"YYYY-MM-DD": count}`.
+  static Future<Map<DateTime, int>> _loadDayCounts(String key) async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_keyDailyReviewCounts);
+    final raw = prefs.getString(key);
     if (raw == null || raw.isEmpty) return {};
 
     try {
@@ -448,10 +465,13 @@ class StorageService {
     }
   }
 
-  static Future<void> saveDailyReviewCounts(Map<DateTime, int> counts) async {
+  static Future<void> _saveDayCounts(
+    String key,
+    Map<DateTime, int> counts,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
-      _keyDailyReviewCounts,
+      key,
       jsonEncode({
         for (final entry in counts.entries)
           '${entry.key.year.toString().padLeft(4, '0')}-'
