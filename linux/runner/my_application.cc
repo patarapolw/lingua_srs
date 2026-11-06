@@ -20,8 +20,25 @@ static void first_frame_cb(MyApplication* self, FlView* view) {
 }
 
 // Implements GApplication::activate.
+//
+// The application is unique (see my_application_new), so a second launch
+// does not run this in a new process: it asks the copy already running to
+// activate, and that copy lands here again with its window already open.
 static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
+
+  GList* windows = gtk_application_get_windows(GTK_APPLICATION(application));
+  if (windows != nullptr) {
+    // Bring the open window forward instead of opening a second one. A
+    // window still waiting for its first Flutter frame is shown by
+    // first_frame_cb, so leave it hidden until then.
+    GtkWindow* existing = GTK_WINDOW(windows->data);
+    if (gtk_widget_get_visible(GTK_WIDGET(existing))) {
+      gtk_window_present(existing);
+    }
+    return;
+  }
+
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
 
@@ -142,7 +159,13 @@ MyApplication* my_application_new() {
   // the application to be recognized beyond its binary name.
   g_set_prgname(APPLICATION_ID);
 
+  // Leave the default flags so the application is unique: only one copy runs
+  // per user session, found on D-Bus by APPLICATION_ID. Every copy would read
+  // and write the same data folder and sync it on its own, so a second one
+  // could overwrite the first one's changes (#104). A second launch registers
+  // as a remote instance, activates the first copy (my_application_activate)
+  // and exits.
   return MY_APPLICATION(g_object_new(my_application_get_type(),
-                                     "application-id", APPLICATION_ID, "flags",
-                                     G_APPLICATION_NON_UNIQUE, nullptr));
+                                     "application-id", APPLICATION_ID,
+                                     nullptr));
 }
