@@ -33,6 +33,15 @@ void main() {
     provider.dispose();
   });
 
+  // The ListView builds lazily, so a view tall enough for every section lets
+  // the tests find the stage line and the leeches below the summary.
+  void useTallView(WidgetTester tester) {
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+  }
+
   testWidgets('shows a non-scrollable empty state when there are no reviews', (
     tester,
   ) async {
@@ -146,7 +155,11 @@ void main() {
       ),
     );
 
-    expect(find.byTooltip('${dayLabel(today)}: 1 review'), findsOneWidget);
+    // A new card answered Good: right, and a new card started.
+    expect(
+      find.byTooltip('${dayLabel(today)}: 1 review, 1 right, 1 new'),
+      findsOneWidget,
+    );
     expect(find.text('1 review in the past year'), findsOneWidget);
   });
 
@@ -225,6 +238,157 @@ void main() {
       expect(monday, DateTime(2026, 4, 20));
       expect(monday.weekday, DateTime.monday);
     });
+  });
+
+  testWidgets('sums up the streak, today and right and wrong', (tester) async {
+    for (final rating in [SrsRating.again, SrsRating.good, SrsRating.easy]) {
+      await provider.recordCardReview(
+        SrsCard(direction: CardDirection.targetToNative),
+        rating,
+      );
+    }
+    final yesterday = DateTime.now().subtract(const Duration(days: 1));
+    await provider.recordCardReview(
+      SrsCard(direction: CardDirection.targetToNative),
+      SrsRating.hard,
+      at: yesterday,
+    );
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppProvider>.value(
+        value: provider,
+        child: const MaterialApp(home: ActivityHeatmapView()),
+      ),
+    );
+
+    expect(find.text('2-day streak · Today 3 reviews, 3 new'), findsOneWidget);
+    // Good and Easy are right; Again and Hard are wrong: 2 of 4.
+    expect(find.text('50%'), findsOneWidget);
+    expect(find.text('2 right'), findsOneWidget);
+    expect(find.text('2 wrong'), findsOneWidget);
+    // Each rating's count, so it shows which of the two made up more.
+    expect(find.text('Good 1 · Easy 1'), findsOneWidget);
+    expect(find.text('Again 1 · Hard 1'), findsOneWidget);
+    // A ring of right in green over wrong in red, as in the study session.
+    final ring = tester.widget<CircularProgressIndicator>(
+      find.byType(CircularProgressIndicator),
+    );
+    expect(ring.value, 0.5);
+    expect(ring.color, Colors.green.shade600);
+    expect(ring.backgroundColor, Colors.red.shade600);
+  });
+
+  testWidgets('shows the next 7 days and stages on one line', (tester) async {
+    useTallView(tester);
+    final now = DateTime.now();
+    SrsCard due(DateTime date) => SrsCard(
+      direction: CardDirection.targetToNative,
+      status: SrsStatus.review,
+      interval: 3,
+      lastReviewed: date.subtract(const Duration(days: 3)),
+      dueDate: date,
+    );
+    provider.lessons.add(
+      Lesson(
+        title: 'L',
+        vocabularies: [
+          VocabItem(
+            targetWord: 'a',
+            translation: 'a',
+            pos: 'nouns',
+            cardTargetToNative: due(now.subtract(const Duration(days: 2))),
+          ),
+          VocabItem(
+            targetWord: 'b',
+            translation: 'b',
+            pos: 'nouns',
+            cardTargetToNative: due(now.add(const Duration(days: 1))),
+          ),
+          VocabItem(targetWord: 'c', translation: 'c', pos: 'nouns'),
+        ],
+      ),
+    );
+    await provider.recordCardReview(
+      SrsCard(direction: CardDirection.targetToNative),
+      SrsRating.good,
+    );
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppProvider>.value(
+        value: provider,
+        child: const MaterialApp(home: ActivityHeatmapView()),
+      ),
+    );
+
+    expect(find.text('Next 7 days'), findsOneWidget);
+    expect(
+      find.text(
+        'All cards coming due, before your limit of 100 reviews '
+        'per 24 hours',
+      ),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('Today: 1 due'), findsOneWidget);
+    expect(find.text('1 new'), findsOneWidget);
+    expect(find.text('2 review'), findsOneWidget);
+    expect(find.byTooltip('Review: 2 cards'), findsOneWidget);
+
+    // Today's bar in the Due badge's amber.
+    final todayBar = tester.widget<Container>(
+      find
+          .descendant(
+            of: find.byTooltip('Today: 1 due'),
+            matching: find.byType(Container),
+          )
+          .last,
+    );
+    expect(
+      (todayBar.decoration as BoxDecoration?)?.color,
+      Colors.amber.shade800,
+    );
+  });
+
+  testWidgets('a leech can be suspended, and the suspension undone', (
+    tester,
+  ) async {
+    useTallView(tester);
+    final card = SrsCard(
+      direction: CardDirection.targetToNative,
+      lapses: 8,
+      status: SrsStatus.review,
+    );
+    provider.lessons.add(
+      Lesson(
+        title: 'L',
+        vocabularies: [
+          VocabItem(
+            targetWord: 'word',
+            translation: 'meaning',
+            pos: 'nouns',
+            cardTargetToNative: card,
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppProvider>.value(
+        value: provider,
+        child: const MaterialApp(home: ActivityHeatmapView()),
+      ),
+    );
+    expect(find.text('Leeches (1)'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Suspend'));
+    await tester.pumpAndSettle();
+    expect(card.isSuspended, isTrue);
+    expect(find.text('Leeches (1)'), findsNothing);
+    expect(find.text('Suspended "word"'), findsOneWidget);
+
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+    expect(card.isSuspended, isFalse);
+    expect(find.text('Leeches (1)'), findsOneWidget);
   });
 
   group('activityLevel', () {
@@ -310,6 +474,31 @@ void main() {
     expect(find.byTooltip('No reviews'), findsOneWidget);
   });
 
+  testWidgets('puts commas in large counts', (tester) async {
+    final today = DateTime.now();
+    final day = DateTime(today.year, today.month, today.day);
+    late AppProvider fresh;
+    await tester.runAsync(() async {
+      await StorageService.saveDailyReviewCounts({day: 1234});
+      fresh = AppProvider();
+      for (var attempt = 0; attempt < 100 && fresh.isLoading; attempt++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    });
+    addTearDown(fresh.dispose);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppProvider>.value(
+        value: fresh,
+        child: const MaterialApp(home: ActivityHeatmapView()),
+      ),
+    );
+
+    expect(find.text('1,234 reviews in the past year'), findsOneWidget);
+    expect(find.byTooltip('${dayLabel(day)}: 1,234 reviews'), findsOneWidget);
+    expect(find.byTooltip('926–1,234 reviews'), findsOneWidget);
+  });
+
   testWidgets('shows the cards waiting before the first review', (
     tester,
   ) async {
@@ -382,6 +571,7 @@ void main() {
   testWidgets('shows unique enabled leeches at the lapse threshold', (
     tester,
   ) async {
+    useTallView(tester);
     final leech = SrsCard(
       id: 'leech-card',
       direction: CardDirection.targetToNative,

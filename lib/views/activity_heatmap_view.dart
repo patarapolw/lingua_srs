@@ -5,8 +5,15 @@ import '../models/lesson.dart';
 import '../models/srs_card.dart';
 import '../models/vocab_item.dart';
 import '../providers/app_provider.dart';
+import '../services/study_stats.dart';
 
 const _leechLapseThreshold = 8;
+
+/// Colours shared with other screens: right and wrong as in the study
+/// session's progress bar, and due as in the lesson list's Due badge.
+final _rightColor = Colors.green.shade600;
+final _wrongColor = Colors.red.shade600;
+final _dueColor = Colors.amber.shade800;
 
 /// The shade, 0 to 4, of a day with [count] reviews, when the busiest day
 /// shown had [busiest]. Shades are quarters of the busiest day, so a calendar
@@ -123,6 +130,13 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
             0,
             (maximum, count) => count > maximum ? count : maximum,
           );
+          final ratingCounts = provider.dailyRatingCounts;
+          final newCardCounts = provider.dailyNewCardCounts;
+          final forecast = dueForecast(provider.lessons, today);
+          final maxDue = forecast.fold(
+            0,
+            (maximum, count) => count > maximum ? count : maximum,
+          );
           final hasActivity = total > 0 || leeches.isNotEmpty;
           final hasCards = maxStageCount > 0;
 
@@ -173,10 +187,18 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                 ),
                 const SizedBox(height: 24),
               ] else ...[
+                _summary(
+                  context,
+                  streak: studyStreak(counts, today),
+                  todayReviews: counts[todayDate] ?? 0,
+                  todayNew: newCardCounts[todayDate] ?? 0,
+                  recent: recentRatings(ratingCounts, today),
+                ),
+                const SizedBox(height: 20),
                 Text(
-                  '$total ${total == 1 ? 'review' : 'reviews'} '
+                  '${formatCount(total)} ${total == 1 ? 'review' : 'reviews'} '
                   'in the past year',
-                  style: theme.textTheme.titleMedium,
+                  style: theme.textTheme.titleSmall,
                 ),
                 const SizedBox(height: 16),
                 SingleChildScrollView(
@@ -252,6 +274,8 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                                       firstDay,
                                       today,
                                       counts,
+                                      ratingCounts,
+                                      newCardCounts,
                                       busiest,
                                     ),
                                 ],
@@ -286,23 +310,52 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                 ),
                 const SizedBox(height: 24),
               ],
-              Text('Cards by stage', style: theme.textTheme.titleMedium),
-              const SizedBox(height: 12),
-              SizedBox(
-                height: 120,
-                child: Row(
-                  children: [
-                    for (final entry in stageCounts.entries)
-                      Expanded(
-                        child: _stageBar(
-                          context,
-                          _stageLabel(entry.key),
-                          entry.value,
-                          maxStageCount,
+              if (maxDue > 0) ...[
+                Text('Next 7 days', style: theme.textTheme.titleMedium),
+                // The Study button counts fewer when the 24-hour limit
+                // holds some back, so say these are all the cards due.
+                if (provider.maxReviews24h > 0)
+                  Text(
+                    'All cards coming due, before your limit of '
+                    '${formatCount(provider.maxReviews24h)} reviews '
+                    'per 24 hours',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 100,
+                  child: Row(
+                    children: [
+                      for (var index = 0; index < forecast.length; index++)
+                        Expanded(
+                          child: _bar(
+                            context,
+                            label: _forecastLabel(today, index),
+                            count: forecast[index],
+                            maximum: maxDue,
+                            // Today's bar is the lesson list's Due count.
+                            color: index == 0 ? _dueColor : null,
+                            tooltip:
+                                '${_forecastLabel(today, index)}: '
+                                '${formatCount(forecast[index])} due',
+                          ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
+                const SizedBox(height: 24),
+              ],
+              Text('Cards by stage', style: theme.textTheme.titleMedium),
+              const SizedBox(height: 8),
+              Wrap(
+                children: [
+                  for (final (index, entry) in stageCounts.entries.indexed) ...[
+                    if (index > 0) const Text(' · '),
+                    _stageCount(entry.key, entry.value),
+                  ],
+                ],
               ),
               if (leeches.isNotEmpty) ...[
                 const SizedBox(height: 24),
@@ -330,7 +383,17 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                           ? leech.vocab.translation
                           : leech.vocab.targetWord,
                     ),
-                    trailing: Text('${leech.card.lapses} lapses'),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('${leech.card.lapses} lapses'),
+                        IconButton(
+                          tooltip: 'Suspend',
+                          icon: const Icon(Icons.pause_circle_outline),
+                          onPressed: () => _suspendLeech(provider, leech),
+                        ),
+                      ],
+                    ),
                   ),
               ],
             ],
@@ -365,6 +428,8 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
     DateTime firstDay,
     DateTime today,
     Map<DateTime, int> counts,
+    Map<DateTime, Map<SrsRating, int>> ratingCounts,
+    Map<DateTime, int> newCardCounts,
     int busiest,
   ) {
     final isInRange =
@@ -374,10 +439,16 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
     // tooltip, and nothing for a screen reader to read out.
     if (!isInRange) return const SizedBox(width: 12, height: 16);
     final count = counts[date] ?? 0;
-    final label =
-        '${date.year}-${date.month.toString().padLeft(2, '0')}-'
-        '${date.day.toString().padLeft(2, '0')}: '
-        '$count ${count == 1 ? 'review' : 'reviews'}';
+    final ratings = ratingCounts[date];
+    final newCards = newCardCounts[date] ?? 0;
+    final label = [
+      '${date.year}-${date.month.toString().padLeft(2, '0')}-'
+          '${date.day.toString().padLeft(2, '0')}: '
+          '${formatCount(count)} ${count == 1 ? 'review' : 'reviews'}',
+      // Days counted before ratings were have only the total.
+      if (ratings != null) '${formatCount(rightWrongOf(ratings).right)} right',
+      if (newCards > 0) '${formatCount(newCards)} new',
+    ].join(', ');
     return SizedBox(
       width: 12,
       height: 16,
@@ -408,13 +479,13 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
     if (range == null) {
       if (busiest <= 0) return 'Not used yet';
       return 'Not used: the busiest day had '
-          '$busiest ${busiest == 1 ? 'review' : 'reviews'}';
+          '${formatCount(busiest)} ${busiest == 1 ? 'review' : 'reviews'}';
     }
     final (lowest, highest) = range;
     if (lowest == highest) {
-      return '$lowest ${lowest == 1 ? 'review' : 'reviews'}';
+      return '${formatCount(lowest)} ${lowest == 1 ? 'review' : 'reviews'}';
     }
-    return '$lowest–$highest reviews';
+    return '${formatCount(lowest)}–${formatCount(highest)} reviews';
   }
 
   Map<SrsStatus, int> _studyStageCounts(List<Lesson> lessons) {
@@ -435,9 +506,177 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
     SrsStatus.review => 'Review',
   };
 
-  Widget _stageBar(BuildContext context, String label, int count, int maximum) {
-    final tooltip = '$label: $count ${count == 1 ? 'card' : 'cards'}';
-    final barHeight = maximum == 0 ? 2.0 : 80.0 * count / maximum;
+  /// Streak and today's reviews on one line, then right and wrong over the
+  /// last 30 days as a ring.
+  Widget _summary(
+    BuildContext context, {
+    required int streak,
+    required int todayReviews,
+    required int todayNew,
+    required Map<SrsRating, int> recent,
+  }) {
+    final theme = Theme.of(context);
+    final (:right, :wrong) = rightWrongOf(recent);
+    final parts = [
+      if (streak > 0) '$streak-day streak',
+      'Today ${formatCount(todayReviews)} '
+          '${todayReviews == 1 ? 'review' : 'reviews'}'
+          '${todayNew > 0 ? ', ${formatCount(todayNew)} new' : ''}',
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(parts.join(' · '), style: theme.textTheme.titleMedium),
+        if (right + wrong > 0) ...[
+          const SizedBox(height: 16),
+          _rightWrongRing(context, recent),
+        ],
+      ],
+    );
+  }
+
+  /// A ring of right (green) and wrong (red) answers with the percentage
+  /// right in the middle, then a line each for right and wrong, with the
+  /// counts of its two ratings at the far end, so it shows whether Good or
+  /// Easy, and Again or Hard, made up more.
+  Widget _rightWrongRing(BuildContext context, Map<SrsRating, int> recent) {
+    final theme = Theme.of(context);
+    final (:right, :wrong) = rightWrongOf(recent);
+    final answered = right + wrong;
+    final percent = (right * 100 / answered).round();
+    final quiet = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    String ratings(
+      SrsRating first,
+      String firstName,
+      SrsRating second,
+      String secondName,
+    ) =>
+        '$firstName ${formatCount(recent[first] ?? 0)} · '
+        '$secondName ${formatCount(recent[second] ?? 0)}';
+    TableRow legend(Color color, String text, String ratings) => TableRow(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.circle, size: 10, color: color),
+              const SizedBox(width: 6),
+              Text(text),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(left: 16),
+          child: Text(ratings, style: quiet),
+        ),
+      ],
+    );
+    return Semantics(
+      label:
+          '$percent% right in the last 30 days: ${formatCount(right)} right, '
+          '${formatCount(wrong)} wrong',
+      excludeSemantics: true,
+      child: Row(
+        children: [
+          SizedBox.square(
+            dimension: 56,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // The same colours as the study session's progress bar.
+                SizedBox.expand(
+                  child: CircularProgressIndicator(
+                    value: right / answered,
+                    strokeWidth: 6,
+                    color: _rightColor,
+                    backgroundColor: _wrongColor,
+                  ),
+                ),
+                Text('$percent%', style: theme.textTheme.labelLarge),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // A table, so the ratings start in line after the longer
+                // count, close to both.
+                Table(
+                  columnWidths: const {
+                    0: IntrinsicColumnWidth(),
+                    1: FlexColumnWidth(),
+                  },
+                  defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                  children: [
+                    legend(
+                      _rightColor,
+                      '${formatCount(right)} right',
+                      ratings(SrsRating.good, 'Good', SrsRating.easy, 'Easy'),
+                    ),
+                    legend(
+                      _wrongColor,
+                      '${formatCount(wrong)} wrong',
+                      ratings(SrsRating.again, 'Again', SrsRating.hard, 'Hard'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text('Last 30 days', style: quiet),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// One stage in the Cards by stage line, such as "45 learning".
+  Widget _stageCount(SrsStatus status, int count) {
+    final label = _stageLabel(status);
+    return Tooltip(
+      message: '$label: ${formatCount(count)} ${count == 1 ? 'card' : 'cards'}',
+      child: Text('${formatCount(count)} ${label.toLowerCase()}'),
+    );
+  }
+
+  /// "Today", then the weekday of each day after it.
+  String _forecastLabel(DateTime today, int daysAhead) {
+    if (daysAhead == 0) return 'Today';
+    const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    final day = DateTime(today.year, today.month, today.day + daysAhead);
+    return weekdays[day.weekday - 1];
+  }
+
+  /// Suspends a leech, with a snackbar to undo it.
+  void _suspendLeech(AppProvider provider, _LeechCard leech) {
+    provider.setCardSuspended(leech.card, true);
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('Suspended "${leech.vocab.targetWord}"'),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () => provider.setCardSuspended(leech.card, false),
+        ),
+      ),
+    );
+  }
+
+  Widget _bar(
+    BuildContext context, {
+    required String label,
+    required int count,
+    required int maximum,
+    required String tooltip,
+    Color? color,
+  }) {
+    final barHeight = maximum == 0 ? 2.0 : 60.0 * count / maximum;
     return Semantics(
       label: tooltip,
       child: Tooltip(
@@ -451,7 +690,7 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                   width: 16,
                   height: barHeight,
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primary,
+                    color: color ?? Theme.of(context).colorScheme.primary,
                     borderRadius: const BorderRadius.vertical(
                       top: Radius.circular(3),
                     ),
