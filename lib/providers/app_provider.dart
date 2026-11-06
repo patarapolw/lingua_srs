@@ -16,6 +16,8 @@ import '../services/ai_discussion_search.dart';
 import '../services/deepseek_service.dart';
 import '../services/srs_service.dart';
 import '../services/storage_service.dart';
+import '../services/sync_apply.dart';
+import '../services/sync_engine.dart';
 import '../services/sync_pairing.dart';
 import '../services/sync_records.dart';
 import '../services/vocab_ai_service.dart';
@@ -66,7 +68,7 @@ enum PronunciationTarget {
   final String label;
 }
 
-class AppProvider extends ChangeNotifier {
+class AppProvider extends ChangeNotifier implements SyncRecordStore {
   List<Lesson> _lessons = [];
   List<Sentence> _sentences = [];
   bool _autoplayAudio = true;
@@ -94,6 +96,10 @@ class AppProvider extends ChangeNotifier {
   List<DateTime> _reviewTimestamps24h = [];
   Map<DateTime, int> _dailyReviewCounts = {};
 
+  /// Other devices' activity records, pulled by sync. This device's own
+  /// counts stay in [_dailyReviewCounts] and [_reviewTimestamps24h].
+  Map<String, Map<String, dynamic>> _remoteActivity = {};
+
   List<Lesson> get lessons => _lessons;
   List<Sentence> get sentences => _sentences;
   bool get autoplayAudio => _autoplayAudio;
@@ -114,8 +120,20 @@ class AppProvider extends ChangeNotifier {
   String? get selectedLessonId => _selectedLessonId;
   int get maxReviews24h => _maxReviews24h;
   int get maxNewCards24h => _maxNewCards24h;
-  Map<DateTime, int> get dailyReviewCounts =>
-      Map.unmodifiable(_dailyReviewCounts);
+
+  /// Reviews per day on every device: this one's and those pulled by sync.
+  Map<DateTime, int> get dailyReviewCounts {
+    final counts = {..._dailyReviewCounts};
+    for (final activity in _remoteActivity.values) {
+      final day = DateTime.tryParse('${activity['day']}');
+      final count = activity['count'];
+      if (day == null || count is! num) continue;
+      final date = DateTime(day.year, day.month, day.day);
+      counts[date] = (counts[date] ?? 0) + count.toInt();
+    }
+    return Map.unmodifiable(counts);
+  }
+
   Map<String, List<AiDiscussionMessage>> get aiDiscussions => Map.unmodifiable(
     _aiDiscussions.map<String, List<AiDiscussionMessage>>(
       (id, messages) =>
@@ -127,10 +145,21 @@ class AppProvider extends ChangeNotifier {
   Map<String, bool> get lessonFolderExpansion =>
       Map.unmodifiable(_lessonFolderExpansion);
 
+  /// Reviews on every device in the last 24 hours, so studying on two
+  /// devices does not double the limit.
   int get reviewsInLast24Hours {
     final now = DateTime.now();
     _reviewTimestamps24h.removeWhere((t) => now.difference(t).inHours >= 24);
-    return _reviewTimestamps24h.length;
+    var remote = 0;
+    for (final activity in _remoteActivity.values) {
+      final reviews = activity['reviews'];
+      if (reviews is! List) continue;
+      for (final review in reviews) {
+        final time = DateTime.tryParse('$review');
+        if (time != null && now.difference(time).inHours < 24) remote++;
+      }
+    }
+    return _reviewTimestamps24h.length + remote;
   }
 
   /// Cards seen for the first time in the last 24 hours. Derived from the
@@ -225,6 +254,7 @@ class AppProvider extends ChangeNotifier {
     _pronunciationOptions = results.$8;
     _maxNewCards24h = results.$9;
     _dailyReviewCounts = await StorageService.loadDailyReviewCounts();
+    _remoteActivity = await StorageService.loadSyncRemoteActivity();
     _lessons = await StorageService.loadLessons();
     if (_dailyReviewCounts.isEmpty && _backfillDailyReviewCounts()) {
       await StorageService.saveDailyReviewCounts(_dailyReviewCounts);
@@ -487,6 +517,73 @@ class AppProvider extends ChangeNotifier {
       await StorageService.saveSyncChangeTracker(tracker);
       return changed;
     });
+  }
+
+  @override
+  Map<SyncRecordKey, Map<String, dynamic>> snapshot(String deviceId) =>
+      syncSnapshot(deviceId);
+
+  /// Applies records pulled by sync, saves what changed, and updates screens.
+  @override
+  Future<void> apply(
+    String deviceId,
+    Map<SyncRecordKey, Map<String, dynamic>?> changes,
+  ) async {
+    final data = SyncAppData(
+      deviceId: deviceId,
+      lessons: _lessons,
+      sentences: _sentences,
+      mergeHistory: _mergeHistory,
+      aiDiscussions: _aiDiscussions,
+      lessonOrder: _lessonHierarchyOrder,
+      maxReviews24h: _maxReviews24h,
+      maxNewCards24h: _maxNewCards24h,
+      autoplayAudio: _autoplayAudio,
+      pronunciationOptions: _pronunciationOptions,
+      remoteActivity: {..._remoteActivity},
+    );
+    final changed = SyncApplier.apply(data, changes);
+
+    _lessons = data.lessons;
+    _sentences = data.sentences;
+    _mergeHistory = data.mergeHistory;
+    _aiDiscussions = data.aiDiscussions;
+    _lessonHierarchyOrder = data.lessonOrder;
+    _maxReviews24h = data.maxReviews24h;
+    _maxNewCards24h = data.maxNewCards24h;
+    _autoplayAudio = data.autoplayAudio;
+    _pronunciationOptions = data.pronunciationOptions;
+    _remoteActivity = data.remoteActivity;
+    if (_selectedLessonId != null &&
+        !_lessons.any((lesson) => lesson.id == _selectedLessonId)) {
+      _selectedLessonId = _lessons.isEmpty ? null : _lessons.first.id;
+    }
+
+    if (changed.contains(SyncAppPart.lessons)) {
+      await StorageService.saveLessons(_lessons);
+    }
+    if (changed.contains(SyncAppPart.sentences)) {
+      await StorageService.saveSentences(_sentences);
+    }
+    if (changed.contains(SyncAppPart.mergeHistory)) {
+      await StorageService.saveMergeHistory(_mergeHistory);
+    }
+    if (changed.contains(SyncAppPart.aiDiscussions)) {
+      await StorageService.saveAiDiscussions(_aiDiscussions);
+    }
+    if (changed.contains(SyncAppPart.lessonOrder)) {
+      await StorageService.saveLessonHierarchyOrder(_lessonHierarchyOrder);
+    }
+    if (changed.contains(SyncAppPart.settings)) {
+      await StorageService.saveMaxReviews24h(_maxReviews24h);
+      await StorageService.saveMaxNewCards24h(_maxNewCards24h);
+      await StorageService.saveAutoplay(_autoplayAudio);
+      await StorageService.savePronunciationOptions(_pronunciationOptions);
+    }
+    if (changed.contains(SyncAppPart.remoteActivity)) {
+      await StorageService.saveSyncRemoteActivity(_remoteActivity);
+    }
+    notifyListeners();
   }
 
   /// The contents of every synced record, with this device's activity under

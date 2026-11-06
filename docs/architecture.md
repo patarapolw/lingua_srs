@@ -34,6 +34,7 @@ lingua_srs/
 │   │   ├── sync_change_tracker.dart   # Notices changed records; pending pushes and pull cursor
 │   │   ├── sync_record_cipher.dart    # Encrypts, splits and decrypts records; the unlocked data key
 │   │   ├── sync_engine.dart           # Pulls, resolves conflicts and pushes records
+│   │   ├── sync_apply.dart            # Applies pulled records to lessons, cards and the rest
 │   │   ├── secret_storage.dart        # OS-backed secure storage for credentials
 │   │   ├── lesson_ai_prompt.dart      # Prompt, ids and suggestions for lesson AI chats
 │   │   ├── word_ai_prompt.dart        # Prompt for word AI chats, with the current example sentence

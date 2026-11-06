@@ -27,6 +27,8 @@ class StorageService {
   static const String _keySyncPairing = 'lingua_srs_sync_pairing';
   static const String _keySyncState = 'lingua_srs_sync_state';
   static const String _keySyncDataKey = 'lingua_srs_sync_data_key';
+  static const String _keySyncRemoteActivity =
+      'lingua_srs_sync_remote_activity';
   static const String _keyVocabMergeHistory = 'lingua_srs_vocab_merge_history';
   static const String _keyAiDiscussions = 'lingua_srs_ai_discussions';
   static const String _keyAutoplay = 'lingua_srs_autoplay';
@@ -111,6 +113,31 @@ class StorageService {
     } else {
       await _secretStorage.write(_keySyncDataKey, jsonEncode(key.toJson()));
     }
+  }
+
+  /// Other devices' study activity, pulled by sync, by `<device id>:<day>`.
+  static Future<Map<String, Map<String, dynamic>>>
+  loadSyncRemoteActivity() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_keySyncRemoteActivity);
+    if (raw == null || raw.isEmpty) return {};
+    try {
+      final decoded = jsonDecode(raw) as Map;
+      return {
+        for (final entry in decoded.entries)
+          entry.key as String: Map<String, dynamic>.from(entry.value as Map),
+      };
+    } catch (error) {
+      debugPrint('Could not read synced activity: $error');
+      return {};
+    }
+  }
+
+  static Future<void> saveSyncRemoteActivity(
+    Map<String, Map<String, dynamic>> activity,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keySyncRemoteActivity, jsonEncode(activity));
   }
 
   /// What this device knows about its synced records. A missing or unreadable

@@ -141,6 +141,40 @@ void main() {
     expect(printed, [contains('Could not read the sync state')]);
   });
 
+  test('applies pulled records, saves them and counts other devices', () async {
+    final provider = await _loadedProvider();
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    String day(DateTime d) =>
+        '${d.year.toString().padLeft(4, '0')}-'
+        '${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+    await provider.apply('this-device', {
+      const SyncRecordKey('lesson', 'pulled'): {
+        'title': 'Pulled lesson',
+        'targetLanguage': 'ko',
+        'nativeLanguage': 'en',
+        'vocabularies': [],
+      },
+      SyncRecordKey('activity', 'other-device:${day(today)}'): {
+        'day': day(today),
+        'count': 4,
+        'reviews': [
+          now.subtract(const Duration(hours: 1)).toUtc().toIso8601String(),
+          now.subtract(const Duration(hours: 30)).toUtc().toIso8601String(),
+        ],
+      },
+    });
+
+    expect(provider.lessons.map((lesson) => lesson.title), ['Pulled lesson']);
+    expect(provider.dailyReviewCounts[today], 4);
+    expect(provider.reviewsInLast24Hours, 1);
+
+    final reloaded = await _loadedProvider();
+    expect(reloaded.lessons.map((lesson) => lesson.title), ['Pulled lesson']);
+    expect(reloaded.dailyReviewCounts[today], 4);
+  });
+
   test('backup leaves out the sync state and restore keeps it', () async {
     final provider = await _loadedProvider();
     await provider.setSyncPairing(_pairing);
