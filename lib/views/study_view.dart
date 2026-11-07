@@ -427,13 +427,13 @@ String cramModeTitle(CramMode mode) => switch (mode) {
   required bool practice,
 }) => practice
     ? (
-        label: 'PRACTICE · schedule unchanged',
+        label: 'PRACTICE',
         tooltip:
             "Practice only: this answer doesn't change the card's "
             'schedule.',
       )
     : (
-        label: 'REPEAT · schedule unchanged',
+        label: 'REPEAT',
         tooltip:
             'Already rated in this session: this answer only decides '
             "whether it comes back again. It doesn't change the schedule.",
@@ -2334,12 +2334,11 @@ class _StudyViewState extends State<StudyView> {
                                           fontWeight: FontWeight.bold,
                                         ),
                                       ),
-                                      Text(
-                                        _isRepeatCard
-                                            ? 'no change'
-                                            : _nextIn(SrsRating.again),
-                                        style: const TextStyle(fontSize: 11),
-                                      ),
+                                      if (!_isRepeatCard)
+                                        Text(
+                                          _nextIn(SrsRating.again),
+                                          style: const TextStyle(fontSize: 11),
+                                        ),
                                     ],
                                   ),
                                 ),
@@ -2398,12 +2397,11 @@ class _StudyViewState extends State<StudyView> {
                                           fontSize: 16,
                                         ),
                                       ),
-                                      Text(
-                                        _isRepeatCard
-                                            ? 'no change'
-                                            : _nextIn(SrsRating.good),
-                                        style: const TextStyle(fontSize: 11),
-                                      ),
+                                      if (!_isRepeatCard)
+                                        Text(
+                                          _nextIn(SrsRating.good),
+                                          style: const TextStyle(fontSize: 11),
+                                        ),
                                     ],
                                   ),
                                 ),

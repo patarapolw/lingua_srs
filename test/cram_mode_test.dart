@@ -107,15 +107,9 @@ void main() {
   });
 
   group('unscheduledCardChip', () {
-    test('practice and repeat say the schedule is unchanged', () {
-      expect(
-        unscheduledCardChip(practice: true).label,
-        'PRACTICE · schedule unchanged',
-      );
-      expect(
-        unscheduledCardChip(practice: false).label,
-        'REPEAT · schedule unchanged',
-      );
+    test('practice and repeat labels', () {
+      expect(unscheduledCardChip(practice: true).label, 'PRACTICE');
+      expect(unscheduledCardChip(practice: false).label, 'REPEAT');
     });
   });
 
@@ -329,9 +323,7 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('a repeat after Again says its schedule is unchanged', (
-      tester,
-    ) async {
+    testWidgets('a repeat after Again is marked REPEAT', (tester) async {
       final provider = await loadedProvider(tester);
       final lesson = lessonWith('Repeat', [seenVocab('봄'), seenVocab('여름')]);
       for (final vocab in lesson.vocabularies) {
@@ -359,8 +351,7 @@ void main() {
       await tester.pump();
 
       // First pass: scheduled, so no chip and real intervals.
-      expect(find.textContaining('schedule unchanged'), findsNothing);
-      expect(find.text('no change'), findsNothing);
+      expect(find.text('REPEAT'), findsNothing);
       await tester.tap(find.textContaining('Show Answer'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Again'));
@@ -368,10 +359,7 @@ void main() {
       await answerGood(tester);
 
       // The Again card is back at the end, as a repeat.
-      expect(find.text('REPEAT · schedule unchanged'), findsOneWidget);
-      await tester.tap(find.textContaining('Show Answer'));
-      await tester.pumpAndSettle();
-      expect(find.text('no change'), findsNWidgets(2));
+      expect(find.text('REPEAT'), findsOneWidget);
     });
 
     testWidgets('practice only leaves schedules and new cards alone', (
@@ -387,7 +375,7 @@ void main() {
       final repetitions = seenCard.repetitions;
 
       await openCram(tester, provider, lesson, CramMode.practice);
-      expect(find.text('PRACTICE · schedule unchanged'), findsOneWidget);
+      expect(find.text('PRACTICE'), findsOneWidget);
       await answerGood(tester); // the new card comes first
       await answerGood(tester);
 
