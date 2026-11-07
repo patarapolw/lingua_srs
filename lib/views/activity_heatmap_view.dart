@@ -235,13 +235,15 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                             width: 28,
                             child: Column(
                               children: [
+                                // One row per day, Monday first, as in
+                                // calendarWeekStart.
                                 for (final label in const [
-                                  '',
                                   'Mon',
                                   '',
                                   'Wed',
                                   '',
                                   'Fri',
+                                  '',
                                   '',
                                 ])
                                   SizedBox(
