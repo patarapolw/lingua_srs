@@ -662,6 +662,9 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
     messenger.showSnackBar(
       SnackBar(
         content: Text('Suspended "${leech.vocab.targetWord}"'),
+        // With an action a snackbar persists by default; an old Undo would
+        // stay for minutes, across screens.
+        persist: false,
         action: SnackBarAction(
           label: 'Undo',
           onPressed: () => provider.setCardSuspended(leech.card, false),

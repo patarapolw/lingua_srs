@@ -429,6 +429,43 @@ void main() {
     expect(find.text('Leeches (1)'), findsOneWidget);
   });
 
+  testWidgets('the suspension snackbar goes away on its own', (tester) async {
+    useTallView(tester);
+    provider.lessons.add(
+      Lesson(
+        title: 'L',
+        vocabularies: [
+          VocabItem(
+            targetWord: 'word',
+            translation: 'meaning',
+            pos: 'nouns',
+            cardTargetToNative: SrsCard(
+              direction: CardDirection.targetToNative,
+              lapses: 8,
+              status: SrsStatus.review,
+            ),
+          ),
+        ],
+      ),
+    );
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppProvider>.value(
+        value: provider,
+        child: const MaterialApp(home: ActivityHeatmapView()),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Suspend'));
+    await tester.pumpAndSettle();
+    expect(find.text('Suspended "word"'), findsOneWidget);
+
+    // A snackbar with an action persists unless told otherwise; an old Undo
+    // stayed on screen for minutes, across screens.
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    expect(find.text('Suspended "word"'), findsNothing);
+  });
+
   group('activityLevel', () {
     test('is 0 without reviews', () {
       expect(activityLevel(0, 100), 0);
