@@ -41,6 +41,27 @@ int activityLevel(int count, int busiest) {
 DateTime calendarWeekStart(DateTime day) =>
     DateTime(day.year, day.month, day.day - (day.weekday - DateTime.monday));
 
+/// New cards started in the last 24 hours against the daily limit (0 is
+/// unlimited), e.g. "4 of 10 started in the last 24 hours". Learn New Words
+/// can go past the limit.
+@visibleForTesting
+String newCardsLimitText(int started, int limit) => limit > 0
+    ? '${formatCount(started)} of ${formatCount(limit)} started in the last '
+          '24 hours'
+    : '${formatCount(started)} started in the last 24 hours (no limit)';
+
+/// The new cards not started yet, and how long they take at [limit] a day,
+/// e.g. "312 new left, about 32 days at 10 a day".
+@visibleForTesting
+String newCardsLeftText(int left, int limit) {
+  if (left <= 0) return 'Every card has been started';
+  final cards = '${formatCount(left)} new ${left == 1 ? 'card' : 'cards'} left';
+  final days = daysToFinishNewCards(left, limit);
+  if (days == null) return cards;
+  return '$cards, about ${formatCount(days)} '
+      '${days == 1 ? 'day' : 'days'} at ${formatCount(limit)} a day';
+}
+
 class ActivityHeatmapView extends StatefulWidget {
   const ActivityHeatmapView({super.key});
 
@@ -133,6 +154,12 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
           final ratingCounts = provider.dailyRatingCounts;
           final newCardCounts = provider.dailyNewCardCounts;
           final forecast = dueForecast(provider.lessons, today);
+          final newPerDay = newCardsPerDay(
+            newCardCounts,
+            provider.lessons,
+            today,
+          );
+          final newLeft = newCardsLeft(provider.lessons);
           final maxDue = forecast.fold(
             0,
             (maximum, count) => count > maximum ? count : maximum,
@@ -312,6 +339,17 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                 ),
                 const SizedBox(height: 24),
               ],
+              Text('Cards by stage', style: theme.textTheme.titleMedium),
+              const SizedBox(height: 8),
+              Wrap(
+                children: [
+                  for (final (index, entry) in stageCounts.entries.indexed) ...[
+                    if (index > 0) const Text(' · '),
+                    _stageCount(entry.key, entry.value),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 24),
               if (maxDue > 0) ...[
                 Text('Next 7 days', style: theme.textTheme.titleMedium),
                 // The Study button counts fewer when the 24-hour limit
@@ -327,7 +365,7 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                   ),
                 const SizedBox(height: 12),
                 SizedBox(
-                  height: 100,
+                  height: 110,
                   child: Row(
                     children: [
                       for (var index = 0; index < forecast.length; index++)
@@ -349,18 +387,19 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                 ),
                 const SizedBox(height: 24),
               ],
-              Text('Cards by stage', style: theme.textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Wrap(
-                children: [
-                  for (final (index, entry) in stageCounts.entries.indexed) ...[
-                    if (index > 0) const Text(' · '),
-                    _stageCount(entry.key, entry.value),
-                  ],
-                ],
-              ),
-              if (leeches.isNotEmpty) ...[
+              if (newPerDay.any((count) => count > 0) || newLeft > 0) ...[
+                _newCardsSection(
+                  context,
+                  perDay: newPerDay,
+                  today: today,
+                  startedLast24h: provider.newCardsIntroducedLast24h,
+                  limit: provider.maxNewCards24h,
+                  left: newLeft,
+                ),
                 const SizedBox(height: 24),
+              ],
+              // Each section above ends with its own gap.
+              if (leeches.isNotEmpty) ...[
                 Text(
                   'Leeches (${leeches.length})',
                   style: theme.textTheme.titleMedium,
@@ -646,6 +685,172 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
     );
   }
 
+  /// New cards against the daily limit, how long the cards left take at
+  /// that limit, and a bar per day over the last 30 days with the limit as a
+  /// line.
+  Widget _newCardsSection(
+    BuildContext context, {
+    required List<int> perDay,
+    required DateTime today,
+    required int startedLast24h,
+    required int limit,
+    required int left,
+  }) {
+    final theme = Theme.of(context);
+    final quiet = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    final busiest = perDay.fold(0, (maximum, n) => n > maximum ? n : maximum);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('New cards', style: theme.textTheme.titleMedium),
+        const SizedBox(height: 4),
+        Text(newCardsLimitText(startedLast24h, limit)),
+        Text(newCardsLeftText(left, limit), style: quiet),
+        if (busiest > 0) ...[
+          const SizedBox(height: 12),
+          _newCardsChart(context, perDay, today, limit),
+        ],
+      ],
+    );
+  }
+
+  Widget _newCardsChart(
+    BuildContext context,
+    List<int> perDay,
+    DateTime today,
+    int limit,
+  ) {
+    final theme = Theme.of(context);
+    final quiet = theme.textTheme.labelSmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    const plotHeight = 80.0;
+    final busiest = perDay.fold(0, (maximum, n) => n > maximum ? n : maximum);
+    final top = limit > busiest ? limit : busiest;
+    final days = perDay.length;
+    final firstDay = DateTime(today.year, today.month, today.day - (days - 1));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          height: plotHeight + 16,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                top: 16,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    for (var index = 0; index < days; index++)
+                      Expanded(
+                        child: Builder(
+                          builder: (context) {
+                            final day = DateTime(
+                              firstDay.year,
+                              firstDay.month,
+                              firstDay.day + index,
+                            );
+                            final count = perDay[index];
+                            final label =
+                                '${_shortDate(day)}: ${formatCount(count)} new';
+                            return Semantics(
+                              label: label,
+                              excludeSemantics: true,
+                              child: Tooltip(
+                                message: label,
+                                child: Container(
+                                  // Taller than the bar, so short bars are
+                                  // still easy to hover.
+                                  height: plotHeight,
+                                  alignment: Alignment.bottomCenter,
+                                  color: Colors.transparent,
+                                  child: count == 0
+                                      ? null
+                                      : Container(
+                                          // A gap between thin bars, so 30
+                                          // days don't merge into a block.
+                                          margin: const EdgeInsets.symmetric(
+                                            horizontal: 2,
+                                          ),
+                                          constraints: const BoxConstraints(
+                                            maxWidth: 12,
+                                          ),
+                                          height: plotHeight * count / top,
+                                          decoration: BoxDecoration(
+                                            color: theme.colorScheme.primary,
+                                            borderRadius:
+                                                const BorderRadius.vertical(
+                                                  top: Radius.circular(2),
+                                                ),
+                                          ),
+                                        ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              if (limit > 0) ...[
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: plotHeight * limit / top,
+                  child: IgnorePointer(
+                    child: Container(
+                      height: 1,
+                      color: theme.colorScheme.onSurfaceVariant.withValues(
+                        alpha: 0.6,
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  right: 0,
+                  bottom: plotHeight * limit / top + 2,
+                  child: IgnorePointer(
+                    child: Text('Limit ${formatCount(limit)}', style: quiet),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            Text(_shortDate(firstDay), style: quiet),
+            const Spacer(),
+            Text('Today', style: quiet),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// "Nov 7".
+  String _shortDate(DateTime day) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${months[day.month - 1]} ${day.day}';
+  }
+
   /// "Today", then the weekday of each day after it.
   String _forecastLabel(DateTime today, int daysAhead) {
     if (daysAhead == 0) return 'Today';
@@ -682,17 +887,29 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
     Color? color,
   }) {
     final barHeight = maximum == 0 ? 2.0 : 60.0 * count / maximum;
+    final theme = Theme.of(context);
     return Semantics(
       label: tooltip,
+      excludeSemantics: true,
       child: Tooltip(
         message: tooltip,
         child: Column(
           children: [
+            // Seven bars leave room to print each count.
+            if (count > 0)
+              Text(
+                formatCount(count),
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            const SizedBox(height: 2),
             Expanded(
               child: Align(
                 alignment: Alignment.bottomCenter,
                 child: Container(
-                  width: 16,
+                  // Wide enough that the week doesn't look empty.
+                  width: 32,
                   height: barHeight,
                   decoration: BoxDecoration(
                     color: color ?? Theme.of(context).colorScheme.primary,

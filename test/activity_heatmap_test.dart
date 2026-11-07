@@ -71,6 +71,7 @@ void main() {
   testWidgets('records and persists daily reviews for the activity calendar', (
     tester,
   ) async {
+    useTallView(tester);
     for (final rating in SrsRating.values) {
       await provider.recordCardReview(
         SrsCard(direction: CardDirection.targetToNative),
@@ -367,6 +368,19 @@ void main() {
       findsOneWidget,
     );
     expect(find.byTooltip('Today: 1 due'), findsOneWidget);
+    // Each forecast bar prints its count.
+    expect(
+      find.descendant(
+        of: find.byTooltip('Today: 1 due'),
+        matching: find.text('1'),
+      ),
+      findsOneWidget,
+    );
+    // The deck by stage comes before the forecast.
+    expect(
+      tester.getTopLeft(find.text('Cards by stage')).dy,
+      lessThan(tester.getTopLeft(find.text('Next 7 days')).dy),
+    );
     expect(find.text('1 new'), findsOneWidget);
     expect(find.text('2 review'), findsOneWidget);
     expect(find.byTooltip('Review: 2 cards'), findsOneWidget);
@@ -716,6 +730,80 @@ void main() {
     expect(find.text('duplicate'), findsNothing);
     expect(find.text('not-yet'), findsNothing);
     expect(find.text('disabled'), findsNothing);
+  });
+
+  group('New cards', () {
+    test('the limit line', () {
+      expect(newCardsLimitText(4, 10), '4 of 10 started in the last 24 hours');
+      expect(
+        newCardsLimitText(12, 0),
+        '12 started in the last 24 hours (no limit)',
+      );
+    });
+
+    test('the cards left and the time to start them', () {
+      expect(
+        newCardsLeftText(312, 10),
+        '312 new cards left, about 32 days at 10 a day',
+      );
+      expect(
+        newCardsLeftText(1, 10),
+        '1 new card left, about 1 day at 10 a day',
+      );
+      expect(newCardsLeftText(1500, 0), '1,500 new cards left');
+      expect(newCardsLeftText(0, 10), 'Every card has been started');
+    });
+
+    testWidgets('shows the limit, the cards left and a bar per day', (
+      tester,
+    ) async {
+      useTallView(tester);
+      final lesson = Lesson(title: 'New cards')
+        ..vocabularies.addAll([
+          for (var i = 0; i < 3; i++)
+            VocabItem(targetWord: '새$i', translation: 'new $i', pos: 'nouns'),
+        ]);
+      provider.lessons.add(lesson);
+      await provider.recordCardReview(
+        lesson.vocabularies.first.cardTargetToNative,
+        SrsRating.good,
+      );
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<AppProvider>.value(
+          value: provider,
+          child: const MaterialApp(home: ActivityHeatmapView()),
+        ),
+      );
+
+      expect(find.text('New cards'), findsOneWidget);
+      expect(find.text('1 of 10 started in the last 24 hours'), findsOneWidget);
+      expect(
+        find.text('2 new cards left, about 1 day at 10 a day'),
+        findsOneWidget,
+      );
+      expect(find.text('Limit 10'), findsOneWidget);
+      expect(find.text('Today'), findsWidgets);
+      final today = DateTime.now();
+      const months = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
+      ];
+      expect(
+        find.byTooltip('${months[today.month - 1]} ${today.day}: 1 new'),
+        findsOneWidget,
+      );
+    });
   });
 
   testWidgets('opens study activity from the Lessons options on mobile', (
