@@ -512,10 +512,7 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
     final messages = provider.getAiDiscussion(widget.discussionId);
     final typedQuestions = _typedQuestions(provider, messages);
     final firstQuestions = _firstQuestions(typedQuestions.keys);
-    final followUps = _followUpQuestions(
-      messages,
-      typed: typedQuestions.keys,
-    );
+    final followUps = _followUpQuestions(messages, typed: typedQuestions.keys);
     final theme = Theme.of(context);
     final width = MediaQuery.sizeOf(context).width;
     final height = MediaQuery.sizeOf(context).height;
@@ -773,10 +770,7 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                           runSpacing: 6,
                           children: [
                             for (final question in followUps)
-                              _questionChip(
-                                question,
-                                typedQuestions[question],
-                              ),
+                              _questionChip(question, typedQuestions[question]),
                           ],
                         ),
                       ),

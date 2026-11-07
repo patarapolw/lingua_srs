@@ -361,9 +361,7 @@ void main() {
       });
       expect(app.typedQuestions[id]?.toJson(), question.toJson());
 
-      expect(SyncApplier.apply(app, {key: null}), {
-        SyncAppPart.typedQuestions,
-      });
+      expect(SyncApplier.apply(app, {key: null}), {SyncAppPart.typedQuestions});
       expect(app.typedQuestions, isEmpty);
     });
   });

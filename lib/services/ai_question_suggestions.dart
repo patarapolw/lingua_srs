@@ -159,10 +159,7 @@ class AiQuestionSuggestions {
   }) {
     final keys = <String>{};
     final mine = _distinct(typed, keys).take(maxTypedQuestions).toList();
-    return [
-      ...mine,
-      ..._distinct(fixed, keys),
-    ].take(maxQuestions).toList();
+    return [...mine, ..._distinct(fixed, keys)].take(maxQuestions).toList();
   }
 
   /// What to show after an answer: up to [maxTypedQuestions] of [typed], the
@@ -178,10 +175,9 @@ class AiQuestionSuggestions {
   }) {
     final askedKeys = {for (final question in asked) _key(question)};
 
-    final mine = _distinct(
-      typed,
-      {...askedKeys},
-    ).take(maxTypedQuestions).toList();
+    final mine = _distinct(typed, {
+      ...askedKeys,
+    }).take(maxTypedQuestions).toList();
     // The fixed and AI questions leave out the typed ones too.
     final fixedKeys = {for (final question in mine) _key(question)};
 

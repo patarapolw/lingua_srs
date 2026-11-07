@@ -73,9 +73,7 @@ abstract final class TypedQuestions {
   }
 
   /// Text in quotes, such as a phrase from the example sentence.
-  static final _quoted = RegExp(
-    r'"[^"]+"|“[^”]+”|「[^」]+」|『[^』]+』|«[^»]+»',
-  );
+  static final _quoted = RegExp(r'"[^"]+"|“[^”]+”|「[^」]+」|『[^』]+』|«[^»]+»');
 
   /// [kept] with [question], asked about [subject], used once more at [now].
   /// [kept] is returned unchanged when the question is not kept (see
