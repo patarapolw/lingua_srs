@@ -10,6 +10,7 @@ import '../models/lesson.dart';
 import '../models/sentence.dart';
 import '../models/shared_vocab.dart';
 import '../models/srs_card.dart';
+import '../models/typed_question.dart';
 import '../models/vocab_item.dart';
 import '../models/vocab_merge_record.dart';
 import 'secret_storage.dart';
@@ -33,6 +34,7 @@ class StorageService {
       'lingua_srs_sync_remote_activity';
   static const String _keyVocabMergeHistory = 'lingua_srs_vocab_merge_history';
   static const String _keyAiDiscussions = 'lingua_srs_ai_discussions';
+  static const String _keyTypedQuestions = 'lingua_srs_typed_questions';
   static const String _keyAutoplay = 'lingua_srs_autoplay';
   static const String _keyShowAi = 'lingua_srs_show_ai';
   static const String _keyPronunciation = 'lingua_srs_pronunciation';
@@ -314,6 +316,40 @@ class StorageService {
             messages.map((message) => message.toJson()).toList(),
           ),
         ),
+      ),
+    );
+  }
+
+  /// Questions typed in AI chats, by id. See `TypedQuestions`.
+  static Future<Map<String, TypedQuestion>> loadTypedQuestions() async {
+    final prefs = await SharedPreferences.getInstance();
+    final json = prefs.getString(_keyTypedQuestions);
+    if (json == null || json.isEmpty) return {};
+    return parseTypedQuestions(jsonDecode(json));
+  }
+
+  /// [decoded] as stored by [saveTypedQuestions]. Throws a
+  /// [FormatException] when it is not.
+  static Map<String, TypedQuestion> parseTypedQuestions(Object? decoded) {
+    if (decoded is! Map) {
+      throw const FormatException('Typed questions must be a map.');
+    }
+    return {
+      for (final entry in decoded.entries)
+        entry.key.toString(): entry.value is Map
+            ? TypedQuestion.fromJson(Map<String, dynamic>.from(entry.value))
+            : throw const FormatException('Invalid typed question.'),
+    };
+  }
+
+  static Future<void> saveTypedQuestions(
+    Map<String, TypedQuestion> questions,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _keyTypedQuestions,
+      jsonEncode(
+        questions.map((id, question) => MapEntry(id, question.toJson())),
       ),
     );
   }

@@ -88,5 +88,45 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(tester.widget<InkWell>(find.byType(InkWell)).onTap, isNull);
     });
+
+    testWidgets('has no remove button unless it can be removed', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host([AiQuestionChip(label: _short, onPressed: () {})]),
+      );
+
+      expect(find.byIcon(Icons.close), findsNothing);
+    });
+
+    testWidgets('removes a typed question without asking it', (tester) async {
+      var taps = 0;
+      var removals = 0;
+      await tester.pumpWidget(
+        _host([
+          AiQuestionChip(
+            label: _long,
+            onPressed: () => taps++,
+            onRemove: () => removals++,
+          ),
+        ]),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.byTooltip(AiQuestionChip.removeTooltip), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pump();
+      expect(removals, 1);
+      expect(taps, 0);
+
+      await tester.tap(find.text(_long));
+      await tester.pump();
+      expect(taps, 1);
+      expect(removals, 1);
+      expect(
+        tester.getSize(find.byType(AiQuestionChip)).width,
+        lessThanOrEqualTo(220),
+      );
+    });
   });
 }
