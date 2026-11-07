@@ -152,4 +152,109 @@ void main() {
     expect(formatCount(1234567), '1,234,567');
     expect(formatCount(-1234), '-1,234');
   });
+
+  group('newCardsPerDay', () {
+    SrsCard started(String id, DateTime at) => SrsCard(
+      id: id,
+      direction: CardDirection.targetToNative,
+      status: SrsStatus.review,
+      dueDate: at.add(const Duration(days: 1)),
+      introducedAt: at,
+    );
+
+    test('one count per day, oldest first, today last', () {
+      final perDay = newCardsPerDay(
+        {_today: 4, _daysAgo(2): 1},
+        const [],
+        _now,
+        days: 3,
+      );
+
+      expect(perDay, [1, 0, 4]);
+    });
+
+    test('days without a count are filled in from the cards', () {
+      final lesson = Lesson(title: 'L')
+        ..vocabularies.addAll([
+          _word('a', started('a', _daysAgo(1).add(const Duration(hours: 9)))),
+          _word('b', started('b', _daysAgo(1).add(const Duration(hours: 20)))),
+          _word('c', started('c', _now)),
+        ]);
+
+      expect(newCardsPerDay({}, [lesson], _now, days: 3), [0, 2, 1]);
+    });
+
+    test('a counted day is not counted twice', () {
+      final lesson = Lesson(title: 'L')
+        ..vocabularies.addAll([
+          _word('a', started('a', _now)),
+          _word('b', started('b', _now)),
+        ]);
+
+      // Counted 3 (one card was reset since); the cards show 2.
+      expect(newCardsPerDay({_today: 3}, [lesson], _now, days: 1), [3]);
+      // Counted 1 (the other was started on a device with an older app).
+      expect(newCardsPerDay({_today: 1}, [lesson], _now, days: 1), [2]);
+    });
+
+    test('a card shared by two lessons counts once', () {
+      final card = started('shared', _now);
+      final first = Lesson(title: 'A')..vocabularies.add(_word('x', card));
+      final second = Lesson(title: 'B')..vocabularies.add(_word('y', card));
+
+      expect(newCardsPerDay({}, [first, second], _now, days: 1), [1]);
+    });
+
+    test('older days are left out', () {
+      final lesson = Lesson(title: 'L')
+        ..vocabularies.add(_word('a', started('a', _daysAgo(40))));
+
+      expect(
+        newCardsPerDay({_daysAgo(31): 5}, [lesson], _now),
+        everyElement(0),
+      );
+      expect(newCardsPerDay({}, [lesson], _now), hasLength(30));
+    });
+  });
+
+  group('newCardsLeft', () {
+    test('counts enabled, unsuspended cards not started yet', () {
+      final lesson = Lesson(title: 'L')
+        ..vocabularies.addAll([
+          _word(
+            'new1',
+            SrsCard(id: 'new1', direction: CardDirection.targetToNative),
+          ),
+          _word(
+            'new2',
+            SrsCard(id: 'new2', direction: CardDirection.targetToNative),
+          ),
+          _word(
+            'suspended',
+            SrsCard(
+              id: 'suspended',
+              direction: CardDirection.targetToNative,
+              isSuspended: true,
+            ),
+          ),
+          _word('due', _due('due', _today)),
+        ]);
+
+      // Each word's other direction is disabled, so it is not counted.
+      expect(newCardsLeft([lesson]), 2);
+    });
+  });
+
+  group('daysToFinishNewCards', () {
+    test('rounds up', () {
+      expect(daysToFinishNewCards(312, 10), 32);
+      expect(daysToFinishNewCards(30, 10), 3);
+      expect(daysToFinishNewCards(1, 10), 1);
+    });
+
+    test('null with nothing left or no limit', () {
+      expect(daysToFinishNewCards(0, 10), isNull);
+      expect(daysToFinishNewCards(50, 0), isNull);
+    });
+  });
 }

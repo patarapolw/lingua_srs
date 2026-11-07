@@ -84,3 +84,56 @@ String formatCount(int count) {
   }
   return buffer.toString();
 }
+
+/// New cards started on each of the [days] days up to today, oldest first.
+/// A day's count is the larger of [dailyNewCardCounts] (counted as cards
+/// are started) and the cards whose first review ([SrsCard.introducedAt])
+/// fell on that day, so days from before new cards were counted are filled
+/// in from the cards. Resetting a card clears that time, so filled-in days
+/// can be low.
+List<int> newCardsPerDay(
+  Map<DateTime, int> dailyNewCardCounts,
+  Iterable<Lesson> lessons,
+  DateTime now, {
+  int days = 30,
+}) {
+  final today = _day(now);
+  final first = _addDays(today, -(days - 1));
+  final fromCards = <DateTime, int>{};
+  final seenCardIds = <String>{};
+  for (final vocab in lessons.expand((lesson) => lesson.vocabularies)) {
+    for (final card in [vocab.cardTargetToNative, vocab.cardNativeToTarget]) {
+      final introducedAt = card.introducedAt;
+      if (introducedAt == null || !seenCardIds.add(card.id)) continue;
+      final day = _day(introducedAt);
+      fromCards[day] = (fromCards[day] ?? 0) + 1;
+    }
+  }
+  final counts = <int>[];
+  for (var index = 0; index < days; index++) {
+    final day = _addDays(first, index);
+    final counted = dailyNewCardCounts[day] ?? 0;
+    final filled = fromCards[day] ?? 0;
+    counts.add(counted > filled ? counted : filled);
+  }
+  return counts;
+}
+
+/// Enabled, unsuspended cards not started yet. A card shared by several
+/// lessons is counted once.
+int newCardsLeft(Iterable<Lesson> lessons) {
+  final ids = <String>{};
+  for (final vocab in lessons.expand((lesson) => lesson.vocabularies)) {
+    for (final card in [vocab.cardTargetToNative, vocab.cardNativeToTarget]) {
+      if (card.isNewCard) ids.add(card.id);
+    }
+  }
+  return ids.length;
+}
+
+/// Days to start [left] new cards at [limit] a day, rounded up, or null
+/// when there is nothing left or the limit is unlimited (0).
+int? daysToFinishNewCards(int left, int limit) {
+  if (left <= 0 || limit <= 0) return null;
+  return (left + limit - 1) ~/ limit;
+}

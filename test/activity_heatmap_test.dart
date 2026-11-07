@@ -718,6 +718,80 @@ void main() {
     expect(find.text('disabled'), findsNothing);
   });
 
+  group('New cards', () {
+    test('the limit line', () {
+      expect(newCardsLimitText(4, 10), '4 of 10 started in the last 24 hours');
+      expect(
+        newCardsLimitText(12, 0),
+        '12 started in the last 24 hours (no limit)',
+      );
+    });
+
+    test('the cards left and the time to start them', () {
+      expect(
+        newCardsLeftText(312, 10),
+        '312 new cards left, about 32 days at 10 a day',
+      );
+      expect(
+        newCardsLeftText(1, 10),
+        '1 new card left, about 1 day at 10 a day',
+      );
+      expect(newCardsLeftText(1500, 0), '1,500 new cards left');
+      expect(newCardsLeftText(0, 10), 'Every card has been started');
+    });
+
+    testWidgets('shows the limit, the cards left and a bar per day', (
+      tester,
+    ) async {
+      useTallView(tester);
+      final lesson = Lesson(title: 'New cards')
+        ..vocabularies.addAll([
+          for (var i = 0; i < 3; i++)
+            VocabItem(targetWord: '새$i', translation: 'new $i', pos: 'nouns'),
+        ]);
+      provider.lessons.add(lesson);
+      await provider.recordCardReview(
+        lesson.vocabularies.first.cardTargetToNative,
+        SrsRating.good,
+      );
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<AppProvider>.value(
+          value: provider,
+          child: const MaterialApp(home: ActivityHeatmapView()),
+        ),
+      );
+
+      expect(find.text('New cards'), findsOneWidget);
+      expect(find.text('1 of 10 started in the last 24 hours'), findsOneWidget);
+      expect(
+        find.text('2 new cards left, about 1 day at 10 a day'),
+        findsOneWidget,
+      );
+      expect(find.text('Limit 10'), findsOneWidget);
+      expect(find.text('Today'), findsWidgets);
+      final today = DateTime.now();
+      const months = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
+      ];
+      expect(
+        find.byTooltip('${months[today.month - 1]} ${today.day}: 1 new'),
+        findsOneWidget,
+      );
+    });
+  });
+
   testWidgets('opens study activity from the Lessons options on mobile', (
     tester,
   ) async {
