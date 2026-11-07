@@ -71,6 +71,7 @@ void main() {
   testWidgets('records and persists daily reviews for the activity calendar', (
     tester,
   ) async {
+    useTallView(tester);
     for (final rating in SrsRating.values) {
       await provider.recordCardReview(
         SrsCard(direction: CardDirection.targetToNative),
