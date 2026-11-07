@@ -114,6 +114,16 @@ void main() {
   });
 
   group('markPracticeMistake', () {
+    test('a wrong new card is a recent mistake and stays new', () {
+      final card = newVocab('새').cardTargetToNative;
+
+      markPracticeMistake(card);
+
+      expect(card.hasRecentMistake, isTrue);
+      expect(card.isNewCard, isTrue);
+      expect(card.introducedAt, isNull);
+    });
+
     test('makes a seen card a recent mistake without rescheduling it', () {
       final card = seenVocab('봄').cardTargetToNative;
       final dueDate = card.dueDate;
