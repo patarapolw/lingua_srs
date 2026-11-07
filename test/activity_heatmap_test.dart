@@ -163,6 +163,44 @@ void main() {
     expect(find.text('1 review in the past year'), findsOneWidget);
   });
 
+  testWidgets('the weekday labels are on their own rows', (tester) async {
+    useTallView(tester);
+    await provider.recordCardReview(
+      SrsCard(direction: CardDirection.targetToNative),
+      SrsRating.good,
+    );
+    final today = DateTime.now();
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppProvider>.value(
+        value: provider,
+        child: const MaterialApp(home: ActivityHeatmapView()),
+      ),
+    );
+
+    // Weeks start on Monday, one 16-pixel row per day, so the Monday row is
+    // (weekday - 1) rows above today's cell. The labels sat one row too low,
+    // which put Saturday on the "Fri" row.
+    final cell = tester.getTopLeft(
+      find.byTooltip('${dayLabel(today)}: 1 review, 1 right, 1 new'),
+    );
+    final mondayTop = cell.dy - (today.weekday - DateTime.monday) * 16;
+    Offset labelTopLeft(String label) {
+      final labels = find.text(label);
+      for (var i = 0; i < labels.evaluate().length; i++) {
+        final topLeft = tester.getTopLeft(labels.at(i));
+        // The calendar's labels are left of its cells; the 7-day forecast
+        // has weekday names too.
+        if (topLeft.dx < cell.dx) return topLeft;
+      }
+      fail('No "$label" label next to the calendar');
+    }
+
+    expect(labelTopLeft('Mon').dy, mondayTop);
+    expect(labelTopLeft('Wed').dy, mondayTop + 2 * 16);
+    expect(labelTopLeft('Fri').dy, mondayTop + 4 * 16);
+  });
+
   testWidgets('days outside the calendar range have no tooltip', (
     tester,
   ) async {
@@ -389,6 +427,43 @@ void main() {
     await tester.pumpAndSettle();
     expect(card.isSuspended, isFalse);
     expect(find.text('Leeches (1)'), findsOneWidget);
+  });
+
+  testWidgets('the suspension snackbar goes away on its own', (tester) async {
+    useTallView(tester);
+    provider.lessons.add(
+      Lesson(
+        title: 'L',
+        vocabularies: [
+          VocabItem(
+            targetWord: 'word',
+            translation: 'meaning',
+            pos: 'nouns',
+            cardTargetToNative: SrsCard(
+              direction: CardDirection.targetToNative,
+              lapses: 8,
+              status: SrsStatus.review,
+            ),
+          ),
+        ],
+      ),
+    );
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppProvider>.value(
+        value: provider,
+        child: const MaterialApp(home: ActivityHeatmapView()),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Suspend'));
+    await tester.pumpAndSettle();
+    expect(find.text('Suspended "word"'), findsOneWidget);
+
+    // A snackbar with an action persists unless told otherwise; an old Undo
+    // stayed on screen for minutes, across screens.
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    expect(find.text('Suspended "word"'), findsNothing);
   });
 
   group('activityLevel', () {

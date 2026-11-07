@@ -18,6 +18,8 @@ void showMergeUndoSnackBar(
     SnackBar(
       content: Text(text ?? 'Merged ${records.first.label}'),
       duration: const Duration(seconds: 10),
+      // Without this, the action makes it persist and the duration is ignored.
+      persist: false,
       action: SnackBarAction(
         label: 'Undo',
         onPressed: () async {
