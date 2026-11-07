@@ -3,6 +3,7 @@ import '../models/lesson.dart';
 import '../models/sentence.dart';
 import '../models/shared_vocab.dart';
 import '../models/srs_card.dart';
+import '../models/typed_question.dart';
 import '../models/vocab_merge_record.dart';
 import 'sync_records.dart';
 
@@ -15,6 +16,7 @@ class SyncAppData {
     required this.sentences,
     required this.mergeHistory,
     required this.aiDiscussions,
+    this.typedQuestions = const {},
     required this.lessonOrder,
     required this.maxReviews24h,
     required this.maxNewCards24h,
@@ -28,6 +30,9 @@ class SyncAppData {
   List<Sentence> sentences;
   List<VocabMergeRecord> mergeHistory;
   Map<String, List<AiDiscussionMessage>> aiDiscussions;
+
+  /// Questions typed in AI chats, by id. See `TypedQuestions`.
+  Map<String, TypedQuestion> typedQuestions;
   Map<String, int> lessonOrder;
   int maxReviews24h;
   int maxNewCards24h;
@@ -44,6 +49,7 @@ enum SyncAppPart {
   sentences,
   mergeHistory,
   aiDiscussions,
+  typedQuestions,
   lessonOrder,
   settings,
   remoteActivity,
@@ -282,6 +288,25 @@ abstract final class SyncApplier {
         ];
       }
       data.aiDiscussions = next;
+    }
+
+    final questions = ofKind(SyncKinds.question);
+    if (questions.isNotEmpty) {
+      changed.add(SyncAppPart.typedQuestions);
+      final next = {...data.typedQuestions};
+      for (final entry in questions.entries) {
+        final json = entry.value;
+        if (json == null) {
+          next.remove(entry.key);
+          continue;
+        }
+        try {
+          next[entry.key] = TypedQuestion.fromJson(json);
+        } on FormatException {
+          // A question that cannot be read is not offered; the rest are.
+        }
+      }
+      data.typedQuestions = next;
     }
 
     for (final entry in ofKind(SyncKinds.activity).entries) {

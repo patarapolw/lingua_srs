@@ -141,7 +141,7 @@ What the app stores on the server, one record per piece of data. Building the re
 
 Everything a backup contains syncs, except what only makes sense on one device:
 
-- **Syncs:** lessons and their Markdown, vocabulary entries, word details and SRS progress, the Sentence Pool, merge history, saved AI discussions, the lesson tree's order, study activity, and the study settings listed below.
+- **Syncs:** lessons and their Markdown, vocabulary entries, word details and SRS progress, the Sentence Pool, merge history, saved AI discussions, questions typed in AI chats, the lesson tree's order, study activity, and the study settings listed below.
 - **Stays on the device:** the DeepSeek key and the sync sign-in (secrets), whether AI features are shown, which folders are expanded, the fingerprints of imported Markdown files (they are keyed by a path on this device), the audio and image caches, and one-off migration flags.
 
 ### Kinds
@@ -155,6 +155,7 @@ Everything a backup contains syncs, except what only makes sense on one device:
 | `sentence` | sentence | `Sentence.toJson()`. | Newest wins. |
 | `merge` | merge record | `VocabMergeRecord.toJson()`. Undoing a merge deletes its record. | Newest wins. |
 | `discussion` | saved AI discussion | Its messages. | Merged: the union of both sides' messages, by time. |
+| `question` | question typed in an AI chat | `TypedQuestion.toJson()`: the language, whether it was a word or lesson chat, the question with the word or lesson title as a placeholder, how often it was sent and when last (#80). | Newest wins. |
 | `activity` | device and day | That device's review count for the day, the same reviews counted per rating (`ratings`, such as `{"good": 3, "again": 1}`), how many of them started a new card (`newCards`), and its review times while they still count toward the rolling 24-hour limits. Days counted before ratings and new cards were recorded, and records from older app versions, have no `ratings` or `newCards`, so a day's ratings can add up to less than its count. | None: only that device writes it. |
 | `lesson_order` | account (one record) | The lesson tree's manual order. | Newest wins. |
 | `settings` | account (one record) | Review limits per 24 hours, autoplay, and the pronunciation lines shown. | Newest wins. |
@@ -165,6 +166,7 @@ Why it is split this way:
 - **Shared things are stored once.** Entries with the same vocab id share details and progress in the app, so they share one `vocab` record and its two `card` records, however many lessons contain the word.
 - **Activity is never in conflict.** Each device writes only its own `activity` records, and the totals are the sums across devices, so two devices studying offline on the same day both count. The heatmap and the rolling review and new-card limits read these sums, so studying on two devices does not double the daily limit.
 - **A discussion is merged, not replaced.** Asking the AI about the same word on two devices would otherwise keep only one side's messages.
+- **A typed question's count is not summed.** The newest record wins, so a question sent on two devices before they sync counts the uses of one of them. The count only orders the questions offered, so that is not worth a record per device as `activity` has.
 
 Two devices reviewing the same card offline: the later review wins, and the earlier one is lost from the schedule but still counted in activity. This app accepts that, because it is simpler than replaying both reviews.
 
@@ -172,7 +174,7 @@ Two devices reviewing the same card offline: the later review wins, and the earl
 
 The server sees each record's kind and id, so an id must not give away content. A generated vocab id is `auto-` and an unkeyed SHA-256 of the language, word and meaning, so anyone could test it against a dictionary. An explicit `id` from a lesson file can be a plain word.
 
-So the record id is a keyed hash of the local id: `base64url(HMAC-SHA256(idKey, kind + ":" + localId))`, 43 characters, with `idKey = HKDF(dataKey, "record-id")`. Only devices with the data key can compute it. The local id is kept inside the encrypted data, so a pulled record maps back to it. An `activity` record's local id is `<device id>:<YYYY-MM-DD>`, where the device id is random, made once per install, and kept with the sync sign-in. The single records use `lesson_order` and `settings` as their local ids.
+So the record id is a keyed hash of the local id: `base64url(HMAC-SHA256(idKey, kind + ":" + localId))`, 43 characters, with `idKey = HKDF(dataKey, "record-id")`. Only devices with the data key can compute it. The local id is kept inside the encrypted data, so a pulled record maps back to it. An `activity` record's local id is `<device id>:<YYYY-MM-DD>`, where the device id is random, made once per install, and kept with the sync sign-in. A `question` record's local id is the language code, the chat kind and the question's normalized text (lowercase, without spaces or punctuation): `ko:word:is{}formal`. The single records use `lesson_order` and `settings` as their local ids.
 
 ### Encrypted envelope
 
@@ -201,7 +203,7 @@ The Worker refuses `data` over 32 KB, which leaves about 24 KB of compressed con
 
 ### Deleting
 
-Deleting a lesson, sentence, merge record, discussion or Markdown pushes a tombstone for it, and for its parts.
+Deleting a lesson, sentence, merge record, discussion, typed question or Markdown pushes a tombstone for it, and for its parts. A typed question is deleted when it is removed from the suggestions, or when it is one of the least recently used past the 100 kept.
 
 `vocab` and `card` records are never deleted because a lesson was removed. Whether a word is still used depends on every lesson on every device, and one device deleting the last lesson that it knows of while another imports the word again would lose that word's progress. An unused `vocab` or `card` record costs a few hundred bytes, and it brings the progress back if the word is imported again. Pruning them can come later, once every device is known to be in sync.
 
@@ -254,7 +256,7 @@ A sync unlocks the data key only when it has none for this sign-in. The key is k
 
 Signing in on a device that already has lessons and progress merges them with what the account has, on that device's first sync:
 
-- **Stamps.** Until a device has pulled once, a record it sees for the first time is stamped with when it last really changed, not with the time of signing in: a card's last review, or a discussion's latest message. Anything else is stamped 0, so the account's copy wins. Edits made after that are stamped as usual.
+- **Stamps.** Until a device has pulled once, a record it sees for the first time is stamped with when it last really changed, not with the time of signing in: a card's last review, a discussion's latest message, or when a typed question was last sent. Anything else is stamped 0, so the account's copy wins. Edits made after that are stamped as usual.
 - **Words.** A word imported on both devices without an explicit `id` has the same generated id on both, so it is one `vocab` record, but its cards have different ids. The card reviewed more recently keeps its progress, under the account's card id, and it is pushed back if it came from this device.
 - **Lessons.** Each device gives a lesson its own id. On the first sync, a local lesson with the same title (ignoring case) and folder as a pulled lesson is merged into the pulled one, keeping the words only this device has. Its Markdown keeps the account's text and adds, at the end, each block (text between blank lines) that only this device has. Lessons that only one side has stay as they are. After the first sync, lessons with the same name are kept apart.
 - **Anything the app keeps of its own** instead of a pulled copy, such as a newer card or a merged lesson, is pushed back with a newer `updatedAt`, so the other devices get it too.
