@@ -160,6 +160,30 @@ void main() {
       expect(tts.voiceUsed.toSet(), {'ko-good'});
     });
 
+    test('a region prefers voices of that region', () async {
+      final tts = _VoicesTts([
+        _voice('zh-cn-a', 'zh-CN'),
+        _voice('zh-tw-a', 'zh-TW'),
+        _voice('zh-cn-b', 'zh-CN'),
+      ]);
+      final service = offlineService(tts);
+
+      for (var i = 0; i < 15; i++) {
+        await service.speak('垃圾', language: 'zh-TW');
+      }
+
+      expect(tts.voiceUsed.toSet(), {'zh-tw-a'});
+    });
+
+    test('falls back to the language without a voice of the region', () async {
+      final tts = _VoicesTts([_voice('zh-cn-a', 'zh-CN')]);
+      final service = offlineService(tts);
+
+      await service.speak('垃圾', language: 'zh-TW');
+
+      expect(tts.voiceUsed, ['zh-cn-a']);
+    });
+
     test('speaks nothing when no offline voice is installed', () async {
       final tts = _VoicesTts([_voice('ko-online', 'ko-KR', online: true)]);
       final service = offlineService(tts);
@@ -190,6 +214,52 @@ void main() {
       await service.speak('(only a note)', language: 'ko');
 
       expect(tts.spoken, isEmpty);
+    });
+
+    test('a locale prefix picks the voice and is not spoken', () async {
+      final tts = _VoicesTts([
+        _voice('ko-a', 'ko-KR'),
+        _voice('zh-cn-a', 'zh-CN'),
+        _voice('zh-tw-a', 'zh-TW'),
+      ]);
+      final service = offlineService(tts);
+
+      await service.speak('zh-TW:垃圾', language: 'ko');
+      await service.speak('세 개', language: 'ko');
+
+      expect(tts.spoken, ['垃圾', '세 개']);
+      expect(tts.voiceUsed, ['zh-tw-a', 'ko-a']);
+    });
+
+    test('a colon followed by a space is spoken as text', () async {
+      final tts = _VoicesTts([_voice('ko-a', 'ko-KR')]);
+      final service = offlineService(tts);
+
+      await service.speak('ko: 세 개', language: 'ko');
+
+      expect(tts.spoken, ['ko: 세 개']);
+    });
+
+    test('the online TTS URL uses the prefix locale, without the prefix', () {
+      final service = offlineService(_VoicesTts([]));
+
+      final prefixed = Uri.parse(
+        service.getTtsUrl('zh-TW:垃圾', language: 'ko'),
+      ).queryParameters;
+      expect(prefixed['q'], '垃圾');
+      expect(prefixed['tl'], 'zh-TW');
+
+      final plain = Uri.parse(
+        service.getTtsUrl('垃圾', language: 'zh'),
+      ).queryParameters;
+      expect(plain['q'], '垃圾');
+      expect(plain['tl'], 'zh-CN');
+
+      final korean = Uri.parse(
+        service.getTtsUrl('ko:세 개', language: 'zh'),
+      ).queryParameters;
+      expect(korean['q'], '세 개');
+      expect(korean['tl'], 'ko');
     });
 
     test('the online TTS URL leaves out bracketed text too', () {

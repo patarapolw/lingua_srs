@@ -11,6 +11,7 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 import '../models/sentence.dart';
+import 'tts_text.dart';
 
 class AudioService extends ChangeNotifier {
   final AudioPlayer _player;
@@ -183,23 +184,37 @@ class AudioService extends ChangeNotifier {
     }
   }
 
+  /// The language code for the online TTS service. Chinese keeps its region
+  /// (`zh-TW` for Taiwan and traditional script, else `zh-CN`); other
+  /// languages are reduced to the language alone.
   String _resolveLanguageCode(String? lang) {
     if (lang == null || lang.isEmpty) return 'ko';
     final lower = lang.toLowerCase().trim();
+    final parts = lower.split(RegExp('[-_]'));
+    if (parts.first == 'zh' || parts.first == 'chinese') {
+      const traditional = {'tw', 'hant', 'hk', 'mo'};
+      return parts.skip(1).any(traditional.contains) ? 'zh-TW' : 'zh-CN';
+    }
     if (lower == 'ko' || lower == 'korean') return 'ko';
     if (lower == 'ja' || lower == 'japanese') return 'ja';
-    if (lower == 'zh' || lower == 'chinese') return 'zh-CN';
     if (lower == 'es' || lower == 'spanish') return 'es';
     if (lower == 'fr' || lower == 'french') return 'fr';
     if (lower == 'de' || lower == 'german') return 'de';
     if (lower == 'en' || lower == 'english') return 'en';
-    if (lower.contains('-')) return lower.split('-').first;
-    return lower;
+    return parts.first;
   }
 
-  /// Generates an audio stream URL for TTS
+  /// Generates an audio stream URL for TTS. A locale prefix on [text]
+  /// (`zh-TW:垃圾`, see [TtsText]) picks the voice instead of [language].
   String getTtsUrl(String text, {String? language}) {
-    final clean = Sentence.cleanForSpeech(text);
+    final tts = TtsText.parse(text);
+    return _ttsUrl(
+      Sentence.cleanForSpeech(tts.text),
+      language: tts.locale ?? language,
+    );
+  }
+
+  String _ttsUrl(String clean, {String? language}) {
     final lang = _resolveLanguageCode(language);
     final encoded = Uri.encodeComponent(clean);
     return 'https://translate.google.com/translate_tts?ie=UTF-8&tl=$lang&client=tw-ob&q=$encoded';
@@ -208,14 +223,19 @@ class AudioService extends ChangeNotifier {
   bool _isCurrent(int session) => !_isDisposed && session == _generation;
 
   /// Uses an installed offline Android voice; other platforms stream and cache online TTS.
+  ///
+  /// A locale prefix on [text] (`zh-TW:垃圾`, see [TtsText]) is not spoken:
+  /// it picks the voice instead of [language].
   Future<void> speak(String text, {String? language}) async {
-    if (Sentence.cleanForSpeech(text).isEmpty) return;
+    if (Sentence.cleanForSpeech(TtsText.parse(text).text).isEmpty) return;
     await _speak(text, ++_generation, language: language);
   }
 
   Future<void> _speak(String text, int session, {String? language}) async {
-    final clean = Sentence.cleanForSpeech(text);
+    final tts = TtsText.parse(text);
+    final clean = Sentence.cleanForSpeech(tts.text);
     if (clean.isEmpty) return;
+    final voice = tts.locale ?? language;
 
     if (usesOfflineTts) {
       await _haltPlayback();
@@ -224,12 +244,12 @@ class AudioService extends ChangeNotifier {
         clean,
         text,
         session,
-        language: language,
+        language: voice,
       );
       return;
     }
 
-    final ttsUrl = getTtsUrl(clean, language: language);
+    final ttsUrl = _ttsUrl(clean, language: voice);
     await _playAudio(ttsUrl, session, playingKey: 'tts_${text.trim()}');
   }
 
@@ -240,10 +260,9 @@ class AudioService extends ChangeNotifier {
     String? language,
   }) async {
     try {
-      final requestedLanguage = _resolveLanguageCode(language)
-          .toLowerCase()
-          .split('-')
-          .first;
+      final requested = _resolveLanguageCode(language).toLowerCase().split('-');
+      final requestedLanguage = requested.first;
+      final requestedRegion = requested.length > 1 ? requested.last : null;
       final availableVoices = await _tts.getVoices;
       if (!_isCurrent(session)) return;
       if (availableVoices is! List) {
@@ -263,6 +282,19 @@ class AudioService extends ChangeNotifier {
       // A language can have several installed voices. Varying them keeps
       // reviews from sounding monotonous; any that fails is skipped below.
       offlineVoices.shuffle(_random);
+      // A region (zh-TW) puts that region's voices first; the language's
+      // other voices are still tried when none of them can be selected.
+      if (requestedRegion != null) {
+        bool inRegion(Map<String, dynamic> voice) {
+          final locale = voice['locale']?.toString().toLowerCase() ?? '';
+          return locale.split(RegExp('[-_]')).skip(1).contains(requestedRegion);
+        }
+
+        final preferred = offlineVoices.where(inRegion).toList();
+        offlineVoices
+          ..removeWhere(inRegion)
+          ..insertAll(0, preferred);
+      }
 
       var voiceSelected = false;
       for (final voice in offlineVoices) {
