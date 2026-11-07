@@ -243,21 +243,18 @@ void main() {
     test('the online TTS URL uses the prefix locale, without the prefix', () {
       final service = offlineService(_VoicesTts([]));
 
-      final prefixed = Uri.parse(
-        service.getTtsUrl('zh-TW:垃圾', language: 'ko'),
-      ).queryParameters;
+      final prefixed = Uri.parse(service.getTtsUrl('zh-TW:垃圾', language: 'ko'))
+          .queryParameters;
       expect(prefixed['q'], '垃圾');
       expect(prefixed['tl'], 'zh-TW');
 
-      final plain = Uri.parse(
-        service.getTtsUrl('垃圾', language: 'zh'),
-      ).queryParameters;
+      final plain = Uri.parse(service.getTtsUrl('垃圾', language: 'zh'))
+          .queryParameters;
       expect(plain['q'], '垃圾');
       expect(plain['tl'], 'zh-CN');
 
-      final korean = Uri.parse(
-        service.getTtsUrl('ko:세 개', language: 'zh'),
-      ).queryParameters;
+      final korean = Uri.parse(service.getTtsUrl('ko:세 개', language: 'zh'))
+          .queryParameters;
       expect(korean['q'], '세 개');
       expect(korean['tl'], 'ko');
     });

@@ -36,13 +36,7 @@ void main() {
     });
 
     test('a prefix that does not look like a locale is text', () {
-      for (final text in [
-        '10:30',
-        'Note:this',
-        'a:b',
-        'zh-TWN:垃圾',
-        ':垃圾',
-      ]) {
+      for (final text in ['10:30', 'Note:this', 'a:b', 'zh-TWN:垃圾', ':垃圾']) {
         final tts = TtsText.parse(text);
         expect(tts.locale, isNull, reason: text);
         expect(tts.text, text);

@@ -23,6 +23,7 @@ lingua_srs/
 │   │   ├── study_queue_order.dart     # Study queue order: part-of-speech interleaving, new cards mixed into reviews
 │   │   ├── yaml_parser_service.dart   # Markdown/YAML lesson & sentence parser
 │   │   ├── audio_service.dart         # Audio playback, TTS and offline caching
+│   │   ├── tts_text.dart              # Splits a `zh-TW:`-style locale prefix off TTS text
 │   │   ├── image_cache_service.dart   # Disk cache for online images in Markdown
 │   │   ├── deepseek_service.dart      # DeepSeek chat client for quiz discussions
 │   │   ├── backup_service.dart        # Versioned local data backup and restore

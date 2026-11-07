@@ -240,12 +240,7 @@ class AudioService extends ChangeNotifier {
     if (usesOfflineTts) {
       await _haltPlayback();
       if (!_isCurrent(session)) return;
-      await _speakWithOfflineAndroidTts(
-        clean,
-        text,
-        session,
-        language: voice,
-      );
+      await _speakWithOfflineAndroidTts(clean, text, session, language: voice);
       return;
     }
 
