@@ -12,7 +12,11 @@ The address of the hosted Worker is not in git. It is read at build time from th
 cp env.example.json env.json    # env.json is git-ignored
 flutter run --dart-define-from-file=env.json
 flutter build apk --dart-define-from-file=env.json
+flutter clean                                   # before a Windows release build, see below
+flutter build windows --release --dart-define-from-file=env.json
 ```
+
+Windows release builds keep only the icons the app uses in their copy of the icon font, and the Flutter tool does not redo that step when only Dart code changes: its inputs leave out the compiled app (`app.dill`). An incremental release build then ships the font from an earlier build, and icons added since are blank (#124). Android builds were not affected. Run `flutter clean` first, or build with `--no-tree-shake-icons`, which ships the whole font (about 1.6 MB).
 
 In VS Code, run the `lingua_srs (sync server)` launch configurations, and use the `(sync server)` tasks to build. In Android Studio or IntelliJ, run the shared `lingua_srs (sync server)` configuration, which passes the flag as *Additional run args*. Both need `env.json` to exist; the plain configurations work without it, and then the app has no Sync section. The **Build** menu in Android Studio does not pass the flag, so build from the terminal or a task. The flag also reads a `.env` file, and either format works; JSON is used here because it is strict, and every editor understands it. Either way the values are compiled into the app, so only put things in it that you could print on the app's own screen.
 
