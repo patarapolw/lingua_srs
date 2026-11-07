@@ -3,10 +3,13 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:lingua_srs/services/audio_service.dart';
+import 'package:lingua_srs/widgets/audio_edit_fields.dart';
+import 'package:provider/provider.dart';
 
 import 'debug_print_capture.dart';
 
@@ -47,6 +50,9 @@ class _VoicesTts implements FlutterTts {
   dynamic noSuchMethod(Invocation invocation) {
     final name = invocation.memberName;
     if (name == #getVoices) return Future<dynamic>.value(voices);
+    if (name == #getDefaultEngine) {
+      return Future<dynamic>.value('com.example.tts');
+    }
     if (name == #isLanguageInstalled) return Future<dynamic>.value(true);
     if (name == #setVoice) {
       final voice = (invocation.positionalArguments.first as Map)['name'];
@@ -193,6 +199,96 @@ void main() {
 
       expect(tts.spoken, isEmpty);
       expect(printed, [contains('No installed offline Android TTS voice')]);
+    });
+  });
+
+  group('the voice used', () {
+    test('records a voice of another region as a substitute', () async {
+      final tts = _VoicesTts([_voice('zh-cn-a', 'zh-CN')]);
+      final service = offlineService(tts);
+
+      await service.speak('zh-TW:垃圾', language: 'ko');
+
+      final used = service.lastVoice!;
+      expect(used.text, 'zh-TW:垃圾');
+      expect(used.requested, 'zh-TW');
+      expect(used.voice!.name, 'zh-cn-a');
+      expect(used.isSubstitute, isTrue);
+    });
+
+    test('records no voice when none of the language is installed', () async {
+      final service = offlineService(_VoicesTts([_voice('ko-a', 'ko-KR')]));
+      captureDebugPrints();
+
+      await service.speak('ja:ゴミ', language: 'ko');
+
+      expect(service.lastVoice!.voice, isNull);
+      expect(service.lastVoice!.requested, 'ja');
+    });
+
+    test('finds a region voice reported with three-letter codes', () async {
+      final tts = _VoicesTts([
+        _voice('mainland', 'zh-CN'),
+        _voice('taiwan', 'cmn-TW'),
+      ]);
+      final service = offlineService(tts);
+
+      await service.speak('zh-TW:垃圾', language: 'ko');
+
+      expect(tts.voiceUsed, ['taiwan']);
+      expect(service.lastVoice!.isSubstitute, isFalse);
+    });
+
+    test('a region prefix of another language prefers that region', () async {
+      final tts = _VoicesTts([
+        _voice('ko-kr', 'ko-KR'),
+        _voice('ko-kp', 'ko-KP'),
+      ]);
+      final service = offlineService(tts);
+
+      for (var i = 0; i < 10; i++) {
+        await service.speak('ko-KP:안녕', language: 'zh');
+      }
+
+      expect(tts.voiceUsed.toSet(), {'ko-kp'});
+    });
+
+    test('lists the engine and its voices by locale', () async {
+      final service = offlineService(
+        _VoicesTts([
+          _voice('zh-tw-a', 'zh-TW'),
+          _voice('ko-a', 'ko-KR', online: true),
+        ]),
+      );
+
+      final list = await service.listVoices();
+
+      expect(list.engine, 'com.example.tts');
+      expect(list.voices.map((v) => v.locale), ['ko-KR', 'zh-TW']);
+      expect(list.voices.map((v) => v.offline), [false, true]);
+      expect(list.voices.map((v) => v.installed), [true, true]);
+    });
+
+    testWidgets('the editor note warns when another voice spoke', (
+      tester,
+    ) async {
+      final service = offlineService(_VoicesTts([_voice('zh-cn-a', 'zh-CN')]));
+      await tester.runAsync(() => service.speak('zh-TW:垃圾', language: 'zh'));
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<AudioService>.value(
+          value: service,
+          child: const MaterialApp(
+            home: Scaffold(body: TtsVoiceNote(spokenText: 'zh-TW:垃圾')),
+          ),
+        ),
+      );
+
+      expect(
+        find.text('No zh-TW voice found; spoken by zh-CN (zh-cn-a).'),
+        findsOneWidget,
+      );
+      expect(find.text('Voices'), findsOneWidget);
     });
   });
 

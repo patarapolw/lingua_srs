@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../services/audio_service.dart';
 import 'audio_button.dart';
+import 'tts_voices_dialog.dart';
 
 /// An "Audio URL" field for an edit dialog.
 ///
@@ -206,6 +209,17 @@ class _TtsTextFieldState extends State<TtsTextField> {
               border: const OutlineInputBorder(),
             ),
           ),
+          ListenableBuilder(
+            listenable: Listenable.merge([controller, widget.spokenFallback]),
+            builder: (context, _) {
+              final override = controller.text.trim();
+              return TtsVoiceNote(
+                spokenText: override.isNotEmpty
+                    ? override
+                    : widget.spokenFallback.text,
+              );
+            },
+          ),
         ],
       ),
     );
@@ -243,6 +257,50 @@ class SentenceAudioChoice extends StatelessWidget {
             ? 'Playing the recording. Tap to use text-to-speech.'
             : 'Using text-to-speech. Tap to play the recording.',
       ),
+    );
+  }
+}
+
+/// Under the TTS text on Android (offline voices): which voice spoke
+/// [spokenText] the last time it was previewed, with a warning when it is not
+/// of the requested locale (a `zh-TW:` prefix spoken by a zh-CN voice), and a
+/// button that lists the device's voices.
+class TtsVoiceNote extends StatelessWidget {
+  final String spokenText;
+
+  const TtsVoiceNote({super.key, required this.spokenText});
+
+  @override
+  Widget build(BuildContext context) {
+    final audioService = context.watch<AudioService>();
+    if (!audioService.usesOfflineTts) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    final used = audioService.lastVoice;
+    final usedHere = used != null && used.text == spokenText.trim();
+    final voice = used?.voice;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: !usedHere
+              ? const SizedBox.shrink()
+              : Text(
+                  voice == null
+                      ? 'No installed voice for ${used.requested}.'
+                      : used.isSubstitute
+                      ? 'No ${used.requested} voice found; spoken by '
+                            '${voice.locale} (${voice.name}).'
+                      : 'Spoken by ${voice.locale} (${voice.name}).',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: used.isSubstitute ? theme.colorScheme.error : null,
+                  ),
+                ),
+        ),
+        TextButton(
+          onPressed: () => TtsVoicesDialog.show(context),
+          child: const Text('Voices'),
+        ),
+      ],
     );
   }
 }
