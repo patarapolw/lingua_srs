@@ -2367,9 +2367,8 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
 
   /// Cram queue: every enabled card that is not new, due or not, lesson by
   /// lesson, ignoring the review limit. Crammed from one lesson
-  /// ([lessonId]), the lesson's new cards come first, up to what is left of
-  /// the new-card limit: cramming never starts more new cards than a normal
-  /// review would.
+  /// ([lessonId]), the lesson's new cards come first; practice does not
+  /// start them.
   List<StudyCardItem> getCramQueue({String? lessonId}) {
     final all = getStudyQueue(lessonId: lessonId, dueOnly: false);
     final seen = [
@@ -2377,24 +2376,30 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
         if (!item.card.isNewCard) item,
     ];
     if (lessonId == null) return seen;
-    final newCards = all
-        .where((item) => item.card.isNewCard)
-        .take(remainingNewCards24h);
-    return [...newCards, ...seen];
+    return [
+      for (final item in all)
+        if (item.card.isNewCard) item,
+      ...seen,
+    ];
   }
 
-  /// New cards [lessonId] can start now: its new cards, up to what is left
-  /// of the new-card limit.
+  /// New cards one Learn New Words session of [lessonId] starts: a batch the
+  /// size of the daily new-card limit (all of them while it is unlimited),
+  /// whatever is left of the limit. Learn New Words is how to learn more
+  /// than the limit, one lesson at a time; the cards it starts still count
+  /// toward the rolling 24 hours, so normal study brings in fewer.
   int learnableNewCardCount(String lessonId) {
     final lesson = _lessons.where((l) => l.id == lessonId).firstOrNull;
     if (lesson == null) return 0;
-    return min(lesson.newCardsCount, remainingNewCards24h);
+    final count = lesson.newCardsCount;
+    return _maxNewCards24h > 0 ? min(count, _maxNewCards24h) : count;
   }
 
-  /// Learn New Words queue for [lessonId]: the new cards it can start now,
-  /// spread evenly among up to [oldCardsPerNewCard] of the lesson's seen
-  /// cards each, a new card first. The seen cards are only there to mix
-  /// with; the session does not reschedule them.
+  /// Learn New Words queue for [lessonId]: a batch of its new cards (see
+  /// [learnableNewCardCount]), spread evenly among up to
+  /// [oldCardsPerNewCard] of the lesson's seen cards each, a new card first.
+  /// The seen cards are only there to mix with; the session does not
+  /// reschedule them.
   List<StudyCardItem> getLearnNewQueue(
     String lessonId, {
     int oldCardsPerNewCard = 2,
@@ -2402,7 +2407,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     final all = getStudyQueue(lessonId: lessonId, dueOnly: false);
     final newCards = all
         .where((item) => item.card.isNewCard)
-        .take(remainingNewCards24h)
+        .take(learnableNewCardCount(lessonId))
         .toList();
     if (newCards.isEmpty) return const [];
     final seen = [

@@ -160,7 +160,7 @@ void main() {
       expect(queue.every((item) => item.lesson.id == lesson.id), isTrue);
     });
 
-    test('one lesson: new cards stay within the new-card limit', () async {
+    test('one lesson: practice holds every new card, past the limit', () async {
       final provider = await newProvider(maxNewCards: 2);
       final lesson = lessonWith('A', [
         for (var i = 0; i < 5; i++) newVocab('새$i'),
@@ -169,15 +169,8 @@ void main() {
       provider.lessons.add(lesson);
 
       final queue = provider.getCramQueue(lessonId: lesson.id);
-      expect(queue.where((item) => item.card.isNewCard), hasLength(2));
-
-      await provider.recordCardReview(queue.first.card, SrsRating.good);
-      await provider.recordCardReview(queue[1].card, SrsRating.good);
-
-      final after = provider.getCramQueue(lessonId: lesson.id);
-      expect(provider.remainingNewCards24h, 0);
-      expect(after.where((item) => item.card.isNewCard), isEmpty);
-      expect(after, hasLength(3), reason: 'the two started cards and a1');
+      expect(queue.where((item) => item.card.isNewCard), hasLength(5));
+      expect(queue, hasLength(6));
     });
   });
 
@@ -215,9 +208,9 @@ void main() {
       expect(queue.every((item) => item.lesson.id == lesson.id), isTrue);
     });
 
-    test('new cards stay within the new-card limit', () async {
+    test('a batch is the size of the daily new-card limit', () async {
       final provider = await newProvider(maxNewCards: 2);
-      final lesson = lessonWith('Capped', [
+      final lesson = lessonWith('Batch', [
         for (var i = 0; i < 5; i++) newVocab('새$i'),
         seenVocab('봄'),
       ]);
@@ -229,14 +222,42 @@ void main() {
       expect(queue, hasLength(3), reason: 'only one seen card to mix in');
     });
 
-    test('nothing to learn: empty, even with seen cards', () async {
-      final provider = await newProvider(maxNewCards: 1);
-      final lesson = lessonWith('Done', [newVocab('새'), seenVocab('봄')]);
+    test('learns past the daily limit, and still counts toward it', () async {
+      final provider = await newProvider(maxNewCards: 2);
+      final lesson = lessonWith('Extra', [
+        for (var i = 0; i < 5; i++) newVocab('새$i'),
+      ]);
       provider.lessons.add(lesson);
-      await provider.recordCardReview(
-        lesson.vocabularies.first.cardTargetToNative,
-        SrsRating.good,
-      );
+
+      for (final item in provider.getLearnNewQueue(lesson.id)) {
+        await provider.recordCardReview(item.card, SrsRating.good);
+      }
+      expect(provider.remainingNewCards24h, 0);
+      expect(provider.getStudyQueue(dueOnly: true), isEmpty);
+
+      // The next batch is still offered: 3 new cards left, batches of 2.
+      expect(provider.learnableNewCardCount(lesson.id), 2);
+      for (final item in provider.getLearnNewQueue(lesson.id)) {
+        await provider.recordCardReview(item.card, SrsRating.good);
+      }
+      expect(provider.newCardsIntroducedLast24h, 4);
+      expect(provider.learnableNewCardCount(lesson.id), 1);
+    });
+
+    test('0 (unlimited) learns every new card in one batch', () async {
+      final provider = await newProvider(maxNewCards: 0);
+      final lesson = lessonWith('All', [
+        for (var i = 0; i < 25; i++) newVocab('새$i'),
+      ]);
+      provider.lessons.add(lesson);
+
+      expect(provider.learnableNewCardCount(lesson.id), 25);
+    });
+
+    test('no new cards left: nothing to learn', () async {
+      final provider = await newProvider();
+      final lesson = lessonWith('Done', [seenVocab('봄')]);
+      provider.lessons.add(lesson);
 
       expect(provider.learnableNewCardCount(lesson.id), 0);
       expect(provider.getLearnNewQueue(lesson.id), isEmpty);

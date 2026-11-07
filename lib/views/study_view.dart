@@ -393,7 +393,7 @@ bool refreshStaleSentences({
 /// The cram sessions offered when a session ends. Cramming every lesson
 /// offers practice only and updating schedules. Cramming one lesson
 /// ([lessonCram]) offers Learn New Words, while [canLearnNew] (the lesson
-/// has new cards and the new-card limit has room), and practice only.
+/// has new cards), and practice only.
 List<CramMode> cramChoicesAfterSession({
   required bool lessonCram,
   bool canLearnNew = false,
@@ -428,9 +428,9 @@ enum CramMode {
   /// Every lesson's seen cards, rated as a normal review would, due or not.
   reschedule,
 
-  /// One lesson's new cards, started and scheduled (each uses a new-card
-  /// slot), mixed with a few of its seen cards practised without changing
-  /// their schedules.
+  /// A batch of one lesson's new cards, started and scheduled even past the
+  /// daily new-card limit (they still count toward it), mixed with a few of
+  /// its seen cards practised without changing their schedules.
   learnNew,
 }
 
