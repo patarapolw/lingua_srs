@@ -522,7 +522,7 @@ void main() {
         provider,
         StudyView(
           lessonId: lesson.id,
-          dueOnly: false,
+          cramMode: mistakes ? null : CramMode.practice,
           recentMistakesOnly: mistakes,
         ),
       );

@@ -196,6 +196,7 @@ void reRateRecord({
   required ReviewHistoryRecord record,
   required SrsRating rating,
   required bool practiceOnly,
+  bool clearsMistakes = true,
   required List<ReviewHistoryRecord> history,
   required List<StudyCardItem> queue,
   required int answeredCount,
@@ -208,10 +209,13 @@ void reRateRecord({
 
   // 1. Card state.
   if (practiceOnly) {
-    // Mistakes practice never touches SRS; it only clears/restores the mistake.
-    card.mistakesClearedAt = nowAgain
-        ? record.oldMistakesClearedAt
-        : DateTime.now();
+    // Practice never touches SRS. Mistakes practice only clears/restores the
+    // mistake; practice-only cram leaves the card as it was.
+    if (clearsMistakes) {
+      card.mistakesClearedAt = nowAgain
+          ? record.oldMistakesClearedAt
+          : DateTime.now();
+    }
   } else if (record.wasFirstSessionRating) {
     record.restore();
     // processReview directly, not recordCardReview: a re-mark must not add
@@ -386,15 +390,53 @@ bool refreshStaleSentences({
   return changed;
 }
 
+/// The cram sessions offered when a session ends ([finished] is the cram
+/// mode of the session that ended, null for a normal review). Cramming one
+/// lesson ([lessonCram]) starts with practice only, then offers a session
+/// that updates schedules. Cramming every lesson offers both from the start.
+List<CramMode> cramChoicesAfterSession({
+  required bool lessonCram,
+  required CramMode? finished,
+}) {
+  if (!lessonCram) return CramMode.values;
+  return switch (finished) {
+    null => const [CramMode.practice],
+    CramMode.practice => CramMode.values,
+    CramMode.reschedule => const [CramMode.reschedule],
+  };
+}
+
+String cramButtonLabel(CramMode mode) => switch (mode) {
+  CramMode.practice => 'Cram (Practice Only)',
+  CramMode.reschedule => 'Cram and Update Schedules',
+};
+
+String cramModeTitle(CramMode mode) => switch (mode) {
+  CramMode.practice => 'Cram: practice only',
+  CramMode.reschedule => 'Cram: updates schedules',
+};
+
+/// How a cram session treats ratings.
+enum CramMode {
+  /// Ratings never change a card's schedule; new cards stay new.
+  practice,
+
+  /// Ratings reschedule cards as a normal review does, and a new card's
+  /// first rating starts it and counts toward the new-card limit.
+  reschedule,
+}
+
 class StudyView extends StatefulWidget {
   final String? lessonId;
-  final bool dueOnly;
+
+  /// Null for a normal review of due and new cards.
+  final CramMode? cramMode;
   final bool recentMistakesOnly;
 
   const StudyView({
     super.key,
     this.lessonId,
-    this.dueOnly = true,
+    this.cramMode,
     this.recentMistakesOnly = false,
   });
 
@@ -411,6 +453,8 @@ class _StudyViewState extends State<StudyView> {
   // Every undoable action, ratings included, newest last.
   final List<SessionUndoEntry> _undoStack = [];
   final Set<String> _againCardIds = {};
+  // The session's cram mode; a finished session can start a cram session.
+  CramMode? _cramMode;
   // Wrapped up: no unseen cards are brought in any more.
   bool _wrappedUp = false;
   final Set<String> _sessionRatedCardIds = {};
@@ -429,10 +473,10 @@ class _StudyViewState extends State<StudyView> {
   // Study review judges a card by its first pass (Again/Hard = wrong).
   // Mistakes practice judges it by its latest answer, so a mistake that is
   // answered correctly on retry counts as complete.
-  int get rightCount => _isPracticeOnly
+  int get rightCount => _isMistakesMode
       ? lastAnswerRightCount(_history)
       : firstPassRightCount(_history);
-  int get wrongCount => _isPracticeOnly
+  int get wrongCount => _isMistakesMode
       ? lastAnswerWrongCount(_history)
       : firstPassWrongCount(_history);
 
@@ -459,10 +503,13 @@ class _StudyViewState extends State<StudyView> {
     return SrsService.formatDuration(SrsService.previewInterval(card, rating));
   }
 
-  bool get _isPracticeOnly => widget.recentMistakesOnly;
+  bool get _isMistakesMode => widget.recentMistakesOnly;
+
+  // Mistakes practice and practice-only cram never change a card's schedule.
+  bool get _isPracticeOnly => _isMistakesMode || _cramMode == CramMode.practice;
 
   // Cards already rated this session (Again interleaving), and all cards in
-  // mistakes practice, only offer Again/Good.
+  // practice, only offer Again/Good.
   bool get _isRepeatCard {
     if (_isPracticeOnly) return true;
     if (_currentIndex >= _queue.length) return false;
@@ -492,6 +539,7 @@ class _StudyViewState extends State<StudyView> {
   @override
   void initState() {
     super.initState();
+    _cramMode = widget.recentMistakesOnly ? null : widget.cramMode;
     _audio = context.read<AudioService>();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadQueue();
@@ -511,13 +559,27 @@ class _StudyViewState extends State<StudyView> {
 
   void _loadQueue() {
     final provider = context.read<AppProvider>();
-    final queue = provider.getStudyQueue(
-      lessonId: widget.lessonId,
-      dueOnly: widget.recentMistakesOnly ? false : widget.dueOnly,
-      mistakesOnly: widget.recentMistakesOnly,
-    );
+    final queue = _cramMode != null
+        ? provider.getCramQueue(lessonId: widget.lessonId)
+        : provider.getStudyQueue(
+            lessonId: widget.lessonId,
+            dueOnly: !widget.recentMistakesOnly,
+            mistakesOnly: widget.recentMistakesOnly,
+          );
     setState(() => _startSession(queue));
 
+    _triggerPreload(0);
+  }
+
+  /// Starts a cram session in [mode] over the same lesson, or all lessons.
+  void _startCram(CramMode mode) {
+    final queue = context.read<AppProvider>().getCramQueue(
+      lessonId: widget.lessonId,
+    );
+    setState(() {
+      _cramMode = mode;
+      _startSession(queue);
+    });
     _triggerPreload(0);
   }
 
@@ -687,7 +749,7 @@ class _StudyViewState extends State<StudyView> {
     if (rating == SrsRating.again) {
       _againCardIds.add(cardId);
       if (_isPracticeOnly) {
-        // Mistakes practice never touches SRS state.
+        // Practice never touches SRS state.
       } else if (isFirstSessionRating) {
         final countedAt = record.countedAt = DateTime.now();
         provider.recordCardReview(card, SrsRating.again, at: countedAt);
@@ -721,10 +783,12 @@ class _StudyViewState extends State<StudyView> {
       }
     } else {
       _againCardIds.remove(cardId);
-      if (_isPracticeOnly) {
+      if (_isMistakesMode) {
         // Good in mistakes practice dismisses the mistake without touching SRS.
         card.mistakesClearedAt = DateTime.now();
         provider.saveState();
+      } else if (_isPracticeOnly) {
+        // Practice-only cram never touches the card.
       } else if (isFirstSessionRating) {
         final countedAt = record.countedAt = DateTime.now();
         provider.recordCardReview(card, rating, at: countedAt);
@@ -766,6 +830,7 @@ class _StudyViewState extends State<StudyView> {
       record: record,
       rating: rating,
       practiceOnly: _isPracticeOnly,
+      clearsMistakes: _isMistakesMode,
       history: _history,
       queue: _queue,
       answeredCount: _answeredCount,
@@ -1338,24 +1403,35 @@ class _StudyViewState extends State<StudyView> {
                         setState(() => _startSession(retryQueue));
                       },
                     ),
-                  ] else ...[
+                  ] else if (isMistakesMode) ...[
                     FilledButton.icon(
                       icon: const Icon(Icons.refresh),
-                      label: Text(
-                        isMistakesMode
-                            ? 'Review Mistakes Again'
-                            : 'Review All (Cram Mode)',
-                      ),
+                      label: const Text('Review Mistakes Again'),
                       onPressed: () {
                         final reloadQueue = provider.getStudyQueue(
                           lessonId: widget.lessonId,
                           dueOnly: false,
-                          mistakesOnly: isMistakesMode,
+                          mistakesOnly: true,
                         );
                         setState(() => _startSession(reloadQueue));
                       },
                     ),
-                  ],
+                  ] else
+                    for (final (index, mode) in cramChoicesAfterSession(
+                      lessonCram: widget.lessonId != null,
+                      finished: _cramMode,
+                    ).indexed) ...[
+                      if (index > 0) const SizedBox(width: 16),
+                      FilledButton.icon(
+                        icon: Icon(
+                          mode == CramMode.practice
+                              ? Icons.refresh
+                              : Icons.event_repeat,
+                        ),
+                        label: Text(cramButtonLabel(mode)),
+                        onPressed: () => _startCram(mode),
+                      ),
+                    ],
                 ],
               ),
             ],
@@ -1409,6 +1485,11 @@ class _StudyViewState extends State<StudyView> {
                     if (!isNarrow && widget.recentMistakesOnly)
                       Text(
                         'Recent Mistakes Review',
+                        style: Theme.of(context).textTheme.labelSmall,
+                      )
+                    else if (!isNarrow && _cramMode != null)
+                      Text(
+                        cramModeTitle(_cramMode!),
                         style: Theme.of(context).textTheme.labelSmall,
                       )
                     else if (!isNarrow &&

@@ -2365,6 +2365,24 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     return queue;
   }
 
+  /// Cram queue: every enabled card that is not new, due or not, lesson by
+  /// lesson, ignoring the review limit. Crammed from one lesson
+  /// ([lessonId]), the lesson's new cards come first, up to what is left of
+  /// the new-card limit: cramming never starts more new cards than a normal
+  /// review would.
+  List<StudyCardItem> getCramQueue({String? lessonId}) {
+    final all = getStudyQueue(lessonId: lessonId, dueOnly: false);
+    final seen = [
+      for (final item in all)
+        if (!item.card.isNewCard) item,
+    ];
+    if (lessonId == null) return seen;
+    final newCards = all
+        .where((item) => item.card.isNewCard)
+        .take(remainingNewCards24h);
+    return [...newCards, ...seen];
+  }
+
   List<Lesson> _orderedLessons() {
     final lastSavedRank = _lessonHierarchyOrder.values.fold<int>(
       -1,
