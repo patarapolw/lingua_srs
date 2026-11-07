@@ -121,7 +121,10 @@ class LessonListView extends StatelessWidget {
         content: Text(
           'In the last 24 hours you reviewed ${provider.reviewsOfSeenCardsInLast24Hours} cards (limit ${_limitText(provider.maxReviews24h)}) '
           'and started ${provider.newCardsIntroducedLast24h} new cards (limit ${_limitText(provider.maxNewCards24h)}).\n\n'
-          'You can adjust your limits in Settings, or continue practicing in Cram Mode (which ignores the daily limits).',
+          'You can adjust your limits in Settings, or cram the cards you have '
+          'already seen: practice only, or update their schedules as a '
+          'review would. Cram Mode ignores the review limit and never '
+          'starts new cards.',
         ),
         actions: [
           TextButton(
@@ -134,18 +137,17 @@ class LessonListView extends StatelessWidget {
             },
             child: const Text('Open Settings'),
           ),
-          FilledButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const StudyView(dueOnly: false),
-                ),
-              );
-            },
-            child: const Text('Practice in Cram Mode'),
-          ),
+          for (final mode in CramMode.values)
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => StudyView(cramMode: mode)),
+                );
+              },
+              child: Text(cramButtonLabel(mode)),
+            ),
         ],
       ),
     );

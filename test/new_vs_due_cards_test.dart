@@ -555,7 +555,7 @@ void main() {
       expect(provider.remainingNewCards24h, 1);
     });
 
-    test('cram mode ignores both daily limits', () async {
+    test('the all-cards queue ignores both daily limits', () async {
       final provider = await newProvider(maxReviews: 1, maxNewCards: 1);
       provider.lessons.add(
         lessonWith('Cram', [
