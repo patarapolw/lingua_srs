@@ -16,6 +16,7 @@ import '../services/ai_discussion_search.dart';
 import '../services/deepseek_service.dart';
 import '../services/srs_service.dart';
 import '../services/storage_service.dart';
+import '../services/study_queue_order.dart';
 import '../services/sync_account_service.dart';
 import '../services/sync_apply.dart';
 import '../services/sync_client.dart';
@@ -2255,6 +2256,21 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     return getRandomSentenceForVocab(vocab);
   }
 
+  /// Reviews of already-seen cards today, on every device: today's reviews
+  /// less the new cards started today.
+  int get seenCardReviewsToday {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final reviews = dailyReviewCounts[today] ?? 0;
+    final newCards = dailyNewCardCounts[today] ?? 0;
+    return max(0, reviews - newCards);
+  }
+
+  static String _posKey(StudyCardItem item) {
+    final pos = item.vocab.pos.trim().toLowerCase();
+    return pos.isEmpty ? 'general' : pos;
+  }
+
   // Generate study queue for a lesson (or all)
   List<StudyCardItem> getStudyQueue({
     String? lessonId,
@@ -2270,83 +2286,36 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     final rand = Random();
 
     for (final lesson in targetLessons) {
-      final Map<String, List<StudyCardItem>> posGroups = {};
-
+      final lessonItems = <StudyCardItem>[];
       for (final vocab in lesson.vocabularies) {
-        final posKey = vocab.pos.trim().toLowerCase().isEmpty
-            ? 'general'
-            : vocab.pos.trim().toLowerCase();
-
-        // KO -> EN Card
-        if (vocab.cardTargetToNative.isActive) {
-          final card = vocab.cardTargetToNative;
+        for (final card in [
+          vocab.cardTargetToNative,
+          vocab.cardNativeToTarget,
+        ]) {
+          if (!card.isActive) continue;
           final isEligible = mistakesOnly
               ? card.hasRecentMistake
               : (!dueOnly || card.isAvailable);
           if (isEligible && seenCardIds.add(card.id)) {
-            posGroups
-                .putIfAbsent(posKey, () => [])
-                .add(
-                  StudyCardItem(
-                    vocab: vocab,
-                    card: card,
-                    lesson: lesson,
-                    sentenceResolver: () => getRandomSentenceForVocab(vocab),
-                  ),
-                );
-          }
-        }
-
-        // EN -> KO Card
-        if (vocab.cardNativeToTarget.isActive) {
-          final card = vocab.cardNativeToTarget;
-          final isEligible = mistakesOnly
-              ? card.hasRecentMistake
-              : (!dueOnly || card.isAvailable);
-          if (isEligible && seenCardIds.add(card.id)) {
-            posGroups
-                .putIfAbsent(posKey, () => [])
-                .add(
-                  StudyCardItem(
-                    vocab: vocab,
-                    card: card,
-                    lesson: lesson,
-                    sentenceResolver: () => getRandomSentenceForVocab(vocab),
-                  ),
-                );
+            lessonItems.add(
+              StudyCardItem(
+                vocab: vocab,
+                card: card,
+                lesson: lesson,
+                sentenceResolver: () => getRandomSentenceForVocab(vocab),
+              ),
+            );
           }
         }
       }
-
-      if (posGroups.isEmpty) continue;
-
-      // Shuffle cards within each POS bucket
-      final activeBuckets = <List<StudyCardItem>>[];
-      final sortedPosKeys = posGroups.keys.toList()..shuffle(rand);
-      for (final key in sortedPosKeys) {
-        final items = posGroups[key]!;
-        items.shuffle(rand);
-        activeBuckets.add(items);
-      }
-
-      // Interleave across POS categories
-      while (activeBuckets.isNotEmpty) {
-        activeBuckets.shuffle(rand);
-        for (var i = activeBuckets.length - 1; i >= 0; i--) {
-          final bucket = activeBuckets[i];
-          if (bucket.isNotEmpty) {
-            queue.add(bucket.removeLast());
-          }
-          if (bucket.isEmpty) {
-            activeBuckets.removeAt(i);
-          }
-        }
-      }
+      // Shuffle within each lesson, interleaved across parts of speech.
+      queue.addAll(interleaveByGroup(lessonItems, _posKey, rand));
     }
 
     if (dueOnly && !mistakesOnly) {
-      // Reviews first, then new cards; each has its own rolling 24h limit.
-      // New cards follow hierarchy order and favor lessons already in progress.
+      // Each kind has its own rolling 24h limit. Reviews are shuffled across
+      // lessons; new cards follow hierarchy order and favor lessons already in
+      // progress, and are mixed in after the day's first few reviews.
       final due = <StudyCardItem>[];
       final newCards = <StudyCardItem>[];
       for (final item in queue) {
@@ -2374,7 +2343,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       // up any of its quota.
       var reviewBudget = remainingReviews24h;
       final reviews = <StudyCardItem>[];
-      for (final item in due) {
+      for (final item in interleaveByGroup(due, _posKey, rand)) {
         if (item.card.isShortInterval) {
           reviews.add(item);
         } else if (reviewBudget > 0) {
@@ -2385,8 +2354,12 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       final prioritizedNewCards = [
         ...newCardsInPriorityOrder,
         ...otherNewCards,
-      ].take(remainingNewCards24h);
-      return [...reviews, ...prioritizedNewCards];
+      ].take(remainingNewCards24h).toList();
+      return mixNewCardsIntoReviews(
+        reviews: reviews,
+        newCards: prioritizedNewCards,
+        leadIn: newCardLeadIn(seenCardReviewsToday),
+      );
     }
 
     return queue;

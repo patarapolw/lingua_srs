@@ -20,6 +20,7 @@ lingua_srs/
 │   ├── services/
 │   │   ├── srs_service.dart           # SM-2 algorithm implementation
 │   │   ├── study_stats.dart           # Streak, right/wrong split and due forecast for Study activity
+│   │   ├── study_queue_order.dart     # Study queue order: part-of-speech interleaving, new cards mixed into reviews
 │   │   ├── yaml_parser_service.dart   # Markdown/YAML lesson & sentence parser
 │   │   ├── audio_service.dart         # Audio playback, TTS and offline caching
 │   │   ├── image_cache_service.dart   # Disk cache for online images in Markdown
