@@ -339,6 +339,17 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                 ),
                 const SizedBox(height: 24),
               ],
+              Text('Cards by stage', style: theme.textTheme.titleMedium),
+              const SizedBox(height: 8),
+              Wrap(
+                children: [
+                  for (final (index, entry) in stageCounts.entries.indexed) ...[
+                    if (index > 0) const Text(' · '),
+                    _stageCount(entry.key, entry.value),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 24),
               if (maxDue > 0) ...[
                 Text('Next 7 days', style: theme.textTheme.titleMedium),
                 // The Study button counts fewer when the 24-hour limit
@@ -354,7 +365,7 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                   ),
                 const SizedBox(height: 12),
                 SizedBox(
-                  height: 100,
+                  height: 110,
                   child: Row(
                     children: [
                       for (var index = 0; index < forecast.length; index++)
@@ -387,18 +398,8 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                 ),
                 const SizedBox(height: 24),
               ],
-              Text('Cards by stage', style: theme.textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Wrap(
-                children: [
-                  for (final (index, entry) in stageCounts.entries.indexed) ...[
-                    if (index > 0) const Text(' · '),
-                    _stageCount(entry.key, entry.value),
-                  ],
-                ],
-              ),
+              // Each section above ends with its own gap.
               if (leeches.isNotEmpty) ...[
-                const SizedBox(height: 24),
                 Text(
                   'Leeches (${leeches.length})',
                   style: theme.textTheme.titleMedium,
@@ -765,12 +766,17 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                                   height: plotHeight,
                                   alignment: Alignment.bottomCenter,
                                   color: Colors.transparent,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 1,
-                                  ),
                                   child: count == 0
                                       ? null
                                       : Container(
+                                          // A gap between thin bars, so 30
+                                          // days don't merge into a block.
+                                          margin: const EdgeInsets.symmetric(
+                                            horizontal: 2,
+                                          ),
+                                          constraints: const BoxConstraints(
+                                            maxWidth: 12,
+                                          ),
                                           height: plotHeight * count / top,
                                           decoration: BoxDecoration(
                                             color: theme.colorScheme.primary,
@@ -881,17 +887,29 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
     Color? color,
   }) {
     final barHeight = maximum == 0 ? 2.0 : 60.0 * count / maximum;
+    final theme = Theme.of(context);
     return Semantics(
       label: tooltip,
+      excludeSemantics: true,
       child: Tooltip(
         message: tooltip,
         child: Column(
           children: [
+            // Seven bars leave room to print each count.
+            if (count > 0)
+              Text(
+                formatCount(count),
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            const SizedBox(height: 2),
             Expanded(
               child: Align(
                 alignment: Alignment.bottomCenter,
                 child: Container(
-                  width: 16,
+                  // Wide enough that the week doesn't look empty.
+                  width: 32,
                   height: barHeight,
                   decoration: BoxDecoration(
                     color: color ?? Theme.of(context).colorScheme.primary,

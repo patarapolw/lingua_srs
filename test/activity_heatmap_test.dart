@@ -368,6 +368,19 @@ void main() {
       findsOneWidget,
     );
     expect(find.byTooltip('Today: 1 due'), findsOneWidget);
+    // Each forecast bar prints its count.
+    expect(
+      find.descendant(
+        of: find.byTooltip('Today: 1 due'),
+        matching: find.text('1'),
+      ),
+      findsOneWidget,
+    );
+    // The deck by stage comes before the forecast.
+    expect(
+      tester.getTopLeft(find.text('Cards by stage')).dy,
+      lessThan(tester.getTopLeft(find.text('Next 7 days')).dy),
+    );
     expect(find.text('1 new'), findsOneWidget);
     expect(find.text('2 review'), findsOneWidget);
     expect(find.byTooltip('Review: 2 cards'), findsOneWidget);
