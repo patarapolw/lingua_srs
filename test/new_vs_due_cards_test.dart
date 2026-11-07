@@ -239,7 +239,7 @@ void main() {
       expect(await StorageService.loadMaxNewCards24h(), 5);
     });
 
-    test('due cards come before new cards', () async {
+    test('a fresh day starts with reviews before new cards', () async {
       final provider = await newProvider();
       provider.lessons.add(
         lessonWith('Mixed', [
@@ -256,6 +256,82 @@ void main() {
       expect(queue, hasLength(5));
       expect(queue.take(2).every((item) => item.card.isDue), isTrue);
       expect(queue.skip(2).every((item) => item.card.isNewCard), isTrue);
+    });
+
+    test('new cards are mixed in after the first 10 reviews', () async {
+      final provider = await newProvider();
+      provider.lessons.add(
+        lessonWith('Lead-in', [
+          for (var i = 0; i < 20; i++) dueVocab('복습$i'),
+          for (var i = 0; i < 2; i++) newVocab('새$i'),
+        ]),
+      );
+
+      final queue = provider.getStudyQueue(dueOnly: true);
+      final newPositions = [
+        for (var i = 0; i < queue.length; i++)
+          if (queue[i].card.isNewCard) i,
+      ];
+
+      expect(queue, hasLength(22));
+      expect(queue.take(10).every((item) => item.card.isDue), isTrue);
+      // 10 reviews left after the lead-in: one new card every 5.
+      expect(newPositions, [10, 16]);
+    });
+
+    test("today's reviews shorten the lead-in", () async {
+      final provider = await newProvider();
+      provider.lessons.add(
+        lessonWith('Later today', [
+          for (var i = 0; i < 15; i++) dueVocab('복습$i'),
+          newVocab('새'),
+        ]),
+      );
+      final first = provider.getStudyQueue(dueOnly: true);
+      for (final item in first.take(3)) {
+        await provider.recordCardReview(item.card, SrsRating.good);
+      }
+
+      expect(provider.seenCardReviewsToday, 3);
+      final queue = provider.getStudyQueue(dueOnly: true);
+      expect(queue, hasLength(13));
+      expect(queue.indexWhere((item) => item.card.isNewCard), 7);
+    });
+
+    test('new cards started today do not count toward the lead-in', () async {
+      final provider = await newProvider();
+      provider.lessons.add(
+        lessonWith('New only', [for (var i = 0; i < 3; i++) newVocab('새$i')]),
+      );
+      final first = provider.getStudyQueue(dueOnly: true);
+      await provider.recordCardReview(first.first.card, SrsRating.good);
+
+      expect(provider.seenCardReviewsToday, 0);
+    });
+
+    test('reviews are shuffled across lessons', () async {
+      final provider = await newProvider();
+      final first = lessonWith('First', [
+        for (var i = 0; i < 10; i++) dueVocab('하나$i'),
+      ]);
+      final second = lessonWith('Second', [
+        for (var i = 0; i < 10; i++) dueVocab('둘$i'),
+      ]);
+      provider.lessons.addAll([first, second]);
+
+      final lessonIds = provider
+          .getStudyQueue(dueOnly: true)
+          .map((item) => item.lesson.id)
+          .toList();
+
+      expect(lessonIds, hasLength(20));
+      // Lesson blocks would switch lessons once; a shuffle switches more
+      // (both blocks by chance is about 1 in 92,000).
+      var switches = 0;
+      for (var i = 1; i < lessonIds.length; i++) {
+        if (lessonIds[i] != lessonIds[i - 1]) switches++;
+      }
+      expect(switches, greaterThan(1));
     });
 
     test(
