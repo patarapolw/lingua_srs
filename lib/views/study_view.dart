@@ -24,7 +24,12 @@ import '../widgets/review_notes_editor.dart';
 import 'ai_discussion_dialog.dart';
 import 'vocab_edit_dialog.dart';
 
-class ReviewHistoryRecord {
+/// A study-session action that Undo takes back, newest last: a rating
+/// ([ReviewHistoryRecord]), [SendToBackRecord], [SuspendRecord] or
+/// [WrapUpRecord].
+sealed class SessionUndoEntry {}
+
+class ReviewHistoryRecord implements SessionUndoEntry {
   final int queueIndex;
   final SrsCard card;
   final int oldInterval;
@@ -264,6 +269,99 @@ void forgetCardInSession({
   }
 }
 
+/// A queue entry taken out of a study session, with the position it had.
+typedef RemovedQueueItem = ({int index, StudyCardItem item});
+
+/// A card moved to the end of the session queue without being rated.
+class SendToBackRecord implements SessionUndoEntry {
+  final StudyCardItem item;
+  final int fromIndex;
+  SendToBackRecord({required this.item, required this.fromIndex});
+}
+
+/// A card suspended during the session, and the queue entries it lost.
+class SuspendRecord implements SessionUndoEntry {
+  final StudyCardItem item;
+  final int index;
+  final List<RemovedQueueItem> removed;
+  final bool wasInAgainSet;
+  SuspendRecord({
+    required this.item,
+    required this.index,
+    required this.removed,
+    required this.wasInAgainSet,
+  });
+}
+
+/// The session was wrapped up: the unseen cards it dropped.
+class WrapUpRecord implements SessionUndoEntry {
+  final int fromIndex;
+  final List<RemovedQueueItem> removed;
+  WrapUpRecord({required this.fromIndex, required this.removed});
+}
+
+/// Moves the unanswered card at [index] to the end of [queue], unrated.
+/// Returns null when no other card is left after it, so there is nothing to
+/// move it behind.
+SendToBackRecord? sendCardToBack(List<StudyCardItem> queue, int index) {
+  if (index < 0 || index >= queue.length - 1) return null;
+  final item = queue.removeAt(index);
+  queue.add(item);
+  return SendToBackRecord(item: item, fromIndex: index);
+}
+
+/// Puts a card sent to the back where it was.
+void undoSendCardToBack(List<StudyCardItem> queue, SendToBackRecord record) {
+  queue.remove(record.item); // StudyCardItem has no ==, so identity
+  queue.insert(min(record.fromIndex, queue.length), record.item);
+}
+
+/// Removes every entry from [fromIndex] on for which [test] is true, and
+/// returns them in queue order with their positions.
+List<RemovedQueueItem> _removeFrom(
+  List<StudyCardItem> queue,
+  int fromIndex,
+  bool Function(StudyCardItem item) test,
+) {
+  final removed = <RemovedQueueItem>[];
+  for (var i = queue.length - 1; i >= max(fromIndex, 0); i--) {
+    if (test(queue[i])) removed.add((index: i, item: queue.removeAt(i)));
+  }
+  return removed.reversed.toList();
+}
+
+/// Puts back entries taken out by [removeCardFromSession] or [wrapUpQueue].
+void restoreRemovedItems(
+  List<StudyCardItem> queue,
+  List<RemovedQueueItem> removed,
+) {
+  for (final r in removed) {
+    queue.insert(min(r.index, queue.length), r.item);
+  }
+}
+
+/// Takes [card] out of the session from [fromIndex] on: the entry on screen
+/// and any re-queued Again copy. It no longer counts as a pending Again
+/// card. Mutates [queue] and [againCardIds].
+List<RemovedQueueItem> removeCardFromSession({
+  required SrsCard card,
+  required List<StudyCardItem> queue,
+  required int fromIndex,
+  required Set<String> againCardIds,
+}) {
+  againCardIds.remove(card.id);
+  return _removeFrom(queue, fromIndex, (i) => i.card.id == card.id);
+}
+
+/// Wraps up a session: from [fromIndex] (the first unanswered position) on,
+/// keeps only the re-queued copies of cards rated Again this session, and
+/// drops every card not yet seen. Mutates [queue].
+List<RemovedQueueItem> wrapUpQueue({
+  required List<StudyCardItem> queue,
+  required int fromIndex,
+  required Set<String> againCardIds,
+}) => _removeFrom(queue, fromIndex, (i) => !againCardIds.contains(i.card.id));
+
 /// Re-picks the sentence of every card in [queue] from [fromIndex] on that
 /// shows [vocab], when its sentence was deselected from the vocab (or the vocab
 /// had none and now has some). Earlier cards are left as they were answered.
@@ -310,7 +408,11 @@ class _StudyViewState extends State<StudyView> {
   int _answeredCount = 0; // Highest index of card answered so far
   bool _isAnswerRevealed = false;
   final List<ReviewHistoryRecord> _history = [];
+  // Every undoable action, ratings included, newest last.
+  final List<SessionUndoEntry> _undoStack = [];
   final Set<String> _againCardIds = {};
+  // Wrapped up: no unseen cards are brought in any more.
+  bool _wrappedUp = false;
   final Set<String> _sessionRatedCardIds = {};
   final FocusNode _keyboardFocusNode = FocusNode();
   // Held so dispose() can stop audio without a BuildContext lookup.
@@ -414,17 +516,22 @@ class _StudyViewState extends State<StudyView> {
       dueOnly: widget.recentMistakesOnly ? false : widget.dueOnly,
       mistakesOnly: widget.recentMistakesOnly,
     );
-    setState(() {
-      _queue = queue;
-      _currentIndex = 0;
-      _answeredCount = 0;
-      _isAnswerRevealed = false;
-      _history.clear();
-      _againCardIds.clear();
-      _sessionRatedCardIds.clear();
-    });
+    setState(() => _startSession(queue));
 
     _triggerPreload(0);
+  }
+
+  /// Starts a fresh session over [queue]. Call inside setState.
+  void _startSession(List<StudyCardItem> queue) {
+    _queue = queue;
+    _currentIndex = 0;
+    _answeredCount = 0;
+    _isAnswerRevealed = false;
+    _history.clear();
+    _undoStack.clear();
+    _againCardIds.clear();
+    _sessionRatedCardIds.clear();
+    _wrappedUp = false;
   }
 
   /// Pre-buffers audio in background for the next few cards
@@ -628,6 +735,7 @@ class _StudyViewState extends State<StudyView> {
 
     // Save snapshot in history for Undo (values captured before the review)
     _history.add(record);
+    _undoStack.add(record);
 
     setState(() {
       if (_currentIndex == _answeredCount) {
@@ -679,10 +787,32 @@ class _StudyViewState extends State<StudyView> {
   }
 
   void _undo() {
-    if (_history.isEmpty) return;
+    if (_undoStack.isEmpty) return;
     context.read<AudioService>().stop();
+    switch (_undoStack.removeLast()) {
+      case final ReviewHistoryRecord record:
+        _undoRating(record);
+      case final SendToBackRecord record:
+        _undoSendToBack(record);
+      case final SuspendRecord record:
+        _undoSuspend(record);
+      case final WrapUpRecord record:
+        _undoWrapUp(record);
+    }
+  }
+
+  void _showSnack(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(milliseconds: 1400),
+      ),
+    );
+  }
+
+  void _undoRating(ReviewHistoryRecord record) {
     final provider = context.read<AppProvider>();
-    final record = _history.removeLast();
+    _history.remove(record);
 
     // Remove the re-queued duplicate if one was inserted
     final dup = record.requeuedItem;
@@ -720,14 +850,154 @@ class _StudyViewState extends State<StudyView> {
       _isAnswerRevealed = true; // Show back of undone card ready to re-rate
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
+    _showSnack(
+      'Undid rating (${record.ratingGiven.name.toUpperCase()}) for '
+      '${_queue[_currentIndex].vocab.targetWord}',
+    );
+  }
+
+  // Send to back, suspend and wrap up act on the card being answered, never
+  // on one navigated back to: that card has history (undo, re-rate) tied to
+  // its queue position.
+  bool get _isOnUnansweredCard =>
+      _currentIndex < _queue.length && !_isReviewingPast;
+
+  bool get _canSendCurrentCardToBack =>
+      _isOnUnansweredCard && _currentIndex < _queue.length - 1;
+
+  void _sendCurrentCardToBack() {
+    if (!_canSendCurrentCardToBack) return;
+    context.read<AudioService>().stop();
+    final record = sendCardToBack(_queue, _currentIndex);
+    if (record == null) return;
+    _undoStack.add(record);
+    setState(() => _isAnswerRevealed = false);
+    _triggerPreload(_currentIndex);
+    _showSnack('Sent "${record.item.vocab.targetWord}" to the back.');
+  }
+
+  void _undoSendToBack(SendToBackRecord record) {
+    setState(() {
+      undoSendCardToBack(_queue, record);
+      _currentIndex = record.fromIndex;
+      _answeredCount = min(_answeredCount, _currentIndex);
+      _isAnswerRevealed = false;
+    });
+    _showSnack('Put "${record.item.vocab.targetWord}" back where it was.');
+  }
+
+  String _directionLabel(StudyCardItem item) {
+    final target = item.lesson.targetLanguage.toUpperCase();
+    final native = item.lesson.nativeLanguage.toUpperCase();
+    return item.isTargetToNative ? '$target ➔ $native' : '$native ➔ $target';
+  }
+
+  Future<void> _confirmSuspendCurrentCard() async {
+    if (!_isOnUnansweredCard) return;
+    final item = _queue[_currentIndex];
+    final direction = _directionLabel(item);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Suspend this card for "${item.vocab.targetWord}"?'),
         content: Text(
-          'Undid rating (${record.ratingGiven.name.toUpperCase()}) for ${_queue[_currentIndex].vocab.targetWord}',
+          'The $direction card is left out of reviews, with its progress '
+          'kept, until you unsuspend it from its chip in the lesson\'s '
+          'vocabulary list. The other direction is not affected.',
         ),
-        duration: const Duration(milliseconds: 1400),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Suspend'),
+          ),
+        ],
       ),
     );
+    if (confirmed != true || !mounted) return;
+    // The card may have moved on while the dialog was open.
+    if (!_isOnUnansweredCard || _queue[_currentIndex] != item) return;
+
+    context.read<AudioService>().stop();
+    final provider = context.read<AppProvider>();
+    final wasInAgainSet = _againCardIds.contains(item.card.id);
+    final index = _currentIndex;
+    final saved = provider.setCardSuspended(item.card, true);
+    setState(() {
+      final removed = removeCardFromSession(
+        card: item.card,
+        queue: _queue,
+        fromIndex: index,
+        againCardIds: _againCardIds,
+      );
+      _undoStack.add(
+        SuspendRecord(
+          item: item,
+          index: index,
+          removed: removed,
+          wasInAgainSet: wasInAgainSet,
+        ),
+      );
+      _isAnswerRevealed = false;
+    });
+    _triggerPreload(_currentIndex);
+    await saved;
+    if (!mounted) return;
+    _showSnack('Suspended "${item.vocab.targetWord}" ($direction).');
+  }
+
+  void _undoSuspend(SuspendRecord record) {
+    context.read<AppProvider>().setCardSuspended(record.item.card, false);
+    setState(() {
+      restoreRemovedItems(_queue, record.removed);
+      if (record.wasInAgainSet) _againCardIds.add(record.item.card.id);
+      _currentIndex = min(record.index, _queue.length);
+      _answeredCount = min(_answeredCount, _currentIndex);
+      _isAnswerRevealed = false;
+    });
+    _showSnack('Unsuspended "${record.item.vocab.targetWord}".');
+  }
+
+  void _wrapUp() {
+    if (_wrappedUp || _queue.isEmpty) return;
+    context.read<AudioService>().stop();
+    final from = _answeredCount;
+    final onScreen = _currentIndex < _queue.length
+        ? _queue[_currentIndex]
+        : null;
+    setState(() {
+      final removed = wrapUpQueue(
+        queue: _queue,
+        fromIndex: from,
+        againCardIds: _againCardIds,
+      );
+      _undoStack.add(WrapUpRecord(fromIndex: from, removed: removed));
+      _wrappedUp = true;
+      if (_currentIndex >= _queue.length || _queue[_currentIndex] != onScreen) {
+        _isAnswerRevealed = false;
+      }
+    });
+    _triggerPreload(_currentIndex);
+    final left = _queue.length - from;
+    if (left > 0) {
+      _showSnack(
+        'Wrapping up: $left Again ${left == 1 ? 'card' : 'cards'} left.',
+      );
+    }
+  }
+
+  void _undoWrapUp(WrapUpRecord record) {
+    setState(() {
+      restoreRemovedItems(_queue, record.removed);
+      _wrappedUp = false;
+      _currentIndex = min(record.fromIndex, _queue.length);
+      _answeredCount = min(_answeredCount, _currentIndex);
+      _isAnswerRevealed = false;
+    });
+    _showSnack('Undid wrap up.');
   }
 
   void _navigateBack() {
@@ -823,6 +1093,15 @@ class _StudyViewState extends State<StudyView> {
       _undo();
     }
 
+    // Send to back (B), suspend (P, asks first) and wrap up (W)
+    if (event.logicalKey == LogicalKeyboardKey.keyB) {
+      _sendCurrentCardToBack();
+    } else if (event.logicalKey == LogicalKeyboardKey.keyP) {
+      _confirmSuspendCurrentCard();
+    } else if (event.logicalKey == LogicalKeyboardKey.keyW) {
+      _wrapUp();
+    }
+
     // Audio replay shortcuts
     if (event.logicalKey == LogicalKeyboardKey.keyR &&
         _currentIndex < _queue.length) {
@@ -890,9 +1169,7 @@ class _StudyViewState extends State<StudyView> {
   Future<void> _confirmResetCurrentCard() async {
     if (!_canResetCurrentCard) return;
     final item = _queue[_currentIndex];
-    final direction = item.isTargetToNative
-        ? '${item.lesson.targetLanguage.toUpperCase()} ➔ ${item.lesson.nativeLanguage.toUpperCase()}'
-        : '${item.lesson.nativeLanguage.toUpperCase()} ➔ ${item.lesson.targetLanguage.toUpperCase()}';
+    final direction = _directionLabel(item);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1014,7 +1291,7 @@ class _StudyViewState extends State<StudyView> {
               Text(
                 hasPostponedCard
                     ? '1 difficult card was postponed for your next review session.'
-                    : (_queue.isEmpty
+                    : (_queue.isEmpty && !_wrappedUp
                           ? 'No cards found matching this queue.'
                           : 'You have completed all cards in this review queue.'),
                 textAlign: TextAlign.center,
@@ -1032,11 +1309,17 @@ class _StudyViewState extends State<StudyView> {
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                   const SizedBox(width: 16),
-                  if (_history.isNotEmpty) ...[
+                  if (_undoStack.isNotEmpty) ...[
                     FilledButton.tonalIcon(
                       icon: const Icon(Icons.undo),
                       label: Text(
-                        _showKeyHints ? 'Undo Last Card (Z)' : 'Undo Last Card',
+                        _undoStack.last is WrapUpRecord
+                            ? (_showKeyHints
+                                  ? 'Undo Wrap Up (Z)'
+                                  : 'Undo Wrap Up')
+                            : (_showKeyHints
+                                  ? 'Undo Last Card (Z)'
+                                  : 'Undo Last Card'),
                       ),
                       onPressed: _undo,
                     ),
@@ -1052,15 +1335,7 @@ class _StudyViewState extends State<StudyView> {
                             .getStudyQueue(dueOnly: false)
                             .where((item) => item.card.id == remainingCardId)
                             .toList();
-                        setState(() {
-                          _queue = retryQueue;
-                          _currentIndex = 0;
-                          _answeredCount = 0;
-                          _isAnswerRevealed = false;
-                          _history.clear();
-                          _againCardIds.clear();
-                          _sessionRatedCardIds.clear();
-                        });
+                        setState(() => _startSession(retryQueue));
                       },
                     ),
                   ] else ...[
@@ -1077,15 +1352,7 @@ class _StudyViewState extends State<StudyView> {
                           dueOnly: false,
                           mistakesOnly: isMistakesMode,
                         );
-                        setState(() {
-                          _queue = reloadQueue;
-                          _currentIndex = 0;
-                          _answeredCount = 0;
-                          _isAnswerRevealed = false;
-                          _history.clear();
-                          _againCardIds.clear();
-                          _sessionRatedCardIds.clear();
-                        });
+                        setState(() => _startSession(reloadQueue));
                       },
                     ),
                   ],
@@ -1103,7 +1370,7 @@ class _StudyViewState extends State<StudyView> {
     final currentNumber = distinctProgress(_queue, _currentIndex);
     final canGoBack = _currentIndex > 0;
     final canGoForward = _currentIndex < _answeredCount;
-    final canUndo = _history.isNotEmpty;
+    final canUndo = _undoStack.isNotEmpty;
 
     const overflowWidthCutoff = 700;
     final isNarrow = MediaQuery.sizeOf(context).width < overflowWidthCutoff;
@@ -1251,6 +1518,12 @@ class _StudyViewState extends State<StudyView> {
                     _openAiDiscussion(item);
                   case 'reset':
                     _confirmResetCurrentCard();
+                  case 'back':
+                    _sendCurrentCardToBack();
+                  case 'suspend':
+                    _confirmSuspendCurrentCard();
+                  case 'wrapup':
+                    _wrapUp();
                 }
               },
               itemBuilder: (context) => [
@@ -1286,10 +1559,28 @@ class _StudyViewState extends State<StudyView> {
                   ),
                 const PopupMenuDivider(),
                 moreItem(
+                  'back',
+                  Icons.low_priority,
+                  _showKeyHints ? 'Send to back (B)' : 'Send to back',
+                  enabled: _canSendCurrentCardToBack,
+                ),
+                moreItem(
+                  'suspend',
+                  Icons.pause_circle_outline,
+                  _showKeyHints ? 'Suspend card (P)' : 'Suspend card',
+                  enabled: _isOnUnansweredCard,
+                ),
+                moreItem(
                   'reset',
                   Icons.restart_alt,
                   'Reset card to New',
                   enabled: _canResetCurrentCard,
+                ),
+                moreItem(
+                  'wrapup',
+                  Icons.flag_outlined,
+                  _showKeyHints ? 'Wrap up session (W)' : 'Wrap up session',
+                  enabled: !_wrappedUp,
                 ),
                 if (item.lesson.targetLanguage == 'ko') ...[
                   const PopupMenuDivider(),
