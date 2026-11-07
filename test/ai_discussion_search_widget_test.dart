@@ -8,6 +8,7 @@ import 'package:lingua_srs/models/lesson.dart';
 import 'package:lingua_srs/models/vocab_item.dart';
 import 'package:lingua_srs/providers/app_provider.dart';
 import 'package:lingua_srs/services/audio_service.dart';
+import 'package:lingua_srs/services/tts_voice.dart';
 import 'package:lingua_srs/services/lesson_ai_prompt.dart';
 import 'package:lingua_srs/services/storage_service.dart';
 import 'package:lingua_srs/views/ai_discussion_dialog.dart';
@@ -20,6 +21,8 @@ import 'secret_storage_mock.dart';
 
 /// Neither screen under test may touch real audio plugins.
 class _FakeAudioService extends ChangeNotifier implements AudioService {
+  @override
+  TtsVoiceUsed? get lastVoice => null;
   @override
   bool get isPlaying => false;
   @override

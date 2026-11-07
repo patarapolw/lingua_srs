@@ -2,6 +2,7 @@ import 'package:uuid/uuid.dart';
 
 import 'sentence.dart';
 import 'shared_vocab.dart';
+import '../services/tts_text.dart';
 import 'srs_card.dart';
 
 class VocabItem {
@@ -82,8 +83,9 @@ class VocabItem {
   }
 
   /// What text-to-speech should say: [ttsText] when set, else [targetWord].
-  String get speechText =>
-      SharedVocab.isBlank(ttsText) ? targetWord : ttsText!.trim();
+  /// A [ttsText] that is only a locale prefix (`zh-TW:`) says [targetWord]
+  /// in that locale.
+  String get speechText => TtsText.speechOf(ttsText, targetWord);
 
   String get notes => shared.notes;
   set notes(String v) {

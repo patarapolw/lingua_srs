@@ -9,6 +9,7 @@ import '../models/srs_card.dart';
 import '../models/vocab_item.dart';
 import '../providers/app_provider.dart';
 import '../services/korean_text_search.dart';
+import '../services/tts_text.dart';
 import '../widgets/audio_button.dart';
 import '../widgets/audio_edit_fields.dart';
 import '../widgets/emphasis_text.dart';
@@ -1079,9 +1080,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                       ? null
                       : audioCtrl.text.trim(),
                   useAudio: useAudio,
-                  ttsText: ttsCtrl.text.trim().isEmpty
-                      ? null
-                      : ttsCtrl.text.trim(),
+                  ttsText: TtsText.clean(ttsCtrl.text),
                   notes: notesCtrl.text.trim(),
                   lessonId: widget.lessonId,
                 );
@@ -1421,11 +1420,8 @@ class _VocabEditDialogState extends State<VocabEditDialog>
         ? null
         : _audioCtrl.text.trim();
     widget.vocab.useAudio = _useAudio;
-    if ((widget.vocab.ttsText ?? '') != _ttsCtrl.text.trim()) {
-      widget.vocab.ttsText = _ttsCtrl.text.trim().isEmpty
-          ? null
-          : _ttsCtrl.text.trim();
-    }
+    final ttsText = TtsText.clean(_ttsCtrl.text);
+    if (widget.vocab.ttsText != ttsText) widget.vocab.ttsText = ttsText;
     widget.vocab.notes = _notesCtrl.text.trim();
     widget.vocab.disambiguation = _disambiguationCtrl.text.trim();
     widget.vocab.sentenceIds = _sentenceIds;

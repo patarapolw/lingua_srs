@@ -13,8 +13,8 @@ class TtsVoice {
   /// Whether the voice works without a network connection.
   final bool offline;
 
-  /// Whether the voice's language data is installed (only known once
-  /// [AudioService.listVoices] has asked).
+  /// Whether the voice's language data is installed (only known for an
+  /// offline voice once [AudioService.listVoices] has asked).
   final bool? installed;
 
   const TtsVoice({

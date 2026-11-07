@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../models/sentence.dart';
 import '../providers/app_provider.dart';
+import '../services/tts_text.dart';
 import '../widgets/audio_edit_fields.dart';
 import '../widgets/emphasis_text.dart';
 import '../widgets/markdown_content.dart';
@@ -163,9 +164,7 @@ class _SentencePoolViewState extends State<SentencePoolView> {
                         ? null
                         : audioCtrl.text.trim(),
                     useAudio: useAudio,
-                    ttsText: ttsCtrl.text.trim().isEmpty
-                        ? null
-                        : ttsCtrl.text.trim(),
+                    ttsText: TtsText.clean(ttsCtrl.text),
                     notes: notesCtrl.text.trim(),
                   );
                   await provider.addSentenceToPool(newSentence);
@@ -176,9 +175,7 @@ class _SentencePoolViewState extends State<SentencePoolView> {
                       ? null
                       : audioCtrl.text.trim();
                   sentence.useAudio = useAudio;
-                  sentence.ttsText = ttsCtrl.text.trim().isEmpty
-                      ? null
-                      : ttsCtrl.text.trim();
+                  sentence.ttsText = TtsText.clean(ttsCtrl.text);
                   sentence.notes = notesCtrl.text.trim();
                   await provider.updateSentenceInPool(sentence);
                 }

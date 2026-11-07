@@ -24,6 +24,7 @@ lingua_srs/
 │   │   ├── yaml_parser_service.dart   # Markdown/YAML lesson & sentence parser
 │   │   ├── audio_service.dart         # Audio playback, TTS and offline caching
 │   │   ├── tts_text.dart              # Splits a `zh-TW:`-style locale prefix off TTS text
+│   │   ├── locale_names.dart          # English names of locale tags (`zh-TW` → Chinese (Taiwan))
 │   │   ├── tts_voice.dart             # Device TTS voices: locale/region matching (3-letter codes too), the voice last used
 │   │   ├── image_cache_service.dart   # Disk cache for online images in Markdown
 │   │   ├── deepseek_service.dart      # DeepSeek chat client for quiz discussions
@@ -80,7 +81,7 @@ lingua_srs/
 │       ├── audio_button.dart          # Audio play/stop indicator
 │       ├── answer_workspace.dart      # Per-card handwriting or typed answer area
 │       ├── audio_edit_fields.dart     # Audio URL (preview, use-recording checkbox) and collapsible TTS text fields for edit dialogs
-│       ├── tts_voices_dialog.dart     # Lists the device's TTS voices by locale (copies a `tts` prefix)
+│       ├── tts_language_sheet.dart    # Bottom sheet to pick the language of a `tts` prefix
 │       ├── emphasis_text.dart         # Sentence text with **bold** segments, no Markdown
 │       ├── folder_picker_dialog.dart  # Pick an existing or new folder to move a lesson/folder into
 │       ├── lesson_hierarchy_view.dart # Lesson folder tree with reordering

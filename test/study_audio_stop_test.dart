@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lingua_srs/models/lesson.dart';
 import 'package:lingua_srs/providers/app_provider.dart';
 import 'package:lingua_srs/services/audio_service.dart';
+import 'package:lingua_srs/services/tts_voice.dart';
 import 'package:lingua_srs/views/study_view.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -14,6 +15,8 @@ import 'secret_storage_mock.dart';
 
 /// Records what the review asks of the audio service, and touches no plugin.
 class _RecordingAudioService extends ChangeNotifier implements AudioService {
+  @override
+  TtsVoiceUsed? get lastVoice => null;
   int stopCalls = 0;
   int answerSequences = 0;
 

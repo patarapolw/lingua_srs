@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../services/audio_service.dart';
+import '../services/locale_names.dart';
+import '../services/tts_text.dart';
 import 'audio_button.dart';
-import 'tts_voices_dialog.dart';
+import 'tts_language_sheet.dart';
 
 /// An "Audio URL" field for an edit dialog.
 ///
@@ -151,6 +153,14 @@ class _TtsTextFieldState extends State<TtsTextField> {
   late bool _expanded = widget.controller.text.trim().isNotEmpty;
 
   @override
+  void initState() {
+    super.initState();
+    // Lists the device's voices ahead of time, so the language sheet opens
+    // without waiting for the TTS engine.
+    context.read<AudioService>().warmVoices();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final controller = widget.controller;
@@ -170,26 +180,29 @@ class _TtsTextFieldState extends State<TtsTextField> {
         ),
         subtitle: ListenableBuilder(
           listenable: controller,
-          builder: (context, _) => Text(
-            controller.text.trim().isEmpty
-                ? 'Speaks the text as written.'
-                : 'Speaks: ${controller.text.trim()}',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.bodySmall,
-          ),
+          builder: (context, _) {
+            final override = TtsText.clean(controller.text);
+            return Text(
+              override == null
+                  ? 'Speaks the text as written.'
+                  : 'Speaks: $override',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall,
+            );
+          },
         ),
         trailing: ListenableBuilder(
           listenable: Listenable.merge([controller, widget.spokenFallback]),
           builder: (context, _) {
-            final override = controller.text.trim();
             return Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 AudioButton(
-                  fallbackText: override.isNotEmpty
-                      ? override
-                      : widget.spokenFallback.text,
+                  fallbackText: TtsText.speechOf(
+                    controller.text,
+                    widget.spokenFallback.text,
+                  ),
                   language: widget.language,
                   compact: true,
                 ),
@@ -212,11 +225,13 @@ class _TtsTextFieldState extends State<TtsTextField> {
           ListenableBuilder(
             listenable: Listenable.merge([controller, widget.spokenFallback]),
             builder: (context, _) {
-              final override = controller.text.trim();
               return TtsVoiceNote(
-                spokenText: override.isNotEmpty
-                    ? override
-                    : widget.spokenFallback.text,
+                spokenText: TtsText.speechOf(
+                  controller.text,
+                  widget.spokenFallback.text,
+                ),
+                controller: controller,
+                language: widget.language,
               );
             },
           ),
@@ -261,14 +276,42 @@ class SentenceAudioChoice extends StatelessWidget {
   }
 }
 
-/// Under the TTS text on Android (offline voices): which voice spoke
-/// [spokenText] the last time it was previewed, with a warning when it is not
-/// of the requested locale (a `zh-TW:` prefix spoken by a zh-CN voice), and a
-/// button that lists the device's voices.
+/// Under the TTS text on Android (offline voices): the language and region
+/// the text is spoken in, which opens a [TtsLanguageSheet] to change the
+/// prefix of [controller]'s TTS text, and which voice spoke [spokenText] the
+/// last time it was previewed, with a warning when it is not of the requested
+/// locale (a `zh-TW:` prefix spoken by a zh-CN voice).
 class TtsVoiceNote extends StatelessWidget {
   final String spokenText;
+  final TextEditingController? controller;
 
-  const TtsVoiceNote({super.key, required this.spokenText});
+  /// The language spoken without a prefix; [AudioService.defaultTtsLanguage]
+  /// when null.
+  final String? language;
+
+  const TtsVoiceNote({
+    super.key,
+    required this.spokenText,
+    this.controller,
+    this.language,
+  });
+
+  String get _defaultLanguage => language ?? AudioService.defaultTtsLanguage;
+
+  Future<void> _pickLanguage(BuildContext context, String? current) async {
+    final choice = await TtsLanguageSheet.show(
+      context,
+      current: current,
+      defaultLanguage: _defaultLanguage,
+    );
+    final controller = this.controller;
+    if (choice == null || controller == null) return;
+    final text = TtsText.withLocale(controller.text, choice.locale);
+    controller.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -278,28 +321,37 @@ class TtsVoiceNote extends StatelessWidget {
     final used = audioService.lastVoice;
     final usedHere = used != null && used.text == spokenText.trim();
     final voice = used?.voice;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
+    final current = controller == null
+        ? null
+        : TtsText.prefixOf(controller!.text);
+    final languageName = current == null
+        ? '${LocaleNames.of(_defaultLanguage)} (default)'
+        : LocaleNames.of(current);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: !usedHere
-              ? const SizedBox.shrink()
-              : Text(
-                  voice == null
-                      ? 'No installed voice for ${used.requested}.'
-                      : used.isSubstitute
-                      ? 'No ${used.requested} voice found; spoken by '
-                            '${voice.locale} (${voice.name}).'
-                      : 'Spoken by ${voice.locale} (${voice.name}).',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: used.isSubstitute ? theme.colorScheme.error : null,
-                  ),
-                ),
-        ),
-        TextButton(
-          onPressed: () => TtsVoicesDialog.show(context),
-          child: const Text('Voices'),
-        ),
+        if (controller != null)
+          TextButton.icon(
+            onPressed: () => _pickLanguage(context, current),
+            icon: const Icon(Icons.translate, size: 18),
+            label: Text('Spoken in $languageName'),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+        if (usedHere)
+          Text(
+            voice == null
+                ? 'No installed voice for ${used.requested}.'
+                : used.isSubstitute
+                ? 'No ${used.requested} voice found; spoken by '
+                      '${voice.locale} (${voice.name}).'
+                : 'Spoken by ${voice.locale} (${voice.name}).',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: used.isSubstitute ? theme.colorScheme.error : null,
+            ),
+          ),
       ],
     );
   }
