@@ -80,35 +80,29 @@ void main() {
   });
 
   group('cramChoicesAfterSession', () {
-    test('all lessons: both choices, whatever ended', () {
-      for (final finished in [null, ...CramMode.values]) {
-        expect(
-          cramChoicesAfterSession(lessonCram: false, finished: finished),
-          CramMode.values,
-        );
-      }
+    test('all lessons: practice only and updating schedules', () {
+      expect(cramChoicesAfterSession(lessonCram: false), [
+        CramMode.practice,
+        CramMode.reschedule,
+      ]);
+      expect(cramChoicesAfterSession(lessonCram: false, canLearnNew: true), [
+        CramMode.practice,
+        CramMode.reschedule,
+      ], reason: 'Learn New Words is only for one lesson');
     });
 
-    test('one lesson: practice first, then updating schedules', () {
-      expect(cramChoicesAfterSession(lessonCram: true, finished: null), [
+    test('one lesson: Learn New Words while it can, and practice only', () {
+      expect(cramChoicesAfterSession(lessonCram: true, canLearnNew: true), [
+        CramMode.learnNew,
         CramMode.practice,
       ]);
-      expect(
-        cramChoicesAfterSession(lessonCram: true, finished: CramMode.practice),
-        CramMode.values,
-      );
-      expect(
-        cramChoicesAfterSession(
-          lessonCram: true,
-          finished: CramMode.reschedule,
-        ),
-        [CramMode.reschedule],
-      );
+      expect(cramChoicesAfterSession(lessonCram: true), [CramMode.practice]);
     });
 
     test('labels', () {
       expect(cramButtonLabel(CramMode.practice), 'Cram (Practice Only)');
       expect(cramButtonLabel(CramMode.reschedule), 'Cram and Update Schedules');
+      expect(cramButtonLabel(CramMode.learnNew), 'Learn New Words');
     });
   });
 
@@ -187,6 +181,68 @@ void main() {
     });
   });
 
+  group('getLearnNewQueue', () {
+    Future<AppProvider> newProvider({int? maxNewCards}) async {
+      SharedPreferences.setMockInitialValues({
+        'lingua_srs_windows_legacy_migration_complete': true,
+        'lingua_srs_lessons': '[]',
+        'lingua_srs_sentences': '[]',
+        'lingua_srs_max_new_cards_24h': ?maxNewCards,
+      });
+      final provider = AppProvider();
+      while (provider.isLoading) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      provider.lessons.clear();
+      return provider;
+    }
+
+    test('new cards spread among up to 2 seen cards each, new first', () async {
+      final provider = await newProvider();
+      final lesson = lessonWith('Learn', [
+        for (var i = 0; i < 3; i++) newVocab('새$i'),
+        for (var i = 0; i < 10; i++) seenVocab('봄$i'),
+      ]);
+      provider.lessons.addAll([
+        lesson,
+        lessonWith('Other', [newVocab('딴'), seenVocab('딴봄')]),
+      ]);
+
+      final queue = provider.getLearnNewQueue(lesson.id);
+      final kinds = [for (final i in queue) i.card.isNewCard ? 'N' : 'o'];
+
+      expect(kinds.join(), 'NooNooNoo');
+      expect(queue.every((item) => item.lesson.id == lesson.id), isTrue);
+    });
+
+    test('new cards stay within the new-card limit', () async {
+      final provider = await newProvider(maxNewCards: 2);
+      final lesson = lessonWith('Capped', [
+        for (var i = 0; i < 5; i++) newVocab('새$i'),
+        seenVocab('봄'),
+      ]);
+      provider.lessons.add(lesson);
+
+      expect(provider.learnableNewCardCount(lesson.id), 2);
+      final queue = provider.getLearnNewQueue(lesson.id);
+      expect(queue.where((item) => item.card.isNewCard), hasLength(2));
+      expect(queue, hasLength(3), reason: 'only one seen card to mix in');
+    });
+
+    test('nothing to learn: empty, even with seen cards', () async {
+      final provider = await newProvider(maxNewCards: 1);
+      final lesson = lessonWith('Done', [newVocab('새'), seenVocab('봄')]);
+      provider.lessons.add(lesson);
+      await provider.recordCardReview(
+        lesson.vocabularies.first.cardTargetToNative,
+        SrsRating.good,
+      );
+
+      expect(provider.learnableNewCardCount(lesson.id), 0);
+      expect(provider.getLearnNewQueue(lesson.id), isEmpty);
+    });
+  });
+
   group('Cram sessions', () {
     Future<AppProvider> loadedProvider(WidgetTester tester) async {
       SharedPreferences.setMockInitialValues({
@@ -262,31 +318,71 @@ void main() {
       expect(provider.newCardsIntroducedLast24h, 0);
       expect(provider.reviewsInLast24Hours, 0);
 
-      // A lesson's practice cram then offers to update schedules.
-      expect(find.text('Cram and Update Schedules'), findsOneWidget);
+      // The new card is still new, so a lesson can then learn it.
+      expect(find.text('Learn New Words'), findsOneWidget);
       expect(find.text('Cram (Practice Only)'), findsOneWidget);
+      expect(find.text('Cram and Update Schedules'), findsNothing);
     });
 
-    testWidgets('updating schedules starts new cards against the limit', (
+    testWidgets('Learn New Words starts new cards, only practises old ones', (
       tester,
     ) async {
       final provider = await loadedProvider(tester);
       final fresh = newVocab('새');
       final seen = seenVocab('봄');
-      final lesson = lessonWith('Reschedule', [seen, fresh]);
+      final lesson = lessonWith('Learn', [seen, fresh]);
       provider.lessons.add(lesson);
       final seenCard = seen.cardTargetToNative;
+      final dueDate = seenCard.dueDate;
       final repetitions = seenCard.repetitions;
       final remainingBefore = provider.remainingNewCards24h;
 
-      await openCram(tester, provider, lesson, CramMode.reschedule);
+      await openCram(tester, provider, lesson, CramMode.learnNew);
+      expect(find.text('NEW'), findsOneWidget, reason: 'a new card first');
       await answerGood(tester);
       await answerGood(tester);
 
       expect(fresh.cardTargetToNative.isNewCard, isFalse);
       expect(fresh.cardTargetToNative.introducedAt, isNotNull);
       expect(provider.remainingNewCards24h, remainingBefore - 1);
+      expect(seenCard.repetitions, repetitions);
+      expect(seenCard.dueDate, dueDate);
+    });
+
+    testWidgets('updating schedules reschedules every lesson\'s seen cards', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      final seen = seenVocab('봄');
+      final lesson = lessonWith('Reschedule', [seen, newVocab('새')]);
+      provider.lessons.add(lesson);
+      final seenCard = seen.cardTargetToNative;
+      final repetitions = seenCard.repetitions;
+      tester.view.physicalSize = const Size(1200, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AppProvider>.value(value: provider),
+            ChangeNotifierProvider<AudioService>(
+              create: (_) => _FakeAudioService(),
+            ),
+          ],
+          child: const MaterialApp(
+            home: StudyView(cramMode: CramMode.reschedule),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('NEW'), findsNothing, reason: 'no new cards');
+      await answerGood(tester);
+
       expect(seenCard.repetitions, repetitions + 1);
+      expect(find.text('Cram and Update Schedules'), findsOneWidget);
     });
 
     testWidgets('a normal lesson session offers practice-only cram', (

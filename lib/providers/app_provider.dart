@@ -2383,6 +2383,39 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     return [...newCards, ...seen];
   }
 
+  /// New cards [lessonId] can start now: its new cards, up to what is left
+  /// of the new-card limit.
+  int learnableNewCardCount(String lessonId) {
+    final lesson = _lessons.where((l) => l.id == lessonId).firstOrNull;
+    if (lesson == null) return 0;
+    return min(lesson.newCardsCount, remainingNewCards24h);
+  }
+
+  /// Learn New Words queue for [lessonId]: the new cards it can start now,
+  /// spread evenly among up to [oldCardsPerNewCard] of the lesson's seen
+  /// cards each, a new card first. The seen cards are only there to mix
+  /// with; the session does not reschedule them.
+  List<StudyCardItem> getLearnNewQueue(
+    String lessonId, {
+    int oldCardsPerNewCard = 2,
+  }) {
+    final all = getStudyQueue(lessonId: lessonId, dueOnly: false);
+    final newCards = all
+        .where((item) => item.card.isNewCard)
+        .take(remainingNewCards24h)
+        .toList();
+    if (newCards.isEmpty) return const [];
+    final seen = [
+      for (final item in all)
+        if (!item.card.isNewCard) item,
+    ]..shuffle();
+    return mixNewCardsIntoReviews(
+      reviews: seen.take(newCards.length * oldCardsPerNewCard).toList(),
+      newCards: newCards,
+      leadIn: 0,
+    );
+  }
+
   List<Lesson> _orderedLessons() {
     final lastSavedRank = _lessonHierarchyOrder.values.fold<int>(
       -1,

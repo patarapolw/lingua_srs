@@ -48,6 +48,60 @@ String lessonStudyLabel({
   return due + fresh > 0 ? 'Study (${due + fresh})' : 'Study';
 }
 
+/// The lesson's Learn New Words menu entry: with the number of new cards
+/// it would start, or without one when none can start.
+String learnNewWordsLabel(int learnable) =>
+    learnable > 0 ? 'Learn New Words ($learnable)' : 'Learn New Words';
+
+/// One button for the lesson's extra sessions, so the app bar stays
+/// uncluttered: Learn New Words and Cram (Practice Only).
+class _LearnOrCramButton extends StatelessWidget {
+  final Lesson lesson;
+
+  const _LearnOrCramButton({required this.lesson});
+
+  @override
+  Widget build(BuildContext context) {
+    final learnable = context.watch<AppProvider>().learnableNewCardCount(
+      lesson.id,
+    );
+    return PopupMenuButton<CramMode>(
+      icon: const Icon(Icons.school_outlined),
+      tooltip: 'Learn new words or cram',
+      enabled: lesson.activeCardsCount > 0,
+      onSelected: (mode) => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => StudyView(lessonId: lesson.id, cramMode: mode),
+        ),
+      ),
+      itemBuilder: (_) => [
+        PopupMenuItem(
+          value: CramMode.learnNew,
+          enabled: learnable > 0,
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(cramModeIcon(CramMode.learnNew)),
+            title: Text(learnNewWordsLabel(learnable)),
+            subtitle: const Text('Start new cards among a few known ones'),
+          ),
+        ),
+        PopupMenuItem(
+          value: CramMode.practice,
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(cramModeIcon(CramMode.practice)),
+            title: Text(cramButtonLabel(CramMode.practice)),
+            subtitle: const Text('No schedule changes'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class LessonDetailView extends StatefulWidget {
   final String lessonId;
 
@@ -521,6 +575,7 @@ class _LessonDetailViewState extends State<LessonDetailView> {
               ),
             const SizedBox(width: 8),
           ],
+          _LearnOrCramButton(lesson: lesson),
           FilledButton.icon(
             icon: const Icon(Icons.play_arrow_rounded),
             label: Text(
