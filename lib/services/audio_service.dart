@@ -6,11 +6,14 @@ import 'dart:math';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show AppLifecycleListener;
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 import '../models/sentence.dart';
+import 'tts_text.dart';
+import 'tts_voice.dart';
 
 class AudioService extends ChangeNotifier {
   final AudioPlayer _player;
@@ -36,6 +39,75 @@ class AudioService extends ChangeNotifier {
   bool get isPlaying => _isPlaying;
   String? get currentlyPlayingKey => _currentlyPlayingKey;
   bool get usesOfflineTts => _offlineTts;
+
+  TtsVoiceUsed? _lastVoice;
+
+  /// The voice the last offline TTS utterance was spoken with, or tried to
+  /// be, so an editor can say when a locale prefix found no voice of its own.
+  TtsVoiceUsed? get lastVoice => _lastVoice;
+
+  /// The language spoken when neither a lesson nor a prefix names one.
+  static const defaultTtsLanguage = 'ko';
+
+  Future<TtsVoiceList>? _voiceList;
+  AppLifecycleListener? _voiceListLifecycle;
+
+  /// Every voice of the device's current TTS engine, for showing which
+  /// locales can be used in a `tts` prefix. Only offline TTS (Android) has a
+  /// voice list; elsewhere this is empty.
+  ///
+  /// Asking the engine takes a while, so the list is kept until the app is
+  /// resumed (voices may have been installed in the meantime).
+  Future<TtsVoiceList> listVoices() {
+    if (!usesOfflineTts) return Future.value(const TtsVoiceList(null, []));
+    _voiceListLifecycle ??= AppLifecycleListener(
+      onResume: () => _voiceList = null,
+    );
+    return _voiceList ??= _loadVoices().then((list) {
+      // An engine that failed to answer is asked again next time.
+      if (list.voices.isEmpty) _voiceList = null;
+      return list;
+    });
+  }
+
+  /// Starts [listVoices] in the background, so the list is ready when it is
+  /// shown.
+  void warmVoices() {
+    if (usesOfflineTts) unawaited(listVoices());
+  }
+
+  Future<TtsVoiceList> _loadVoices() async {
+    String? engine;
+    var voices = <TtsVoice>[];
+    try {
+      final defaultEngine = await _tts.getDefaultEngine;
+      engine = defaultEngine?.toString();
+      voices = TtsVoice.fromPlugin(await _tts.getVoices);
+      // Only offline voices need their language data on the device. The
+      // checks are sent together rather than one round trip at a time.
+      final locales = {
+        for (final voice in voices)
+          if (voice.offline) voice.locale,
+      }.toList();
+      final answers = await Future.wait(locales.map(_tts.isLanguageInstalled));
+      final installed = {
+        for (var i = 0; i < locales.length; i++) locales[i]: answers[i] == true,
+      };
+      voices = [
+        for (final voice in voices)
+          voice.offline
+              ? voice.withInstalled(installed[voice.locale] ?? false)
+              : voice,
+      ];
+    } catch (e) {
+      debugPrint('Could not list TTS voices: $e');
+    }
+    voices.sort((a, b) {
+      final byLocale = a.locale.compareTo(b.locale);
+      return byLocale != 0 ? byLocale : a.name.compareTo(b.name);
+    });
+    return TtsVoiceList(engine, voices);
+  }
 
   AudioService() : this.withPlayers();
 
@@ -183,23 +255,37 @@ class AudioService extends ChangeNotifier {
     }
   }
 
+  /// The language code for the online TTS service. Chinese keeps its region
+  /// (`zh-TW` for Taiwan and traditional script, else `zh-CN`); other
+  /// languages are reduced to the language alone.
   String _resolveLanguageCode(String? lang) {
-    if (lang == null || lang.isEmpty) return 'ko';
+    if (lang == null || lang.isEmpty) return defaultTtsLanguage;
     final lower = lang.toLowerCase().trim();
+    final parts = lower.split(RegExp('[-_]'));
+    if (parts.first == 'zh' || parts.first == 'chinese') {
+      const traditional = {'tw', 'hant', 'hk', 'mo'};
+      return parts.skip(1).any(traditional.contains) ? 'zh-TW' : 'zh-CN';
+    }
     if (lower == 'ko' || lower == 'korean') return 'ko';
     if (lower == 'ja' || lower == 'japanese') return 'ja';
-    if (lower == 'zh' || lower == 'chinese') return 'zh-CN';
     if (lower == 'es' || lower == 'spanish') return 'es';
     if (lower == 'fr' || lower == 'french') return 'fr';
     if (lower == 'de' || lower == 'german') return 'de';
     if (lower == 'en' || lower == 'english') return 'en';
-    if (lower.contains('-')) return lower.split('-').first;
-    return lower;
+    return parts.first;
   }
 
-  /// Generates an audio stream URL for TTS
+  /// Generates an audio stream URL for TTS. A locale prefix on [text]
+  /// (`zh-TW:垃圾`, see [TtsText]) picks the voice instead of [language].
   String getTtsUrl(String text, {String? language}) {
-    final clean = Sentence.cleanForSpeech(text);
+    final tts = TtsText.parse(text);
+    return _ttsUrl(
+      Sentence.cleanForSpeech(tts.text),
+      language: tts.locale ?? language,
+    );
+  }
+
+  String _ttsUrl(String clean, {String? language}) {
     final lang = _resolveLanguageCode(language);
     final encoded = Uri.encodeComponent(clean);
     return 'https://translate.google.com/translate_tts?ie=UTF-8&tl=$lang&client=tw-ob&q=$encoded';
@@ -208,28 +294,28 @@ class AudioService extends ChangeNotifier {
   bool _isCurrent(int session) => !_isDisposed && session == _generation;
 
   /// Uses an installed offline Android voice; other platforms stream and cache online TTS.
+  ///
+  /// A locale prefix on [text] (`zh-TW:垃圾`, see [TtsText]) is not spoken:
+  /// it picks the voice instead of [language].
   Future<void> speak(String text, {String? language}) async {
-    if (Sentence.cleanForSpeech(text).isEmpty) return;
+    if (Sentence.cleanForSpeech(TtsText.parse(text).text).isEmpty) return;
     await _speak(text, ++_generation, language: language);
   }
 
   Future<void> _speak(String text, int session, {String? language}) async {
-    final clean = Sentence.cleanForSpeech(text);
+    final tts = TtsText.parse(text);
+    final clean = Sentence.cleanForSpeech(tts.text);
     if (clean.isEmpty) return;
+    final voice = tts.locale ?? language;
 
     if (usesOfflineTts) {
       await _haltPlayback();
       if (!_isCurrent(session)) return;
-      await _speakWithOfflineAndroidTts(
-        clean,
-        text,
-        session,
-        language: language,
-      );
+      await _speakWithOfflineAndroidTts(clean, text, session, language: voice);
       return;
     }
 
-    final ttsUrl = getTtsUrl(clean, language: language);
+    final ttsUrl = _ttsUrl(clean, language: voice);
     await _playAudio(ttsUrl, session, playingKey: 'tts_${text.trim()}');
   }
 
@@ -240,10 +326,14 @@ class AudioService extends ChangeNotifier {
     String? language,
   }) async {
     try {
-      final requestedLanguage = _resolveLanguageCode(language)
-          .toLowerCase()
-          .split('-')
-          .first;
+      // A region given with the language (a `ko-KR:` prefix) is kept, so its
+      // voices are preferred; otherwise the language is resolved as for
+      // online TTS, which turns plain `zh` into `zh-CN`.
+      final requested = language != null && TtsVoice.regionOf(language) != null
+          ? language
+          : _resolveLanguageCode(language);
+      final requestedLanguage = TtsVoice.languageOf(requested);
+      final requestedRegion = TtsVoice.regionOf(requested);
       final availableVoices = await _tts.getVoices;
       if (!_isCurrent(session)) return;
       if (availableVoices is! List) {
@@ -251,38 +341,46 @@ class AudioService extends ChangeNotifier {
         return;
       }
 
-      final offlineVoices = availableVoices
-          .whereType<Map>()
-          .map((voice) => Map<String, dynamic>.from(voice))
-          .where((voice) {
-            final locale = voice['locale']?.toString().toLowerCase() ?? '';
-            return locale.split('-').first == requestedLanguage &&
-                voice['network_required']?.toString() == '0';
-          })
+      final candidates = TtsVoice.fromPlugin(availableVoices)
+          .where((voice) => voice.language == requestedLanguage)
           .toList();
-      // A language can have several installed voices. Varying them keeps
-      // reviews from sounding monotonous; any that fails is skipped below.
-      offlineVoices.shuffle(_random);
+      // A language can have several voices. Varying them keeps reviews from
+      // sounding monotonous; any that fails is skipped below.
+      candidates.shuffle(_random);
+      // A region (zh-TW) puts that region's voices first; the language's
+      // other voices are still tried when none of them can be selected.
+      // Within each, installed offline voices come before network voices
+      // (such as Google's), which only speak with a connection.
+      int rank(TtsVoice voice) =>
+          (requestedRegion == null || voice.isInRegion(requestedRegion)
+              ? 0
+              : 2) +
+          (voice.offline ? 0 : 1);
+      mergeSort(candidates, compare: (a, b) => rank(a) - rank(b));
 
-      var voiceSelected = false;
-      for (final voice in offlineVoices) {
-        final locale = voice['locale']?.toString();
-        final name = voice['name']?.toString();
-        if (locale == null ||
-            name == null ||
-            await _tts.isLanguageInstalled(locale) != true) {
+      TtsVoice? selected;
+      for (final voice in candidates) {
+        if (voice.offline &&
+            await _tts.isLanguageInstalled(voice.locale) != true) {
           continue;
         }
-        if (await _tts.setVoice({'name': name, 'locale': locale}) == 1) {
-          voiceSelected = true;
+        final choice = {'name': voice.name, 'locale': voice.locale};
+        if (await _tts.setVoice(choice) == 1) {
+          selected = voice;
           break;
         }
       }
+      if (!_isCurrent(session)) return;
+      _lastVoice = TtsVoiceUsed(
+        text: originalText.trim(),
+        requested: requested,
+        voice: selected,
+      );
 
-      if (!voiceSelected) {
+      if (selected == null) {
         debugPrint(
-          'No installed offline Android TTS voice is available for "$requestedLanguage". '
-          'Install an offline voice in Android text-to-speech settings.',
+          'No Android TTS voice is available for "$requestedLanguage". '
+          'Install a voice in Android text-to-speech settings.',
         );
         return;
       }
@@ -449,6 +547,7 @@ class AudioService extends ChangeNotifier {
   @override
   void dispose() {
     _isDisposed = true;
+    _voiceListLifecycle?.dispose();
     _completeSub?.cancel();
     _player.dispose();
     if (_isSpeakingWithNativeTts) {

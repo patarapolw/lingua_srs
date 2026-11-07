@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lingua_srs/models/srs_card.dart';
 import 'package:lingua_srs/providers/app_provider.dart';
 import 'package:lingua_srs/services/audio_service.dart';
+import 'package:lingua_srs/services/tts_voice.dart';
 import 'package:lingua_srs/services/storage_service.dart';
 import 'package:lingua_srs/services/sync_records.dart';
 import 'package:lingua_srs/views/study_view.dart';
@@ -16,6 +17,8 @@ import 'secret_storage_mock.dart';
 
 /// Touches no audio plugin.
 class _SilentAudioService extends ChangeNotifier implements AudioService {
+  @override
+  TtsVoiceUsed? get lastVoice => null;
   @override
   bool get isPlaying => false;
   @override

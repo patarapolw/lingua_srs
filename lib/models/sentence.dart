@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:uuid/uuid.dart';
 
 import 'shared_vocab.dart';
+import '../services/tts_text.dart';
 
 /// One word's own `**` marking of a pool sentence.
 ///
@@ -77,8 +78,9 @@ class Sentence {
   }
 
   /// What text-to-speech should say: [ttsText] when set, else [targetText].
-  String get speechText =>
-      ttsText == null || ttsText!.trim().isEmpty ? targetText : ttsText!.trim();
+  /// A [ttsText] that is only a locale prefix (`zh-TW:`) says [targetText] in
+  /// that locale.
+  String get speechText => TtsText.speechOf(ttsText, targetText);
 
   static String withoutEmphasis(String text) => text
       .replaceAllMapped(RegExp(r'\*\*([^*]+)\*\*'), (match) => match[1] ?? '')

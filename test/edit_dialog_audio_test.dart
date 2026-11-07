@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lingua_srs/models/sentence.dart';
 import 'package:lingua_srs/providers/app_provider.dart';
 import 'package:lingua_srs/services/audio_service.dart';
+import 'package:lingua_srs/services/tts_voice.dart';
 import 'package:lingua_srs/views/sentence_pool_view.dart';
 import 'package:lingua_srs/widgets/audio_button.dart';
 import 'package:lingua_srs/widgets/audio_edit_fields.dart';
@@ -17,6 +18,8 @@ import 'secret_storage_mock.dart';
 
 /// Records what the buttons ask to play, without touching audio plugins.
 class _RecordingAudio extends ChangeNotifier implements AudioService {
+  @override
+  TtsVoiceUsed? get lastVoice => null;
   final spoken = <String>[];
   final played = <String>[];
 
