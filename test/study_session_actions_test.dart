@@ -401,6 +401,11 @@ void main() {
       expect(find.text('NEW'), findsNothing);
       expect(find.textContaining('(1/1)'), findsOneWidget);
       expect(seeded.fresh.status, SrsStatus.isNew);
+      expect(find.text('Wrapping up: 1 Again card left.'), findsOneWidget);
+
+      // Let the snackbar close; it covers the rating buttons.
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
 
       await reveal(tester);
       await rate(tester, 'Good');
