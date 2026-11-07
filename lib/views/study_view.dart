@@ -190,6 +190,14 @@ int distinctProgress(List<StudyCardItem> queue, int index) {
   return seen.length;
 }
 
+/// Marks a practised card answered Again as a recent mistake, so it shows
+/// in Recent Mistakes (for 48 hours, as after a review's Again), without
+/// changing its schedule. Undo restores the card from its history record.
+void markPracticeMistake(SrsCard card) {
+  card.lastMistakeDate = DateTime.now();
+  card.lastRating = SrsRating.again;
+}
+
 /// Changes the rating of an already-answered card.
 /// Mutates the card, [queue], [againCardIds] and [record].
 void reRateRecord({
@@ -209,12 +217,17 @@ void reRateRecord({
 
   // 1. Card state.
   if (practiceOnly) {
-    // Practice never touches SRS. Mistakes practice only clears/restores the
-    // mistake; practice-only cram leaves the card as it was.
+    // Practice never touches the schedule. Mistakes practice only clears or
+    // restores the mistake; other practice marks or unmarks one on Again.
     if (clearsMistakes) {
       card.mistakesClearedAt = nowAgain
           ? record.oldMistakesClearedAt
           : DateTime.now();
+    } else if (nowAgain) {
+      markPracticeMistake(card);
+    } else {
+      card.lastMistakeDate = record.oldLastMistakeDate;
+      card.lastRating = record.oldLastRating;
     }
   } else if (record.wasFirstSessionRating) {
     record.restore();
@@ -813,8 +826,12 @@ class _StudyViewState extends State<StudyView> {
 
     if (rating == SrsRating.again) {
       _againCardIds.add(cardId);
-      if (_isPracticeCard(card)) {
-        // Practice never touches SRS state.
+      if (_isMistakesMode) {
+        // Already a recent mistake; mistakes practice never touches SRS.
+      } else if (_isPracticeCard(card)) {
+        // Practice leaves the schedule alone but still records the mistake.
+        markPracticeMistake(card);
+        provider.saveState();
       } else if (isFirstSessionRating) {
         final countedAt = record.countedAt = DateTime.now();
         provider.recordCardReview(card, SrsRating.again, at: countedAt);

@@ -113,6 +113,21 @@ void main() {
     });
   });
 
+  group('markPracticeMistake', () {
+    test('makes a seen card a recent mistake without rescheduling it', () {
+      final card = seenVocab('봄').cardTargetToNative;
+      final dueDate = card.dueDate;
+      final interval = card.interval;
+
+      markPracticeMistake(card);
+
+      expect(card.hasRecentMistake, isTrue);
+      expect(card.dueDate, dueDate);
+      expect(card.interval, interval);
+      expect(card.status, SrsStatus.review);
+    });
+  });
+
   group('getCramQueue', () {
     Future<AppProvider> newProvider({int? maxReviews, int? maxNewCards}) async {
       SharedPreferences.setMockInitialValues({
@@ -360,6 +375,37 @@ void main() {
 
       // The Again card is back at the end, as a repeat.
       expect(find.text('REPEAT'), findsOneWidget);
+    });
+
+    testWidgets('practice Again shows in Recent Mistakes, schedule kept', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      final seen = seenVocab('봄');
+      final lesson = lessonWith('Mistake', [seen]);
+      provider.lessons.add(lesson);
+      final card = seen.cardTargetToNative;
+      final dueDate = card.dueDate;
+      final repetitions = card.repetitions;
+      final status = card.status;
+
+      await openCram(tester, provider, lesson, CramMode.practice);
+      await tester.tap(find.textContaining('Show Answer'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Again'));
+      await tester.pumpAndSettle();
+
+      expect(card.hasRecentMistake, isTrue);
+      expect(provider.getRecentMistakesCount(lessonId: lesson.id), 1);
+      expect(card.dueDate, dueDate);
+      expect(card.repetitions, repetitions);
+      expect(card.status, status);
+      expect(provider.reviewsInLast24Hours, 0);
+
+      // Undo takes the mistake back.
+      await tester.tap(find.text('Undo Last Card'));
+      await tester.pumpAndSettle();
+      expect(card.hasRecentMistake, isFalse);
     });
 
     testWidgets('practice only leaves schedules and new cards alone', (
