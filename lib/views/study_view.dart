@@ -419,6 +419,26 @@ String cramModeTitle(CramMode mode) => switch (mode) {
   CramMode.learnNew => 'Learn new words',
 };
 
+/// The chip on a card whose rating doesn't change its schedule: one only
+/// practised ([practice]: practice-only cram, the seen cards of Learn New
+/// Words, Recent Mistakes), or a repeat of a card already rated this
+/// session, back after Again.
+({String label, String tooltip}) unscheduledCardChip({
+  required bool practice,
+}) => practice
+    ? (
+        label: 'PRACTICE · schedule unchanged',
+        tooltip:
+            "Practice only: this answer doesn't change the card's "
+            'schedule.',
+      )
+    : (
+        label: 'REPEAT · schedule unchanged',
+        tooltip:
+            'Already rated in this session: this answer only decides '
+            "whether it comes back again. It doesn't change the schedule.",
+      );
+
 /// How a cram session treats ratings.
 enum CramMode {
   /// Ratings never change a card's schedule; new cards stay new. From one
@@ -559,6 +579,13 @@ class _StudyViewState extends State<StudyView> {
   }
 
   bool get _offersOnlyAgainAndGood => _isRepeatCard || _isFreshCard;
+
+  // The chip on a card whose rating doesn't change its schedule: practice,
+  // or a repeat of a card already rated this session.
+  ({String label, String tooltip})? get _unscheduledChip {
+    if (!_isRepeatCard) return null;
+    return unscheduledCardChip(practice: _isPracticeOnly);
+  }
 
   @override
   void initState() {
@@ -1787,6 +1814,34 @@ class _StudyViewState extends State<StudyView> {
                                   children: [
                                     // Same colour as the New badge in the
                                     // lesson list; explains the two buttons.
+                                    if (_unscheduledChip case (
+                                      :final label,
+                                      :final tooltip,
+                                    ))
+                                      Tooltip(
+                                        message: tooltip,
+                                        child: Chip(
+                                          visualDensity: VisualDensity.compact,
+                                          side: BorderSide.none,
+                                          avatar: Icon(
+                                            Icons.event_busy_outlined,
+                                            size: 16,
+                                            color: theme
+                                                .colorScheme
+                                                .onSecondaryContainer,
+                                          ),
+                                          label: Text(label),
+                                          backgroundColor: theme
+                                              .colorScheme
+                                              .secondaryContainer,
+                                          labelStyle: TextStyle(
+                                            color: theme
+                                                .colorScheme
+                                                .onSecondaryContainer,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
                                     if (_isFreshCard)
                                       Chip(
                                         visualDensity: VisualDensity.compact,
@@ -2279,11 +2334,12 @@ class _StudyViewState extends State<StudyView> {
                                           fontWeight: FontWeight.bold,
                                         ),
                                       ),
-                                      if (!_isRepeatCard)
-                                        Text(
-                                          _nextIn(SrsRating.again),
-                                          style: const TextStyle(fontSize: 11),
-                                        ),
+                                      Text(
+                                        _isRepeatCard
+                                            ? 'no change'
+                                            : _nextIn(SrsRating.again),
+                                        style: const TextStyle(fontSize: 11),
+                                      ),
                                     ],
                                   ),
                                 ),
@@ -2342,11 +2398,12 @@ class _StudyViewState extends State<StudyView> {
                                           fontSize: 16,
                                         ),
                                       ),
-                                      if (!_isRepeatCard)
-                                        Text(
-                                          _nextIn(SrsRating.good),
-                                          style: const TextStyle(fontSize: 11),
-                                        ),
+                                      Text(
+                                        _isRepeatCard
+                                            ? 'no change'
+                                            : _nextIn(SrsRating.good),
+                                        style: const TextStyle(fontSize: 11),
+                                      ),
                                     ],
                                   ),
                                 ),

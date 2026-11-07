@@ -106,6 +106,19 @@ void main() {
     });
   });
 
+  group('unscheduledCardChip', () {
+    test('practice and repeat say the schedule is unchanged', () {
+      expect(
+        unscheduledCardChip(practice: true).label,
+        'PRACTICE · schedule unchanged',
+      );
+      expect(
+        unscheduledCardChip(practice: false).label,
+        'REPEAT · schedule unchanged',
+      );
+    });
+  });
+
   group('getCramQueue', () {
     Future<AppProvider> newProvider({int? maxReviews, int? maxNewCards}) async {
       SharedPreferences.setMockInitialValues({
@@ -316,6 +329,51 @@ void main() {
       await tester.pumpAndSettle();
     }
 
+    testWidgets('a repeat after Again says its schedule is unchanged', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      final lesson = lessonWith('Repeat', [seenVocab('봄'), seenVocab('여름')]);
+      for (final vocab in lesson.vocabularies) {
+        vocab.cardTargetToNative.dueDate = DateTime.now().subtract(
+          const Duration(days: 1),
+        );
+      }
+      provider.lessons.add(lesson);
+      tester.view.physicalSize = const Size(1200, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AppProvider>.value(value: provider),
+            ChangeNotifierProvider<AudioService>(
+              create: (_) => _FakeAudioService(),
+            ),
+          ],
+          child: MaterialApp(home: StudyView(lessonId: lesson.id)),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      // First pass: scheduled, so no chip and real intervals.
+      expect(find.textContaining('schedule unchanged'), findsNothing);
+      expect(find.text('no change'), findsNothing);
+      await tester.tap(find.textContaining('Show Answer'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Again'));
+      await tester.pumpAndSettle();
+      await answerGood(tester);
+
+      // The Again card is back at the end, as a repeat.
+      expect(find.text('REPEAT · schedule unchanged'), findsOneWidget);
+      await tester.tap(find.textContaining('Show Answer'));
+      await tester.pumpAndSettle();
+      expect(find.text('no change'), findsNWidgets(2));
+    });
+
     testWidgets('practice only leaves schedules and new cards alone', (
       tester,
     ) async {
@@ -329,6 +387,7 @@ void main() {
       final repetitions = seenCard.repetitions;
 
       await openCram(tester, provider, lesson, CramMode.practice);
+      expect(find.text('PRACTICE · schedule unchanged'), findsOneWidget);
       await answerGood(tester); // the new card comes first
       await answerGood(tester);
 
