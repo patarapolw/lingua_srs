@@ -39,7 +39,7 @@ Flutter app (Dart, `provider` state management). See [README.md](README.md) for 
 
 If `flutter` or `dart` isn't available, you can't run tests or `flutter analyze`. In that case:
 
-- Formatting does not need Flutter. Install the Dart SDK from conda-forge (`dart-sdk`, any version meeting the `sdk:` constraint in `pubspec.yaml`), e.g. `micromamba create -y -p "$HOME/.dart-env" -c conda-forge dart-sdk`, then run `"$HOME/.dart-env/bin/dart" format lib test` before committing. Do not run `dart analyze` or `dart test` with it: the app depends on Flutter, which conda-forge does not have.
+- Formatting does not need Flutter. Install the Dart SDK alone with `tool/install_dart_sdk.sh`, which prints the path of `dart` (latest stable, like CI; pass a version to pin one), then run `"$(tool/install_dart_sdk.sh)" format lib test` before committing. It downloads Google's official zip from `storage.googleapis.com`, which cloud sessions can reach. Don't use micromamba or conda: micromamba is not installed in cloud sessions, and its installer hosts (`micro.mamba.pm`, `api.anaconda.org`) and GitHub release downloads are blocked there. Do not run `dart analyze` or `dart test` on the app with it: the app depends on Flutter.
 - If the Dart SDK can't be installed either, hand-format to Dart style: 2-space indent, trailing commas on multi-line argument lists and collections, lines ≤ 80 columns, and expect `dart format` to change something.
 - Still add or update tests in `test/`, written carefully since they can't be run.
 - Keep changes small and focused so they are easy to fix locally.
