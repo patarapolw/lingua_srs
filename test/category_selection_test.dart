@@ -23,10 +23,9 @@ void main() {
         'nouns',
         'verbs',
       });
-      expect(
-        nextCategorySelection({'nouns', 'verbs'}, 'Nouns', add: true),
-        {'verbs'},
-      );
+      expect(nextCategorySelection({'nouns', 'verbs'}, 'Nouns', add: true), {
+        'verbs',
+      });
       expect(nextCategorySelection({}, 'Nouns', add: true), {'nouns'});
     });
   });
