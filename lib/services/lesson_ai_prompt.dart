@@ -70,8 +70,11 @@ class LessonAiPrompt {
           'part-of-speech keys (such as nouns, verbs, adjectives, adverbs, '
           'expressions) directly under `vocabulary:`. Verbs and adjectives '
           'are in their dictionary form. `notes` and `examples` are '
-          'optional; in every example the word being learned is wrapped in '
-          '**bold** in the $target sentence. Quote every value.',
+          'optional. In every example, the word being learned must be '
+          'wrapped in **bold** in the $target sentence. In the $native '
+          'translation, also wrap in **bold** the words that translate it; '
+          'if no words in the translation match it (it is left out or '
+          'reworded), leave the translation without bold. Quote every value.',
       '```yaml\n'
           'vocabulary:\n'
           '  nouns:\n'
@@ -80,7 +83,7 @@ class LessonAiPrompt {
           '      notes: "..."\n'
           '      examples:\n'
           '        - $target: "... **...** ..."\n'
-          '          $native: "..."\n'
+          '          $native: "... **...** ..."\n'
           '```',
       'The learner can edit the list before adding it to the lesson.',
     ].join('\n');

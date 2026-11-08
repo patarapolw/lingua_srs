@@ -86,6 +86,10 @@ void main() {
       expect(prompt, contains('vocabulary:\n  nouns:\n    - ko: "..."'));
       expect(prompt, contains('      en: "..."'));
       expect(prompt, contains('not in its vocabulary yet'));
+      // The translation is asked to emphasize the word too, where it can.
+      expect(prompt, contains('          en: "... **...** ..."'));
+      expect(prompt, contains('In the en translation, also wrap in **bold**'));
+      expect(prompt, contains('leave the translation without bold'));
     });
 
     test('finds the vocabulary YAML in an answer', () {
@@ -98,7 +102,7 @@ vocabulary:
       en: "pear"
       examples:
         - ko: "**배**가 달아요."
-          en: "The pear is sweet."
+          en: "The **pear** is sweet."
   verbs:
     - ko: "사다"
       en: "to buy"
@@ -112,6 +116,18 @@ Edit them as you like.''';
       expect(yaml, isNot(contains('```')));
       final parsed = YamlParserService.parseLessonYaml(yaml);
       expect(parsed.lesson.vocabularies.map((v) => v.targetWord), ['배', '사다']);
+      // The translation's emphasis is kept as the word's own.
+      expect(
+        parsed
+            .lesson
+            .vocabularies
+            .first
+            .sentenceEmphasis
+            .values
+            .single
+            .translation,
+        'The **pear** is sweet.',
+      );
     });
 
     test('takes an unlabelled block too, and skips other blocks', () {
