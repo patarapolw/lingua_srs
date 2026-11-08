@@ -1510,6 +1510,30 @@ void main() {
       expect(view.initialYaml, yaml);
     });
 
+    testWidgets('a word written the same with another meaning is kept', (
+      tester,
+    ) async {
+      // The lesson has 사과 "apple"; 사과 "apology" may be another word.
+      await openLessonChatWith(
+        tester,
+        '```yaml\n'
+        'vocabulary:\n'
+        '  nouns:\n'
+        '    - ko: "사과"\n'
+        '      en: "apology"\n'
+        '```\n',
+      );
+
+      expect(
+        find.text(
+          'Possible duplicates (same word, another meaning): '
+          '사과 "apology" (you have "apple")',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Edit and add to lesson'), findsOneWidget);
+    });
+
     testWidgets('a noun whose 하다 verb is known is pointed out', (tester) async {
       final (provider, lesson) = await loadedProvider(tester);
       lesson.vocabularies.add(_word('v-study', '공부하다', 'to study'));

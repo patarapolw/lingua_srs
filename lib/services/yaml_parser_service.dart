@@ -37,6 +37,25 @@ class MissingEmphasisException extends FormatException {
 /// An entry kept by [YamlParserService.withoutKnownVocabulary].
 typedef KeptVocabularyEntry = ({String word, String section});
 
+/// A word the learner has, to compare suggested vocabulary with: its target
+/// word, its translation, and its reading (such as Hanja or pinyin), which
+/// can be empty.
+typedef KnownVocabulary = ({String word, String meaning, String reading});
+
+/// A kept entry written exactly like another word, but whose translation has
+/// no meaning in common with it, so it may be another word that is spelled
+/// and read the same (배 "pear" and 배 "ship"), or the same word translated
+/// differently.
+typedef PossibleDuplicate = ({
+  String word,
+  String meaning,
+  String otherMeaning,
+
+  /// Whether the other word is earlier in the same YAML, rather than a word
+  /// the learner has.
+  bool inList,
+});
+
 /// Vocabulary YAML with the words that are already known left out, from
 /// [YamlParserService.withoutKnownVocabulary].
 class VocabularyYamlFilter {
@@ -53,10 +72,14 @@ class VocabularyYamlFilter {
   /// The target words of the entries that were left out, in order.
   final List<String> removed;
 
+  /// Kept entries that may still be duplicates, in order.
+  final List<PossibleDuplicate> possibleDuplicates;
+
   const VocabularyYamlFilter({
     required this.yaml,
     required this.keptEntries,
     required this.removed,
+    this.possibleDuplicates = const [],
   });
 }
 
@@ -326,14 +349,51 @@ class YamlParserService {
   static String vocabularyKey(String word) =>
       word.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
 
-  /// [yaml], plain vocabulary YAML, without the entries whose target word is
-  /// in [known] (keys from [vocabularyKey]) or comes earlier in [yaml]. The
-  /// rest of the text is kept as it is written, so only whole entries go, and
-  /// a part of speech left with no entries goes too. YAML that cannot be
-  /// read, and lists written in flow style (`[...]`), are left as they are.
+  /// Keys that hold a word's reading in vocabulary YAML: Korean Hanja, or a
+  /// reading such as pinyin.
+  static const readingKeys = ['hanja', 'reading', 'pinyin'];
+
+  /// Whether translations [a] and [b] have a meaning in common: a sense,
+  /// split at commas, semicolons and slashes, that is the same once notes in
+  /// parentheses, punctuation, case and a leading "to", "be" or article are
+  /// set aside ("to be pretty" and "Pretty!" share one). A translation that is
+  /// empty, or has no sense but "to be", has one in common with any.
+  static bool meaningsOverlap(String a, String b) {
+    final senses = _senses(a);
+    final others = _senses(b);
+    if (senses.isEmpty || others.isEmpty) return true;
+    return senses.any(others.contains);
+  }
+
+  static Set<String> _senses(String meaning) => {
+    for (final part
+        in meaning
+            .toLowerCase()
+            .replaceAll(RegExp(r'\([^)]*\)|\[[^\]]*\]'), ' ')
+            .split(RegExp(r'[,;/]')))
+      if (part
+              .replaceAll(RegExp(r'[^\p{L}\p{N}\s]+', unicode: true), ' ')
+              .trim()
+              .replaceAll(RegExp(r'\s+'), ' ')
+              .replaceFirst(RegExp(r'^(to )?(be )?((a|an|the) )?'), '')
+          case final sense when sense.isNotEmpty)
+        sense,
+  };
+
+  /// [yaml], plain vocabulary YAML, without the entries that duplicate a word
+  /// in [known] or an earlier entry in [yaml]. The rest of the text is kept
+  /// as it is written, so only whole entries go, and a part of speech left
+  /// with no entries goes too. YAML that cannot be read, and lists written in
+  /// flow style (`[...]`), are left as they are.
+  ///
+  /// An entry duplicates a word that is written the same ([vocabularyKey])
+  /// unless both have a reading ([readingKeys]) and the readings differ: then
+  /// they are different words, such as two with other Hanja. If their
+  /// translations have no meaning in common ([meaningsOverlap]), the entry is
+  /// kept but listed in [VocabularyYamlFilter.possibleDuplicates].
   static VocabularyYamlFilter withoutKnownVocabulary(
     String yaml,
-    Set<String> known,
+    Iterable<KnownVocabulary> known,
   ) {
     final YamlNode root;
     try {
@@ -355,9 +415,17 @@ class YamlParserService {
     final vocabulary = root.nodes['vocabulary'];
     final sections = vocabulary is YamlMap ? vocabulary : root;
 
-    final seen = {...known};
+    final seen = <String, List<({KnownVocabulary word, bool inList})>>{};
+    void remember(KnownVocabulary word, {required bool inList}) {
+      (seen[vocabularyKey(word.word)] ??= []).add((word: word, inList: inList));
+    }
+
+    for (final word in known) {
+      remember(word, inList: false);
+    }
     final kept = <KeptVocabularyEntry>[];
     final removed = <String>[];
+    final possibleDuplicates = <PossibleDuplicate>[];
     final cuts = <(int, int)>[];
 
     // The start of the line [offset] is on.
@@ -380,6 +448,17 @@ class YamlParserService {
       return null;
     }
 
+    String field(YamlMap item, List<String> keys) {
+      for (final entry in item.entries) {
+        final key = entry.key.toString().trim().toLowerCase();
+        if (keys.contains(key)) return entry.value?.toString().trim() ?? '';
+      }
+      return '';
+    }
+
+    String normalReading(String reading) =>
+        reading.replaceAll(RegExp(r'\s+'), '').toLowerCase();
+
     void filterSection(YamlNode key, YamlNode value) {
       if (value is YamlMap) {
         for (final entry in value.nodes.entries) {
@@ -394,14 +473,45 @@ class YamlParserService {
       for (var i = 0; i < items.length; i++) {
         final item = items[i];
         if (item is! YamlMap) continue;
-        final word = targetWord(item);
-        if (word == null || word.trim().isEmpty) continue;
-        if (!block || seen.add(vocabularyKey(word))) {
-          kept.add((word: word.trim(), section: key.value.toString().trim()));
-        } else {
-          removed.add(word.trim());
+        final word = targetWord(item)?.trim();
+        if (word == null || word.isEmpty) continue;
+        final entry = (
+          word: word,
+          meaning: field(item, knownNativeKeys),
+          reading: field(item, readingKeys),
+        );
+        // Words written the same whose readings do not tell them apart.
+        final same = [
+          for (final other in seen[vocabularyKey(word)] ?? const [])
+            if (entry.reading.isEmpty ||
+                other.word.reading.isEmpty ||
+                normalReading(entry.reading) ==
+                    normalReading(other.word.reading))
+              other,
+        ];
+        final duplicate = same.any(
+          (other) => meaningsOverlap(entry.meaning, other.word.meaning),
+        );
+        if (block && duplicate) {
+          removed.add(word);
           gone.add(i);
+          continue;
         }
+        kept.add((word: word, section: key.value.toString().trim()));
+        if (block && same.isNotEmpty) {
+          // A word the learner has comes before one in the list.
+          final other = same.firstWhere(
+            (other) => !other.inList,
+            orElse: () => same.first,
+          );
+          possibleDuplicates.add((
+            word: word,
+            meaning: entry.meaning,
+            otherMeaning: other.word.meaning,
+            inList: other.inList,
+          ));
+        }
+        remember(entry, inList: true);
       }
       if (gone.isEmpty) return;
       if (gone.length == items.length) {
@@ -430,6 +540,7 @@ class YamlParserService {
       yaml: text,
       keptEntries: kept,
       removed: removed,
+      possibleDuplicates: possibleDuplicates,
     );
   }
 

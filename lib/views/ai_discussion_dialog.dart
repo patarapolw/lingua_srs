@@ -211,10 +211,11 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
       final yaml = LessonAiPrompt.vocabularyYaml(content);
       if (yaml == null) return null;
       final vocabularies = [for (final other in lessons) ...other.vocabularies];
-      final filter = YamlParserService.withoutKnownVocabulary(yaml, {
+      final filter = YamlParserService.withoutKnownVocabulary(yaml, [
         for (final vocab in vocabularies)
-          YamlParserService.vocabularyKey(vocab.targetWord),
-      });
+          // Words have no reading (Hanja, pinyin) to tell them apart yet.
+          (word: vocab.targetWord, meaning: vocab.translation, reading: ''),
+      ]);
       return (
         filter: filter,
         hints: SuggestedVocabularyHints.forEntries(
@@ -228,11 +229,12 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
 
   /// An AI answer. In a lesson chat, an answer with vocabulary YAML in it
   /// gets a button that opens the YAML in the import screen, under the
-  /// lesson's name, to edit and add to the lesson. Words already in a lesson,
-  /// or listed twice, are left out of it and named under the button, and so
-  /// are words the learner may want to edit out: another spelling or form of
-  /// a word they have or that is listed earlier (see
-  /// [SuggestedVocabularyHints]).
+  /// lesson's name, to edit and add to the lesson. Under the button are named
+  /// the words left out because they are in a lesson or listed twice; the
+  /// words kept though written like another with another meaning, which may
+  /// be other words or the same one ([YamlParserService.withoutKnownVocabulary]);
+  /// and the words that are another form of one the learner has or that is
+  /// listed earlier ([SuggestedVocabularyHints]).
   Widget _answer(String content) {
     final markdown = MarkdownContent(content: content, selectable: true);
     final lesson = widget.lesson;
@@ -270,6 +272,15 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
               style: theme.textTheme.bodySmall,
             ),
           ),
+        if (offer.possibleDuplicates.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              'Possible duplicates (same word, another meaning): '
+              '${offer.possibleDuplicates.map(_describeDuplicate).join(', ')}',
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
         if (hints.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 4),
@@ -282,6 +293,12 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
       ],
     );
   }
+
+  /// 배 "ship" (you have "pear"), or (also listed as "pear").
+  static String _describeDuplicate(PossibleDuplicate duplicate) =>
+      '${duplicate.word} "${duplicate.meaning}" '
+      '(${duplicate.inList ? 'also listed as' : 'you have'} '
+      '"${duplicate.otherMeaning}")';
 
   /// Opens [yaml] in the import screen under [lesson]'s name. Nothing is added
   /// until the learner imports it there, so the words can be edited first.
