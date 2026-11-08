@@ -48,17 +48,74 @@ class LessonAiPrompt {
       if (body.isNotEmpty) 'Lesson content:\n"""\n$body\n"""',
       if (vocabulary.isNotEmpty) 'Lesson vocabulary:\n${vocabulary.join('\n')}',
       'Format your answer using Markdown.',
+      vocabularyYamlInstructions(lesson),
     ].join('\n\n');
+  }
+
+  /// The fixed question that asks for words to add to the lesson, as YAML the
+  /// learner can edit before adding it.
+  static const vocabularyQuestion =
+      'List more vocabulary for this lesson in YAML.';
+
+  /// How the AI writes vocabulary to add to [lesson], so that the reply opens
+  /// in the import screen as it is (see docs/lesson-format.md).
+  static String vocabularyYamlInstructions(Lesson lesson) {
+    final target = lesson.targetLanguage;
+    final native = lesson.nativeLanguage;
+    return [
+      'When the learner asks for vocabulary to add to this lesson, suggest '
+          'words that fit the lesson and are not in its vocabulary yet. Put '
+          'them in one ```yaml code block in this format, with '
+          'part-of-speech keys (such as nouns, verbs, adjectives, adverbs, '
+          'expressions) directly under `vocabulary:`. Verbs and adjectives '
+          'are in their dictionary form. `notes` and `examples` are '
+          'optional; in every example the word being learned is wrapped in '
+          '**bold** in the $target sentence. Quote every value.',
+      '```yaml\n'
+          'vocabulary:\n'
+          '  nouns:\n'
+          '    - $target: "..."\n'
+          '      $native: "..."\n'
+          '      notes: "..."\n'
+          '      examples:\n'
+          '        - $target: "... **...** ..."\n'
+          '          $native: "..."\n'
+          '```',
+      'The learner can edit the list before adding it to the lesson.',
+    ].join('\n');
+  }
+
+  /// The vocabulary YAML in an AI [answer]: the first fenced code block whose
+  /// root is `vocabulary:`, or null if there is none. It is not checked here;
+  /// the import screen parses it and shows any errors.
+  static String? vocabularyYaml(String answer) {
+    final fence = RegExp(
+      r'^[ \t]*```[ \t]*([A-Za-z]*)[ \t]*\r?\n([\s\S]*?)^[ \t]*```',
+      multiLine: true,
+    );
+    for (final match in fence.allMatches(answer)) {
+      final language = match.group(1)!.toLowerCase();
+      if (language.isNotEmpty && language != 'yaml' && language != 'yml') {
+        continue;
+      }
+      final body = match.group(2)!.trimRight();
+      if (RegExp(r'^vocabulary:', multiLine: true).hasMatch(body)) {
+        return '$body\n';
+      }
+    }
+    return null;
   }
 
   static List<String> suggestedQuestions(bool hasMessages) => hasMessages
       ? [
           'Quiz me on this lesson.',
+          vocabularyQuestion,
           'What are common mistakes with this grammar?',
         ]
       : [
           'Summarize this lesson.',
           'Explain the main grammar point simply.',
+          vocabularyQuestion,
           'Give me practice sentences using this lesson.',
         ];
 }

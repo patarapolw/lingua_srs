@@ -21,7 +21,17 @@ class YamlImportView extends StatefulWidget {
   final String? initialLessonName;
   final String? initialYaml;
 
-  const YamlImportView({super.key, this.initialLessonName, this.initialYaml});
+  /// Parses [initialYaml] as soon as the screen opens, so its preview (or its
+  /// errors) shows before anything is edited. For YAML that is meant to be
+  /// imported as it is, such as vocabulary an AI chat suggested.
+  final bool previewInitialYaml;
+
+  const YamlImportView({
+    super.key,
+    this.initialLessonName,
+    this.initialYaml,
+    this.previewInitialYaml = false,
+  });
 
   @override
   State<YamlImportView> createState() => _YamlImportViewState();
@@ -57,6 +67,11 @@ class _YamlImportViewState extends State<YamlImportView>
     super.initState();
     _lessonNameController.text = widget.initialLessonName ?? '';
     _yamlController.text = widget.initialYaml ?? '';
+    if (widget.previewInitialYaml && _yamlController.text.trim().isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _parseCurrentYaml();
+      });
+    }
   }
 
   @override

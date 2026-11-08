@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lingua_srs/models/lesson.dart';
 import 'package:lingua_srs/models/vocab_item.dart';
 import 'package:lingua_srs/services/lesson_ai_prompt.dart';
+import 'package:lingua_srs/services/yaml_parser_service.dart';
 
 Lesson buildLesson({String markdown = '## Grammar\n\n-아요 endings'}) => Lesson(
   title: 'Unit 1::Lesson 2',
@@ -65,6 +66,82 @@ void main() {
       expect(clipped, contains('a' * 100));
       expect(clipped, isNot(contains('a' * 101)));
       expect(clipped, contains('400 characters'));
+    });
+
+    test('both question lists offer vocabulary as YAML', () {
+      expect(
+        LessonAiPrompt.suggestedQuestions(false),
+        contains(LessonAiPrompt.vocabularyQuestion),
+      );
+      expect(
+        LessonAiPrompt.suggestedQuestions(true),
+        contains(LessonAiPrompt.vocabularyQuestion),
+      );
+    });
+
+    test('prompt says how to write vocabulary YAML in its languages', () {
+      final prompt = LessonAiPrompt.systemPrompt(buildLesson());
+
+      expect(prompt, contains('```yaml'));
+      expect(prompt, contains('vocabulary:\n  nouns:\n    - ko: "..."'));
+      expect(prompt, contains('      en: "..."'));
+      expect(prompt, contains('not in its vocabulary yet'));
+    });
+
+    test('finds the vocabulary YAML in an answer', () {
+      const answer = '''Here are some words:
+
+```yaml
+vocabulary:
+  nouns:
+    - ko: "배"
+      en: "pear"
+      examples:
+        - ko: "**배**가 달아요."
+          en: "The pear is sweet."
+  verbs:
+    - ko: "사다"
+      en: "to buy"
+```
+
+Edit them as you like.''';
+      final yaml = LessonAiPrompt.vocabularyYaml(answer)!;
+
+      expect(yaml, startsWith('vocabulary:\n  nouns:'));
+      expect(yaml, endsWith('en: "to buy"\n'));
+      expect(yaml, isNot(contains('```')));
+      final parsed = YamlParserService.parseLessonYaml(yaml);
+      expect(parsed.lesson.vocabularies.map((v) => v.targetWord), ['배', '사다']);
+    });
+
+    test('takes an unlabelled block too, and skips other blocks', () {
+      const answer = '''```json
+{"vocabulary": []}
+```
+
+```
+vocabulary:
+  nouns:
+    - ko: "배"
+      en: "pear"
+```''';
+
+      expect(
+        LessonAiPrompt.vocabularyYaml(answer),
+        'vocabulary:\n  nouns:\n    - ko: "배"\n      en: "pear"\n',
+      );
+    });
+
+    test('an answer without vocabulary YAML has none', () {
+      expect(LessonAiPrompt.vocabularyYaml('배 means pear.'), isNull);
+      expect(
+        LessonAiPrompt.vocabularyYaml('```yaml\nwords:\n  - 배\n```'),
+        isNull,
+      );
+      expect(
+        LessonAiPrompt.vocabularyYaml('```dart\nvocabulary: 1\n```'),
+        isNull,
+      );
     });
 
     test('suggested questions differ before and after the first message', () {

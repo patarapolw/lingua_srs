@@ -122,6 +122,40 @@ The full lesson body.
     );
   });
 
+  testWidgets('previews prefilled YAML on open when asked to', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: YamlImportView(
+          initialLessonName: 'Lesson 26',
+          initialYaml:
+              'vocabulary:\n  nouns:\n    - ko: "배"\n      en: "pear"\n',
+          previewInitialYaml: true,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 301));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 500)),
+    );
+    await tester.pump();
+
+    final importButton = tester.widget<FilledButton>(
+      find.ancestor(
+        of: find.text('Import Markdown'),
+        matching: find.byType(FilledButton),
+      ),
+    );
+    expect(importButton.onPressed, isNotNull);
+    expect(
+      find.descendant(of: find.byType(ListTile), matching: find.text('pear')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('explains that an existing lesson name adds to that lesson', (
     tester,
   ) async {

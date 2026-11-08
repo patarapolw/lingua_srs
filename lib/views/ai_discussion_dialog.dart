@@ -19,6 +19,7 @@ import '../widgets/ai_question_chip.dart';
 import '../widgets/emphasis_text.dart';
 import '../widgets/markdown_content.dart';
 import 'related_ai_discussions_sheet.dart';
+import 'yaml_import_view.dart';
 
 /// What the dialog header's More menu offers.
 enum _DialogMenuAction { delete }
@@ -180,6 +181,46 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
         setState(() => _error = 'Could not delete discussion: $error');
       }
     }
+  }
+
+  /// An AI answer. In a lesson chat, an answer with vocabulary YAML in it
+  /// gets a button that opens the YAML in the import screen, under the
+  /// lesson's name, to edit and add to the lesson.
+  Widget _answer(String content) {
+    final markdown = MarkdownContent(content: content, selectable: true);
+    final lesson = widget.lesson;
+    if (lesson == null || widget.orphaned) return markdown;
+    final yaml = LessonAiPrompt.vocabularyYaml(content);
+    if (yaml == null) return markdown;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        markdown,
+        const SizedBox(height: 6),
+        OutlinedButton.icon(
+          icon: const Icon(Icons.playlist_add),
+          label: const Text('Edit and add to lesson'),
+          onPressed: () => _addVocabulary(lesson, yaml),
+        ),
+      ],
+    );
+  }
+
+  /// Opens [yaml] in the import screen under [lesson]'s name. Nothing is added
+  /// until the learner imports it there, so the words can be edited first.
+  void _addVocabulary(Lesson lesson, String yaml) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => YamlImportView(
+          initialLessonName: joinHierarchyPath([
+            ...lesson.folderPath,
+            lesson.displayTitle,
+          ]),
+          initialYaml: yaml,
+          previewInitialYaml: true,
+        ),
+      ),
+    );
   }
 
   String _systemPrompt() {
@@ -740,10 +781,7 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                                 ),
                                 child: isUser
                                     ? SelectableText(message.content)
-                                    : MarkdownContent(
-                                        content: message.content,
-                                        selectable: true,
-                                      ),
+                                    : _answer(message.content),
                               ),
                             );
                           },
