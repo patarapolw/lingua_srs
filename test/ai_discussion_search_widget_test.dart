@@ -1534,6 +1534,40 @@ void main() {
       expect(find.text('Edit and add to lesson'), findsOneWidget);
     });
 
+    testWidgets('words of a lesson in another language are not compared', (
+      tester,
+    ) async {
+      final (provider, lesson) = await loadedProvider(tester);
+      // The same characters can be another word in another language.
+      provider.lessons.add(
+        Lesson(
+          title: 'Chinese',
+          targetLanguage: 'zh',
+          vocabularies: [_word('zh-1', '工夫', 'kung fu')],
+        ),
+      );
+      final id = LessonAiPrompt.discussionId(lesson.id);
+      await tester.runAsync(
+        () => provider.addAiDiscussionMessage(
+          id,
+          _msg(
+            'assistant',
+            '```yaml\n'
+                'vocabulary:\n'
+                '  nouns:\n'
+                '    - ko: "工夫"\n'
+                '      en: "kung fu"\n'
+                '```\n',
+            1,
+          ),
+        ),
+      );
+      await openChat(tester, provider, id, lesson: lesson);
+
+      expect(find.text('Edit and add to lesson'), findsOneWidget);
+      expect(find.textContaining('already in your lessons'), findsNothing);
+    });
+
     testWidgets('a noun whose 하다 verb is known is pointed out', (tester) async {
       final (provider, lesson) = await loadedProvider(tester);
       lesson.vocabularies.add(_word('v-study', '공부하다', 'to study'));

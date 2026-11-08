@@ -210,11 +210,26 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
     return _vocabularyOffers.putIfAbsent(content, () {
       final yaml = LessonAiPrompt.vocabularyYaml(content);
       if (yaml == null) return null;
-      final vocabularies = [for (final other in lessons) ...other.vocabularies];
+      // Only words of the lesson's language: the same characters can be
+      // another word in another language.
+      final language = AiQuestionSuggestions.languageCode(
+        lesson.targetLanguage,
+      );
+      final vocabularies = [
+        for (final other in lessons)
+          if (AiQuestionSuggestions.languageCode(other.targetLanguage) ==
+              language)
+            ...other.vocabularies,
+      ];
       final filter = YamlParserService.withoutKnownVocabulary(yaml, [
         for (final vocab in vocabularies)
-          // Words have no reading (Hanja, pinyin) to tell them apart yet.
-          (word: vocab.targetWord, meaning: vocab.translation, reading: ''),
+          // Words have no Hanja or reading to tell them apart yet.
+          (
+            word: vocab.targetWord,
+            meaning: vocab.translation,
+            hanja: '',
+            reading: '',
+          ),
       ]);
       return (
         filter: filter,

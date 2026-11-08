@@ -20,17 +20,22 @@ const _yaml = '''vocabulary:
       en: "sweet"
 ''';
 
-/// [known] words are `word`, `word = meaning` or `word = meaning = reading`;
-/// a word without a meaning duplicates any written the same.
-VocabularyYamlFilter _filter(String yaml, Iterable<String> known) =>
-    YamlParserService.withoutKnownVocabulary(yaml, [
-      for (final word in known)
-        (
-          word: word.split('=').first.trim(),
-          meaning: word.split('=').skip(1).firstOrNull?.trim() ?? '',
-          reading: word.split('=').skip(2).firstOrNull?.trim() ?? '',
-        ),
-    ]);
+/// [known] words are `word` or `word = meaning`; a word without a meaning
+/// duplicates any written the same. [hanja] and [reading] are given to all.
+VocabularyYamlFilter _filter(
+  String yaml,
+  Iterable<String> known, {
+  String hanja = '',
+  String reading = '',
+}) => YamlParserService.withoutKnownVocabulary(yaml, [
+  for (final word in known)
+    (
+      word: word.split('=').first.trim(),
+      meaning: word.split('=').skip(1).firstOrNull?.trim() ?? '',
+      hanja: hanja,
+      reading: reading,
+    ),
+]);
 
 List<String> _words(String yaml) =>
     YamlParserService.parseLessonYaml(yaml).lesson.vocabularies
@@ -165,18 +170,37 @@ void main() {
       expect(_filter(pretty, ['예쁘다 = to be pretty']).removed, ['예쁘다']);
     });
 
-    test('different readings are different words', () {
-      const hanja =
+    test('other Hanja make other words', () {
+      // Hangul is how a Korean word is read; Hanja is how it is written.
+      const fraud =
           'vocabulary:\n  nouns:\n    - ko: "사기"\n      hanja: "詐欺"\n'
           '      en: "fraud"\n';
       // Another word: kept, and not a possible duplicate either.
-      final other = _filter(hanja, ['사기 = morale = 士氣']);
+      final other = _filter(fraud, ['사기 = morale'], hanja: '士氣');
       expect(other.kept, ['사기']);
       expect(other.possibleDuplicates, isEmpty);
 
-      // The same reading, or none to compare, goes by the meaning.
-      expect(_filter(hanja, ['사기 = fraud = 詐欺']).removed, ['사기']);
-      expect(_filter(hanja, ['사기 = morale']).possibleDuplicates, hasLength(1));
+      // The same Hanja, or none to compare, goes by the meaning.
+      expect(_filter(fraud, ['사기 = fraud'], hanja: '詐欺').removed, ['사기']);
+      expect(_filter(fraud, ['사기 = morale']).possibleDuplicates, hasLength(1));
+    });
+
+    test('other readings make other words', () {
+      const walk =
+          'vocabulary:\n  verbs:\n    - zh: "行"\n      pinyin: "xíng"\n'
+          '      en: "to walk"\n';
+      expect(_filter(walk, ['行 = row'], reading: 'háng').kept, ['行']);
+      expect(_filter(walk, ['行 = to walk'], reading: 'Xíng').removed, [
+        '行',
+      ], reason: 'readings are compared without case');
+    });
+
+    test('Hanja and readings are told apart', () {
+      // A Hanja is not compared with a reading.
+      const study =
+          'vocabulary:\n  nouns:\n    - ko: "공부"\n      hanja: "工夫"\n'
+          '      en: "study"\n';
+      expect(_filter(study, ['공부 = study'], reading: 'gongbu').removed, ['공부']);
     });
 
     test('in the same list', () {
