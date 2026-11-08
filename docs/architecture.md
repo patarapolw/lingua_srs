@@ -5,6 +5,7 @@ Overview of the source layout. Lesson file syntax lives in [lesson-format.md](le
 ```
 lingua_srs/
 ├── worker/                            # Cloudflare Worker (D1) for sync; see sync.md
+├── tool/install_dart_sdk.sh           # Dart SDK alone, for `dart format` without Flutter (AGENTS.md)
 ├── lib/
 │   ├── main.dart                      # App entry point, MultiProvider, adaptive theming
 │   ├── models/
