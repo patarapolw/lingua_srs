@@ -499,20 +499,41 @@ void main() {
       },
     );
 
-    test('a card introduced more than 24 hours ago no longer counts', () async {
+    test('the new-card limit refills 16 hours after a card started', () async {
       final provider = await newProvider(maxNewCards: 3);
       final recent = dueVocab('최근');
       final old = dueVocab('예전');
       recent.cardTargetToNative.introducedAt = DateTime.now().subtract(
-        const Duration(hours: 23),
+        const Duration(hours: 15),
       );
       old.cardTargetToNative.introducedAt = DateTime.now().subtract(
-        const Duration(hours: 25),
+        const Duration(hours: 17),
       );
-      provider.lessons.add(lessonWith('Rolling', [recent, old]));
+      provider.lessons.add(lessonWith('Refill', [recent, old]));
 
-      expect(provider.newCardsIntroducedLast24h, 1);
+      expect(provider.newCardsIntroducedLast24h, 2);
       expect(provider.remainingNewCards24h, 2);
+    });
+
+    test('a full batch 16 hours after the last one is allowed', () async {
+      final provider = await newProvider(maxNewCards: 2);
+      final started = [dueVocab('하나'), dueVocab('둘')];
+      for (final vocab in started) {
+        vocab.cardTargetToNative.introducedAt = DateTime.now().subtract(
+          const Duration(hours: 16, minutes: 1),
+        );
+      }
+      provider.lessons.add(
+        lessonWith('Early', [...started, newVocab('셋'), newVocab('넷')]),
+      );
+
+      expect(provider.remainingNewCards24h, 2);
+      expect(
+        provider
+            .getStudyQueue(dueOnly: true)
+            .where((item) => item.card.isNewCard),
+        hasLength(2),
+      );
     });
 
     test('undoing a first review gives the new-card slot back', () async {

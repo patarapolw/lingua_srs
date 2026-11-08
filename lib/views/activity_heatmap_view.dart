@@ -51,11 +51,12 @@ String newCardsLimitText(int started, int limit) => limit > 0
     : '${formatCount(started)} started in the last 24 hours (no limit)';
 
 /// Under the new-cards chart: its bars are calendar days, while the limit
-/// line stands for the rolling 24 hours the limit counts, so a bar and the
-/// "started in the last 24 hours" line can differ.
+/// refills 16 hours after a batch (see `NewCardQuota`), so a bar and the
+/// "started in the last 24 hours" line can differ from the limit line.
 @visibleForTesting
 String newCardsChartCaption(int limit) => limit > 0
-    ? '*per calendar day. The limit counts the last 24 hours.'
+    ? '*per calendar day. The limit refills 16 hours after a batch, '
+          'and averages out to the limit per day.'
     : '*per calendar day.';
 
 /// The new cards not started yet, and how long they take at [limit] a day,

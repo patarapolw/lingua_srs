@@ -15,6 +15,7 @@ import '../models/vocab_item.dart';
 import '../models/vocab_merge_record.dart';
 import '../services/ai_discussion_search.dart';
 import '../services/deepseek_service.dart';
+import '../services/new_card_quota.dart';
 import '../services/srs_service.dart';
 import '../services/storage_service.dart';
 import '../services/study_queue_order.dart';
@@ -263,9 +264,28 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     return max(0, _maxReviews24h - reviewsOfSeenCardsInLast24Hours);
   }
 
+  /// New cards that can be started now. The limit refills 16 hours after a
+  /// batch and stays at most the limit per 24 hours on average; see
+  /// [NewCardQuota].
   int get remainingNewCards24h {
     if (_maxNewCards24h <= 0) return 999999;
-    return max(0, _maxNewCards24h - newCardsIntroducedLast24h);
+    final starts = <String, DateTime>{};
+    for (final lesson in _lessons) {
+      for (final vocab in lesson.vocabularies) {
+        for (final card in [
+          vocab.cardTargetToNative,
+          vocab.cardNativeToTarget,
+        ]) {
+          final introducedAt = card.introducedAt;
+          if (introducedAt != null) starts[card.id] = introducedAt;
+        }
+      }
+    }
+    return NewCardQuota.remaining(
+      _maxNewCards24h,
+      starts.values,
+      DateTime.now(),
+    );
   }
 
   Future<void> setMaxReviews24h(int limit) async {
@@ -2372,9 +2392,10 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     }
 
     if (dueOnly && !mistakesOnly) {
-      // Each kind has its own rolling 24h limit. Reviews are shuffled across
-      // lessons; new cards follow hierarchy order and favor lessons already in
-      // progress, and are mixed in after the day's first few reviews.
+      // Each kind has its own limit (new cards: see NewCardQuota). Reviews
+      // are shuffled across lessons; new cards follow hierarchy order and
+      // favor lessons already in progress, and are mixed in after the day's
+      // first few reviews.
       final due = <StudyCardItem>[];
       final newCards = <StudyCardItem>[];
       for (final item in queue) {
@@ -2446,7 +2467,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   /// size of the daily new-card limit (all of them while it is unlimited),
   /// whatever is left of the limit. Learn New Words is how to learn more
   /// than the limit, one lesson at a time; the cards it starts still count
-  /// toward the rolling 24 hours, so normal study brings in fewer.
+  /// toward the limit (see [NewCardQuota]), so normal study brings in fewer.
   int learnableNewCardCount(String lessonId) {
     final lesson = _lessons.where((l) => l.id == lessonId).firstOrNull;
     if (lesson == null) return 0;

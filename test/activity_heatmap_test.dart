@@ -744,7 +744,8 @@ void main() {
     test('the chart caption', () {
       expect(
         newCardsChartCaption(10),
-        '*per calendar day. The limit counts the last 24 hours.',
+        '*per calendar day. The limit refills 16 hours after a batch, '
+        'and averages out to the limit per day.',
       );
       expect(newCardsChartCaption(0), '*per calendar day.');
     });
@@ -792,7 +793,10 @@ void main() {
       );
       expect(find.text('Limit 10'), findsOneWidget);
       expect(
-        find.text('*per calendar day. The limit counts the last 24 hours.'),
+        find.text(
+          '*per calendar day. The limit refills 16 hours after a batch, '
+          'and averages out to the limit per day.',
+        ),
         findsOneWidget,
       );
       expect(find.text('Today'), findsWidgets);
