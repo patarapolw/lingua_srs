@@ -55,8 +55,8 @@ String newCardsLimitText(int started, int limit) => limit > 0
 /// "started in the last 24 hours" line can differ.
 @visibleForTesting
 String newCardsChartCaption(int limit) => limit > 0
-    ? 'Per calendar day. The limit counts the last 24 hours.'
-    : 'Per calendar day.';
+    ? 'per calendar day. The limit counts the last 24 hours.'
+    : 'per calendar day.';
 
 /// The new cards not started yet, and how long they take at [limit] a day,
 /// e.g. "312 new left, about 32 days at 10 a day".
@@ -837,7 +837,12 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
           ],
         ),
         const SizedBox(height: 4),
-        Text(newCardsChartCaption(limit), style: quiet),
+        // Italic, so it doesn't read as one more axis label like the date
+        // just above it.
+        Text(
+          newCardsChartCaption(limit),
+          style: quiet?.copyWith(fontStyle: FontStyle.italic),
+        ),
       ],
     );
   }

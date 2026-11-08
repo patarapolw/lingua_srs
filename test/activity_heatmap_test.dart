@@ -744,9 +744,9 @@ void main() {
     test('the chart caption', () {
       expect(
         newCardsChartCaption(10),
-        'Per calendar day. The limit counts the last 24 hours.',
+        'per calendar day. The limit counts the last 24 hours.',
       );
-      expect(newCardsChartCaption(0), 'Per calendar day.');
+      expect(newCardsChartCaption(0), 'per calendar day.');
     });
 
     test('the cards left and the time to start them', () {
@@ -792,7 +792,7 @@ void main() {
       );
       expect(find.text('Limit 10'), findsOneWidget);
       expect(
-        find.text('Per calendar day. The limit counts the last 24 hours.'),
+        find.text('per calendar day. The limit counts the last 24 hours.'),
         findsOneWidget,
       );
       expect(find.text('Today'), findsWidgets);
