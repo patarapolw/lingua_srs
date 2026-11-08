@@ -20,7 +20,7 @@ lingua_srs/
 │   ├── services/
 │   │   ├── srs_service.dart           # SM-2 algorithm implementation
 │   │   ├── study_stats.dart           # Streak, right/wrong split, due forecast and new cards per day for Study activity
-│   │   ├── card_preview.dart          # Picks the new cards a preview shows, in list order
+│   │   ├── card_preview.dart          # Picks the new cards a preview shows, in list order (shown in study_view)
 │   │   ├── study_queue_order.dart     # Study queue order: part-of-speech interleaving, new cards mixed into reviews
 │   │   ├── yaml_parser_service.dart   # Markdown/YAML lesson & sentence parser
 │   │   ├── audio_service.dart         # Audio playback, TTS and offline caching
@@ -62,7 +62,6 @@ lingua_srs/
 │   │   ├── lesson_list_view.dart      # Lessons dashboard & due queue counter
 │   │   ├── lesson_reader_view.dart    # Lesson Markdown reader & editor
 │   │   ├── lesson_detail_view.dart    # Vocab list, POS filters, direction toggles
-│   │   ├── card_preview_view.dart     # Flips through new cards without adding them to SRS
 │   │   ├── sentence_pool_view.dart    # Global & lesson sentence pool browser
 │   │   ├── vocab_pool_view.dart       # Vocab Pool tab: all distinct words, search, POS filter
 │   │   ├── yaml_import_view.dart      # File/folder import, editor, validator & preview

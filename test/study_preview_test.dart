@@ -13,7 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'secret_storage_mock.dart';
 
-/// The preview must not touch real audio plugins.
+/// The review screen must not touch real audio plugins.
 class _FakeAudioService extends ChangeNotifier implements AudioService {
   @override
   TtsVoiceUsed? get lastVoice => null;
@@ -119,20 +119,26 @@ void main() {
     await tester.tap(find.byIcon(Icons.style_outlined));
     await tester.pumpAndSettle();
 
-    expect(find.text('Preview new cards · NOUNS'), findsOneWidget);
-    expect(find.text('1 / 2'), findsOneWidget);
-    expect(find.text('집'), findsOneWidget);
-    expect(find.text('house'), findsNothing);
+    // The review screen, with every card marked as a preview.
+    expect(find.text('PREVIEW'), findsOneWidget);
+    expect(find.text('Preview · NOUNS: not added to reviews'), findsOneWidget);
+    expect(find.text('집'), findsWidgets);
 
-    await tester.tap(find.text('Flip'));
+    // Again records no mistake and only brings the card back.
+    await tester.tap(find.textContaining('Show Answer'));
     await tester.pumpAndSettle();
-    expect(find.text('house'), findsOneWidget);
-
-    await tester.tap(find.byTooltip('Next card'));
+    await tester.tap(find.text('Again'));
     await tester.pumpAndSettle();
-    expect(find.text('2 / 2'), findsOneWidget);
-    expect(find.text('책'), findsOneWidget);
-    expect(find.text('가다'), findsNothing);
+    for (var i = 0; i < 2; i++) {
+      expect(find.text('가다'), findsNothing);
+      await tester.tap(find.textContaining('Show Answer'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Good'));
+      await tester.pumpAndSettle();
+    }
+    expect(find.text('Preview Complete'), findsOneWidget);
+    expect(find.text('Preview Again'), findsOneWidget);
+    expect(find.text('Cram (Practice Only)'), findsNothing);
 
     await tester.pageBack();
     await tester.pumpAndSettle();
@@ -140,7 +146,9 @@ void main() {
     for (final vocab in lesson.vocabularies) {
       expect(vocab.cardTargetToNative.status, SrsStatus.isNew);
       expect(vocab.cardNativeToTarget.status, SrsStatus.isNew);
+      expect(vocab.cardTargetToNative.hasRecentMistake, isFalse);
     }
+    expect(provider.reviewsInLast24Hours, 0);
     expect(lesson.newCardsCount, newBefore);
     expect(provider.remainingNewCards24h, remainingBefore);
   });

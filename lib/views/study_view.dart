@@ -205,6 +205,7 @@ void reRateRecord({
   required SrsRating rating,
   required bool practiceOnly,
   bool clearsMistakes = true,
+  bool marksMistakes = true,
   required List<ReviewHistoryRecord> history,
   required List<StudyCardItem> queue,
   required int answeredCount,
@@ -223,6 +224,8 @@ void reRateRecord({
       card.mistakesClearedAt = nowAgain
           ? record.oldMistakesClearedAt
           : DateTime.now();
+    } else if (!marksMistakes) {
+      // A preview leaves the card exactly as it was.
     } else if (nowAgain) {
       markPracticeMistake(card);
     } else {
@@ -452,6 +455,13 @@ String cramModeTitle(CramMode mode) => switch (mode) {
             "whether it comes back again. It doesn't change the schedule.",
       );
 
+/// The chip on every card of a preview.
+const previewCardChip = (
+  label: 'PREVIEW',
+  tooltip:
+      "Preview only: the card stays new and isn't added to your reviews.",
+);
+
 /// How a cram session treats ratings.
 enum CramMode {
   /// Ratings never change a card's schedule; new cards stay new. From one
@@ -474,11 +484,21 @@ class StudyView extends StatefulWidget {
   final CramMode? cramMode;
   final bool recentMistakesOnly;
 
+  /// Cards to preview instead of studying: ratings only decide whether a
+  /// card comes back in the session, so every card stays as it was, new
+  /// cards stay new, and no mistake is recorded.
+  final List<StudyCardItem>? previewCards;
+
+  /// What [previewCards] were picked by, such as a part of speech.
+  final String? previewLabel;
+
   const StudyView({
     super.key,
     this.lessonId,
     this.cramMode,
     this.recentMistakesOnly = false,
+    this.previewCards,
+    this.previewLabel,
   });
 
   @override
@@ -549,10 +569,12 @@ class _StudyViewState extends State<StudyView> {
 
   bool get _isMistakesMode => widget.recentMistakesOnly;
 
+  bool get _isPreview => widget.previewCards != null;
+
   // Mistakes practice and practice-only cram never change a card's
   // schedule; Learn New Words changes only its new cards'.
   bool _isPracticeCard(SrsCard card) {
-    if (_isMistakesMode) return true;
+    if (_isMistakesMode || _isPreview) return true;
     return switch (_cramMode) {
       CramMode.practice => true,
       CramMode.learnNew => !_learnNewCardIds.contains(card.id),
@@ -596,6 +618,7 @@ class _StudyViewState extends State<StudyView> {
   // The chip on a card whose rating doesn't change its schedule: practice,
   // or a repeat of a card already rated this session.
   ({String label, String tooltip})? get _unscheduledChip {
+    if (_isPreview) return previewCardChip;
     if (!_isRepeatCard) return null;
     return unscheduledCardChip(practice: _isPracticeOnly);
   }
@@ -603,7 +626,9 @@ class _StudyViewState extends State<StudyView> {
   @override
   void initState() {
     super.initState();
-    _cramMode = widget.recentMistakesOnly ? null : widget.cramMode;
+    _cramMode = widget.recentMistakesOnly || widget.previewCards != null
+        ? null
+        : widget.cramMode;
     _audio = context.read<AudioService>();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadQueue();
@@ -624,7 +649,10 @@ class _StudyViewState extends State<StudyView> {
   void _loadQueue() {
     final provider = context.read<AppProvider>();
     final cramMode = _cramMode;
-    final queue = cramMode != null
+    final preview = widget.previewCards;
+    final queue = preview != null
+        ? [...preview]
+        : cramMode != null
         ? _cramQueue(provider, cramMode)
         : provider.getStudyQueue(
             lessonId: widget.lessonId,
@@ -828,6 +856,8 @@ class _StudyViewState extends State<StudyView> {
       _againCardIds.add(cardId);
       if (_isMistakesMode) {
         // Already a recent mistake; mistakes practice never touches SRS.
+      } else if (_isPreview) {
+        // A preview records nothing, not even the mistake.
       } else if (_isPracticeCard(card)) {
         // Practice leaves the schedule alone but still records the mistake.
         markPracticeMistake(card);
@@ -913,6 +943,7 @@ class _StudyViewState extends State<StudyView> {
       rating: rating,
       practiceOnly: _isPracticeCard(record.card),
       clearsMistakes: _isMistakesMode,
+      marksMistakes: !_isPreview,
       history: _history,
       queue: _queue,
       answeredCount: _answeredCount,
@@ -1402,12 +1433,17 @@ class _StudyViewState extends State<StudyView> {
 
     if (_queue.isEmpty || _currentIndex >= _queue.length) {
       final isMistakesMode = widget.recentMistakesOnly;
-      final hasPostponedCard = _againCardIds.length == 1;
+      // A preview postpones nothing: its cards are still new.
+      final hasPostponedCard = !_isPreview && _againCardIds.length == 1;
 
       return Scaffold(
         appBar: AppBar(
           title: Text(
-            isMistakesMode ? 'Recent Mistakes Complete' : 'Study Complete',
+            isMistakesMode
+                ? 'Recent Mistakes Complete'
+                : _isPreview
+                ? 'Preview Complete'
+                : 'Study Complete',
           ),
         ),
         body: Center(
@@ -1484,6 +1520,14 @@ class _StudyViewState extends State<StudyView> {
                             .toList();
                         setState(() => _startSession(retryQueue));
                       },
+                    ),
+                  ] else if (_isPreview) ...[
+                    FilledButton.icon(
+                      icon: const Icon(Icons.style_outlined),
+                      label: const Text('Preview Again'),
+                      onPressed: () => setState(
+                        () => _startSession([...widget.previewCards!]),
+                      ),
                     ),
                   ] else if (isMistakesMode) ...[
                     FilledButton.icon(
@@ -1565,6 +1609,14 @@ class _StudyViewState extends State<StudyView> {
                     if (!isNarrow && widget.recentMistakesOnly)
                       Text(
                         'Recent Mistakes Review',
+                        style: Theme.of(context).textTheme.labelSmall,
+                      )
+                    else if (!isNarrow && _isPreview)
+                      Text(
+                        widget.previewLabel == null
+                            ? 'Preview: not added to reviews'
+                            : 'Preview · ${widget.previewLabel}: '
+                                  'not added to reviews',
                         style: Theme.of(context).textTheme.labelSmall,
                       )
                     else if (!isNarrow && _cramMode != null)

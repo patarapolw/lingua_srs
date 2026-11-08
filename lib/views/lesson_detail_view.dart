@@ -10,7 +10,6 @@ import '../services/srs_service.dart';
 import '../widgets/audio_button.dart';
 import '../widgets/emphasis_text.dart';
 import '../widgets/markdown_content.dart';
-import 'card_preview_view.dart';
 import 'vocab_edit_dialog.dart';
 import 'study_view.dart';
 import 'yaml_import_view.dart';
@@ -608,10 +607,21 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                       : () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => CardPreviewView(
-                              lesson: lesson,
-                              cards: previewCards,
-                              filterLabel: _selectedCategory == 'All'
+                            builder: (_) => StudyView(
+                              lessonId: lesson.id,
+                              previewCards: [
+                                for (final preview in previewCards)
+                                  StudyCardItem(
+                                    vocab: preview.vocab,
+                                    card: preview.card,
+                                    lesson: lesson,
+                                    sentenceResolver: () => provider
+                                        .getRandomSentenceForVocab(
+                                          preview.vocab,
+                                        ),
+                                  ),
+                              ],
+                              previewLabel: _selectedCategory == 'All'
                                   ? null
                                   : _selectedCategory.toUpperCase(),
                             ),
