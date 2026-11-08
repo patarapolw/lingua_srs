@@ -116,7 +116,9 @@ void main() {
 
     await tester.tap(find.widgetWithText(FilterChip, 'NOUNS'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.style_outlined));
+    // Wide window: a labelled button counting the nouns' new cards.
+    expect(find.text('Preview (2)'), findsOneWidget);
+    await tester.tap(find.text('Preview (2)'));
     await tester.pumpAndSettle();
 
     // The review screen, with every card marked as a preview.

@@ -451,6 +451,35 @@ class _LessonDetailViewState extends State<LessonDetailView> {
 
     final compact = MediaQuery.sizeOf(context).width < 700;
 
+    final previewTooltip = previewCards.isEmpty
+        ? 'No new cards to preview'
+        : 'Preview ${previewCards.length} new '
+              '${previewCards.length == 1 ? 'card' : 'cards'} '
+              'without adding them to reviews';
+    final VoidCallback? openPreview = previewCards.isEmpty
+        ? null
+        : () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => StudyView(
+                lessonId: lesson.id,
+                previewCards: [
+                  for (final preview in previewCards)
+                    StudyCardItem(
+                      vocab: preview.vocab,
+                      card: preview.card,
+                      lesson: lesson,
+                      sentenceResolver: () =>
+                          provider.getRandomSentenceForVocab(preview.vocab),
+                    ),
+                ],
+                previewLabel: _selectedCategory == 'All'
+                    ? null
+                    : _selectedCategory.toUpperCase(),
+              ),
+            ),
+          );
+
     return Scaffold(
       appBar: AppBar(
         title: Column(
@@ -591,43 +620,30 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                   ),
                 ),
                 const SizedBox(width: 12),
-                IconButton(
-                  icon: Badge(
-                    isLabelVisible: previewCards.isNotEmpty,
-                    label: Text('${previewCards.length}'),
-                    child: const Icon(Icons.style_outlined),
+                if (compact)
+                  IconButton(
+                    icon: Badge(
+                      isLabelVisible: previewCards.isNotEmpty,
+                      label: Text('${previewCards.length}'),
+                      child: const Icon(Icons.preview_outlined),
+                    ),
+                    tooltip: previewTooltip,
+                    onPressed: openPreview,
+                  )
+                else
+                  Tooltip(
+                    message: previewTooltip,
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.preview_outlined),
+                      label: Text(
+                        previewCards.isEmpty
+                            ? 'Preview'
+                            : 'Preview (${previewCards.length})',
+                      ),
+                      onPressed: openPreview,
+                    ),
                   ),
-                  tooltip: previewCards.isEmpty
-                      ? 'No new cards to preview'
-                      : 'Preview ${previewCards.length} new '
-                            '${previewCards.length == 1 ? 'card' : 'cards'} '
-                            'without adding them to reviews',
-                  onPressed: previewCards.isEmpty
-                      ? null
-                      : () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => StudyView(
-                              lessonId: lesson.id,
-                              previewCards: [
-                                for (final preview in previewCards)
-                                  StudyCardItem(
-                                    vocab: preview.vocab,
-                                    card: preview.card,
-                                    lesson: lesson,
-                                    sentenceResolver: () =>
-                                        provider.getRandomSentenceForVocab(
-                                          preview.vocab,
-                                        ),
-                                  ),
-                              ],
-                              previewLabel: _selectedCategory == 'All'
-                                  ? null
-                                  : _selectedCategory.toUpperCase(),
-                            ),
-                          ),
-                        ),
-                ),
+                SizedBox(width: compact ? 4 : 12),
                 if (MediaQuery.sizeOf(context).width >= 700)
                   SizedBox(
                     width: 220,

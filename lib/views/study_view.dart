@@ -1516,7 +1516,7 @@ class _StudyViewState extends State<StudyView> {
                     ),
                   ] else if (_isPreview) ...[
                     FilledButton.icon(
-                      icon: const Icon(Icons.style_outlined),
+                      icon: const Icon(Icons.preview_outlined),
                       label: const Text('Preview Again'),
                       onPressed: () => setState(
                         () => _startSession([...widget.previewCards!]),
