@@ -24,7 +24,6 @@ jobs:
           cache: true
       - run: flutter --version
       - run: flutter pub get
-      - run: dart format --output=none --set-exit-if-changed lib test
       - run: flutter analyze
       # super_clipboard's build hook compiles Rust, which links GTK on Linux.
       # The .deb files are cached per runner image: the Ubuntu mirror
@@ -63,6 +62,8 @@ jobs:
           key: hooks-test-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
           restore-keys: hooks-test-${{ runner.os }}-
       - run: flutter test
+      # After the tests, so a formatting slip doesn't hide their results.
+      - run: dart format --output=none --set-exit-if-changed lib test
 
   worker:
     runs-on: ubuntu-latest
