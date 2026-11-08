@@ -37,7 +37,7 @@ Flutter app (Dart, `provider` state management). See [README.md](README.md) for 
 
 ## Environments without Flutter/Dart (e.g. cloud agents)
 
-If `flutter` or `dart` isn't available, you can't run tests or `flutter analyze`, and the CI workflow needs manual approval to run. In that case:
+If `flutter` or `dart` isn't available, you can't run tests or `flutter analyze`. In that case:
 
 - Formatting does not need Flutter. Install the Dart SDK from conda-forge (`dart-sdk`, any version meeting the `sdk:` constraint in `pubspec.yaml`), e.g. `micromamba create -y -p "$HOME/.dart-env" -c conda-forge dart-sdk`, then run `"$HOME/.dart-env/bin/dart" format lib test` before committing. Do not run `dart analyze` or `dart test` with it: the app depends on Flutter, which conda-forge does not have.
 - If the Dart SDK can't be installed either, hand-format to Dart style: 2-space indent, trailing commas on multi-line argument lists and collections, lines ≤ 80 columns, and expect `dart format` to change something.
