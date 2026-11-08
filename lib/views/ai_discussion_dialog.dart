@@ -210,18 +210,17 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
     return _vocabularyOffers.putIfAbsent(content, () {
       final yaml = LessonAiPrompt.vocabularyYaml(content);
       if (yaml == null) return null;
-      final known = {
-        for (final other in lessons)
-          for (final vocab in other.vocabularies)
-            YamlParserService.vocabularyKey(vocab.targetWord),
-      };
-      final filter = YamlParserService.withoutKnownVocabulary(yaml, known);
+      final vocabularies = [for (final other in lessons) ...other.vocabularies];
+      final filter = YamlParserService.withoutKnownVocabulary(yaml, {
+        for (final vocab in vocabularies)
+          YamlParserService.vocabularyKey(vocab.targetWord),
+      });
       return (
         filter: filter,
         hints: SuggestedVocabularyHints.forEntries(
           language: lesson.targetLanguage,
           entries: filter.keptEntries,
-          known: known,
+          known: [for (final vocab in vocabularies) vocab.targetWord],
         ),
       );
     });
@@ -231,8 +230,9 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
   /// gets a button that opens the YAML in the import screen, under the
   /// lesson's name, to edit and add to the lesson. Words already in a lesson,
   /// or listed twice, are left out of it and named under the button, and so
-  /// are words the learner may want to edit out (such as a noun whose 하다
-  /// verb they have).
+  /// are words the learner may want to edit out: another spelling or form of
+  /// a word they have or that is listed earlier (see
+  /// [SuggestedVocabularyHints]).
   Widget _answer(String content) {
     final markdown = MarkdownContent(content: content, selectable: true);
     final lesson = widget.lesson;
@@ -275,7 +275,7 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
             padding: const EdgeInsets.only(top: 4),
             child: Text(
               'Consider editing out: '
-              '${hints.map((h) => '${h.word} (you have ${h.known})').join(', ')}',
+              '${SuggestedVocabularyHints.summary(hints)}',
               style: theme.textTheme.bodySmall,
             ),
           ),

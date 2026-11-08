@@ -34,6 +34,9 @@ class MissingEmphasisException extends FormatException {
   }
 }
 
+/// An entry kept by [YamlParserService.withoutKnownVocabulary].
+typedef KeptVocabularyEntry = ({String word, String section});
+
 /// Vocabulary YAML with the words that are already known left out, from
 /// [YamlParserService.withoutKnownVocabulary].
 class VocabularyYamlFilter {
@@ -42,7 +45,7 @@ class VocabularyYamlFilter {
 
   /// The entries that are kept, in order: each one's target word and the
   /// section (usually a part of speech) it is listed under.
-  final List<({String word, String section})> keptEntries;
+  final List<KeptVocabularyEntry> keptEntries;
 
   /// The target words of the entries that are kept, in order.
   List<String> get kept => [for (final entry in keptEntries) entry.word];
@@ -353,7 +356,7 @@ class YamlParserService {
     final sections = vocabulary is YamlMap ? vocabulary : root;
 
     final seen = {...known};
-    final kept = <({String word, String section})>[];
+    final kept = <KeptVocabularyEntry>[];
     final removed = <String>[];
     final cuts = <(int, int)>[];
 
