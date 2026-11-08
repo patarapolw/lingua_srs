@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/ai_discussion_message.dart';
 import '../models/lesson.dart';
+import '../models/saved_time.dart';
 import '../models/sentence.dart';
 import '../models/shared_vocab.dart';
 import '../models/srs_card.dart';
@@ -127,7 +128,7 @@ class StorageService {
   static Future<DateTime?> loadLastSyncedAt() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_keySyncLastSyncedAt);
-    return raw == null ? null : DateTime.tryParse(raw);
+    return raw == null ? null : tryLoadedTime(raw);
   }
 
   static Future<void> saveLastSyncedAt(DateTime? time) async {
@@ -135,7 +136,7 @@ class StorageService {
     if (time == null) {
       await prefs.remove(_keySyncLastSyncedAt);
     } else {
-      await prefs.setString(_keySyncLastSyncedAt, time.toIso8601String());
+      await prefs.setString(_keySyncLastSyncedAt, savedTime(time));
     }
   }
 
@@ -458,7 +459,7 @@ class StorageService {
     final now = DateTime.now();
     final valid = <DateTime>[];
     for (final s in list) {
-      final dt = DateTime.tryParse(s);
+      final dt = tryLoadedTime(s);
       if (dt != null && now.difference(dt).inHours < 24) {
         valid.add(dt);
       }
@@ -471,7 +472,7 @@ class StorageService {
     final now = DateTime.now();
     final strings = timestamps
         .where((t) => now.difference(t).inHours < 24)
-        .map((t) => t.toIso8601String())
+        .map(savedTime)
         .toList();
     await prefs.setStringList(_keyReviewTimestamps, strings);
   }

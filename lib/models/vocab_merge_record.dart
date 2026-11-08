@@ -1,4 +1,5 @@
 import '../models/vocab_item.dart';
+import 'saved_time.dart';
 
 /// One distinct vocabulary (shared id) with every lesson that uses it.
 class VocabGroup {
@@ -96,7 +97,7 @@ class VocabMergeRecord {
 
   Map<String, dynamic> toJson() => {
     'id': id,
-    'createdAt': createdAt.toIso8601String(),
+    'createdAt': savedTime(createdAt),
     'survivorId': survivorId,
     'label': label,
     'source': source,
@@ -110,7 +111,7 @@ class VocabMergeRecord {
     Map<String, dynamic> json,
   ) => VocabMergeRecord(
     id: json['id'] as String,
-    createdAt: DateTime.parse(json['createdAt'] as String),
+    createdAt: loadedTime(json['createdAt'] as String),
     survivorId: json['survivorId'] as String,
     label: json['label'] as String? ?? '',
     source: json['source'] as String? ?? 'manual',

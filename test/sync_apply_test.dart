@@ -339,7 +339,12 @@ void main() {
       final card = data.lessons.single.vocabularies.single.cardTargetToNative;
       expect(card.id, 'w1-tn');
       expect(card.interval, 7);
-      expect(card.lastReviewed, DateTime.utc(2026, 11, 5));
+      // The same instant, read back as local time since times are saved in
+      // UTC (#146).
+      expect(
+        card.lastReviewed?.isAtSameMomentAs(DateTime.utc(2026, 11, 5)),
+        isTrue,
+      );
     });
 
     test('takes the progress reviewed there more recently', () {

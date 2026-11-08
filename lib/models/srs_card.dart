@@ -1,5 +1,7 @@
 import 'package:uuid/uuid.dart';
 
+import 'saved_time.dart';
+
 enum CardDirection {
   targetToNative, // e.g. KO -> EN
   nativeToTarget, // e.g. EN -> KO
@@ -151,22 +153,26 @@ class SrsCard {
     'interval': interval,
     'repetitions': repetitions,
     'easeFactor': easeFactor,
-    'dueDate': dueDate.toIso8601String(),
-    'lastReviewed': lastReviewed?.toIso8601String(),
+    'dueDate': savedTime(dueDate),
+    'lastReviewed': lastReviewed == null ? null : savedTime(lastReviewed!),
     'status': status.name,
     'lapses': lapses,
-    'lastMistakeDate': lastMistakeDate?.toIso8601String(),
+    'lastMistakeDate': lastMistakeDate == null
+        ? null
+        : savedTime(lastMistakeDate!),
     'lastRating': lastRating?.name,
-    'mistakesClearedAt': mistakesClearedAt?.toIso8601String(),
-    'introducedAt': introducedAt?.toIso8601String(),
+    'mistakesClearedAt': mistakesClearedAt == null
+        ? null
+        : savedTime(mistakesClearedAt!),
+    'introducedAt': introducedAt == null ? null : savedTime(introducedAt!),
   };
 
   factory SrsCard.fromJson(Map<String, dynamic> json) => SrsCard(
     mistakesClearedAt: json['mistakesClearedAt'] != null
-        ? DateTime.parse(json['mistakesClearedAt'] as String)
+        ? loadedTime(json['mistakesClearedAt'] as String)
         : null,
     introducedAt: json['introducedAt'] != null
-        ? DateTime.parse(json['introducedAt'] as String)
+        ? loadedTime(json['introducedAt'] as String)
         : null,
     id: json['id'] as String?,
     direction: CardDirection.values.firstWhere(
@@ -181,10 +187,10 @@ class SrsCard {
     repetitions: json['repetitions'] as int? ?? 0,
     easeFactor: (json['easeFactor'] as num?)?.toDouble() ?? 2.5,
     dueDate: json['dueDate'] != null
-        ? DateTime.parse(json['dueDate'] as String)
+        ? loadedTime(json['dueDate'] as String)
         : null,
     lastReviewed: json['lastReviewed'] != null
-        ? DateTime.parse(json['lastReviewed'] as String)
+        ? loadedTime(json['lastReviewed'] as String)
         : null,
     status: SrsStatus.values.firstWhere(
       (e) => e.name == json['status'],
@@ -192,7 +198,7 @@ class SrsCard {
     ),
     lapses: json['lapses'] as int? ?? 0,
     lastMistakeDate: json['lastMistakeDate'] != null
-        ? DateTime.parse(json['lastMistakeDate'] as String)
+        ? loadedTime(json['lastMistakeDate'] as String)
         : null,
     lastRating: json['lastRating'] != null
         ? SrsRating.values.firstWhere(

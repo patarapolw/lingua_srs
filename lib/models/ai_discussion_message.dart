@@ -1,3 +1,5 @@
+import 'saved_time.dart';
+
 class AiDiscussionMessage {
   final String role;
   final String content;
@@ -12,7 +14,7 @@ class AiDiscussionMessage {
   Map<String, dynamic> toJson() => {
     'role': role,
     'content': content,
-    if (createdAt != null) 'createdAt': createdAt!.toIso8601String(),
+    if (createdAt != null) 'createdAt': savedTime(createdAt!),
   };
 
   factory AiDiscussionMessage.fromJson(Map<String, dynamic> json) {
@@ -24,9 +26,7 @@ class AiDiscussionMessage {
         (createdAt != null && createdAt is! String)) {
       throw const FormatException('Invalid AI discussion message.');
     }
-    final parsedCreatedAt = createdAt == null
-        ? null
-        : DateTime.tryParse(createdAt);
+    final parsedCreatedAt = createdAt == null ? null : tryLoadedTime(createdAt);
     if (createdAt != null && parsedCreatedAt == null) {
       throw const FormatException('Invalid AI discussion message timestamp.');
     }

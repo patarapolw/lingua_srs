@@ -144,6 +144,8 @@ Everything a backup contains syncs, except what only makes sense on one device:
 - **Syncs:** lessons and their Markdown, vocabulary entries, word details and SRS progress, the Sentence Pool, merge history, saved AI discussions, questions typed in AI chats, the lesson tree's order, study activity, and the study settings listed below.
 - **Stays on the device:** the DeepSeek key and the sync sign-in (secrets), whether AI features are shown, which folders are expanded, the fingerprints of imported Markdown files (they are keyed by a path on this device), the audio and image caches, and one-off migration flags.
 
+Times inside records (a card's due date, last review and first review, a message's or merge's time) are saved in UTC (`saved_time.dart`), so a record names the same instant on devices in different time zones, and after a device changes zone. Times saved by older versions have no zone and are read as the device's local time. The first sync after updating to UTC times pushes every card once, since each card's saved text, and so its hash, changes.
+
 ### Kinds
 
 | Kind | One record per | Contents | Conflicts |
