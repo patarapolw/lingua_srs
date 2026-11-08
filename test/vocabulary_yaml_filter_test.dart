@@ -27,7 +27,8 @@ VocabularyYamlFilter _filter(
   Iterable<String> known, {
   String hanja = '',
   String reading = '',
-}) => YamlParserService.withoutKnownVocabulary(yaml, [
+  String language = 'ko',
+}) => YamlParserService.withoutKnownVocabulary(yaml, language: language, [
   for (final word in known)
     (
       word: word.split('=').first.trim(),
@@ -189,18 +190,61 @@ void main() {
       const walk =
           'vocabulary:\n  verbs:\n    - zh: "行"\n      pinyin: "xíng"\n'
           '      en: "to walk"\n';
-      expect(_filter(walk, ['行 = row'], reading: 'háng').kept, ['行']);
-      expect(_filter(walk, ['行 = to walk'], reading: 'Xíng').removed, [
-        '行',
-      ], reason: 'readings are compared without case');
+      final row = _filter(walk, ['行 = row'], reading: 'háng', language: 'zh');
+      expect(row.kept, ['行']);
+      final same = _filter(
+        walk,
+        ['行 = to walk'],
+        reading: 'Xíng',
+        language: 'zh',
+      );
+      expect(same.removed, ['行'], reason: 'compared without case');
     });
 
-    test('Hanja and readings are told apart', () {
-      // A Hanja is not compared with a reading.
+    test('Korean Hanja and Hangul are told apart', () {
+      // A reading is never taken for a form.
       const study =
           'vocabulary:\n  nouns:\n    - ko: "공부"\n      hanja: "工夫"\n'
           '      en: "study"\n';
-      expect(_filter(study, ['공부 = study'], reading: 'gongbu').removed, ['공부']);
+      expect(_filter(study, ['공부 = study'], reading: '공부').removed, ['공부']);
+    });
+
+    test('`hangul` and `reading` are always the reading', () {
+      // `ko` with Hanja in it is the form.
+      for (final field in ['hangul', 'reading']) {
+        final morale =
+            'vocabulary:\n  nouns:\n    - ko: "士氣"\n      $field: "사기"\n'
+            '      en: "morale"\n';
+        // Read alike and nothing else to tell: a duplicate.
+        expect(_filter(morale, ['사기 = morale']).removed, ['士氣']);
+        // Read alike but written otherwise: another word.
+        final fraud = _filter(morale, ['사기 = fraud'], hanja: '詐欺');
+        expect(fraud.kept, ['士氣']);
+        expect(fraud.possibleDuplicates, isEmpty);
+        // Read alike, form unknown: by the meaning.
+        expect(
+          _filter(morale, [
+            '사기 = fraud',
+          ]).possibleDuplicates.single.otherMeaning,
+          'fraud',
+        );
+      }
+    });
+
+    test('a Korean word in Hanja without Hangul is compared by its form', () {
+      const hanjaOnly =
+          'vocabulary:\n  nouns:\n    - ko: "工夫"\n      en: "study"\n';
+      expect(_filter(hanjaOnly, ['工夫 = study']).removed, ['工夫']);
+      // Its reading is unknown, so 공부 is not compared with it.
+      expect(_filter(hanjaOnly, ['공부 = study']).kept, ['工夫']);
+    });
+
+    test('in another language the word is its form', () {
+      const kungfu =
+          'vocabulary:\n  nouns:\n    - zh: "工夫"\n      en: "kung fu"\n';
+      expect(_filter(kungfu, ['工夫 = kung fu'], language: 'zh').removed, ['工夫']);
+      // It is compared as written, never by a Korean reading of it.
+      expect(_filter(kungfu, ['공부 = kung fu'], language: 'zh').kept, ['工夫']);
     });
 
     test('in the same list', () {

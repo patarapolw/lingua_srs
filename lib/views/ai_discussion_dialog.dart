@@ -223,14 +223,14 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
       ];
       final filter = YamlParserService.withoutKnownVocabulary(yaml, [
         for (final vocab in vocabularies)
-          // Words have no Hanja or reading to tell them apart yet.
+          // Words have no Hanja or reading fields yet.
           (
             word: vocab.targetWord,
             meaning: vocab.translation,
             hanja: '',
             reading: '',
           ),
-      ]);
+      ], language: lesson.targetLanguage);
       return (
         filter: filter,
         hints: SuggestedVocabularyHints.forEntries(

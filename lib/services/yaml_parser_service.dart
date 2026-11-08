@@ -52,6 +52,11 @@ typedef KnownVocabulary = ({
   String reading,
 });
 
+/// How a word is told apart from others written alike: the key it is
+/// compared under, its written form and its reading, either of which can be
+/// unknown (empty).
+typedef _WordIdentity = ({String key, String form, String reading});
+
 /// A kept entry written exactly like another word, but whose translation has
 /// no meaning in common with it, so it may be another word that is spelled
 /// and read the same (배 "pear" and 배 "ship"), or the same word translated
@@ -363,9 +368,51 @@ class YamlParserService {
   /// written form, where the Hangul is how it is read.
   static const hanjaKeys = ['hanja'];
 
-  /// Keys that hold how a word written in characters is read in vocabulary
-  /// YAML, such as the pinyin of a Chinese word.
-  static const readingKeys = ['reading', 'pinyin'];
+  /// Keys that hold how a word is read in vocabulary YAML: the Hangul of a
+  /// Korean word, or the reading of a word written in characters, such as the
+  /// pinyin of a Chinese word.
+  static const readingKeys = ['hangul', 'reading', 'pinyin'];
+
+  /// Hanja (CJK ideographs).
+  static final _hanja = RegExp(r'[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]');
+
+  /// What tells [word] apart from words written alike in [korean] or another
+  /// language.
+  ///
+  /// A Korean word's Hangul is how it is read, and its Hanja is how it is
+  /// written. The `hangul` field ([KnownVocabulary.reading]) is always its
+  /// reading; the `ko` field ([KnownVocabulary.word]) is its reading too
+  /// unless it has Hanja in it, and then it is its form, as the `hanja` field
+  /// is. It is compared under its reading, or its form if it has none.
+  ///
+  /// A word in another language is written as its target word, which it is
+  /// compared under, and read as its `reading` or `pinyin`.
+  static _WordIdentity _identity(KnownVocabulary word, {required bool korean}) {
+    final target = word.word.trim();
+    if (!korean) {
+      return (
+        key: vocabularyKey(target),
+        form: target,
+        reading: word.reading.trim(),
+      );
+    }
+    final targetIsForm = _hanja.hasMatch(target);
+    final form = word.hanja.trim().isNotEmpty
+        ? word.hanja.trim()
+        : targetIsForm
+        ? target
+        : '';
+    final reading = word.reading.trim().isNotEmpty
+        ? word.reading.trim()
+        : targetIsForm
+        ? ''
+        : target;
+    return (
+      key: vocabularyKey(reading.isNotEmpty ? reading : form),
+      form: form,
+      reading: reading,
+    );
+  }
 
   /// Whether translations [a] and [b] have a meaning in common: a sense,
   /// split at commas, semicolons and slashes, that is the same once notes in
@@ -400,21 +447,25 @@ class YamlParserService {
   /// with no entries goes too. YAML that cannot be read, and lists written in
   /// flow style (`[...]`), are left as they are.
   ///
-  /// An entry duplicates a word whose target word is the same
-  /// ([vocabularyKey]), and so is its form and reading where the target word
-  /// shows only one: both must have the same Hanja ([hanjaKeys]) if both have
-  /// one, and the same reading ([readingKeys]) if both have one. Otherwise
-  /// they are different words: 사기 詐欺 (fraud) and 사기 士氣 (morale), or
-  /// 行 xíng and 行 háng. If their translations have no meaning in common
+  /// An entry duplicates a word written the same ([vocabularyKey]), the same
+  /// Korean word read the same, unless both have a written form and the forms
+  /// differ, or both have a reading and the readings differ: then they are
+  /// different words, such as 사기 詐欺 (fraud) and 사기 士氣 (morale), or
+  /// 行 xíng and 行 háng. See [_identity] for what a word's form and reading
+  /// are. If their translations have no meaning in common
   /// ([meaningsOverlap]), the entry is kept but listed in
   /// [VocabularyYamlFilter.possibleDuplicates].
   ///
-  /// [known] should only have words of the same language: the same
-  /// characters can be another word in another language, as 工夫 is.
+  /// [known] should only have words of [language], the language of the
+  /// YAML: the same characters can be another word in another language, as
+  /// 工夫 is.
   static VocabularyYamlFilter withoutKnownVocabulary(
     String yaml,
-    Iterable<KnownVocabulary> known,
-  ) {
+    Iterable<KnownVocabulary> known, {
+    required String language,
+  }) {
+    final korean =
+        language.trim().toLowerCase().split(RegExp(r'[-_]')).first == 'ko';
     final YamlNode root;
     try {
       root = loadYamlNode(yaml);
@@ -435,9 +486,19 @@ class YamlParserService {
     final vocabulary = root.nodes['vocabulary'];
     final sections = vocabulary is YamlMap ? vocabulary : root;
 
-    final seen = <String, List<({KnownVocabulary word, bool inList})>>{};
+    final seen =
+        <
+          String,
+          List<({KnownVocabulary word, _WordIdentity identity, bool inList})>
+        >{};
     void remember(KnownVocabulary word, {required bool inList}) {
-      (seen[vocabularyKey(word.word)] ??= []).add((word: word, inList: inList));
+      final identity = _identity(word, korean: korean);
+      if (identity.key.isEmpty) return;
+      (seen[identity.key] ??= []).add((
+        word: word,
+        identity: identity,
+        inList: inList,
+      ));
     }
 
     for (final word in known) {
@@ -476,7 +537,7 @@ class YamlParserService {
       return '';
     }
 
-    // Whether two Hanja, or two readings, do not tell words apart.
+    // Whether two forms, or two readings, do not tell words apart.
     bool alike(String a, String b) =>
         a.isEmpty ||
         b.isEmpty ||
@@ -505,12 +566,13 @@ class YamlParserService {
           hanja: field(item, hanjaKeys),
           reading: field(item, readingKeys),
         );
-        // Words with the same target word whose Hanja and readings do not
+        // Words compared under the same key whose forms and readings do not
         // tell them apart.
+        final identity = _identity(entry, korean: korean);
         final same = [
-          for (final other in seen[vocabularyKey(word)] ?? const [])
-            if (alike(entry.hanja, other.word.hanja) &&
-                alike(entry.reading, other.word.reading))
+          for (final other in seen[identity.key] ?? const [])
+            if (alike(identity.form, other.identity.form) &&
+                alike(identity.reading, other.identity.reading))
               other,
         ];
         final duplicate = same.any(
