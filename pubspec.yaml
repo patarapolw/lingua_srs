@@ -50,6 +50,7 @@ dependencies:
   url_launcher: ^6.3.1
   webview_flutter: ^4.14.1
   webview_all: ^1.4.4 # for broader platform support, or webview_win_floating: ^1.0.0 for windows
+  webview_all_android: ^1.4.4 # Android-specific playback configuration
   markdown: ^7.3.1
   archive: ^4.5.2
   desktop_drop: ^0.8.0
@@ -78,6 +79,7 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  webview_platform_interface: ^1.4.4
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

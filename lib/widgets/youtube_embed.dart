@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_all/webview_all.dart';
+import 'package:webview_all_android/webview_all_android.dart';
 
 import 'cached_markdown_image.dart';
 
@@ -196,6 +197,8 @@ class YouTubeEmbed extends StatefulWidget {
 class _YouTubeEmbedState extends State<YouTubeEmbed> {
   WebViewController? _controller;
   bool _failed = false;
+  bool _starting = false;
+  int _generation = 0;
   late Future<String?> _titleFuture;
 
   // On Windows the WebView ignores the base URL of an HTML string, so the
@@ -215,8 +218,10 @@ class _YouTubeEmbedState extends State<YouTubeEmbed> {
   void didUpdateWidget(YouTubeEmbed oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.embedUrl != widget.embedUrl) {
+      _generation++;
       _controller = null;
       _failed = false;
+      _starting = false;
       _titleFuture = _loadTitle();
     }
   }
@@ -263,15 +268,31 @@ document.body.appendChild(f);
 ''';
   }
 
-  void _start() {
+  Future<void> _start() async {
+    if (_starting) return;
+    final generation = ++_generation;
+    setState(() {
+      _starting = true;
+      _failed = false;
+    });
     final useHostPage =
         !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
     var injected = false;
-    final controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setNavigationDelegate(
+    try {
+      final controller = WebViewController();
+      final platform = controller.platform;
+      if (platform is AndroidWebViewController) {
+        // The thumbnail tap occurs outside the WebView, so it is not a
+        // WebView gesture capable of authorizing autoplay.
+        await platform.setMediaPlaybackRequiresUserGesture(false);
+      }
+      await controller.setJavaScriptMode(JavaScriptMode.unrestricted);
+      await controller.setNavigationDelegate(
         NavigationDelegate(
           onNavigationRequest: (request) {
+            if (!mounted || generation != _generation) {
+              return NavigationDecision.prevent;
+            }
             if (!YouTubeEmbed.leavesPlayer(request.url)) {
               return NavigationDecision.navigate;
             }
@@ -279,28 +300,54 @@ document.body.appendChild(f);
             return NavigationDecision.prevent;
           },
           onWebResourceError: (error) {
-            if (!mounted || error.isForMainFrame == false) return;
+            if (!mounted ||
+                generation != _generation ||
+                error.isForMainFrame == false) {
+              return;
+            }
             setState(() => _failed = true);
           },
           onPageFinished: (_) {
-            if (!useHostPage || injected) return;
+            if (!mounted ||
+                generation != _generation ||
+                !useHostPage ||
+                injected) {
+              return;
+            }
             injected = true;
-            _controller?.runJavaScript(_embedScript);
+            controller.runJavaScript(_embedScript);
           },
         ),
       );
-    if (useHostPage) {
-      controller.loadRequest(Uri.parse(_windowsHostPage));
-    } else {
-      controller.loadHtmlString(
-        YouTubeEmbed.playerHtml(widget.embedUrl),
-        baseUrl: '${YouTubeEmbed.playerOrigin}/',
+      if (!mounted || generation != _generation) return;
+      if (useHostPage) {
+        await controller.loadRequest(Uri.parse(_windowsHostPage));
+      } else {
+        await controller.loadHtmlString(
+          YouTubeEmbed.playerHtml(widget.embedUrl),
+          baseUrl: '${YouTubeEmbed.playerOrigin}/',
+        );
+      }
+      if (!mounted || generation != _generation) return;
+      setState(() {
+        _controller = controller;
+        _starting = false;
+      });
+    } catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'YouTube embed',
+          context: ErrorDescription('while starting the video player'),
+        ),
       );
+      if (!mounted || generation != _generation) return;
+      setState(() {
+        _starting = false;
+        _failed = true;
+      });
     }
-    setState(() {
-      _controller = controller;
-      _failed = false;
-    });
   }
 
   /// Opens the regular YouTube link outside the app, where the video plays
@@ -380,9 +427,7 @@ document.body.appendChild(f);
   Widget build(BuildContext context) {
     final controller = _controller;
     final Widget player;
-    if (controller == null) {
-      player = _thumbnail(context);
-    } else if (_failed) {
+    if (_failed) {
       player = Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -400,6 +445,10 @@ document.body.appendChild(f);
           ],
         ),
       );
+    } else if (_starting) {
+      player = const Center(child: CircularProgressIndicator());
+    } else if (controller == null) {
+      player = _thumbnail(context);
     } else {
       player = WebViewWidget(controller: controller);
     }
