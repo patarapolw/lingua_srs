@@ -618,6 +618,31 @@ Lesson content is not part of the vocabulary data.
       ]);
     });
 
+    test('Markdown can be refused, for adding vocabulary only', () {
+      const yaml = 'vocabulary:\n  nouns:\n    - ko: 배\n      en: pear\n';
+
+      expect(
+        YamlParserService.parseLessonYaml(
+          yaml,
+          allowMarkdown: false,
+        ).lesson.vocabularies.single.targetWord,
+        '배',
+      );
+      for (final markdown in ['---\n$yaml---\n', '---\n$yaml---\n# Text\n']) {
+        expect(
+          () =>
+              YamlParserService.parseLessonYaml(markdown, allowMarkdown: false),
+          throwsA(
+            isA<FormatException>().having(
+              (e) => e.message,
+              'message',
+              YamlParserService.markdownNotAllowed,
+            ),
+          ),
+        );
+      }
+    });
+
     test('frontmatter-only Markdown is equivalent to plain YAML', () {
       const yaml = '''
 vocabulary:

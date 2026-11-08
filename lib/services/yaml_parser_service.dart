@@ -125,15 +125,30 @@ class YamlParserService {
     'trans',
   ];
 
+  /// The error for Markdown given to [parseLessonYaml] with `allowMarkdown`
+  /// false.
+  static const markdownNotAllowed =
+      'Only vocabulary can be added here, as plain YAML starting with '
+      '"vocabulary:". Markdown (a "---" frontmatter block and lesson text) '
+      'is not allowed: it would replace the lesson\'s text. Edit the lesson '
+      'to change its text.';
+
+  /// Parses a lesson: Markdown with YAML frontmatter, or plain YAML. With
+  /// [allowMarkdown] false, as when only vocabulary is added to a lesson,
+  /// Markdown is a [FormatException] ([markdownNotAllowed]).
   static YamlParseResult parseLessonYaml(
     String yamlString, {
     String? defaultTitle,
     String? defaultUnitTitle,
+    bool allowMarkdown = true,
   }) {
     var frontMatter = yamlString.trim();
     String? markdownTitle;
     String markdownContent = '';
     final isMarkdown = frontMatter.startsWith('---');
+    if (isMarkdown && !allowMarkdown) {
+      throw const FormatException(markdownNotAllowed);
+    }
     if (isMarkdown) {
       final frontMatterParts = _splitMarkdownFrontmatter(frontMatter);
       final markdownBody = frontMatterParts.$2;

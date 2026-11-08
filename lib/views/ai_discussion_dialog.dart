@@ -195,18 +195,29 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
   /// The vocabulary each answer offers to add to the lesson, by the answer's
   /// text: its YAML without the words already in a lesson, and the hints for
   /// the words left in it, or null for an answer without vocabulary YAML.
-  /// Worked out again when the number of words in the lessons changes, as it
-  /// does once some are added.
+  /// Worked out again whenever the lessons' words change ([_knownWords]),
+  /// whether they are added, edited or deleted, here or anywhere else.
   final Map<String, _VocabularyOffer?> _vocabularyOffers = {};
-  int _knownWordCount = -1;
+  int? _knownWords;
+
+  /// Forgets [_vocabularyOffers] if the words in [lessons], or their
+  /// languages, have changed since they were worked out. Called on every
+  /// build of a lesson chat, which follows the provider.
+  void _forgetStaleVocabularyOffers(List<Lesson> lessons) {
+    var hash = lessons.length;
+    for (final lesson in lessons) {
+      hash = Object.hash(hash, lesson.targetLanguage);
+      for (final vocab in lesson.vocabularies) {
+        hash = Object.hash(hash, vocab.targetWord, vocab.translation);
+      }
+    }
+    if (hash == _knownWords) return;
+    _vocabularyOffers.clear();
+    _knownWords = hash;
+  }
 
   _VocabularyOffer? _vocabularyOffer(Lesson lesson, String content) {
     final lessons = context.read<AppProvider>().lessons;
-    final count = lessons.fold(0, (sum, l) => sum + l.vocabularies.length);
-    if (count != _knownWordCount) {
-      _vocabularyOffers.clear();
-      _knownWordCount = count;
-    }
     return _vocabularyOffers.putIfAbsent(content, () {
       final yaml = LessonAiPrompt.vocabularyYaml(content);
       if (yaml == null) return null;
@@ -327,6 +338,7 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
           ]),
           initialYaml: yaml,
           previewInitialYaml: true,
+          vocabularyOnly: true,
         ),
       ),
     );
@@ -659,6 +671,7 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
+    if (widget.lesson != null) _forgetStaleVocabularyOffers(provider.lessons);
     final messages = provider.getAiDiscussion(widget.discussionId);
     final typedQuestions = _typedQuestions(provider, messages);
     final firstQuestions = _firstQuestions(typedQuestions.keys);

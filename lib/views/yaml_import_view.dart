@@ -26,11 +26,18 @@ class YamlImportView extends StatefulWidget {
   /// imported as it is, such as vocabulary an AI chat suggested.
   final bool previewInitialYaml;
 
+  /// Only adds vocabulary to the lesson named [initialLessonName]: the input
+  /// must be plain vocabulary YAML, not Markdown, which would replace the
+  /// lesson's text. The lesson name is fixed, and files and folders cannot be
+  /// imported.
+  final bool vocabularyOnly;
+
   const YamlImportView({
     super.key,
     this.initialLessonName,
     this.initialYaml,
     this.previewInitialYaml = false,
+    this.vocabularyOnly = false,
   });
 
   @override
@@ -118,6 +125,7 @@ class _YamlImportViewState extends State<YamlImportView>
           text,
           nameParts.title,
           unitTitle,
+          allowMarkdown: !widget.vocabularyOnly,
         );
         if (!mounted || generation != _parseGeneration) return;
         setState(() {
@@ -128,7 +136,9 @@ class _YamlImportViewState extends State<YamlImportView>
       } catch (error) {
         if (!mounted || generation != _parseGeneration) return;
         setState(() {
-          _errorMessage = 'YAML / Markdown Parse Error: $error';
+          _errorMessage = widget.vocabularyOnly
+              ? 'YAML Parse Error: $error'
+              : 'YAML / Markdown Parse Error: $error';
           _previewResult = null;
           _progressMessage = null;
         });
@@ -571,12 +581,22 @@ class _YamlImportViewState extends State<YamlImportView>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final compactBar = MediaQuery.sizeOf(context).width < 700;
+    final vocabularyOnly = widget.vocabularyOnly;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(compactBar ? 'Import' : 'Import Lessons'),
+        title: Text(
+          vocabularyOnly
+              ? 'Add Vocabulary'
+              : compactBar
+              ? 'Import'
+              : 'Import Lessons',
+        ),
         actions: [
-          if (compactBar) ...[
+          // Files and folders are whole lessons, not vocabulary to add.
+          if (vocabularyOnly)
+            const SizedBox.shrink()
+          else if (compactBar) ...[
             IconButton(
               icon: const Icon(Icons.file_open_outlined),
               tooltip: 'Import Markdown, YAML, or ZIP files',
@@ -615,7 +635,9 @@ class _YamlImportViewState extends State<YamlImportView>
                   )
                 : const Icon(Icons.check),
             label: Text(
-              _directoryFiles.isEmpty
+              vocabularyOnly
+                  ? (compactBar ? 'Add' : 'Add Vocabulary')
+                  : _directoryFiles.isEmpty
                   ? (compactBar ? 'Save' : 'Import Markdown')
                   : (compactBar
                         ? 'Save ${_selectedDirectoryPaths.length}'
@@ -632,7 +654,7 @@ class _YamlImportViewState extends State<YamlImportView>
         ],
       ),
       body: DropTarget(
-        enable: _supportsDesktopFileDrop && !_isParsing,
+        enable: _supportsDesktopFileDrop && !_isParsing && !vocabularyOnly,
         onDragEntered: (_) => setState(() => _isDraggingFiles = true),
         onDragExited: (_) => setState(() => _isDraggingFiles = false),
         onDragDone: _handleDroppedFiles,
@@ -646,7 +668,7 @@ class _YamlImportViewState extends State<YamlImportView>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (_supportsDesktopFileDrop) ...[
+                      if (_supportsDesktopFileDrop && !vocabularyOnly) ...[
                         Container(
                           width: double.infinity,
                           padding: const EdgeInsets.symmetric(
@@ -685,21 +707,27 @@ class _YamlImportViewState extends State<YamlImportView>
                       TextField(
                         controller: _lessonNameController,
                         enabled: !_isParsing && _directoryFiles.isEmpty,
+                        readOnly: vocabularyOnly,
                         textInputAction: TextInputAction.next,
-                        decoration: const InputDecoration(
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          border: const OutlineInputBorder(),
                           hintText: 'e.g. Unit 2::Lesson 26',
-                          helperText:
-                              'Use :: to separate hierarchy levels. Enter an existing '
-                              'lesson\'s name to add vocabulary to it; existing '
-                              'words and SRS progress are kept.',
+                          helperText: vocabularyOnly
+                              ? 'The words are added to this lesson; its other '
+                                    'words, its text and SRS progress are kept.'
+                              : 'Use :: to separate hierarchy levels. Enter an '
+                                    'existing lesson\'s name to add vocabulary '
+                                    'to it; existing words and SRS progress are '
+                                    'kept.',
                           helperMaxLines: 3,
                         ),
                         onChanged: (_) => _parseCurrentYaml(),
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        'Markdown with YAML frontmatter (or plain YAML)',
+                        vocabularyOnly
+                            ? 'Vocabulary YAML (no Markdown)'
+                            : 'Markdown with YAML frontmatter (or plain YAML)',
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
@@ -731,25 +759,32 @@ class _YamlImportViewState extends State<YamlImportView>
                           decoration: InputDecoration(
                             border: const OutlineInputBorder(),
                             alignLabelWithHint: true,
-                            hintText:
-                                '---\n'
-                                'vocabulary:\n'
-                                '  nouns:  # Replace with a part of speech\n'
-                                '    - ko: "Korean word"\n'
-                                '      audio: "https://example.com/word-audio.mp3"\n'
-                                '      en: "English meaning"\n'
-                                '      notes: "Optional **Markdown** notes"\n'
-                                '      examples:\n'
-                                '        - ko: "Sentence with **word**"\n'
-                                '          en: "Translated sentence with **meaning**"\n'
-                                '        - ko: "Another **example** sentence"\n'
-                                '          audio: "https://example.com/sentence-audio.mp3"\n'
-                                '          en: "Another translation"\n'
-                                '---\n'
-                                '\n'
-                                '# Lesson 26\n'
-                                '\n'
-                                'Lesson contents go **here**.',
+                            hintText: vocabularyOnly
+                                ? 'vocabulary:\n'
+                                      '  nouns:  # Replace with a part of speech\n'
+                                      '    - ko: "Korean word"\n'
+                                      '      en: "English meaning"\n'
+                                      '      examples:\n'
+                                      '        - ko: "Sentence with **word**"\n'
+                                      '          en: "Translated sentence with **meaning**"'
+                                : '---\n'
+                                      'vocabulary:\n'
+                                      '  nouns:  # Replace with a part of speech\n'
+                                      '    - ko: "Korean word"\n'
+                                      '      audio: "https://example.com/word-audio.mp3"\n'
+                                      '      en: "English meaning"\n'
+                                      '      notes: "Optional **Markdown** notes"\n'
+                                      '      examples:\n'
+                                      '        - ko: "Sentence with **word**"\n'
+                                      '          en: "Translated sentence with **meaning**"\n'
+                                      '        - ko: "Another **example** sentence"\n'
+                                      '          audio: "https://example.com/sentence-audio.mp3"\n'
+                                      '          en: "Another translation"\n'
+                                      '---\n'
+                                      '\n'
+                                      '# Lesson 26\n'
+                                      '\n'
+                                      'Lesson contents go **here**.',
                             hintStyle: TextStyle(
                               color: theme.colorScheme.onSurfaceVariant
                                   .withValues(alpha: 0.65),
@@ -1140,12 +1175,14 @@ class MarkdownDirectoryResult {
 Future<YamlParseResult> _parseLessonInBackground(
   String text,
   String? title,
-  String? unitTitle,
-) => Isolate.run(
+  String? unitTitle, {
+  bool allowMarkdown = true,
+}) => Isolate.run(
   () => YamlParserService.parseLessonYaml(
     text,
     defaultTitle: title,
     defaultUnitTitle: unitTitle,
+    allowMarkdown: allowMarkdown,
   ),
 );
 

@@ -156,6 +156,59 @@ The full lesson body.
     );
   });
 
+  testWidgets('vocabulary only: no Markdown, files or other lesson', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: YamlImportView(
+          initialLessonName: 'Lesson 26',
+          vocabularyOnly: true,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Add Vocabulary'), findsWidgets);
+    expect(find.text('Files'), findsNothing);
+    expect(find.text('Folder'), findsNothing);
+    expect(find.byType(DropTarget), findsOneWidget);
+    expect(tester.widget<DropTarget>(find.byType(DropTarget)).enable, isFalse);
+    final nameField = tester.widget<TextField>(find.byType(TextField).first);
+    expect(nameField.readOnly, isTrue);
+
+    Future<void> enter(String text) async {
+      await tester.enterText(find.byType(TextField).last, text);
+      await tester.pump(const Duration(milliseconds: 301));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 500)),
+      );
+      await tester.pump();
+    }
+
+    FilledButton addButton() => tester.widget<FilledButton>(
+      find.ancestor(
+        of: find.text('Add Vocabulary').last,
+        matching: find.byType(FilledButton),
+      ),
+    );
+
+    const yaml = 'vocabulary:\n  nouns:\n    - ko: 배\n      en: pear\n';
+    await enter('---\n$yaml---\n# New lesson text\n');
+    expect(find.textContaining('Markdown'), findsWidgets);
+    expect(
+      find.textContaining('it would replace the lesson\'s text'),
+      findsOneWidget,
+    );
+    expect(addButton().onPressed, isNull);
+
+    await enter(yaml);
+    expect(addButton().onPressed, isNotNull);
+  });
+
   testWidgets('explains that an existing lesson name adds to that lesson', (
     tester,
   ) async {

@@ -1460,6 +1460,7 @@ void main() {
       expect(view.initialLessonName, 'Words');
       expect(view.initialYaml, yaml);
       expect(view.previewInitialYaml, isTrue);
+      expect(view.vocabularyOnly, isTrue);
       // Nothing is added until it is imported from there.
       expect(
         lesson.vocabularies.map((v) => v.targetWord),
@@ -1619,6 +1620,51 @@ void main() {
         ),
       );
       expect(button.onPressed, isNull);
+    });
+
+    testWidgets('follows words added or edited after the answer', (
+      tester,
+    ) async {
+      final (provider, lesson) = await loadedProvider(tester);
+      final id = LessonAiPrompt.discussionId(lesson.id);
+      await tester.runAsync(
+        () => provider.addAiDiscussionMessage(
+          id,
+          _msg(
+            'assistant',
+            '```yaml\n'
+                'vocabulary:\n'
+                '  nouns:\n'
+                '    - ko: "배"\n'
+                '      en: "pear"\n'
+                '    - ko: "포도"\n'
+                '      en: "grape"\n'
+                '```\n',
+            1,
+          ),
+        ),
+      );
+      await openChat(tester, provider, id, lesson: lesson);
+      expect(find.text('Edit and add to lesson'), findsOneWidget);
+
+      // Added later: 배 is left out.
+      await tester.runAsync(
+        () =>
+            provider.addVocabToLesson(lesson.id, _word('v-pear', '배', 'pear')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Edit and add 1 new word'), findsOneWidget);
+
+      // Edited later, with as many words as before: 포도 is left out too.
+      final school = lesson.vocabularies.firstWhere(
+        (v) => v.targetWord == '학교',
+      );
+      school
+        ..targetWord = '포도'
+        ..translation = 'grape';
+      await tester.runAsync(() => provider.updateVocab(school));
+      await tester.pumpAndSettle();
+      expect(find.text('Already in your lessons'), findsOneWidget);
     });
 
     testWidgets('a word chat has no button', (tester) async {
