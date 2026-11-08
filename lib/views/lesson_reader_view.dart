@@ -93,12 +93,12 @@ class _LessonReaderViewState extends State<LessonReaderView> {
           if (compact)
             IconButton(
               tooltip: 'View Vocabulary',
-              icon: const Icon(Icons.menu_book_outlined),
+              icon: const Icon(Icons.translate_outlined),
               onPressed: openVocabulary,
             )
           else
             TextButton.icon(
-              icon: const Icon(Icons.menu_book_outlined),
+              icon: const Icon(Icons.translate_outlined),
               label: const Text('View Vocabulary'),
               onPressed: openVocabulary,
             ),
@@ -179,7 +179,7 @@ class _LessonReaderViewState extends State<LessonReaderView> {
             ),
             const SizedBox(height: 16),
             FilledButton.icon(
-              icon: const Icon(Icons.menu_book_outlined),
+              icon: const Icon(Icons.translate_outlined),
               label: const Text('View Vocabulary'),
               onPressed: () {
                 Navigator.push(

@@ -691,7 +691,7 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(
-                          Icons.menu_book,
+                          Icons.translate,
                           size: 64,
                           color: theme.colorScheme.outline,
                         ),
