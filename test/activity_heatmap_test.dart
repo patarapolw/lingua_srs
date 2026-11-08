@@ -741,6 +741,14 @@ void main() {
       );
     });
 
+    test('the chart caption', () {
+      expect(
+        newCardsChartCaption(10),
+        'Per calendar day. The limit counts the last 24 hours.',
+      );
+      expect(newCardsChartCaption(0), 'Per calendar day.');
+    });
+
     test('the cards left and the time to start them', () {
       expect(
         newCardsLeftText(312, 10),
@@ -783,6 +791,10 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Limit 10'), findsOneWidget);
+      expect(
+        find.text('Per calendar day. The limit counts the last 24 hours.'),
+        findsOneWidget,
+      );
       expect(find.text('Today'), findsWidgets);
       final today = DateTime.now();
       const months = [
