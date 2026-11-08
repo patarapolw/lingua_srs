@@ -1,4 +1,6 @@
 import '../models/lesson.dart';
+import '../models/sentence.dart';
+import 'yaml_parser_service.dart';
 
 /// Builds AI discussion ids, prompts and suggestions for whole lessons.
 class LessonAiPrompt {
@@ -109,6 +111,43 @@ class LessonAiPrompt {
       }
     }
     return null;
+  }
+
+  /// The note added to a word an AI suggested, when it is imported.
+  static const aiWordNote =
+      '*Suggested by AI: check this word, its meaning and its examples '
+      'before relying on them.*';
+
+  /// The note added to an example sentence an AI suggested, when it is
+  /// imported.
+  static const aiSentenceNote =
+      '*Suggested by AI: check this sentence and its translation before '
+      'relying on them.*';
+
+  /// Adds [aiWordNote] to the notes of every word in [parsed], vocabulary an
+  /// AI suggested, and [aiSentenceNote] to those of every example sentence
+  /// that [isNew] says is not in the Sentence Pool yet. A sentence already in
+  /// the pool is the learner's own, so it is left as it is. Each note goes
+  /// after any notes there are, as a paragraph of its own, and is not added
+  /// twice.
+  static void addAiNotes(
+    YamlParseResult parsed, {
+    required bool Function(Sentence sentence) isNew,
+  }) {
+    for (final vocab in parsed.lesson.vocabularies) {
+      vocab.notes = _withNote(vocab.notes, aiWordNote);
+    }
+    for (final sentence in parsed.sentences) {
+      if (isNew(sentence)) {
+        sentence.notes = _withNote(sentence.notes, aiSentenceNote);
+      }
+    }
+  }
+
+  static String _withNote(String notes, String note) {
+    final text = notes.trim();
+    if (text.contains(note)) return notes;
+    return text.isEmpty ? note : '$text\n\n$note';
   }
 
   static List<String> suggestedQuestions(bool hasMessages) => hasMessages

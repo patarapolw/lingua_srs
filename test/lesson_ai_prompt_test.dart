@@ -163,6 +163,38 @@ vocabulary:
       );
     });
 
+    test('AI notes go on every word and on new sentences only', () {
+      final parsed = YamlParserService.parseLessonYaml('''vocabulary:
+  nouns:
+    - ko: "배"
+      en: "pear"
+      notes: "A fruit."
+      examples:
+        - ko: "**배**가 달아요."
+          en: "The pear is sweet."
+        - ko: "**배**를 샀어요."
+          en: "I bought a pear."
+    - ko: "포도"
+      en: "grape"
+''');
+      LessonAiPrompt.addAiNotes(
+        parsed,
+        isNew: (sentence) => sentence.targetText != '배가 달아요.',
+      );
+      final [pear, grape] = parsed.lesson.vocabularies;
+      expect(pear.notes, 'A fruit.\n\n${LessonAiPrompt.aiWordNote}');
+      expect(grape.notes, LessonAiPrompt.aiWordNote);
+      final [sweet, bought] = parsed.sentences;
+      // Already in the pool: the learner's own, left as it is.
+      expect(sweet.notes, isEmpty);
+      expect(bought.notes, LessonAiPrompt.aiSentenceNote);
+
+      // Not added twice.
+      LessonAiPrompt.addAiNotes(parsed, isNew: (_) => true);
+      expect(pear.notes, 'A fruit.\n\n${LessonAiPrompt.aiWordNote}');
+      expect(bought.notes, LessonAiPrompt.aiSentenceNote);
+    });
+
     test('suggested questions differ before and after the first message', () {
       expect(
         LessonAiPrompt.suggestedQuestions(false),

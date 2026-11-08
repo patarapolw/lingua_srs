@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 
 import '../models/lesson.dart';
 import '../providers/app_provider.dart';
+import '../services/lesson_ai_prompt.dart';
 import '../services/markdown_archive_service.dart';
 import '../services/storage_service.dart';
 import '../services/yaml_parser_service.dart';
@@ -32,12 +33,18 @@ class YamlImportView extends StatefulWidget {
   /// imported.
   final bool vocabularyOnly;
 
+  /// The vocabulary was suggested by an AI: on import, every word and every
+  /// new example sentence gets a note saying so
+  /// ([LessonAiPrompt.addAiNotes]).
+  final bool aiSuggested;
+
   const YamlImportView({
     super.key,
     this.initialLessonName,
     this.initialYaml,
     this.previewInitialYaml = false,
     this.vocabularyOnly = false,
+    this.aiSuggested = false,
   });
 
   @override
@@ -495,6 +502,12 @@ class _YamlImportViewState extends State<YamlImportView>
     setState(() => _isParsing = true);
     try {
       final provider = context.read<AppProvider>();
+      if (widget.aiSuggested) {
+        LessonAiPrompt.addAiNotes(
+          preview,
+          isNew: (sentence) => !provider.hasSentenceLike(sentence),
+        );
+      }
       final importedLesson = (await provider.importParsedLessons([preview]))
           .single;
 
@@ -732,6 +745,15 @@ class _YamlImportViewState extends State<YamlImportView>
                           fontWeight: FontWeight.bold,
                         ),
                       ),
+                      if (widget.aiSuggested) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'Suggested by AI. Each word, and each example '
+                          'sentence not in your Sentence Pool yet, gets a '
+                          'note saying so when added.',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      ],
                       const SizedBox(height: 8),
                       Expanded(
                         child: TextField(

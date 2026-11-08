@@ -11,6 +11,7 @@ import 'package:lingua_srs/services/audio_service.dart';
 import 'package:lingua_srs/services/tts_voice.dart';
 import 'package:lingua_srs/services/lesson_ai_prompt.dart';
 import 'package:lingua_srs/services/storage_service.dart';
+import 'package:lingua_srs/services/yaml_parser_service.dart';
 import 'package:lingua_srs/views/ai_discussion_dialog.dart';
 import 'package:lingua_srs/views/recent_ai_discussions_view.dart';
 import 'package:lingua_srs/views/yaml_import_view.dart';
@@ -1461,6 +1462,7 @@ void main() {
       expect(view.initialYaml, yaml);
       expect(view.previewInitialYaml, isTrue);
       expect(view.vocabularyOnly, isTrue);
+      expect(view.aiSuggested, isTrue);
       // Nothing is added until it is imported from there.
       expect(
         lesson.vocabularies.map((v) => v.targetWord),
@@ -1665,6 +1667,72 @@ void main() {
       await tester.runAsync(() => provider.updateVocab(school));
       await tester.pumpAndSettle();
       expect(find.text('Already in your lessons'), findsOneWidget);
+    });
+
+    testWidgets('words and new sentences get an AI note when added', (
+      tester,
+    ) async {
+      final (provider, _) = await loadedProvider(tester);
+      // A sentence the learner already has, with their own note.
+      await tester.runAsync(
+        () => provider.importParsedLessons([
+          YamlParserService.parseLessonYaml(
+            'vocabulary:\n'
+            '  nouns:\n'
+            '    - ko: "과일"\n'
+            '      en: "fruit"\n'
+            '      examples:\n'
+            '        - ko: "**배**가 달아요."\n'
+            '          en: "The pear is sweet."\n'
+            '          notes: "Mine."\n',
+            defaultTitle: 'Fruit',
+          ),
+        ]),
+      );
+      const yaml =
+          'vocabulary:\n'
+          '  nouns:\n'
+          '    - ko: "배"\n'
+          '      en: "pear"\n'
+          '      examples:\n'
+          '        - ko: "**배**가 달아요."\n'
+          '          en: "The pear is sweet."\n'
+          '        - ko: "**배**를 샀어요."\n'
+          '          en: "I bought a pear."\n';
+      await pumpWith(
+        tester,
+        provider,
+        const YamlImportView(
+          initialLessonName: 'Words',
+          initialYaml: yaml,
+          previewInitialYaml: true,
+          vocabularyOnly: true,
+          aiSuggested: true,
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 301));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 500)),
+      );
+      await tester.pump();
+      expect(find.textContaining('Suggested by AI. Each word'), findsOneWidget);
+
+      await tester.tap(find.text('Add Vocabulary').last);
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 500)),
+      );
+      await tester.pump();
+
+      final pear = provider.lessons
+          .expand((lesson) => lesson.vocabularies)
+          .singleWhere((vocab) => vocab.targetWord == '배');
+      expect(pear.notes, LessonAiPrompt.aiWordNote);
+      String notesOf(String target) => provider.sentences
+          .singleWhere((sentence) => sentence.targetText == target)
+          .notes;
+      expect(notesOf('배를 샀어요.'), LessonAiPrompt.aiSentenceNote);
+      expect(notesOf('배가 달아요.'), 'Mine.');
     });
 
     testWidgets('a word chat has no button', (tester) async {

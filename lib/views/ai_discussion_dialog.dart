@@ -339,6 +339,7 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
           initialYaml: yaml,
           previewInitialYaml: true,
           vocabularyOnly: true,
+          aiSuggested: true,
         ),
       ),
     );
