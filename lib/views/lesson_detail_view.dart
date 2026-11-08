@@ -615,8 +615,8 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                                     vocab: preview.vocab,
                                     card: preview.card,
                                     lesson: lesson,
-                                    sentenceResolver: () => provider
-                                        .getRandomSentenceForVocab(
+                                    sentenceResolver: () =>
+                                        provider.getRandomSentenceForVocab(
                                           preview.vocab,
                                         ),
                                   ),

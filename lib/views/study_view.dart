@@ -458,8 +458,7 @@ String cramModeTitle(CramMode mode) => switch (mode) {
 /// The chip on every card of a preview.
 const previewCardChip = (
   label: 'PREVIEW',
-  tooltip:
-      "Preview only: the card stays new and isn't added to your reviews.",
+  tooltip: "Preview only: the card stays new and isn't added to your reviews.",
 );
 
 /// How a cram session treats ratings.
