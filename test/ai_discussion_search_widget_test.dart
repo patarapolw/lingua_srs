@@ -1467,6 +1467,71 @@ void main() {
       );
     });
 
+    Future<void> openLessonChatWith(WidgetTester tester, String answer) async {
+      final (provider, lesson) = await loadedProvider(tester);
+      final id = LessonAiPrompt.discussionId(lesson.id);
+      await tester.runAsync(
+        () => provider.addAiDiscussionMessage(id, _msg('assistant', answer, 1)),
+      );
+      await openChat(tester, provider, id, lesson: lesson);
+    }
+
+    testWidgets('words already in a lesson are left out', (tester) async {
+      // 사과 and 학교 are in the lesson; 배 is new.
+      await openLessonChatWith(
+        tester,
+        '```yaml\n'
+        'vocabulary:\n'
+        '  nouns:\n'
+        '    - ko: "사과"\n'
+        '      en: "apple"\n'
+        '    - ko: "배"\n'
+        '      en: "pear"\n'
+        '    - ko: "학교"\n'
+        '      en: "school"\n'
+        '```\n',
+      );
+
+      expect(
+        find.textContaining('already in your lessons or listed twice'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('사과, 학교'), findsOneWidget);
+
+      await tester.tap(find.text('Edit and add 1 new word'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 301));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 500)),
+      );
+      await tester.pump();
+
+      final view = tester.widget<YamlImportView>(find.byType(YamlImportView));
+      expect(view.initialYaml, yaml);
+    });
+
+    testWidgets('an answer with only known words cannot be added', (
+      tester,
+    ) async {
+      await openLessonChatWith(
+        tester,
+        '```yaml\n'
+        'vocabulary:\n'
+        '  nouns:\n'
+        '    - ko: "사과"\n'
+        '      en: "apple"\n'
+        '```\n',
+      );
+
+      final button = tester.widget<OutlinedButton>(
+        find.ancestor(
+          of: find.text('Already in your lessons'),
+          matching: find.byWidgetPredicate((w) => w is OutlinedButton),
+        ),
+      );
+      expect(button.onPressed, isNull);
+    });
+
     testWidgets('a word chat has no button', (tester) async {
       final (provider, _) = await loadedProvider(
         tester,

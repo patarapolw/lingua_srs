@@ -34,6 +34,25 @@ class MissingEmphasisException extends FormatException {
   }
 }
 
+/// Vocabulary YAML with the words that are already known left out, from
+/// [YamlParserService.withoutKnownVocabulary].
+class VocabularyYamlFilter {
+  /// The YAML without the left-out entries, as written otherwise.
+  final String yaml;
+
+  /// The target words of the entries that are kept, in order.
+  final List<String> kept;
+
+  /// The target words of the entries that were left out, in order.
+  final List<String> removed;
+
+  const VocabularyYamlFilter({
+    required this.yaml,
+    required this.kept,
+    required this.removed,
+  });
+}
+
 class YamlParserService {
   /// Known language keys for auto-detection
   static const List<String> knownLangKeys = [
@@ -293,6 +312,114 @@ class YamlParserService {
     }
 
     return YamlParseResult(lesson: lesson, sentences: allSentences);
+  }
+
+  /// Two target words with the same key are the same word: they differ only
+  /// in case or spacing.
+  static String vocabularyKey(String word) =>
+      word.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+
+  /// [yaml], plain vocabulary YAML, without the entries whose target word is
+  /// in [known] (keys from [vocabularyKey]) or comes earlier in [yaml]. The
+  /// rest of the text is kept as it is written, so only whole entries go, and
+  /// a part of speech left with no entries goes too. YAML that cannot be
+  /// read, and lists written in flow style (`[...]`), are left as they are.
+  static VocabularyYamlFilter withoutKnownVocabulary(
+    String yaml,
+    Set<String> known,
+  ) {
+    final YamlNode root;
+    try {
+      root = loadYamlNode(yaml);
+    } on YamlException {
+      return VocabularyYamlFilter(
+        yaml: yaml,
+        kept: const [],
+        removed: const [],
+      );
+    }
+    if (root is! YamlMap) {
+      return VocabularyYamlFilter(
+        yaml: yaml,
+        kept: const [],
+        removed: const [],
+      );
+    }
+    final vocabulary = root.nodes['vocabulary'];
+    final sections = vocabulary is YamlMap ? vocabulary : root;
+
+    final seen = {...known};
+    final kept = <String>[];
+    final removed = <String>[];
+    final cuts = <(int, int)>[];
+
+    // The start of the line [offset] is on.
+    int lineStart(int offset) => yaml.lastIndexOf('\n', offset - 1) + 1;
+    // Just after the end of the last line [node] has text on.
+    int lineEndAfter(YamlNode node) {
+      var end = node.span.end.offset;
+      while (end > 0 && ' \t\r\n'.contains(yaml[end - 1])) {
+        end--;
+      }
+      final newline = yaml.indexOf('\n', end);
+      return newline == -1 ? yaml.length : newline + 1;
+    }
+
+    String? targetWord(YamlMap item) {
+      for (final entry in item.entries) {
+        final key = entry.key.toString().trim().toLowerCase();
+        if (knownLangKeys.contains(key)) return entry.value?.toString() ?? '';
+      }
+      return null;
+    }
+
+    void filterSection(YamlNode key, YamlNode value) {
+      if (value is YamlMap) {
+        for (final entry in value.nodes.entries) {
+          filterSection(entry.key as YamlNode, entry.value);
+        }
+        return;
+      }
+      if (value is! YamlList) return;
+      final block = value.style == CollectionStyle.BLOCK;
+      final items = value.nodes;
+      final gone = <int>[];
+      for (var i = 0; i < items.length; i++) {
+        final item = items[i];
+        if (item is! YamlMap) continue;
+        final word = targetWord(item);
+        if (word == null || word.trim().isEmpty) continue;
+        if (!block || seen.add(vocabularyKey(word))) {
+          kept.add(word.trim());
+        } else {
+          removed.add(word.trim());
+          gone.add(i);
+        }
+      }
+      if (gone.isEmpty) return;
+      if (gone.length == items.length) {
+        // Nothing is left under this part of speech: its key goes too.
+        cuts.add((lineStart(key.span.start.offset), lineEndAfter(value)));
+        return;
+      }
+      for (final i in gone) {
+        final start = lineStart(items[i].span.start.offset);
+        final end = i + 1 < items.length
+            ? lineStart(items[i + 1].span.start.offset)
+            : lineEndAfter(items[i]);
+        cuts.add((start, end));
+      }
+    }
+
+    for (final entry in sections.nodes.entries) {
+      filterSection(entry.key as YamlNode, entry.value);
+    }
+
+    var text = yaml;
+    for (final (start, end) in cuts.reversed) {
+      text = text.replaceRange(start, end, '');
+    }
+    return VocabularyYamlFilter(yaml: text, kept: kept, removed: removed);
   }
 
   static bool hasVocabularyFrontmatter(String markdown) {

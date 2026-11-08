@@ -64,7 +64,8 @@ class LessonAiPrompt {
     final native = lesson.nativeLanguage;
     return [
       'When the learner asks for vocabulary to add to this lesson, suggest '
-          'words that fit the lesson and are not in its vocabulary yet. Put '
+          'words that fit the lesson and are not in its vocabulary yet, each '
+          'once. Put '
           'them in one ```yaml code block in this format, with '
           'part-of-speech keys (such as nouns, verbs, adjectives, adverbs, '
           'expressions) directly under `vocabulary:`. Verbs and adjectives '

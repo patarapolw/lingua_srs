@@ -14,6 +14,7 @@ import '../services/deepseek_service.dart';
 import '../services/lesson_ai_prompt.dart';
 import '../services/typed_questions.dart';
 import '../services/word_ai_prompt.dart';
+import '../services/yaml_parser_service.dart';
 import '../widgets/ai_discussion_suggestion_tile.dart';
 import '../widgets/ai_question_chip.dart';
 import '../widgets/emphasis_text.dart';
@@ -183,15 +184,43 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
     }
   }
 
+  /// The vocabulary each answer offers to add to the lesson, by the answer's
+  /// text: its YAML without the words already in a lesson, or null for an
+  /// answer without vocabulary YAML. Worked out again when the number of words
+  /// in the lessons changes, as it does once some are added.
+  final Map<String, VocabularyYamlFilter?> _vocabularyOffers = {};
+  int _knownWordCount = -1;
+
+  VocabularyYamlFilter? _vocabularyOffer(String content) {
+    final lessons = context.read<AppProvider>().lessons;
+    final count = lessons.fold(0, (sum, l) => sum + l.vocabularies.length);
+    if (count != _knownWordCount) {
+      _vocabularyOffers.clear();
+      _knownWordCount = count;
+    }
+    return _vocabularyOffers.putIfAbsent(content, () {
+      final yaml = LessonAiPrompt.vocabularyYaml(content);
+      if (yaml == null) return null;
+      return YamlParserService.withoutKnownVocabulary(yaml, {
+        for (final lesson in lessons)
+          for (final vocab in lesson.vocabularies)
+            YamlParserService.vocabularyKey(vocab.targetWord),
+      });
+    });
+  }
+
   /// An AI answer. In a lesson chat, an answer with vocabulary YAML in it
   /// gets a button that opens the YAML in the import screen, under the
-  /// lesson's name, to edit and add to the lesson.
+  /// lesson's name, to edit and add to the lesson. Words already in a lesson,
+  /// or listed twice, are left out of it and named under the button.
   Widget _answer(String content) {
     final markdown = MarkdownContent(content: content, selectable: true);
     final lesson = widget.lesson;
     if (lesson == null || widget.orphaned) return markdown;
-    final yaml = LessonAiPrompt.vocabularyYaml(content);
-    if (yaml == null) return markdown;
+    final offer = _vocabularyOffer(content);
+    if (offer == null) return markdown;
+    final nothingNew = offer.kept.isEmpty && offer.removed.isNotEmpty;
+    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -199,9 +228,27 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
         const SizedBox(height: 6),
         OutlinedButton.icon(
           icon: const Icon(Icons.playlist_add),
-          label: const Text('Edit and add to lesson'),
-          onPressed: () => _addVocabulary(lesson, yaml),
+          label: Text(
+            nothingNew
+                ? 'Already in your lessons'
+                : offer.removed.isEmpty
+                ? 'Edit and add to lesson'
+                : 'Edit and add ${offer.kept.length} new '
+                      '${offer.kept.length == 1 ? 'word' : 'words'}',
+          ),
+          onPressed: nothingNew
+              ? null
+              : () => _addVocabulary(lesson, offer.yaml),
         ),
+        if (offer.removed.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              'Left out (already in your lessons or listed twice): '
+              '${offer.removed.toSet().join(', ')}',
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
       ],
     );
   }
