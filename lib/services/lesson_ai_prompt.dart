@@ -52,10 +52,10 @@ class LessonAiPrompt {
     ].join('\n\n');
   }
 
-  /// The fixed question that asks for words to add to the lesson, as YAML the
-  /// learner can edit before adding it.
-  static const vocabularyQuestion =
-      'List more vocabulary for this lesson in YAML.';
+  /// The fixed question that asks for words to add to the lesson. The system
+  /// prompt has the AI answer it, and any other request for words to learn,
+  /// with YAML the learner can edit before adding it.
+  static const vocabularyQuestion = 'List more vocabulary for this lesson.';
 
   /// How the AI writes vocabulary to add to [lesson], so that the reply opens
   /// in the import screen as it is (see docs/lesson-format.md).
@@ -63,10 +63,11 @@ class LessonAiPrompt {
     final target = lesson.targetLanguage;
     final native = lesson.nativeLanguage;
     return [
-      'When the learner asks for vocabulary to add to this lesson, suggest '
-          'words that fit the lesson and are not in its vocabulary yet, each '
-          'once. Put '
-          'them in one ```yaml code block in this format, with '
+      'Whenever you give the learner words to learn (they ask for more '
+          'vocabulary, a word list, words on a topic, or words to add to '
+          'this lesson), suggest words that fit the lesson and are not in '
+          'its vocabulary yet, each once. Besides any explanation, put them '
+          'in one ```yaml code block in this format, with '
           'part-of-speech keys (such as nouns, verbs, adjectives, adverbs, '
           'expressions) directly under `vocabulary:`. Verbs and adjectives '
           'are in their dictionary form. `notes` and `examples` are '

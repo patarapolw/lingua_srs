@@ -86,6 +86,9 @@ void main() {
       expect(prompt, contains('vocabulary:\n  nouns:\n    - ko: "..."'));
       expect(prompt, contains('      en: "..."'));
       expect(prompt, contains('not in its vocabulary yet'));
+      // Not only the fixed question: any request for words to learn.
+      expect(prompt, contains('Whenever you give the learner words to learn'));
+      expect(LessonAiPrompt.vocabularyQuestion, isNot(contains('YAML')));
       // The translation is asked to emphasize the word too, where it can.
       expect(prompt, contains('          en: "... **...** ..."'));
       expect(prompt, contains('In the en translation, also wrap in **bold**'));
