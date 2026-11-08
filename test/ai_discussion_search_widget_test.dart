@@ -1699,19 +1699,34 @@ void main() {
           '          en: "The pear is sweet."\n'
           '        - ko: "**배**를 샀어요."\n'
           '          en: "I bought a pear."\n';
+      // Opened over a page, as from the chat: it closes itself once added.
       await pumpWith(
         tester,
         provider,
-        const YamlImportView(
-          initialLessonName: 'Words',
-          initialYaml: yaml,
-          previewInitialYaml: true,
-          vocabularyOnly: true,
-          aiSuggested: true,
+        Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const YamlImportView(
+                    initialLessonName: 'Words',
+                    initialYaml: yaml,
+                    previewInitialYaml: true,
+                    vocabularyOnly: true,
+                    aiSuggested: true,
+                  ),
+                ),
+              ),
+              child: const Text('open'),
+            ),
+          ),
         ),
       );
+      await tester.tap(find.text('open'));
+      // Not pumpAndSettle: the preview's progress bar runs while the YAML is
+      // parsed on the real clock. These pumps open the page and start it.
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 301));
+      await tester.pump(const Duration(milliseconds: 400));
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 500)),
       );
@@ -1719,10 +1734,30 @@ void main() {
       expect(find.textContaining('Suggested by AI. Each word'), findsOneWidget);
 
       await tester.tap(find.text('Add Vocabulary').last);
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 500)),
-      );
-      await tester.pump();
+      // The import yields to the fake clock between lessons and saves with
+      // real I/O, so both have to run until it is done.
+      bool added() => provider.lessons
+          .expand((lesson) => lesson.vocabularies)
+          .any((vocab) => vocab.targetWord == '배');
+      for (var i = 0; i < 100 && !added(); i++) {
+        await tester.pump(const Duration(milliseconds: 20));
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+      }
+      // Let the save after the import, and its snack bar, finish too.
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 20));
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+      }
+      expect(added(), isTrue, reason: 'the import never finished');
+      // The screen has closed; the snack bar goes after a few seconds.
+      await tester.pumpAndSettle();
+      expect(find.byType(YamlImportView), findsNothing);
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
 
       final pear = provider.lessons
           .expand((lesson) => lesson.vocabularies)
