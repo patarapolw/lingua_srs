@@ -5,10 +5,12 @@ import '../models/lesson.dart';
 import '../models/vocab_item.dart';
 import '../models/srs_card.dart';
 import '../providers/app_provider.dart';
+import '../services/card_preview.dart';
 import '../services/srs_service.dart';
 import '../widgets/audio_button.dart';
 import '../widgets/emphasis_text.dart';
 import '../widgets/markdown_content.dart';
+import 'card_preview_view.dart';
 import 'vocab_edit_dialog.dart';
 import 'study_view.dart';
 import 'yaml_import_view.dart';
@@ -414,6 +416,20 @@ class _LessonDetailViewState extends State<LessonDetailView> {
     }
 
     sortSections(rootSection);
+
+    // The new cards of the filtered words, in list order, collapsed sections
+    // included.
+    final orderedVocab = <VocabItem>[];
+    void collectVocab(_SectionNode section) {
+      for (final child in section.children.values) {
+        orderedVocab.addAll(child.vocabularies);
+        collectVocab(child);
+      }
+    }
+
+    collectVocab(rootSection);
+    final previewCards = previewNewCards(orderedVocab);
+
     final displayRows = <Object>[];
     void flattenSections(
       _SectionNode section,
@@ -576,6 +592,32 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                   ),
                 ),
                 const SizedBox(width: 12),
+                IconButton(
+                  icon: Badge(
+                    isLabelVisible: previewCards.isNotEmpty,
+                    label: Text('${previewCards.length}'),
+                    child: const Icon(Icons.style_outlined),
+                  ),
+                  tooltip: previewCards.isEmpty
+                      ? 'No new cards to preview'
+                      : 'Preview ${previewCards.length} new '
+                            '${previewCards.length == 1 ? 'card' : 'cards'} '
+                            'without adding them to reviews',
+                  onPressed: previewCards.isEmpty
+                      ? null
+                      : () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => CardPreviewView(
+                              lesson: lesson,
+                              cards: previewCards,
+                              filterLabel: _selectedCategory == 'All'
+                                  ? null
+                                  : _selectedCategory.toUpperCase(),
+                            ),
+                          ),
+                        ),
+                ),
                 if (MediaQuery.sizeOf(context).width >= 700)
                   SizedBox(
                     width: 220,
