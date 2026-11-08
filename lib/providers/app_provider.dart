@@ -10,6 +10,7 @@ import '../models/lesson.dart';
 import '../models/sentence.dart';
 import '../models/shared_vocab.dart';
 import '../models/srs_card.dart';
+import '../models/typed_question.dart';
 import '../models/vocab_item.dart';
 import '../models/vocab_merge_record.dart';
 import '../services/ai_discussion_search.dart';
@@ -25,6 +26,7 @@ import '../services/sync_error_text.dart';
 import '../services/sync_pairing.dart';
 import '../services/sync_record_cipher.dart';
 import '../services/sync_records.dart';
+import '../services/typed_questions.dart';
 import '../services/vocab_ai_service.dart';
 import '../services/yaml_parser_service.dart';
 
@@ -90,6 +92,10 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   static const int _maxMergeHistory = 20;
   static const int _maxItemsPerRequest = 150;
   Map<String, List<AiDiscussionMessage>> _aiDiscussions = {};
+
+  /// Questions typed in AI chats, by id, to offer again. See
+  /// [TypedQuestions].
+  Map<String, TypedQuestion> _typedQuestions = {};
   bool _isLoading = true;
   String? _selectedLessonId;
   Map<String, int> _lessonHierarchyOrder = {};
@@ -319,6 +325,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     _maxNewCards24h = results.$9;
     // Records only have `.wait` up to nine fields, so this loads on its own.
     _showAi = await StorageService.loadShowAi();
+    _typedQuestions = await StorageService.loadTypedQuestions();
     _dailyReviewCounts = await StorageService.loadDailyReviewCounts();
     _dailyRatingCounts = await StorageService.loadDailyRatingCounts();
     _dailyNewCardCounts = await StorageService.loadDailyNewCardCounts();
@@ -717,6 +724,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       sentences: _sentences,
       mergeHistory: _mergeHistory,
       aiDiscussions: _aiDiscussions,
+      typedQuestions: _typedQuestions,
       lessonOrder: _lessonHierarchyOrder,
       maxReviews24h: _maxReviews24h,
       maxNewCards24h: _maxNewCards24h,
@@ -730,6 +738,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     _sentences = data.sentences;
     _mergeHistory = data.mergeHistory;
     _aiDiscussions = data.aiDiscussions;
+    _typedQuestions = data.typedQuestions;
     _lessonHierarchyOrder = data.lessonOrder;
     _maxReviews24h = data.maxReviews24h;
     _maxNewCards24h = data.maxNewCards24h;
@@ -776,6 +785,9 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     if (changed.contains(SyncAppPart.aiDiscussions)) {
       await StorageService.saveAiDiscussions(_aiDiscussions);
     }
+    if (changed.contains(SyncAppPart.typedQuestions)) {
+      await StorageService.saveTypedQuestions(_typedQuestions);
+    }
     if (changed.contains(SyncAppPart.lessonOrder)) {
       await StorageService.saveLessonHierarchyOrder(_lessonHierarchyOrder);
     }
@@ -799,6 +811,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
         sentences: _sentences,
         mergeHistory: _mergeHistory,
         aiDiscussions: _aiDiscussions,
+        typedQuestions: _typedQuestions,
         lessonOrder: _lessonHierarchyOrder,
         settings: SyncSettings(
           maxReviews24h: _maxReviews24h,
@@ -832,6 +845,43 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     )..add(savedMessage);
     _aiDiscussions[discussionId] = messages;
     await StorageService.saveAiDiscussions(_aiDiscussions);
+    notifyListeners();
+  }
+
+  /// Questions typed in AI chats, by id. See [TypedQuestions].
+  Map<String, TypedQuestion> get typedQuestions =>
+      Map.unmodifiable(_typedQuestions);
+
+  /// Notes that [question] was typed in an AI chat about [subject] (a word,
+  /// or a lesson's title), or tapped after it was offered as one typed
+  /// before, so it is offered again. Does nothing for a question that only
+  /// fits that one word or lesson.
+  Future<void> recordTypedQuestion({
+    required String question,
+    required String subject,
+    required String language,
+    required TypedQuestionScope scope,
+    DateTime? now,
+  }) async {
+    final next = TypedQuestions.recordUse(
+      _typedQuestions,
+      question: question,
+      subject: subject,
+      language: language,
+      scope: scope,
+      now: now ?? DateTime.now(),
+    );
+    if (identical(next, _typedQuestions)) return;
+    _typedQuestions = next;
+    await StorageService.saveTypedQuestions(_typedQuestions);
+    notifyListeners();
+  }
+
+  /// Stops offering the typed question with [id].
+  Future<void> removeTypedQuestion(String id) async {
+    if (!_typedQuestions.containsKey(id)) return;
+    _typedQuestions = {..._typedQuestions}..remove(id);
+    await StorageService.saveTypedQuestions(_typedQuestions);
     notifyListeners();
   }
 

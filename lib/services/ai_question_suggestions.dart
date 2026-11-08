@@ -12,13 +12,17 @@ import '../models/vocab_item.dart';
 ///
 /// After an answer, a few of the fixed questions are swapped for questions the
 /// AI suggests from that answer, and the result never has more than
-/// [maxQuestions].
+/// [maxQuestions]. Questions the learner typed before (`TypedQuestions`) come
+/// first, up to [maxTypedQuestions] of them.
 class AiQuestionSuggestions {
   /// Most questions shown at once.
   static const maxQuestions = 4;
 
   /// Most questions taken from the AI. The rest are fixed ones.
   static const maxAiQuestions = 2;
+
+  /// Most questions taken from those the learner typed before.
+  static const maxTypedQuestions = 2;
 
   /// Most fixed questions shown at once. With the AI's suggestions in the
   /// list there is room for [maxQuestions] - their count.
@@ -37,6 +41,28 @@ class AiQuestionSuggestions {
   /// Whether there are questions for [language], a code like `ko` (a region
   /// as in `ko-KR` and the English name are accepted too).
   static bool supports(String language) => _forLanguage(language) != null;
+
+  /// [language] as a lowercase code without a region: `ko` for `ko-KR` and
+  /// for `Korean`. A language that is not [supports]ed keeps what comes
+  /// before its region.
+  static String languageCode(String language) {
+    final code = language.trim().toLowerCase().split(RegExp(r'[-_]')).first;
+    for (final entry in _languages.entries) {
+      if (entry.key == code || entry.value.name.toLowerCase() == code) {
+        return entry.key;
+      }
+    }
+    return code;
+  }
+
+  /// Whether [text] has words written in [language], such as a word or phrase
+  /// it asks about. False for a language that is not [supports]ed.
+  static bool hasTargetText({required String language, required String text}) =>
+      _forLanguage(language)?.hasTargetText(text) ?? false;
+
+  /// Two questions with the same key are the same question: they differ only
+  /// in case, spacing or punctuation.
+  static String questionKey(String question) => _key(question);
 
   /// Whether a word is a verb or adjective, which decides if its forms are
   /// asked about. [categories] are what the data says about the word: its part
@@ -124,20 +150,38 @@ class AiQuestionSuggestions {
     required String title,
   }) => 'the ${_require(language).name} lesson "$title"';
 
-  /// What to show after an answer: fixed questions that were not asked yet,
-  /// then up to [maxAiQuestions] from [ai], at most [maxQuestions] together.
-  /// The AI's questions come last, so that the others do not move when they
-  /// arrive. Without any of them, up to [maxFixedQuestions] fixed ones are
-  /// shown.
+  /// What to show in a chat with no messages: up to [maxTypedQuestions] of
+  /// [typed], the questions the learner typed before, then [fixed] ones, at
+  /// most [maxQuestions] together.
+  static List<String> firstQuestions({
+    required List<String> fixed,
+    Iterable<String> typed = const [],
+  }) {
+    final keys = <String>{};
+    final mine = _distinct(typed, keys).take(maxTypedQuestions).toList();
+    return [...mine, ..._distinct(fixed, keys)].take(maxQuestions).toList();
+  }
+
+  /// What to show after an answer: up to [maxTypedQuestions] of [typed], the
+  /// questions the learner typed before, and fixed questions, both not asked
+  /// yet, then up to [maxAiQuestions] from [ai], at most [maxQuestions]
+  /// together. The AI's questions come last, so that the others do not move
+  /// when they arrive. At most [maxFixedQuestions] fixed ones are shown.
   static List<String> followUps({
     required List<String> hardcoded,
     required Iterable<String> asked,
     Iterable<String> ai = const [],
+    Iterable<String> typed = const [],
   }) {
     final askedKeys = {for (final question in asked) _key(question)};
 
+    final mine = _distinct(typed, {
+      ...askedKeys,
+    }).take(maxTypedQuestions).toList();
+    // The fixed and AI questions leave out the typed ones too.
+    final fixedKeys = {for (final question in mine) _key(question)};
+
     final fixed = <String>[];
-    final fixedKeys = <String>{};
     for (final question in hardcoded) {
       final key = _key(question);
       if (askedKeys.contains(key) || !fixedKeys.add(key)) continue;
@@ -158,11 +202,25 @@ class AiQuestionSuggestions {
       if (suggested.length == maxAiQuestions) break;
     }
 
-    final room = maxQuestions - suggested.length;
+    final room = maxQuestions - mine.length - suggested.length;
     return [
+      ...mine,
       ...fixed.take(room < maxFixedQuestions ? room : maxFixedQuestions),
       ...suggested,
     ];
+  }
+
+  /// [questions] that are not empty and whose keys are not in [keys] yet,
+  /// each once. Their keys are added to [keys].
+  static Iterable<String> _distinct(
+    Iterable<String> questions,
+    Set<String> keys,
+  ) sync* {
+    for (final question in questions) {
+      final key = _key(question);
+      if (key.isEmpty || !keys.add(key)) continue;
+      yield question;
+    }
   }
 
   /// The request for the AI's questions. It only gets the last exchange, which
@@ -311,6 +369,9 @@ abstract class _LanguageQuestions {
   /// when the data does not say. A guess that can be wrong.
   bool looksLikeVerbOrAdjective(String word);
 
+  /// Whether [text] has words written in this language.
+  bool hasTargetText(String text);
+
   /// For a chat with no messages. [AiQuestionSuggestions.maxQuestions] of them
   /// are shown, from the first.
   List<String> wordFirst({
@@ -346,6 +407,12 @@ class _KoreanQuestions extends _LanguageQuestions {
   /// else says they are not.
   @override
   bool looksLikeVerbOrAdjective(String word) => word.trim().endsWith('다');
+
+  /// Hangul syllables and jamo.
+  static final _hangul = RegExp(r'[\u1100-\u11FF\u3130-\u318F\uAC00-\uD7A3]');
+
+  @override
+  bool hasTargetText(String text) => _hangul.hasMatch(text);
 
   @override
   List<String> get exampleQuestions => const [

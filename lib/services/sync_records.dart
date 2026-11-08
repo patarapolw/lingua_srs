@@ -7,6 +7,7 @@ import '../models/lesson.dart';
 import '../models/sentence.dart';
 import '../models/shared_vocab.dart';
 import '../models/srs_card.dart';
+import '../models/typed_question.dart';
 import '../models/vocab_merge_record.dart';
 
 /// One record the app syncs: its kind and its id on this device. The id the
@@ -52,6 +53,7 @@ abstract final class SyncKinds {
   static const sentence = 'sentence';
   static const merge = 'merge';
   static const discussion = 'discussion';
+  static const question = 'question';
   static const activity = 'activity';
   static const lessonOrder = 'lesson_order';
   static const settings = 'settings';
@@ -117,6 +119,7 @@ abstract final class SyncSnapshot {
     required List<Sentence> sentences,
     required List<VocabMergeRecord> mergeHistory,
     required Map<String, List<AiDiscussionMessage>> aiDiscussions,
+    Map<String, TypedQuestion> typedQuestions = const {},
     required Map<String, int> lessonOrder,
     required SyncSettings settings,
     required Map<DateTime, int> dailyReviewCounts,
@@ -176,6 +179,10 @@ abstract final class SyncSnapshot {
       });
     }
 
+    for (final entry in typedQuestions.entries) {
+      add(SyncKinds.question, entry.key, entry.value.toJson());
+    }
+
     for (final entry in dailyReviewCounts.entries) {
       final day = _dayKey(entry.key);
       final ratings = ratingCountsToJson(
@@ -202,8 +209,8 @@ abstract final class SyncSnapshot {
   }
 
   /// When the record [key] with [data] last really changed, in milliseconds,
-  /// as far as its contents tell: a card's last review, or a discussion's
-  /// last message. 0 when they do not tell, so a copy already on the server
+  /// as far as its contents tell: a card's last review, a discussion's last
+  /// message, or when a typed question was last used. 0 when they do not tell, so a copy already on the server
   /// wins over it.
   static int knownChangeTime(SyncRecordKey key, Map<String, dynamic> data) {
     int at(Object? value) => value is String
@@ -212,6 +219,8 @@ abstract final class SyncSnapshot {
     switch (key.kind) {
       case SyncKinds.card:
         return at(data['lastReviewed']);
+      case SyncKinds.question:
+        return at(data['lastUsed']);
       case SyncKinds.discussion:
         final messages = data['messages'];
         if (messages is! List) return 0;

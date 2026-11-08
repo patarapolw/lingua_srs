@@ -14,7 +14,8 @@ lingua_srs/
 │   │   ├── srs_card.dart              # SRS state (SM-2 intervals, reps, due date)
 │   │   ├── shared_vocab.dart          # Details and SRS cards shared by every word with the same id
 │   │   ├── vocab_merge_record.dart    # Vocab groups, merge records and undo snapshots
-│   │   └── ai_discussion_message.dart # Saved AI discussion messages
+│   │   ├── ai_discussion_message.dart # Saved AI discussion messages
+│   │   └── typed_question.dart        # A question typed in an AI chat, to offer again
 │   ├── providers/
 │   │   └── app_provider.dart          # State management (lessons, queues, review handling)
 │   ├── services/
@@ -44,6 +45,7 @@ lingua_srs/
 │   │   ├── lesson_ai_prompt.dart      # Prompt, ids and suggestions for lesson AI chats
 │   │   ├── word_ai_prompt.dart        # Prompt for word AI chats, with the current example sentence
 │   │   ├── ai_question_suggestions.dart # Fixed and AI-suggested questions offered in AI chats, per language
+│   │   ├── typed_questions.dart       # Questions typed in AI chats, kept and offered again
 │   │   ├── ai_discussion_search.dart  # Ids, search and related-word suggestions for saved AI chats
 │   │   ├── korean_text_search.dart    # Korean-aware sentence search tokenizer
 │   │   ├── vocab_picker_search.dart   # Ranks vocabulary for the merge picker; scores a typed query
@@ -77,7 +79,7 @@ lingua_srs/
 │   └── widgets/
 │       ├── adaptive_scaffold.dart     # Responsive layout (Rail vs BottomNav)
 │       ├── ai_discussion_suggestion_tile.dart # One suggested AI discussion and why
-│       ├── ai_question_chip.dart              # A suggested question to tap; a long one wraps onto more lines
+│       ├── ai_question_chip.dart              # A suggested question to tap; a long one wraps onto more lines; a typed one can be removed
 │       ├── audio_button.dart          # Audio play/stop indicator
 │       ├── answer_workspace.dart      # Per-card handwriting or typed answer area
 │       ├── audio_edit_fields.dart     # Audio URL (preview, use-recording checkbox) and collapsible TTS text fields for edit dialogs

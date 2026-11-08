@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lingua_srs/models/lesson.dart';
+import 'package:lingua_srs/models/typed_question.dart';
 import 'package:lingua_srs/services/backup_service.dart';
 import 'package:lingua_srs/services/storage_service.dart';
 import 'package:lingua_srs/services/sync_pairing.dart';
@@ -133,6 +134,44 @@ void main() {
       expect(lessons.single.markdownContent, '# Saved lesson');
     },
   );
+
+  test('backup keeps typed AI questions and restore returns them', () async {
+    final question = TypedQuestion(
+      language: 'ko',
+      scope: TypedQuestionScope.word,
+      template: 'Is {word} formal?',
+      uses: 2,
+      lastUsed: DateTime.utc(2026, 11, 1),
+    );
+    await StorageService.saveTypedQuestions({'ko:word:is{}formal': question});
+    final backup = await BackupService.createBackup();
+    await StorageService.saveTypedQuestions({});
+
+    await BackupService.restoreBackup(backup);
+
+    final restored = await StorageService.loadTypedQuestions();
+    expect(restored.keys, ['ko:word:is{}formal']);
+    expect(restored.values.single.toJson(), question.toJson());
+  });
+
+  test('restore rejects typed AI questions it cannot read', () async {
+    final backup = jsonEncode({
+      'format': 'lingua_srs_backup',
+      'version': 1,
+      'preferences': {
+        'lingua_srs_typed_questions': jsonEncode({
+          'ko:word:x': {'template': 'x'},
+        }),
+        'lingua_srs_sentences': '[]',
+      },
+      'lessonMarkdown': {},
+    });
+
+    await expectLater(
+      BackupService.restoreBackup(backup),
+      throwsFormatException,
+    );
+  });
 
   test(
     'invalid lesson data is rejected before changing saved preferences',

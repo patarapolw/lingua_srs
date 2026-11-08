@@ -6,11 +6,13 @@ import 'package:provider/provider.dart';
 
 import '../models/ai_discussion_message.dart';
 import '../models/lesson.dart';
+import '../models/typed_question.dart';
 import '../providers/app_provider.dart';
 import '../services/ai_discussion_search.dart';
 import '../services/ai_question_suggestions.dart';
 import '../services/deepseek_service.dart';
 import '../services/lesson_ai_prompt.dart';
+import '../services/typed_questions.dart';
 import '../services/word_ai_prompt.dart';
 import '../widgets/ai_discussion_suggestion_tile.dart';
 import '../widgets/ai_question_chip.dart';
@@ -74,6 +76,12 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
   /// Counts the questions sent, so that suggestions for an old answer that
   /// arrive late are dropped.
   int _suggestionRound = 0;
+
+  /// The offered question last tapped, which fills the question field, and
+  /// whether it was one the learner typed before. A question sent as it was
+  /// tapped is not a typed one, unless it was offered as one.
+  String? _pickedQuestion;
+  bool _pickedTyped = false;
 
   /// An orphaned chat is only read until the learner chooses to continue.
   late bool _readOnly = widget.orphaned;
@@ -218,24 +226,59 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
     categories: widget.categories,
   );
 
-  /// Questions for a chat that has no messages yet.
-  List<String> _firstQuestions() {
+  TypedQuestionScope get _scope => widget.lesson != null
+      ? TypedQuestionScope.lesson
+      : TypedQuestionScope.word;
+
+  /// Questions the learner typed before in chats like this one and has not
+  /// asked in this one, with their ids.
+  Map<String, String> _typedQuestions(
+    AppProvider provider,
+    List<AiDiscussionMessage> messages,
+  ) {
+    if (widget.orphaned) return const {};
+    return {
+      for (final offer in TypedQuestions.offer(
+        provider.typedQuestions,
+        language: widget.targetLanguage,
+        scope: _scope,
+        subject: widget.targetWord,
+        leaveOut: [
+          for (final message in messages)
+            if (message.role == 'user') message.content,
+        ],
+      ))
+        offer.question: offer.id,
+    };
+  }
+
+  /// Questions for a chat that has no messages yet: ones typed before, then
+  /// fixed ones.
+  List<String> _firstQuestions(Iterable<String> typed) {
     // The questions are about a word or lesson that is not there to ask about.
     if (widget.orphaned) return const [];
-    if (widget.lesson != null) return LessonAiPrompt.suggestedQuestions(false);
-    return AiQuestionSuggestions.wordFirstQuestions(
-      language: widget.targetLanguage,
-      word: widget.targetWord,
-      hasSentence: _hasSentence,
-      verbOrAdjective: _isVerbOrAdjective,
+    return AiQuestionSuggestions.firstQuestions(
+      typed: typed,
+      fixed: widget.lesson != null
+          ? LessonAiPrompt.suggestedQuestions(false)
+          : AiQuestionSuggestions.wordFirstQuestions(
+              language: widget.targetLanguage,
+              word: widget.targetWord,
+              hasSentence: _hasSentence,
+              verbOrAdjective: _isVerbOrAdjective,
+            ),
     );
   }
 
-  /// Questions to offer after an answer: fixed ones not asked yet, and the
-  /// AI's suggestions once they have arrived.
-  List<String> _followUpQuestions(List<AiDiscussionMessage> messages) {
+  /// Questions to offer after an answer: ones typed before and fixed ones,
+  /// not asked yet, and the AI's suggestions once they have arrived.
+  List<String> _followUpQuestions(
+    List<AiDiscussionMessage> messages, {
+    Iterable<String> typed = const [],
+  }) {
     if (widget.orphaned) return const [];
     return AiQuestionSuggestions.followUps(
+      typed: typed,
       hardcoded: widget.lesson != null
           ? LessonAiPrompt.suggestedQuestions(true)
           : AiQuestionSuggestions.wordFollowUps(
@@ -287,10 +330,14 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
             for (final message in provider.getAiDiscussion(widget.discussionId))
               if (message.role == 'user') message.content,
           ],
-          // The fixed questions on screen, which the AI should not repeat.
+          // The other questions on screen, which the AI should not repeat.
           // Its own are not on screen yet.
           shown: _followUpQuestions(
             provider.getAiDiscussion(widget.discussionId),
+            typed: _typedQuestions(
+              provider,
+              provider.getAiDiscussion(widget.discussionId),
+            ).keys,
           ),
           sentenceTarget: isLesson ? null : widget.sentenceTarget,
           sentenceTranslation: isLesson ? null : widget.sentenceTranslation,
@@ -317,7 +364,9 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
     );
   }
 
-  void _selectSuggestedQuestion(String question) {
+  void _selectSuggestedQuestion(String question, {bool typed = false}) {
+    _pickedQuestion = question;
+    _pickedTyped = typed;
     _questionController.value = TextEditingValue(
       text: question,
       selection: TextSelection.collapsed(offset: question.length),
@@ -353,6 +402,17 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
       return;
     }
 
+    // A question tapped and sent as it was is the app's or the AI's, not
+    // the learner's, unless it was offered as one they typed before.
+    final picked = _pickedQuestion;
+    final typed =
+        picked == null ||
+        _pickedTyped ||
+        AiQuestionSuggestions.questionKey(picked) !=
+            AiQuestionSuggestions.questionKey(question);
+    _pickedQuestion = null;
+    _pickedTyped = false;
+
     _questionController.clear();
     setState(() {
       _sending = true;
@@ -367,6 +427,18 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
         widget.discussionId,
         AiDiscussionMessage(role: 'user', content: question),
       );
+      if (typed && !widget.orphaned) {
+        try {
+          await provider.recordTypedQuestion(
+            question: question,
+            subject: widget.targetWord,
+            language: widget.targetLanguage,
+            scope: _scope,
+          );
+        } catch (_) {
+          // Offering it again later is a bonus; the answer still comes.
+        }
+      }
       final messages = [
         AiDiscussionMessage(role: 'system', content: _systemPrompt()),
         ..._history(provider.getAiDiscussion(widget.discussionId)),
@@ -422,12 +494,25 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
     }
   }
 
+  /// A chip for an offered [question]. One the learner typed before has the
+  /// [typedId] it is kept under, and can be removed.
+  Widget _questionChip(String question, String? typedId) => AiQuestionChip(
+    label: question,
+    onPressed: _sending
+        ? null
+        : () => _selectSuggestedQuestion(question, typed: typedId != null),
+    onRemove: typedId == null || _sending
+        ? null
+        : () => context.read<AppProvider>().removeTypedQuestion(typedId),
+  );
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
     final messages = provider.getAiDiscussion(widget.discussionId);
-    final firstQuestions = _firstQuestions();
-    final followUps = _followUpQuestions(messages);
+    final typedQuestions = _typedQuestions(provider, messages);
+    final firstQuestions = _firstQuestions(typedQuestions.keys);
+    final followUps = _followUpQuestions(messages, typed: typedQuestions.keys);
     final theme = Theme.of(context);
     final width = MediaQuery.sizeOf(context).width;
     final height = MediaQuery.sizeOf(context).height;
@@ -587,14 +672,9 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                                       runSpacing: 6,
                                       children: firstQuestions
                                           .map(
-                                            (question) => AiQuestionChip(
-                                              label: question,
-                                              onPressed: _sending
-                                                  ? null
-                                                  : () =>
-                                                        _selectSuggestedQuestion(
-                                                          question,
-                                                        ),
+                                            (question) => _questionChip(
+                                              question,
+                                              typedQuestions[question],
                                             ),
                                           )
                                           .toList(),
@@ -690,12 +770,7 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                           runSpacing: 6,
                           children: [
                             for (final question in followUps)
-                              AiQuestionChip(
-                                label: question,
-                                onPressed: _sending
-                                    ? null
-                                    : () => _selectSuggestedQuestion(question),
-                              ),
+                              _questionChip(question, typedQuestions[question]),
                           ],
                         ),
                       ),

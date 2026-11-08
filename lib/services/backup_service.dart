@@ -36,6 +36,7 @@ class BackupService {
     'lingua_srs_shared_vocab',
     'lingua_srs_vocab_merge_history',
     'lingua_srs_ai_discussions',
+    'lingua_srs_typed_questions',
     'lingua_srs_lesson_hierarchy_order',
     'lingua_srs_lesson_folder_expansion',
   };
@@ -224,6 +225,14 @@ class BackupService {
             );
           }
         }
+      }
+
+      final typedQuestions = _decodePreference(
+        preferences,
+        'lingua_srs_typed_questions',
+      );
+      if (typedQuestions != null) {
+        StorageService.parseTypedQuestions(typedQuestions);
       }
 
       final hierarchyOrder = _decodePreference(
