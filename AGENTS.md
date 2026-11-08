@@ -17,7 +17,7 @@ Flutter app (Dart, `provider` state management). See [README.md](README.md) for 
 - Lesson/vocabulary parsing lives only in `lib/services/yaml_parser_service.dart`. Do not parse lesson syntax elsewhere.
 - SRS scheduling lives in `lib/services/srs_service.dart`.
 - Make commits using a conventional commit message and a detailed body.
-- Name branches `<type>-<issue>-<what-it-does>`: the conventional commit type, the issue number when there is one, and a few lowercase hyphenated words, e.g. `fix-92-undo-review-count` or `docs-agents-branch-naming`. Claude agents prefix the name with `claude/` (`claude/fix-92-undo-review-count`), even when the session suggests a generated name such as `ccr-…`. Use one branch per PR; after a merge, start a new branch.
+- Name branches `<type>-<issue>-<what-it-does>`: the conventional commit type, the issue number when there is one, and a few lowercase hyphenated words, e.g. `fix-92-undo-review-count` or `docs-agents-branch-naming`. Claude agents prefix the name with `claude/` (`claude/fix-92-undo-review-count`). A session may start on, or be told to push to, a generated name such as `ccr-…`: rename the branch to a meaningful one (`git branch -m <name>`) before the first push to `origin` and before opening a PR. A PR can't change its branch later. Use one branch per PR; after a merge, start a new branch.
 
 ## Rules
 
@@ -37,12 +37,14 @@ Flutter app (Dart, `provider` state management). See [README.md](README.md) for 
 
 ## Environments without Flutter/Dart (e.g. cloud agents)
 
-If `flutter` or `dart` isn't available, you can't run tests or `flutter analyze`, and the CI workflow needs manual approval to run. In that case:
+If `flutter` or `dart` isn't available, you can't run tests or `flutter analyze`. In that case:
 
 - Formatting does not need Flutter. Install the Dart SDK from conda-forge (`dart-sdk`, any version meeting the `sdk:` constraint in `pubspec.yaml`), e.g. `micromamba create -y -p "$HOME/.dart-env" -c conda-forge dart-sdk`, then run `"$HOME/.dart-env/bin/dart" format lib test` before committing. Do not run `dart analyze` or `dart test` with it: the app depends on Flutter, which conda-forge does not have.
 - If the Dart SDK can't be installed either, hand-format to Dart style: 2-space indent, trailing commas on multi-line argument lists and collections, lines ≤ 80 columns, and expect `dart format` to change something.
 - Still add or update tests in `test/`, written carefully since they can't be run.
 - Keep changes small and focused so they are easy to fix locally.
 - State in the PR description that tests, analyze and format were not run.
-- Open the PR anyway. It's fine for CI to fail on format, analyze or tests. Don't try to fix a failing PR from here; a local agent with Flutter will fix it on the same PR.
+- Open the PR anyway. It's fine for CI to fail on format, analyze or tests; a local agent with Flutter will fix it on the same PR.
+- CI runs on your pushes, `flutter test` before the format check. You may fix a failure from here only when the log names its cause: an analyzer warning at a file and line, or a failing test whose expected/actual or stack trace points into the changed code. Push at most one fix per failure. If CI still fails, or finding the cause needs the app or a debugger, stop and leave it for a local session.
+- Never push for formatting alone. The next local commit formats.
 - In the PR description, list any step that needs a manual check outside CI (for example deploying the Worker, applying a migration, or trying a change in the running app), or say that none does.
