@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
@@ -113,6 +114,81 @@ class YouTubeEmbed extends StatefulWidget {
     }).toString();
   }
 
+  /// Launch modes tried in turn to open the YouTube link outside the player:
+  /// the YouTube app, then any browser, then an in-app browser tab. A single
+  /// mode can fail on Android (no app takes the link, or YouTube is blocked
+  /// for the default handler), and the next one may still work.
+  static const openModes = [
+    LaunchMode.externalNonBrowserApplication,
+    LaunchMode.externalApplication,
+    LaunchMode.inAppBrowserView,
+  ];
+
+  /// Opens [url] with the first of [openModes] that [launch] reports as
+  /// opened. A mode that throws counts as failed.
+  static Future<bool> openExternally(
+    Uri url,
+    Future<bool> Function(Uri url, LaunchMode mode) launch,
+  ) async {
+    for (final mode in openModes) {
+      try {
+        if (await launch(url, mode)) return true;
+      } catch (_) {}
+    }
+    return false;
+  }
+
+  /// Whether a navigation inside the player leaves the embed, e.g. the
+  /// YouTube logo or "Watch on YouTube", which the WebView can't show
+  /// (`intent:` links on Android) and which should open outside the app.
+  static bool leavesPlayer(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return false;
+    if (uri.scheme == 'intent' || uri.scheme == 'vnd.youtube') return true;
+    if (uri.scheme != 'http' && uri.scheme != 'https') return false;
+    final host = uri.host.toLowerCase();
+    final isYouTube =
+        host == 'youtu.be' ||
+        host == 'youtube.com' ||
+        host.endsWith('.youtube.com');
+    final path = uri.path;
+    return isYouTube &&
+        (path == '/watch' ||
+            path.startsWith('/shorts/') ||
+            path == '/playlist' ||
+            host == 'youtu.be');
+  }
+
+  /// The page the WebView shows to play [embedUrl]: an iframe of the player
+  /// on youtube-nocookie.com, which must be loaded with [playerOrigin] as its
+  /// base URL so YouTube sees a real origin and referrer (else Error 153).
+  static String playerHtml(String embedUrl) =>
+      '<!DOCTYPE html><html><head>'
+      '<meta name="viewport" content="width=device-width, initial-scale=1">'
+      '<style>html,body{margin:0;height:100%;background:#000}'
+      'iframe{position:absolute;inset:0;width:100%;height:100%;border:0}'
+      '</style></head><body>'
+      '<iframe src="${const HtmlEscape().convert(playerSrc(embedUrl))}" '
+      'allow="accelerometer; autoplay; clipboard-write; encrypted-media; '
+      'gyroscope; picture-in-picture; web-share; fullscreen" '
+      'referrerpolicy="strict-origin-when-cross-origin" allowfullscreen>'
+      '</iframe></body></html>';
+
+  /// The origin the player page claims; see [playerHtml].
+  static const playerOrigin = 'https://www.youtube-nocookie.com';
+
+  /// The iframe URL of the player: the embed on youtube-nocookie.com with
+  /// autoplay and [playerOrigin].
+  static String playerSrc(String embedUrl) {
+    final embed = Uri.parse(autoplayUrl(embedUrl));
+    return embed
+        .replace(
+          host: 'www.youtube-nocookie.com',
+          queryParameters: {...embed.queryParameters, 'origin': playerOrigin},
+        )
+        .toString();
+  }
+
   @override
   State<YouTubeEmbed> createState() => _YouTubeEmbedState();
 }
@@ -122,12 +198,12 @@ class _YouTubeEmbedState extends State<YouTubeEmbed> {
   bool _failed = false;
   late Future<String?> _titleFuture;
 
-  // YouTube rejects embeds (Error 153) from pages without a real HTTPS origin,
-  // which is what loadHtmlString gives on Windows. Load a harmless
-  // youtube-nocookie.com page and inject the iframe so the player gets a valid
-  // origin and referrer.
-  static const _hostPage = 'https://www.youtube-nocookie.com/robots.txt';
-  static const _origin = 'https://www.youtube-nocookie.com';
+  // On Windows the WebView ignores the base URL of an HTML string, so the
+  // player gets no real HTTPS origin and YouTube rejects it (Error 153).
+  // There, load a harmless youtube-nocookie.com page and inject the player.
+  // Elsewhere the page is loaded locally, so no extra site has to be
+  // reachable before the video plays.
+  static const _windowsHostPage = 'https://www.youtube-nocookie.com/robots.txt';
 
   @override
   void initState() {
@@ -172,13 +248,7 @@ class _YouTubeEmbedState extends State<YouTubeEmbed> {
   }
 
   String get _embedScript {
-    final embed = Uri.parse(YouTubeEmbed.autoplayUrl(widget.embedUrl));
-    final src = embed
-        .replace(
-          host: 'www.youtube-nocookie.com',
-          queryParameters: {...embed.queryParameters, 'origin': _origin},
-        )
-        .toString();
+    final src = YouTubeEmbed.playerSrc(widget.embedUrl);
     return '''
 document.documentElement.innerHTML =
   '<head><meta name="viewport" content="width=device-width, initial-scale=1"></head>' +
@@ -194,23 +264,39 @@ document.body.appendChild(f);
   }
 
   void _start() {
+    final useHostPage =
+        !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
     var injected = false;
     final controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(
         NavigationDelegate(
+          onNavigationRequest: (request) {
+            if (!YouTubeEmbed.leavesPlayer(request.url)) {
+              return NavigationDecision.navigate;
+            }
+            _openOnYouTube();
+            return NavigationDecision.prevent;
+          },
           onWebResourceError: (error) {
             if (!mounted || error.isForMainFrame == false) return;
             setState(() => _failed = true);
           },
           onPageFinished: (_) {
-            if (injected) return;
+            if (!useHostPage || injected) return;
             injected = true;
             _controller?.runJavaScript(_embedScript);
           },
         ),
-      )
-      ..loadRequest(Uri.parse(_hostPage));
+      );
+    if (useHostPage) {
+      controller.loadRequest(Uri.parse(_windowsHostPage));
+    } else {
+      controller.loadHtmlString(
+        YouTubeEmbed.playerHtml(widget.embedUrl),
+        baseUrl: '${YouTubeEmbed.playerOrigin}/',
+      );
+    }
     setState(() {
       _controller = controller;
       _failed = false;
@@ -222,13 +308,10 @@ document.body.appendChild(f);
   Future<void> _openOnYouTube() async {
     final url = YouTubeEmbed.watchUrl(widget.embedUrl);
     if (url == null) return;
-    var opened = false;
-    try {
-      opened = await launchUrl(
-        Uri.parse(url),
-        mode: LaunchMode.externalApplication,
-      );
-    } catch (_) {}
+    final opened = await YouTubeEmbed.openExternally(
+      Uri.parse(url),
+      (url, mode) => launchUrl(url, mode: mode),
+    );
     if (!opened && mounted) {
       ScaffoldMessenger.maybeOf(
         context,
