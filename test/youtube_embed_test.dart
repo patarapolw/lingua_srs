@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lingua_srs/widgets/youtube_embed.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 void main() {
   group('YouTubeEmbed urls', () {
@@ -54,6 +55,84 @@ void main() {
     test('invalid embed urls give nothing', () {
       expect(YouTubeEmbed.thumbnailUrl(''), isNull);
       expect(YouTubeEmbed.watchUrl(''), isNull);
+    });
+  });
+
+  group('YouTubeEmbed player', () {
+    const embed = 'https://www.youtube.com/embed/abc123?enablejsapi=1';
+
+    test('plays the nocookie embed with autoplay and a real origin', () {
+      final src = Uri.parse(YouTubeEmbed.playerSrc(embed));
+      expect(src.host, 'www.youtube-nocookie.com');
+      expect(src.path, '/embed/abc123');
+      expect(src.queryParameters['autoplay'], '1');
+      expect(src.queryParameters['origin'], YouTubeEmbed.playerOrigin);
+    });
+
+    test('player page holds the iframe without fetching a host page', () {
+      final html = YouTubeEmbed.playerHtml(embed);
+      expect(html, contains('<iframe src="'));
+      expect(html, contains('www.youtube-nocookie.com'));
+      expect(html, isNot(contains('robots.txt')));
+    });
+
+    test('links out of the player open outside the app', () {
+      expect(
+        YouTubeEmbed.leavesPlayer('https://www.youtube.com/watch?v=abc123'),
+        isTrue,
+      );
+      expect(
+        YouTubeEmbed.leavesPlayer('https://m.youtube.com/watch?v=abc123'),
+        isTrue,
+      );
+      expect(YouTubeEmbed.leavesPlayer('https://youtu.be/abc123'), isTrue);
+      expect(
+        YouTubeEmbed.leavesPlayer(
+          'intent://www.youtube.com/watch?v=x#Intent;end',
+        ),
+        isTrue,
+      );
+      expect(YouTubeEmbed.leavesPlayer(YouTubeEmbed.playerSrc(embed)), isFalse);
+      expect(YouTubeEmbed.leavesPlayer('about:blank'), isFalse);
+      expect(
+        YouTubeEmbed.leavesPlayer('https://www.youtube-nocookie.com/'),
+        isFalse,
+      );
+    });
+  });
+
+  group('YouTubeEmbed.openExternally', () {
+    final url = Uri.parse('https://www.youtube.com/watch?v=abc123');
+
+    test('stops at the first mode that opens', () async {
+      final tried = <LaunchMode>[];
+      final opened = await YouTubeEmbed.openExternally(url, (_, mode) async {
+        tried.add(mode);
+        return true;
+      });
+      expect(opened, isTrue);
+      expect(tried, [LaunchMode.externalNonBrowserApplication]);
+    });
+
+    test('falls back when a mode fails or throws', () async {
+      final tried = <LaunchMode>[];
+      final opened = await YouTubeEmbed.openExternally(url, (_, mode) async {
+        tried.add(mode);
+        if (mode == LaunchMode.externalNonBrowserApplication) {
+          throw Exception('ACTIVITY_NOT_FOUND');
+        }
+        return mode == LaunchMode.inAppBrowserView;
+      });
+      expect(opened, isTrue);
+      expect(tried, YouTubeEmbed.openModes);
+    });
+
+    test('reports failure when no mode opens', () async {
+      final opened = await YouTubeEmbed.openExternally(
+        url,
+        (_, _) async => false,
+      );
+      expect(opened, isFalse);
     });
   });
 }

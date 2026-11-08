@@ -55,6 +55,12 @@
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE"/>
         </intent>
+        <!-- Lets url_launcher find the YouTube app and browsers for web
+             links ("Open on YouTube"), which Android 11+ hides otherwise. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
     </queries>
 
     <uses-permission android:name="android.permission.INTERNET"/>
