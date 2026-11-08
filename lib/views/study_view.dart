@@ -14,6 +14,7 @@ import '../providers/app_provider.dart';
 import '../services/ai_discussion_search.dart';
 import '../services/audio_service.dart';
 import '../services/srs_service.dart';
+import '../services/study_queue_order.dart';
 import '../widgets/audio_button.dart';
 import '../widgets/answer_workspace.dart';
 import '../widgets/emphasis_text.dart';
@@ -452,6 +453,11 @@ String cramModeTitle(CramMode mode) => switch (mode) {
             "whether it comes back again. It doesn't change the schedule.",
       );
 
+/// [cards] in the order a preview goes through them: shuffled and spread
+/// across parts of speech, as new cards are in a study session.
+List<StudyCardItem> previewQueue(List<StudyCardItem> cards, Random rand) =>
+    interleaveByGroup(cards, AppProvider.posKeyOf, rand);
+
 /// The chip on every card of a preview.
 const previewCardChip = (
   label: 'PREVIEW',
@@ -480,9 +486,10 @@ class StudyView extends StatefulWidget {
   final CramMode? cramMode;
   final bool recentMistakesOnly;
 
-  /// Cards to preview instead of studying, as in practice-only cram: ratings
-  /// never change a schedule and new cards stay new, but Again still shows
-  /// the card in Recent Mistakes.
+  /// Cards to preview instead of studying, shuffled ([previewQueue]) each
+  /// time the preview starts. As in practice-only cram, ratings never change
+  /// a schedule and new cards stay new, but Again still shows the card in
+  /// Recent Mistakes.
   final List<StudyCardItem>? previewCards;
 
   /// What [previewCards] were picked by, such as a part of speech.
@@ -647,7 +654,7 @@ class _StudyViewState extends State<StudyView> {
     final cramMode = _cramMode;
     final preview = widget.previewCards;
     final queue = preview != null
-        ? [...preview]
+        ? previewQueue(preview, Random())
         : cramMode != null
         ? _cramQueue(provider, cramMode)
         : provider.getStudyQueue(
@@ -1519,7 +1526,9 @@ class _StudyViewState extends State<StudyView> {
                       icon: const Icon(Icons.preview_outlined),
                       label: const Text('Preview Again'),
                       onPressed: () => setState(
-                        () => _startSession([...widget.previewCards!]),
+                        () => _startSession(
+                          previewQueue(widget.previewCards!, Random()),
+                        ),
                       ),
                     ),
                   ] else if (isMistakesMode) ...[

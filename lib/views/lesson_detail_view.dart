@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../models/lesson.dart';
@@ -49,6 +50,33 @@ String lessonStudyLabel({
   return due + fresh > 0 ? 'Study (${due + fresh})' : 'Study';
 }
 
+/// The part-of-speech filter after the chip for [category] is tapped, as
+/// lowercase names; empty means All. A plain tap selects only [category],
+/// or goes back to All when it was the only one selected. With [add]
+/// (long-press, or Ctrl, Cmd or Shift with the click) it is added to the
+/// selection, or taken out when it was in it.
+Set<String> nextCategorySelection(
+  Set<String> selected,
+  String category, {
+  bool add = false,
+}) {
+  final key = category.toLowerCase();
+  if (add) {
+    return selected.contains(key)
+        ? ({...selected}..remove(key))
+        : {...selected, key};
+  }
+  return selected.length == 1 && selected.contains(key) ? {} : {key};
+}
+
+/// Whether a click should add to the selection instead of replacing it.
+bool _addsToSelection() {
+  final keyboard = HardwareKeyboard.instance;
+  return keyboard.isControlPressed ||
+      keyboard.isMetaPressed ||
+      keyboard.isShiftPressed;
+}
+
 class LessonDetailView extends StatefulWidget {
   final String lessonId;
 
@@ -86,7 +114,8 @@ class _SectionRow {
 }
 
 class _LessonDetailViewState extends State<LessonDetailView> {
-  String _selectedCategory = 'All';
+  // Lowercase root sections shown; empty shows all of them.
+  Set<String> _selectedCategories = {};
   String _searchQuery = '';
   bool _searchOpen = false;
   final TextEditingController _searchCtrl = TextEditingController();
@@ -365,13 +394,25 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                 first.toLowerCase().compareTo(second.toLowerCase()),
           )
           ..insert(0, 'All');
+    // A selected section can disappear after an edit or a delete.
+    final selected = _selectedCategories.intersection({
+      for (final category in categories.skip(1)) category.toLowerCase(),
+    });
+    final selectedLabel = selected.isEmpty
+        ? null
+        : categories
+              .skip(1)
+              .where((category) => selected.contains(category.toLowerCase()))
+              .map((category) => category.toUpperCase())
+              .toSet()
+              .join(' + ');
 
     // Filter items
     final filtered = lesson.vocabularies.where((v) {
       final sectionPath = v.effectiveSectionPath;
       final rootSection = sectionPath.isEmpty ? v.pos : sectionPath.first;
-      if (_selectedCategory != 'All' &&
-          rootSection.toLowerCase() != _selectedCategory.toLowerCase()) {
+      if (selected.isNotEmpty &&
+          !selected.contains(rootSection.toLowerCase())) {
         return false;
       }
       if (_searchQuery.isNotEmpty) {
@@ -473,9 +514,7 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                           provider.getRandomSentenceForVocab(preview.vocab),
                     ),
                 ],
-                previewLabel: _selectedCategory == 'All'
-                    ? null
-                    : _selectedCategory.toUpperCase(),
+                previewLabel: selectedLabel,
               ),
             ),
           );
@@ -604,18 +643,49 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
-                      children: categories.map((cat) {
-                        final isSelected = _selectedCategory == cat;
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: FilterChip(
-                            label: Text(cat.toUpperCase()),
-                            selected: isSelected,
-                            onSelected: (_) =>
-                                setState(() => _selectedCategory = cat),
+                      children: [
+                        for (final (index, cat) in categories.indexed)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: index == 0
+                                ? FilterChip(
+                                    label: Text(cat.toUpperCase()),
+                                    // Not on the other chips: a tooltip
+                                    // would take their long-press.
+                                    tooltip:
+                                        'Long-press or Ctrl-click a part of '
+                                        'speech to select several',
+                                    selected: selected.isEmpty,
+                                    onSelected: (_) => setState(
+                                      () => _selectedCategories = {},
+                                    ),
+                                  )
+                                : GestureDetector(
+                                    onLongPress: () => setState(
+                                      () => _selectedCategories =
+                                          nextCategorySelection(
+                                            selected,
+                                            cat,
+                                            add: true,
+                                          ),
+                                    ),
+                                    child: FilterChip(
+                                      label: Text(cat.toUpperCase()),
+                                      selected: selected.contains(
+                                        cat.toLowerCase(),
+                                      ),
+                                      onSelected: (_) => setState(
+                                        () => _selectedCategories =
+                                            nextCategorySelection(
+                                              selected,
+                                              cat,
+                                              add: _addsToSelection(),
+                                            ),
+                                      ),
+                                    ),
+                                  ),
                           ),
-                        );
-                      }).toList(),
+                      ],
                     ),
                   ),
                 ),

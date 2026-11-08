@@ -2266,7 +2266,8 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     return max(0, reviews - newCards);
   }
 
-  static String _posKey(StudyCardItem item) {
+  /// The part of speech [item] is grouped by when a queue is interleaved.
+  static String posKeyOf(StudyCardItem item) {
     final pos = item.vocab.pos.trim().toLowerCase();
     return pos.isEmpty ? 'general' : pos;
   }
@@ -2309,7 +2310,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
         }
       }
       // Shuffle within each lesson, interleaved across parts of speech.
-      queue.addAll(interleaveByGroup(lessonItems, _posKey, rand));
+      queue.addAll(interleaveByGroup(lessonItems, posKeyOf, rand));
     }
 
     if (dueOnly && !mistakesOnly) {
@@ -2343,7 +2344,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       // up any of its quota.
       var reviewBudget = remainingReviews24h;
       final reviews = <StudyCardItem>[];
-      for (final item in interleaveByGroup(due, _posKey, rand)) {
+      for (final item in interleaveByGroup(due, posKeyOf, rand)) {
         if (item.card.isShortInterval) {
           reviews.add(item);
         } else if (reviewBudget > 0) {
