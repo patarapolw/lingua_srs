@@ -1510,6 +1510,37 @@ void main() {
       expect(view.initialYaml, yaml);
     });
 
+    testWidgets('a noun whose 하다 verb is known is pointed out', (tester) async {
+      final (provider, lesson) = await loadedProvider(tester);
+      lesson.vocabularies.add(_word('v-study', '공부하다', 'to study'));
+      final id = LessonAiPrompt.discussionId(lesson.id);
+      await tester.runAsync(
+        () => provider.addAiDiscussionMessage(
+          id,
+          _msg(
+            'assistant',
+            '```yaml\n'
+                'vocabulary:\n'
+                '  nouns:\n'
+                '    - ko: "공부"\n'
+                '      en: "study"\n'
+                '    - ko: "배"\n'
+                '      en: "pear"\n'
+                '```\n',
+            1,
+          ),
+        ),
+      );
+      await openChat(tester, provider, id, lesson: lesson);
+
+      // It is only pointed out: both words are still offered.
+      expect(
+        find.text('Consider editing out: 공부 (you have 공부하다)'),
+        findsOneWidget,
+      );
+      expect(find.text('Edit and add to lesson'), findsOneWidget);
+    });
+
     testWidgets('an answer with only known words cannot be added', (
       tester,
     ) async {

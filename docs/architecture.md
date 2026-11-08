@@ -48,6 +48,7 @@ lingua_srs/
 │   │   ├── word_ai_prompt.dart        # Prompt for word AI chats, with the current example sentence
 │   │   ├── ai_question_suggestions.dart # Fixed and AI-suggested questions offered in AI chats, per language
 │   │   ├── typed_questions.dart       # Questions typed in AI chats, kept and offered again
+│   │   ├── suggested_vocabulary_hints.dart # AI-suggested words to consider editing out (a noun whose 하다 verb is known)
 │   │   ├── ai_discussion_search.dart  # Ids, search and related-word suggestions for saved AI chats
 │   │   ├── korean_text_search.dart    # Korean-aware sentence search tokenizer
 │   │   ├── vocab_picker_search.dart   # Ranks vocabulary for the merge picker; scores a typed query

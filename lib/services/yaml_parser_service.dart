@@ -40,15 +40,19 @@ class VocabularyYamlFilter {
   /// The YAML without the left-out entries, as written otherwise.
   final String yaml;
 
+  /// The entries that are kept, in order: each one's target word and the
+  /// section (usually a part of speech) it is listed under.
+  final List<({String word, String section})> keptEntries;
+
   /// The target words of the entries that are kept, in order.
-  final List<String> kept;
+  List<String> get kept => [for (final entry in keptEntries) entry.word];
 
   /// The target words of the entries that were left out, in order.
   final List<String> removed;
 
   const VocabularyYamlFilter({
     required this.yaml,
-    required this.kept,
+    required this.keptEntries,
     required this.removed,
   });
 }
@@ -334,14 +338,14 @@ class YamlParserService {
     } on YamlException {
       return VocabularyYamlFilter(
         yaml: yaml,
-        kept: const [],
+        keptEntries: const [],
         removed: const [],
       );
     }
     if (root is! YamlMap) {
       return VocabularyYamlFilter(
         yaml: yaml,
-        kept: const [],
+        keptEntries: const [],
         removed: const [],
       );
     }
@@ -349,7 +353,7 @@ class YamlParserService {
     final sections = vocabulary is YamlMap ? vocabulary : root;
 
     final seen = {...known};
-    final kept = <String>[];
+    final kept = <({String word, String section})>[];
     final removed = <String>[];
     final cuts = <(int, int)>[];
 
@@ -390,7 +394,7 @@ class YamlParserService {
         final word = targetWord(item);
         if (word == null || word.trim().isEmpty) continue;
         if (!block || seen.add(vocabularyKey(word))) {
-          kept.add(word.trim());
+          kept.add((word: word.trim(), section: key.value.toString().trim()));
         } else {
           removed.add(word.trim());
           gone.add(i);
@@ -419,7 +423,11 @@ class YamlParserService {
     for (final (start, end) in cuts.reversed) {
       text = text.replaceRange(start, end, '');
     }
-    return VocabularyYamlFilter(yaml: text, kept: kept, removed: removed);
+    return VocabularyYamlFilter(
+      yaml: text,
+      keptEntries: kept,
+      removed: removed,
+    );
   }
 
   static bool hasVocabularyFrontmatter(String markdown) {

@@ -45,6 +45,11 @@ void main() {
 
       expect(result.removed, ['배', '포도']);
       expect(result.kept, ['사과', '먹다', '달다']);
+      expect(result.keptEntries, [
+        (word: '사과', section: 'nouns'),
+        (word: '먹다', section: 'verbs'),
+        (word: '달다', section: 'adjectives'),
+      ]);
       expect(result.yaml, isNot(contains('pear')));
       expect(result.yaml, isNot(contains('grape')));
       expect(result.yaml, contains('  nouns:\n    - ko: "사과"\n'));

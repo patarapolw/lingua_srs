@@ -12,6 +12,7 @@ import '../services/ai_discussion_search.dart';
 import '../services/ai_question_suggestions.dart';
 import '../services/deepseek_service.dart';
 import '../services/lesson_ai_prompt.dart';
+import '../services/suggested_vocabulary_hints.dart';
 import '../services/typed_questions.dart';
 import '../services/word_ai_prompt.dart';
 import '../services/yaml_parser_service.dart';
@@ -21,6 +22,13 @@ import '../widgets/emphasis_text.dart';
 import '../widgets/markdown_content.dart';
 import 'related_ai_discussions_sheet.dart';
 import 'yaml_import_view.dart';
+
+/// Vocabulary an AI answer offers to add: its YAML without the known words,
+/// and hints for the words left in it.
+typedef _VocabularyOffer = ({
+  VocabularyYamlFilter filter,
+  List<SuggestedVocabularyHint> hints,
+});
 
 /// What the dialog header's More menu offers.
 enum _DialogMenuAction { delete }
@@ -185,13 +193,14 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
   }
 
   /// The vocabulary each answer offers to add to the lesson, by the answer's
-  /// text: its YAML without the words already in a lesson, or null for an
-  /// answer without vocabulary YAML. Worked out again when the number of words
-  /// in the lessons changes, as it does once some are added.
-  final Map<String, VocabularyYamlFilter?> _vocabularyOffers = {};
+  /// text: its YAML without the words already in a lesson, and the hints for
+  /// the words left in it, or null for an answer without vocabulary YAML.
+  /// Worked out again when the number of words in the lessons changes, as it
+  /// does once some are added.
+  final Map<String, _VocabularyOffer?> _vocabularyOffers = {};
   int _knownWordCount = -1;
 
-  VocabularyYamlFilter? _vocabularyOffer(String content) {
+  _VocabularyOffer? _vocabularyOffer(Lesson lesson, String content) {
     final lessons = context.read<AppProvider>().lessons;
     final count = lessons.fold(0, (sum, l) => sum + l.vocabularies.length);
     if (count != _knownWordCount) {
@@ -201,24 +210,36 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
     return _vocabularyOffers.putIfAbsent(content, () {
       final yaml = LessonAiPrompt.vocabularyYaml(content);
       if (yaml == null) return null;
-      return YamlParserService.withoutKnownVocabulary(yaml, {
-        for (final lesson in lessons)
-          for (final vocab in lesson.vocabularies)
+      final known = {
+        for (final other in lessons)
+          for (final vocab in other.vocabularies)
             YamlParserService.vocabularyKey(vocab.targetWord),
-      });
+      };
+      final filter = YamlParserService.withoutKnownVocabulary(yaml, known);
+      return (
+        filter: filter,
+        hints: SuggestedVocabularyHints.forEntries(
+          language: lesson.targetLanguage,
+          entries: filter.keptEntries,
+          known: known,
+        ),
+      );
     });
   }
 
   /// An AI answer. In a lesson chat, an answer with vocabulary YAML in it
   /// gets a button that opens the YAML in the import screen, under the
   /// lesson's name, to edit and add to the lesson. Words already in a lesson,
-  /// or listed twice, are left out of it and named under the button.
+  /// or listed twice, are left out of it and named under the button, and so
+  /// are words the learner may want to edit out (such as a noun whose 하다
+  /// verb they have).
   Widget _answer(String content) {
     final markdown = MarkdownContent(content: content, selectable: true);
     final lesson = widget.lesson;
     if (lesson == null || widget.orphaned) return markdown;
-    final offer = _vocabularyOffer(content);
-    if (offer == null) return markdown;
+    final found = _vocabularyOffer(lesson, content);
+    if (found == null) return markdown;
+    final (filter: offer, :hints) = found;
     final nothingNew = offer.kept.isEmpty && offer.removed.isNotEmpty;
     final theme = Theme.of(context);
     return Column(
@@ -246,6 +267,15 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
             child: Text(
               'Left out (already in your lessons or listed twice): '
               '${offer.removed.toSet().join(', ')}',
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
+        if (hints.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              'Consider editing out: '
+              '${hints.map((h) => '${h.word} (you have ${h.known})').join(', ')}',
               style: theme.textTheme.bodySmall,
             ),
           ),
