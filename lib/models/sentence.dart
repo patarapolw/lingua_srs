@@ -281,20 +281,56 @@ class Sentence {
 
   /// Strips markdown and cloze syntax for clean Text-to-Speech.
   ///
-  /// With [skipBrackets] (the default) text in round brackets is dropped too,
-  /// along with the space before it, or the voice would stutter over asides
-  /// such as `먹다 (to eat)`. Callers that need every character, like the
-  /// romanizer, pass `false`.
+  /// With [skipBrackets] (the default) the text is also made fit to be said
+  /// aloud, or the voice would stutter over asides or read out the marks:
+  ///
+  /// - Asides in brackets are dropped, along with the space before them:
+  ///   round `(…)` and full-width `（…）`, square `[…]` and `［…］`, and
+  ///   lenticular `【…】`, as in `먹다 (to eat)` or `垃圾（lājī）`. A markdown
+  ///   link `[text](url)` keeps its text.
+  /// - Marks between alternatives, `/`, `／`, `|` and `｜`, become a pause
+  ///   (`, `): `은/는` is said as `은, 는`, not "은 slash 는". A slash between
+  ///   digits (`1/2`) is kept, for the voice to read as a number or date.
+  /// - Arrows (`→`, `←`, `↔`, `⇒`) become a pause too.
+  /// - Runs of spaces are collapsed, and a pause left at either end goes.
+  ///
+  /// Callers that need every character, like the romanizer, pass `false`:
+  /// only markdown and cloze blanks are removed then.
   static String cleanForSpeech(String text, {bool skipBrackets = true}) {
     String clean = text.replaceAllMapped(
       RegExp(r'\*\*([^*]+)\*\*'),
       (m) => m[1] ?? '',
     );
     clean = clean.replaceAll(RegExp(r'\[___*\]|\(___*_*\)'), '');
-    if (skipBrackets) clean = clean.replaceAll(RegExp(r'\s*\(.+?\)'), '');
+    if (!skipBrackets) {
+      return clean.replaceAll(RegExp(r'[#*_~`]'), '').trim();
+    }
+    clean = clean.replaceAllMapped(_markdownLink, (m) => m[1] ?? '');
+    clean = clean.replaceAll(_speechAside, '');
     clean = clean.replaceAll(RegExp(r'[#*_~`]'), '');
-    return clean.trim();
+    final marked = clean;
+    clean = marked.replaceAllMapped(_alternativeMark, (m) {
+      final before = m.start > 0 ? marked[m.start - 1] : '';
+      final after = m.end < marked.length ? marked[m.end] : '';
+      final isNumber =
+          m[0]!.contains(RegExp('[/／]')) &&
+          _digit.hasMatch(before) &&
+          _digit.hasMatch(after);
+      return isNumber ? m[0]! : ', ';
+    });
+    clean = clean.replaceAll(RegExp(r'[ \t]{2,}'), ' ');
+    clean = clean.replaceAll(RegExp(r',(\s*,)+'), ',');
+    clean = clean.replaceAll(RegExp(r'\s+([,，、。.!?！？])'), r'$1');
+    clean = clean.replaceAll(RegExp(r'^[\s,]+|[\s,]+$'), '');
+    return clean;
   }
+
+  static final _markdownLink = RegExp(r'\[([^\]]*)\]\([^)]*\)');
+  static final _speechAside = RegExp(
+    r'\s*(?:\(.+?\)|（.+?）|\[.+?\]|［.+?］|【.+?】)',
+  );
+  static final _alternativeMark = RegExp(r'\s*[/／|｜→←↔⇒]\s*');
+  static final _digit = RegExp(r'[0-9０-９]');
 
   Map<String, dynamic> toJson() => {
     'id': id,

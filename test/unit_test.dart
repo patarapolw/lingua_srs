@@ -1513,7 +1513,41 @@ vocabulary:
     test('Clean text for speech removes markdown', () {
       final raw = '저는 **아줌마**를 위해 [___] 문을 열었어요';
       final clean = Sentence.cleanForSpeech(raw);
-      expect(clean, '저는 아줌마를 위해  문을 열었어요');
+      expect(clean, '저는 아줌마를 위해 문을 열었어요');
+    });
+
+    test('Clean text for speech skips full-width and square asides', () {
+      expect(Sentence.cleanForSpeech('垃圾（lājī）'), '垃圾');
+      expect(Sentence.cleanForSpeech('먹다 [to eat]'), '먹다');
+      expect(Sentence.cleanForSpeech('食べる［たべる］'), '食べる');
+      expect(Sentence.cleanForSpeech('【注意】気をつけて'), '気をつけて');
+    });
+
+    test('Clean text for speech keeps the text of a markdown link', () {
+      expect(
+        Sentence.cleanForSpeech('[사과](https://example.com)를 먹어요'),
+        '사과를 먹어요',
+      );
+    });
+
+    test('Clean text for speech pauses between alternatives', () {
+      expect(Sentence.cleanForSpeech('은/는'), '은, 는');
+      expect(Sentence.cleanForSpeech('가다 / 오다'), '가다, 오다');
+      expect(Sentence.cleanForSpeech('이／가'), '이, 가');
+      expect(Sentence.cleanForSpeech('this | that'), 'this, that');
+      expect(Sentence.cleanForSpeech('가다 → 갔어요'), '가다, 갔어요');
+    });
+
+    test('Clean text for speech keeps a slash between digits', () {
+      expect(Sentence.cleanForSpeech('1/2'), '1/2');
+      expect(Sentence.cleanForSpeech('3/14에 만나요'), '3/14에 만나요');
+    });
+
+    test('Clean text for speech drops a pause left at either end', () {
+      expect(Sentence.cleanForSpeech('/는'), '는');
+      expect(Sentence.cleanForSpeech('(을)/를'), '를');
+      expect(Sentence.cleanForSpeech('먹다 / (to eat)'), '먹다');
+      expect(Sentence.cleanForSpeech('사과 (apple), 배'), '사과, 배');
     });
 
     test('Clean text for speech skips bracketed asides', () {
@@ -1537,6 +1571,8 @@ vocabulary:
         Sentence.cleanForSpeech('밥을 (___) 먹어요', skipBrackets: false),
         '밥을  먹어요',
       );
+      // Marks between alternatives are kept too.
+      expect(Sentence.cleanForSpeech('은/는', skipBrackets: false), '은/는');
     });
 
     test('A sentence recording can be switched off, keeping its URL', () {
