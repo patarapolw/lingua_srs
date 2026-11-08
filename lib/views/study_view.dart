@@ -205,7 +205,6 @@ void reRateRecord({
   required SrsRating rating,
   required bool practiceOnly,
   bool clearsMistakes = true,
-  bool marksMistakes = true,
   required List<ReviewHistoryRecord> history,
   required List<StudyCardItem> queue,
   required int answeredCount,
@@ -224,8 +223,6 @@ void reRateRecord({
       card.mistakesClearedAt = nowAgain
           ? record.oldMistakesClearedAt
           : DateTime.now();
-    } else if (!marksMistakes) {
-      // A preview leaves the card exactly as it was.
     } else if (nowAgain) {
       markPracticeMistake(card);
     } else {
@@ -483,9 +480,9 @@ class StudyView extends StatefulWidget {
   final CramMode? cramMode;
   final bool recentMistakesOnly;
 
-  /// Cards to preview instead of studying: ratings only decide whether a
-  /// card comes back in the session, so every card stays as it was, new
-  /// cards stay new, and no mistake is recorded.
+  /// Cards to preview instead of studying, as in practice-only cram: ratings
+  /// never change a schedule and new cards stay new, but Again still shows
+  /// the card in Recent Mistakes.
   final List<StudyCardItem>? previewCards;
 
   /// What [previewCards] were picked by, such as a part of speech.
@@ -855,8 +852,6 @@ class _StudyViewState extends State<StudyView> {
       _againCardIds.add(cardId);
       if (_isMistakesMode) {
         // Already a recent mistake; mistakes practice never touches SRS.
-      } else if (_isPreview) {
-        // A preview records nothing, not even the mistake.
       } else if (_isPracticeCard(card)) {
         // Practice leaves the schedule alone but still records the mistake.
         markPracticeMistake(card);
@@ -942,7 +937,6 @@ class _StudyViewState extends State<StudyView> {
       rating: rating,
       practiceOnly: _isPracticeCard(record.card),
       clearsMistakes: _isMistakesMode,
-      marksMistakes: !_isPreview,
       history: _history,
       queue: _queue,
       answeredCount: _answeredCount,

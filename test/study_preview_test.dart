@@ -124,11 +124,16 @@ void main() {
     expect(find.text('Preview · NOUNS: not added to reviews'), findsOneWidget);
     expect(find.text('집'), findsWidgets);
 
-    // Again records no mistake and only brings the card back.
+    // Again brings the card back and shows it in Recent Mistakes, still new.
     await tester.tap(find.textContaining('Show Answer'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Again'));
     await tester.pumpAndSettle();
+    final missed = lesson.vocabularies
+        .firstWhere((vocab) => vocab.targetWord == '집')
+        .cardTargetToNative;
+    expect(missed.hasRecentMistake, isTrue);
+    expect(provider.getRecentMistakesCount(lessonId: lesson.id), 1);
     for (var i = 0; i < 2; i++) {
       expect(find.text('가다'), findsNothing);
       await tester.tap(find.textContaining('Show Answer'));
@@ -146,9 +151,9 @@ void main() {
     for (final vocab in lesson.vocabularies) {
       expect(vocab.cardTargetToNative.status, SrsStatus.isNew);
       expect(vocab.cardNativeToTarget.status, SrsStatus.isNew);
-      expect(vocab.cardTargetToNative.hasRecentMistake, isFalse);
     }
     expect(provider.reviewsInLast24Hours, 0);
+    expect(provider.getRecentMistakesCount(lessonId: lesson.id), 1);
     expect(lesson.newCardsCount, newBefore);
     expect(provider.remainingNewCards24h, remainingBefore);
   });
