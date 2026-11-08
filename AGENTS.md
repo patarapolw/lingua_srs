@@ -44,5 +44,7 @@ If `flutter` or `dart` isn't available, you can't run tests or `flutter analyze`
 - Still add or update tests in `test/`, written carefully since they can't be run.
 - Keep changes small and focused so they are easy to fix locally.
 - State in the PR description that tests, analyze and format were not run.
-- Open the PR anyway. It's fine for CI to fail on format, analyze or tests. Don't try to fix a failing PR from here; a local agent with Flutter will fix it on the same PR.
+- Open the PR anyway. It's fine for CI to fail on format, analyze or tests; a local agent with Flutter will fix it on the same PR.
+- CI runs on your pushes, `flutter test` before the format check. You may fix a failure from here only when the log names its cause: an analyzer warning at a file and line, or a failing test whose expected/actual or stack trace points into the changed code. Push at most one fix per failure. If CI still fails, or finding the cause needs the app or a debugger, stop and leave it for a local session.
+- Never push for formatting alone. The next local commit formats.
 - In the PR description, list any step that needs a manual check outside CI (for example deploying the Worker, applying a migration, or trying a change in the running app), or say that none does.
