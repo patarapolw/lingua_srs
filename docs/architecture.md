@@ -13,6 +13,7 @@ lingua_srs/
 │   │   ├── sentence.dart              # Sentence model with cloze deletion generator
 │   │   ├── srs_card.dart              # SRS state (SM-2 intervals, reps, due date)
 │   │   ├── shared_vocab.dart          # Details and SRS cards shared by every word with the same id
+│   │   ├── saved_time.dart            # Saves times in UTC, reads them back as local times
 │   │   ├── vocab_merge_record.dart    # Vocab groups, merge records and undo snapshots
 │   │   ├── ai_discussion_message.dart # Saved AI discussion messages
 │   │   └── typed_question.dart        # A question typed in an AI chat, to offer again

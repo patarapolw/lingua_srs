@@ -106,7 +106,10 @@ void main() {
         'Question',
         'Answer',
       ]);
-      expect(restored['vocab:sentence']?.last.createdAt, updatedAt);
+      // Saved in UTC and read back as local time: the same instant.
+      final restoredAt = restored['vocab:sentence']?.last.createdAt;
+      expect(restoredAt?.isAtSameMomentAs(updatedAt), isTrue);
+      expect(restoredAt?.isUtc, isFalse);
 
       expect(
         AiDiscussionMessage.fromJson({'role': 'user', 'content': 'Legacy'})

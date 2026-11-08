@@ -1,3 +1,5 @@
+import 'saved_time.dart';
+
 /// Which kind of AI chat a question was typed in. A question typed in a word
 /// chat is only offered in word chats, and one typed in a lesson chat only in
 /// lesson chats: what is asked about a lesson rarely fits a word.
@@ -53,7 +55,7 @@ class TypedQuestion {
     'scope': scope.name,
     'template': template,
     'uses': uses,
-    'lastUsed': lastUsed.toUtc().toIso8601String(),
+    'lastUsed': savedTime(lastUsed),
   };
 
   factory TypedQuestion.fromJson(Map<String, dynamic> json) {
@@ -65,9 +67,7 @@ class TypedQuestion {
     final parsedScope = TypedQuestionScope.values
         .where((value) => value.name == scope)
         .firstOrNull;
-    final parsedLastUsed = lastUsed is String
-        ? DateTime.tryParse(lastUsed)
-        : null;
+    final parsedLastUsed = lastUsed is String ? tryLoadedTime(lastUsed) : null;
     if (language is! String ||
         language.isEmpty ||
         parsedScope == null ||
