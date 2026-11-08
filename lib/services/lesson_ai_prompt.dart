@@ -1,4 +1,6 @@
 import '../models/lesson.dart';
+import '../models/sentence.dart';
+import 'yaml_parser_service.dart';
 
 /// Builds AI discussion ids, prompts and suggestions for whole lessons.
 class LessonAiPrompt {
@@ -48,17 +50,116 @@ class LessonAiPrompt {
       if (body.isNotEmpty) 'Lesson content:\n"""\n$body\n"""',
       if (vocabulary.isNotEmpty) 'Lesson vocabulary:\n${vocabulary.join('\n')}',
       'Format your answer using Markdown.',
+      vocabularyYamlInstructions(lesson),
     ].join('\n\n');
+  }
+
+  /// The fixed question that asks for words to add to the lesson. The system
+  /// prompt has the AI answer it, and any other request for words to learn,
+  /// with YAML the learner can edit before adding it.
+  static const vocabularyQuestion = 'List more vocabulary for this lesson.';
+
+  /// How the AI writes vocabulary to add to [lesson], so that the reply opens
+  /// in the import screen as it is (see docs/lesson-format.md).
+  static String vocabularyYamlInstructions(Lesson lesson) {
+    final target = lesson.targetLanguage;
+    final native = lesson.nativeLanguage;
+    return [
+      'Whenever you give the learner words to learn (they ask for more '
+          'vocabulary, a word list, words on a topic, or words to add to '
+          'this lesson), suggest words that fit the lesson and are not in '
+          'its vocabulary yet, each once. Besides any explanation, put them '
+          'in one ```yaml code block in this format, with '
+          'part-of-speech keys (such as nouns, verbs, adjectives, adverbs, '
+          'expressions) directly under `vocabulary:`. Verbs and adjectives '
+          'are in their dictionary form. `notes` and `examples` are '
+          'optional. In every example, the word being learned must be '
+          'wrapped in **bold** in the $target sentence. In the $native '
+          'translation, also wrap in **bold** the words that translate it; '
+          'if no words in the translation match it (it is left out or '
+          'reworded), leave the translation without bold. Quote every value.',
+      '```yaml\n'
+          'vocabulary:\n'
+          '  nouns:\n'
+          '    - $target: "..."\n'
+          '      $native: "..."\n'
+          '      notes: "..."\n'
+          '      examples:\n'
+          '        - $target: "... **...** ..."\n'
+          '          $native: "... **...** ..."\n'
+          '```',
+      'The learner can edit the list before adding it to the lesson.',
+    ].join('\n');
+  }
+
+  /// The vocabulary YAML in an AI [answer]: the first fenced code block whose
+  /// root is `vocabulary:`, or null if there is none. It is not checked here;
+  /// the import screen parses it and shows any errors.
+  static String? vocabularyYaml(String answer) {
+    final fence = RegExp(
+      r'^[ \t]*```[ \t]*([A-Za-z]*)[ \t]*\r?\n([\s\S]*?)^[ \t]*```',
+      multiLine: true,
+    );
+    for (final match in fence.allMatches(answer)) {
+      final language = match.group(1)!.toLowerCase();
+      if (language.isNotEmpty && language != 'yaml' && language != 'yml') {
+        continue;
+      }
+      final body = match.group(2)!.trimRight();
+      if (RegExp(r'^vocabulary:', multiLine: true).hasMatch(body)) {
+        return '$body\n';
+      }
+    }
+    return null;
+  }
+
+  /// The note added to a word an AI suggested, when it is imported.
+  static const aiWordNote =
+      '*Suggested by AI: check this word, its meaning and its examples '
+      'before relying on them.*';
+
+  /// The note added to an example sentence an AI suggested, when it is
+  /// imported.
+  static const aiSentenceNote =
+      '*Suggested by AI: check this sentence and its translation before '
+      'relying on them.*';
+
+  /// Adds [aiWordNote] to the notes of every word in [parsed], vocabulary an
+  /// AI suggested, and [aiSentenceNote] to those of every example sentence
+  /// that [isNew] says is not in the Sentence Pool yet. A sentence already in
+  /// the pool is the learner's own, so it is left as it is. Each note goes
+  /// after any notes there are, as a paragraph of its own, and is not added
+  /// twice.
+  static void addAiNotes(
+    YamlParseResult parsed, {
+    required bool Function(Sentence sentence) isNew,
+  }) {
+    for (final vocab in parsed.lesson.vocabularies) {
+      vocab.notes = _withNote(vocab.notes, aiWordNote);
+    }
+    for (final sentence in parsed.sentences) {
+      if (isNew(sentence)) {
+        sentence.notes = _withNote(sentence.notes, aiSentenceNote);
+      }
+    }
+  }
+
+  static String _withNote(String notes, String note) {
+    final text = notes.trim();
+    if (text.contains(note)) return notes;
+    return text.isEmpty ? note : '$text\n\n$note';
   }
 
   static List<String> suggestedQuestions(bool hasMessages) => hasMessages
       ? [
           'Quiz me on this lesson.',
+          vocabularyQuestion,
           'What are common mistakes with this grammar?',
         ]
       : [
           'Summarize this lesson.',
           'Explain the main grammar point simply.',
+          vocabularyQuestion,
           'Give me practice sentences using this lesson.',
         ];
 }

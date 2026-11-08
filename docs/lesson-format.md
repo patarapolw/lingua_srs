@@ -99,7 +99,7 @@ The import button stays disabled until the input can be previewed. Fix any displ
 
 ### Adding vocabulary to an existing lesson
 
-Open the lesson and choose **Add → Add from YAML**. The import screen opens with the lesson's name filled in. Write only the new entries; importing under an existing lesson's name adds them to it and leaves its other vocabulary and SRS progress untouched.
+Open the lesson and choose **Add → Add from YAML**. The **Add Vocabulary** screen opens for that lesson. Write only the new entries, as plain YAML starting with `vocabulary:`; they are added to the lesson, and its other vocabulary, its text and SRS progress are left untouched. Markdown (a `---` frontmatter block and lesson text) is refused there, since importing it would replace the lesson's text; to change the text, edit the lesson. The lesson name cannot be changed, and files and folders cannot be picked or dropped there: use **Add Lessons** for whole lessons. The same screen opens from *Edit and add to lesson* in a lesson's AI chat.
 
 ```yaml
 vocabulary:

@@ -1627,6 +1627,14 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       ..shared = source.shared;
   }
 
+  /// Whether the Sentence Pool has a sentence that importing [sentence]
+  /// would merge with: the same text and translation, apart from emphasis,
+  /// case and spacing.
+  bool hasSentenceLike(Sentence sentence) {
+    final signature = _sentenceSignature(sentence);
+    return _sentences.any((s) => _sentenceSignature(s) == signature);
+  }
+
   static String _sentenceSignature(Sentence sentence) {
     String normalize(String text) =>
         Sentence.withoutEmphasis(text)

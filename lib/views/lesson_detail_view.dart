@@ -262,6 +262,7 @@ class _LessonDetailViewState extends State<LessonDetailView> {
               '  nouns:\n'
               '    - ${lesson.targetLanguage}: ""\n'
               '      ${lesson.nativeLanguage}: ""\n',
+          vocabularyOnly: true,
         ),
       ),
     );

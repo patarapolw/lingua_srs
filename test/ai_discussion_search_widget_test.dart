@@ -11,8 +11,10 @@ import 'package:lingua_srs/services/audio_service.dart';
 import 'package:lingua_srs/services/tts_voice.dart';
 import 'package:lingua_srs/services/lesson_ai_prompt.dart';
 import 'package:lingua_srs/services/storage_service.dart';
+import 'package:lingua_srs/services/yaml_parser_service.dart';
 import 'package:lingua_srs/views/ai_discussion_dialog.dart';
 import 'package:lingua_srs/views/recent_ai_discussions_view.dart';
+import 'package:lingua_srs/views/yaml_import_view.dart';
 import 'package:lingua_srs/widgets/ai_question_chip.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -1394,6 +1396,404 @@ void main() {
       expect(inDialog(find.textContaining('read-only')), findsNothing);
       expect(inDialog(find.byType(TextField)), findsOneWidget);
       expect(inDialog(find.byTooltip('Related discussions')), findsOneWidget);
+    });
+  });
+
+  group('Vocabulary YAML in a chat', () {
+    const yaml = 'vocabulary:\n  nouns:\n    - ko: "배"\n      en: "pear"\n';
+    const answer = 'Try these:\n\n```yaml\n$yaml```\n';
+
+    Future<void> openChat(
+      WidgetTester tester,
+      AppProvider provider,
+      String discussionId, {
+      Lesson? lesson,
+    }) async {
+      await pumpWith(
+        tester,
+        provider,
+        Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) => AiDiscussionDialog(
+                  discussionId: discussionId,
+                  targetWord: lesson?.displayTitle ?? '사과',
+                  translation: lesson == null ? 'apple' : '',
+                  targetLanguage: 'ko',
+                  nativeLanguage: 'en',
+                  lesson: lesson,
+                ),
+              ),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a lesson chat opens it in the import screen to edit', (
+      tester,
+    ) async {
+      final (provider, lesson) = await loadedProvider(tester);
+      final id = LessonAiPrompt.discussionId(lesson.id);
+      await tester.runAsync(() async {
+        await provider.addAiDiscussionMessage(
+          id,
+          _msg('user', LessonAiPrompt.vocabularyQuestion, 1),
+        );
+        await provider.addAiDiscussionMessage(id, _msg('assistant', answer, 2));
+      });
+      await openChat(tester, provider, id, lesson: lesson);
+
+      await tester.tap(find.text('Edit and add to lesson'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 301));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 500)),
+      );
+      await tester.pump();
+
+      final view = tester.widget<YamlImportView>(find.byType(YamlImportView));
+      expect(view.initialLessonName, 'Words');
+      expect(view.initialYaml, yaml);
+      expect(view.previewInitialYaml, isTrue);
+      expect(view.vocabularyOnly, isTrue);
+      expect(view.aiSuggested, isTrue);
+      // Nothing is added until it is imported from there.
+      expect(
+        lesson.vocabularies.map((v) => v.targetWord),
+        isNot(contains('배')),
+      );
+    });
+
+    Future<void> openLessonChatWith(WidgetTester tester, String answer) async {
+      final (provider, lesson) = await loadedProvider(tester);
+      final id = LessonAiPrompt.discussionId(lesson.id);
+      await tester.runAsync(
+        () => provider.addAiDiscussionMessage(id, _msg('assistant', answer, 1)),
+      );
+      await openChat(tester, provider, id, lesson: lesson);
+    }
+
+    testWidgets('words already in a lesson are left out', (tester) async {
+      // 사과 and 학교 are in the lesson; 배 is new.
+      await openLessonChatWith(
+        tester,
+        '```yaml\n'
+        'vocabulary:\n'
+        '  nouns:\n'
+        '    - ko: "사과"\n'
+        '      en: "apple"\n'
+        '    - ko: "배"\n'
+        '      en: "pear"\n'
+        '    - ko: "학교"\n'
+        '      en: "school"\n'
+        '```\n',
+      );
+
+      expect(
+        find.textContaining('already in your lessons or listed twice'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('사과, 학교'), findsOneWidget);
+
+      await tester.tap(find.text('Edit and add 1 new word'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 301));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 500)),
+      );
+      await tester.pump();
+
+      final view = tester.widget<YamlImportView>(find.byType(YamlImportView));
+      expect(view.initialYaml, yaml);
+    });
+
+    testWidgets('a word written the same with another meaning is kept', (
+      tester,
+    ) async {
+      // The lesson has 사과 "apple"; 사과 "apology" may be another word.
+      await openLessonChatWith(
+        tester,
+        '```yaml\n'
+        'vocabulary:\n'
+        '  nouns:\n'
+        '    - ko: "사과"\n'
+        '      en: "apology"\n'
+        '```\n',
+      );
+
+      expect(
+        find.text(
+          'Possible duplicates (same word, another meaning): '
+          '사과 "apology" (you have "apple")',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Edit and add to lesson'), findsOneWidget);
+    });
+
+    testWidgets('words of a lesson in another language are not compared', (
+      tester,
+    ) async {
+      final (provider, lesson) = await loadedProvider(tester);
+      // The same characters can be another word in another language.
+      provider.lessons.add(
+        Lesson(
+          title: 'Chinese',
+          targetLanguage: 'zh',
+          vocabularies: [_word('zh-1', '工夫', 'kung fu')],
+        ),
+      );
+      final id = LessonAiPrompt.discussionId(lesson.id);
+      await tester.runAsync(
+        () => provider.addAiDiscussionMessage(
+          id,
+          _msg(
+            'assistant',
+            '```yaml\n'
+                'vocabulary:\n'
+                '  nouns:\n'
+                '    - ko: "工夫"\n'
+                '      en: "kung fu"\n'
+                '```\n',
+            1,
+          ),
+        ),
+      );
+      await openChat(tester, provider, id, lesson: lesson);
+
+      expect(find.text('Edit and add to lesson'), findsOneWidget);
+      expect(find.textContaining('already in your lessons'), findsNothing);
+    });
+
+    testWidgets('a noun whose 하다 verb is known is pointed out', (tester) async {
+      final (provider, lesson) = await loadedProvider(tester);
+      lesson.vocabularies.add(_word('v-study', '공부하다', 'to study'));
+      final id = LessonAiPrompt.discussionId(lesson.id);
+      await tester.runAsync(
+        () => provider.addAiDiscussionMessage(
+          id,
+          _msg(
+            'assistant',
+            '```yaml\n'
+                'vocabulary:\n'
+                '  nouns:\n'
+                '    - ko: "공부"\n'
+                '      en: "study"\n'
+                '    - ko: "배"\n'
+                '      en: "pear"\n'
+                '```\n',
+            1,
+          ),
+        ),
+      );
+      await openChat(tester, provider, id, lesson: lesson);
+
+      // It is only pointed out: both words are still offered.
+      expect(
+        find.text('Consider editing out: 공부 (you have 공부하다)'),
+        findsOneWidget,
+      );
+      expect(find.text('Edit and add to lesson'), findsOneWidget);
+    });
+
+    testWidgets('an answer with only known words cannot be added', (
+      tester,
+    ) async {
+      await openLessonChatWith(
+        tester,
+        '```yaml\n'
+        'vocabulary:\n'
+        '  nouns:\n'
+        '    - ko: "사과"\n'
+        '      en: "apple"\n'
+        '```\n',
+      );
+
+      final button = tester.widget<OutlinedButton>(
+        find.ancestor(
+          of: find.text('Already in your lessons'),
+          matching: find.byWidgetPredicate((w) => w is OutlinedButton),
+        ),
+      );
+      expect(button.onPressed, isNull);
+    });
+
+    testWidgets('follows words added or edited after the answer', (
+      tester,
+    ) async {
+      final (provider, lesson) = await loadedProvider(tester);
+      final id = LessonAiPrompt.discussionId(lesson.id);
+      await tester.runAsync(
+        () => provider.addAiDiscussionMessage(
+          id,
+          _msg(
+            'assistant',
+            '```yaml\n'
+                'vocabulary:\n'
+                '  nouns:\n'
+                '    - ko: "배"\n'
+                '      en: "pear"\n'
+                '    - ko: "포도"\n'
+                '      en: "grape"\n'
+                '```\n',
+            1,
+          ),
+        ),
+      );
+      await openChat(tester, provider, id, lesson: lesson);
+      expect(find.text('Edit and add to lesson'), findsOneWidget);
+
+      // Added later: 배 is left out.
+      await tester.runAsync(
+        () =>
+            provider.addVocabToLesson(lesson.id, _word('v-pear', '배', 'pear')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Edit and add 1 new word'), findsOneWidget);
+
+      // Edited later, with as many words as before: 포도 is left out too.
+      final school = lesson.vocabularies.firstWhere(
+        (v) => v.targetWord == '학교',
+      );
+      school
+        ..targetWord = '포도'
+        ..translation = 'grape';
+      await tester.runAsync(() => provider.updateVocab(school));
+      await tester.pumpAndSettle();
+      expect(find.text('Already in your lessons'), findsOneWidget);
+    });
+
+    testWidgets('words and new sentences get an AI note when added', (
+      tester,
+    ) async {
+      final (provider, _) = await loadedProvider(tester);
+      // A sentence the learner already has, with their own note.
+      await tester.runAsync(
+        () => provider.importParsedLessons([
+          YamlParserService.parseLessonYaml(
+            'vocabulary:\n'
+            '  nouns:\n'
+            '    - ko: "과일"\n'
+            '      en: "fruit"\n'
+            '      examples:\n'
+            '        - ko: "**배**가 달아요."\n'
+            '          en: "The pear is sweet."\n'
+            '          notes: "Mine."\n',
+            defaultTitle: 'Fruit',
+          ),
+        ]),
+      );
+      const yaml =
+          'vocabulary:\n'
+          '  nouns:\n'
+          '    - ko: "배"\n'
+          '      en: "pear"\n'
+          '      examples:\n'
+          '        - ko: "**배**가 달아요."\n'
+          '          en: "The pear is sweet."\n'
+          '        - ko: "**배**를 샀어요."\n'
+          '          en: "I bought a pear."\n';
+      // Opened over a page, as from the chat: it closes itself once added.
+      await pumpWith(
+        tester,
+        provider,
+        Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const YamlImportView(
+                    initialLessonName: 'Words',
+                    initialYaml: yaml,
+                    previewInitialYaml: true,
+                    vocabularyOnly: true,
+                    aiSuggested: true,
+                  ),
+                ),
+              ),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      // Not pumpAndSettle: the preview's progress bar runs while the YAML is
+      // parsed on the real clock. These pumps open the page and start it.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 500)),
+      );
+      await tester.pump();
+      expect(find.textContaining('Suggested by AI. Each word'), findsOneWidget);
+
+      await tester.tap(find.text('Add Vocabulary').last);
+      // The import yields to the fake clock between lessons and saves with
+      // real I/O, so both have to run until it is done.
+      bool added() => provider.lessons
+          .expand((lesson) => lesson.vocabularies)
+          .any((vocab) => vocab.targetWord == '배');
+      for (var i = 0; i < 100 && !added(); i++) {
+        await tester.pump(const Duration(milliseconds: 20));
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+      }
+      // Let the save after the import, and its snack bar, finish too.
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 20));
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+      }
+      expect(added(), isTrue, reason: 'the import never finished');
+      // The screen has closed; the snack bar goes after a few seconds.
+      await tester.pumpAndSettle();
+      expect(find.byType(YamlImportView), findsNothing);
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+
+      final pear = provider.lessons
+          .expand((lesson) => lesson.vocabularies)
+          .singleWhere((vocab) => vocab.targetWord == '배');
+      expect(pear.notes, LessonAiPrompt.aiWordNote);
+      String notesOf(String target) => provider.sentences
+          .singleWhere((sentence) => sentence.targetText == target)
+          .notes;
+      expect(notesOf('배를 샀어요.'), LessonAiPrompt.aiSentenceNote);
+      expect(notesOf('배가 달아요.'), 'Mine.');
+    });
+
+    testWidgets('a word chat has no button', (tester) async {
+      final (provider, _) = await loadedProvider(
+        tester,
+        discussions: {
+          'v-apple:yaml': [_msg('assistant', answer, 1)],
+        },
+      );
+      await openChat(tester, provider, 'v-apple:yaml');
+
+      expect(find.text('Edit and add to lesson'), findsNothing);
+    });
+
+    testWidgets('an answer without it has no button', (tester) async {
+      final (provider, lesson) = await loadedProvider(tester);
+      final id = LessonAiPrompt.discussionId(lesson.id);
+      await tester.runAsync(
+        () => provider.addAiDiscussionMessage(
+          id,
+          _msg('assistant', 'This lesson is about fruit.', 1),
+        ),
+      );
+      await openChat(tester, provider, id, lesson: lesson);
+
+      expect(find.text('Edit and add to lesson'), findsNothing);
     });
   });
 }

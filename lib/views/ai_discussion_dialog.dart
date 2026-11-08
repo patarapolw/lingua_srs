@@ -12,13 +12,23 @@ import '../services/ai_discussion_search.dart';
 import '../services/ai_question_suggestions.dart';
 import '../services/deepseek_service.dart';
 import '../services/lesson_ai_prompt.dart';
+import '../services/suggested_vocabulary_hints.dart';
 import '../services/typed_questions.dart';
 import '../services/word_ai_prompt.dart';
+import '../services/yaml_parser_service.dart';
 import '../widgets/ai_discussion_suggestion_tile.dart';
 import '../widgets/ai_question_chip.dart';
 import '../widgets/emphasis_text.dart';
 import '../widgets/markdown_content.dart';
 import 'related_ai_discussions_sheet.dart';
+import 'yaml_import_view.dart';
+
+/// Vocabulary an AI answer offers to add: its YAML without the known words,
+/// and hints for the words left in it.
+typedef _VocabularyOffer = ({
+  VocabularyYamlFilter filter,
+  List<SuggestedVocabularyHint> hints,
+});
 
 /// What the dialog header's More menu offers.
 enum _DialogMenuAction { delete }
@@ -180,6 +190,159 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
         setState(() => _error = 'Could not delete discussion: $error');
       }
     }
+  }
+
+  /// The vocabulary each answer offers to add to the lesson, by the answer's
+  /// text: its YAML without the words already in a lesson, and the hints for
+  /// the words left in it, or null for an answer without vocabulary YAML.
+  /// Worked out again whenever the lessons' words change ([_knownWords]),
+  /// whether they are added, edited or deleted, here or anywhere else.
+  final Map<String, _VocabularyOffer?> _vocabularyOffers = {};
+  int? _knownWords;
+
+  /// Forgets [_vocabularyOffers] if the words in [lessons], or their
+  /// languages, have changed since they were worked out. Called on every
+  /// build of a lesson chat, which follows the provider.
+  void _forgetStaleVocabularyOffers(List<Lesson> lessons) {
+    var hash = lessons.length;
+    for (final lesson in lessons) {
+      hash = Object.hash(hash, lesson.targetLanguage);
+      for (final vocab in lesson.vocabularies) {
+        hash = Object.hash(hash, vocab.targetWord, vocab.translation);
+      }
+    }
+    if (hash == _knownWords) return;
+    _vocabularyOffers.clear();
+    _knownWords = hash;
+  }
+
+  _VocabularyOffer? _vocabularyOffer(Lesson lesson, String content) {
+    final lessons = context.read<AppProvider>().lessons;
+    return _vocabularyOffers.putIfAbsent(content, () {
+      final yaml = LessonAiPrompt.vocabularyYaml(content);
+      if (yaml == null) return null;
+      // Only words of the lesson's language: the same characters can be
+      // another word in another language.
+      final language = AiQuestionSuggestions.languageCode(
+        lesson.targetLanguage,
+      );
+      final vocabularies = [
+        for (final other in lessons)
+          if (AiQuestionSuggestions.languageCode(other.targetLanguage) ==
+              language)
+            ...other.vocabularies,
+      ];
+      final filter = YamlParserService.withoutKnownVocabulary(yaml, [
+        for (final vocab in vocabularies)
+          // Words have no Hanja or reading fields yet.
+          (
+            word: vocab.targetWord,
+            meaning: vocab.translation,
+            hanja: '',
+            reading: '',
+          ),
+      ], language: lesson.targetLanguage);
+      return (
+        filter: filter,
+        hints: SuggestedVocabularyHints.forEntries(
+          language: lesson.targetLanguage,
+          entries: filter.keptEntries,
+          known: [for (final vocab in vocabularies) vocab.targetWord],
+        ),
+      );
+    });
+  }
+
+  /// An AI answer. In a lesson chat, an answer with vocabulary YAML in it
+  /// gets a button that opens the YAML in the import screen, under the
+  /// lesson's name, to edit and add to the lesson. Under the button are named
+  /// the words left out because they are in a lesson or listed twice; the
+  /// words kept though written like another with another meaning, which may
+  /// be other words or the same one ([YamlParserService.withoutKnownVocabulary]);
+  /// and the words that are another form of one the learner has or that is
+  /// listed earlier ([SuggestedVocabularyHints]).
+  Widget _answer(String content) {
+    final markdown = MarkdownContent(content: content, selectable: true);
+    final lesson = widget.lesson;
+    if (lesson == null || widget.orphaned) return markdown;
+    final found = _vocabularyOffer(lesson, content);
+    if (found == null) return markdown;
+    final (filter: offer, :hints) = found;
+    final nothingNew = offer.kept.isEmpty && offer.removed.isNotEmpty;
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        markdown,
+        const SizedBox(height: 6),
+        OutlinedButton.icon(
+          icon: const Icon(Icons.playlist_add),
+          label: Text(
+            nothingNew
+                ? 'Already in your lessons'
+                : offer.removed.isEmpty
+                ? 'Edit and add to lesson'
+                : 'Edit and add ${offer.kept.length} new '
+                      '${offer.kept.length == 1 ? 'word' : 'words'}',
+          ),
+          onPressed: nothingNew
+              ? null
+              : () => _addVocabulary(lesson, offer.yaml),
+        ),
+        if (offer.removed.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              'Left out (already in your lessons or listed twice): '
+              '${offer.removed.toSet().join(', ')}',
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
+        if (offer.possibleDuplicates.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              'Possible duplicates (same word, another meaning): '
+              '${offer.possibleDuplicates.map(_describeDuplicate).join(', ')}',
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
+        if (hints.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              'Consider editing out: '
+              '${SuggestedVocabularyHints.summary(hints)}',
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// 배 "ship" (you have "pear"), or (also listed as "pear").
+  static String _describeDuplicate(PossibleDuplicate duplicate) =>
+      '${duplicate.word} "${duplicate.meaning}" '
+      '(${duplicate.inList ? 'also listed as' : 'you have'} '
+      '"${duplicate.otherMeaning}")';
+
+  /// Opens [yaml] in the import screen under [lesson]'s name. Nothing is added
+  /// until the learner imports it there, so the words can be edited first.
+  void _addVocabulary(Lesson lesson, String yaml) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => YamlImportView(
+          initialLessonName: joinHierarchyPath([
+            ...lesson.folderPath,
+            lesson.displayTitle,
+          ]),
+          initialYaml: yaml,
+          previewInitialYaml: true,
+          vocabularyOnly: true,
+          aiSuggested: true,
+        ),
+      ),
+    );
   }
 
   String _systemPrompt() {
@@ -509,6 +672,7 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
+    if (widget.lesson != null) _forgetStaleVocabularyOffers(provider.lessons);
     final messages = provider.getAiDiscussion(widget.discussionId);
     final typedQuestions = _typedQuestions(provider, messages);
     final firstQuestions = _firstQuestions(typedQuestions.keys);
@@ -740,10 +904,7 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                                 ),
                                 child: isUser
                                     ? SelectableText(message.content)
-                                    : MarkdownContent(
-                                        content: message.content,
-                                        selectable: true,
-                                      ),
+                                    : _answer(message.content),
                               ),
                             );
                           },
