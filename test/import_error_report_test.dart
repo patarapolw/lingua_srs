@@ -184,6 +184,58 @@ void main() {
       expect(result.skipped, 1);
     });
 
+    test('skips unchanged entries when the zip is picked from elsewhere', () {
+      PickedMarkdownSource picked(String key, String b) {
+        final source = zip('course.zip', {
+          'unit1/a.md': _lesson('A', [('배', '**배**가 커요')]),
+          'unit1/b.md': b,
+        });
+        return PickedMarkdownSource(
+          name: source.name,
+          sourceKey: key,
+          bytes: source.bytes,
+        );
+      }
+
+      final first = parsePickedMarkdownSources([
+        picked(
+          'file:///cache/file_picker/1/course.zip',
+          _lesson('B', [('귤', '**귤**이 커요')]),
+        ),
+      ], const {});
+      final saved = {
+        for (final file in first.imports) file.sourceKey: file.sourceHash,
+      };
+
+      // Android copies the picked zip to a new cache folder every time.
+      final again = parsePickedMarkdownSources([
+        picked(
+          'file:///cache/file_picker/2/course (1).zip',
+          _lesson('B', [('감', '**감**이 커요')]),
+        ),
+      ], saved);
+
+      expect(again.unchanged, 1);
+      expect(again.imports.map((file) => file.path), ['course.zip/unit1/b.md']);
+      expect(again.imports.single.sourceKey, zipEntrySourceKey('unit1/b.md'));
+    });
+
+    test('still skips entries saved under the zip location', () {
+      final source = zip('course.zip', {
+        'a.md': _lesson('A', [('배', '**배**가 커요')]),
+      });
+      final first = parsePickedMarkdownSources([source], const {});
+      final hash = first.imports.single.sourceHash;
+
+      final again = parsePickedMarkdownSources(
+        [source],
+        {'${source.sourceKey}!/a.md': hash},
+      );
+
+      expect(again.unchanged, 1);
+      expect(again.imports, isEmpty);
+    });
+
     test('files from several zips are all named', () {
       final result = parsePickedMarkdownSources([
         zip('one.zip', {
