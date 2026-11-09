@@ -1,4 +1,5 @@
 import '../models/lesson.dart';
+import 'hangul_text.dart';
 
 /// A link from lesson Markdown to a lesson, a heading, or a heading in
 /// another lesson: named in plain text (`[[Unit 2::Lesson 26#Past tense]]`)
@@ -159,11 +160,12 @@ class LessonLink {
       label.replaceAllMapped(RegExp(r'[\[\]\\]'), (m) => '\\${m[0]}');
 
   /// GitHub-style anchor for a heading: `Hello, World!` becomes `hello-world`.
-  static String slug(String text) => text
-      .toLowerCase()
-      .replaceAll(RegExp(r'[^\p{L}\p{N}\s_-]', unicode: true), '')
-      .trim()
-      .replaceAll(RegExp(r'\s'), '-');
+  static String slug(String text) =>
+      composeHangul(text)
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^\p{L}\p{N}\s_-]', unicode: true), '')
+          .trim()
+          .replaceAll(RegExp(r'\s'), '-');
 
   /// Whether [target], a heading's text or its anchor, names [heading].
   static bool headingMatches(String heading, String target) {
@@ -180,7 +182,8 @@ class LessonLink {
     Lesson? from,
   }) {
     final wanted = [
-      for (final part in splitHierarchyPath(name)) part.toLowerCase(),
+      for (final part in splitHierarchyPath(composeHangul(name)))
+        part.toLowerCase(),
     ];
     if (wanted.isEmpty) return null;
     return _nearest(
@@ -264,10 +267,11 @@ class LessonLink {
   /// A name as folder import would write it, for loose comparison: lower
   /// case, with every run of other characters than letters and digits made
   /// one space (`unit-2`, `Unit 2` and `unit_2` are the same).
-  static String _key(String name) => name
-      .toLowerCase()
-      .replaceAll(RegExp(r'[^\p{L}\p{N}]+', unicode: true), ' ')
-      .trim();
+  static String _key(String name) =>
+      composeHangul(name)
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^\p{L}\p{N}]+', unicode: true), ' ')
+          .trim();
 
   static String _fileKey(String name) => _key(
     name.toLowerCase().endsWith('.md')

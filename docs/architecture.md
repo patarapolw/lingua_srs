@@ -53,6 +53,7 @@ lingua_srs/
 │   │   ├── typed_questions.dart       # Questions typed in AI chats, kept and offered again
 │   │   ├── suggested_vocabulary_hints.dart # AI-suggested words to consider editing out: other Korean forms of a known word
 │   │   ├── ai_discussion_search.dart  # Ids, search and related-word suggestions for saved AI chats
+│   │   ├── hangul_text.dart           # Composes Korean jamo (macOS NFD names) into syllables
 │   │   ├── korean_text_search.dart    # Korean-aware sentence search tokenizer
 │   │   ├── vocab_picker_search.dart   # Ranks vocabulary for the merge picker; scores a typed query
 │   │   ├── vocab_pool_search.dart     # Browse, search and POS filter for the Vocab Pool

@@ -15,6 +15,7 @@ import '../models/vocab_item.dart';
 import '../models/vocab_merge_record.dart';
 import '../services/ai_discussion_search.dart';
 import '../services/deepseek_service.dart';
+import '../services/hangul_text.dart';
 import '../services/lesson_ai_prompt.dart';
 import '../services/new_card_quota.dart';
 import '../services/srs_service.dart';
@@ -340,8 +341,8 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     _aiDiscussions = results.$3;
     _maxReviews24h = results.$4;
     _reviewTimestamps24h = results.$5;
-    _lessonHierarchyOrder = results.$6;
-    _lessonFolderExpansion = results.$7;
+    _lessonHierarchyOrder = _composedKeys(results.$6);
+    _lessonFolderExpansion = _composedKeys(results.$7);
     _pronunciationOptions = results.$8;
     _maxNewCards24h = results.$9;
     // Records only have `.wait` up to nine fields, so this loads on its own.
@@ -761,7 +762,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     _mergeHistory = data.mergeHistory;
     _aiDiscussions = data.aiDiscussions;
     _typedQuestions = data.typedQuestions;
-    _lessonHierarchyOrder = data.lessonOrder;
+    _lessonHierarchyOrder = _composedKeys(data.lessonOrder);
     _maxReviews24h = data.maxReviews24h;
     _maxNewCards24h = data.maxNewCards24h;
     _autoplayAudio = data.autoplayAudio;
@@ -1406,6 +1407,13 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     }
     return (null, false);
   }
+
+  /// [map] with Korean syllables in its keys composed, as lesson names are
+  /// ([Lesson]), so the order and expansion saved for a folder whose name a
+  /// Mac stored as separate jamo still find it.
+  static Map<String, V> _composedKeys<V>(Map<String, V> map) => {
+    for (final entry in map.entries) composeHangul(entry.key): entry.value,
+  };
 
   static bool _sameName(Lesson a, Lesson b) =>
       a.displayTitle.trim().toLowerCase() ==
