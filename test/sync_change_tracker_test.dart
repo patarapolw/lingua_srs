@@ -60,6 +60,7 @@ void main() {
         _lesson: {'title': 'A'},
         _sentence: {'text': 'B'},
       }, now: 1000);
+      tracker.markPushed(_sentence, 1000);
 
       final changed = tracker.track({
         _lesson: {'title': 'A'},
@@ -83,6 +84,7 @@ void main() {
       tracker.track({
         _sentence: {'text': 'B'},
       }, now: 1000);
+      tracker.markPushed(_sentence, 1000);
       tracker.track({}, now: 2000);
 
       final changed = tracker.track({
@@ -92,6 +94,53 @@ void main() {
       expect(changed, [_sentence]);
       expect(tracker.records[_sentence]!.deleted, isFalse);
       expect(tracker.records[_sentence]!.updatedAt, 3000);
+    });
+
+    test('forgets a removed record the server never had', () {
+      final tracker = SyncChangeTracker(deviceId: 'device');
+      tracker.track({
+        _sentence: {'text': 'B'},
+      }, now: 1000);
+      expect(tracker.records[_sentence]!.localOnly, isTrue);
+
+      final changed = tracker.track({}, now: 2000);
+
+      expect(changed, isEmpty);
+      expect(tracker.records.containsKey(_sentence), isFalse);
+      expect(tracker.pending, isEmpty);
+    });
+
+    test('a record stays local-only through edits until it is sent', () {
+      final tracker = SyncChangeTracker(deviceId: 'device');
+      tracker.track({
+        _sentence: {'text': 'B'},
+      }, now: 1000);
+      tracker.track({
+        _sentence: {'text': 'C'},
+      }, now: 2000);
+      expect(tracker.records[_sentence]!.localOnly, isTrue);
+
+      tracker.markOnServer(_sentence);
+      tracker.track({
+        _sentence: {'text': 'D'},
+      }, now: 3000);
+      expect(tracker.records[_sentence]!.localOnly, isFalse);
+
+      tracker.track({}, now: 4000);
+      expect(tracker.records[_sentence]!.deleted, isTrue);
+      expect(tracker.records[_sentence]!.pending, isTrue);
+    });
+
+    test('a pulled or pushed record is not local-only', () {
+      final tracker = SyncChangeTracker(deviceId: 'device');
+      tracker.track({
+        _lesson: {'title': 'A'},
+      }, now: 1000);
+      tracker.markPushed(_lesson, 1000);
+      tracker.acceptRemote(_sentence, hash: 'h', updatedAt: 1000);
+
+      expect(tracker.records[_lesson]!.localOnly, isFalse);
+      expect(tracker.records[_sentence]!.localOnly, isFalse);
     });
 
     test('never deletes vocab and card records', () {
@@ -171,6 +220,13 @@ void main() {
       expect(restored.cursor, 42);
       expect(restored.pending, tracker.pending);
       expect(restored.records[_lesson]!.deleted, isTrue);
+      expect(restored.records[_lesson]!.localOnly, isFalse);
+      expect(
+        restored
+            .records[const SyncRecordKey('discussion', 'lesson:a/b')]!
+            .localOnly,
+        isTrue,
+      );
       expect(
         restored.track({
           const SyncRecordKey('discussion', 'lesson:a/b'): {'messages': []},

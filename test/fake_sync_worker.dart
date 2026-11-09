@@ -16,6 +16,10 @@ class FakeWorker {
   /// a batch that would pass it is refused whole with `429 quota_exceeded`.
   int? writesLeft;
 
+  /// The next push is stored, but its reply is lost: the device gets a
+  /// server error.
+  bool loseNextReply = false;
+
   http.Client client() => MockClient(_handle);
 
   Future<http.Response> _handle(http.Request request) async {
@@ -79,6 +83,10 @@ class FakeWorker {
           if (row['deleted'] == true) row['data'] = <String, dynamic>{};
           rows[key] = {...row, 'seq': ++seq};
           accepted++;
+        }
+        if (loseNextReply) {
+          loseNextReply = false;
+          return json({'error': 'internal'}, 500);
         }
         return json({'accepted': accepted});
     }

@@ -231,6 +231,7 @@ class SyncEngine {
     for (final entry in incoming.entries) {
       final key = entry.key;
       final remote = entry.value;
+      tracker.markOnServer(key);
       final state = tracker.records[key];
 
       // This device's own push coming back, or a version it already has.
@@ -436,6 +437,16 @@ class SyncEngine {
         final record = sent[marked++];
         tracker.markPushed(record.key, record.updatedAt, parts: record.parts);
       }
+    }
+
+    // A batch can reach the server without its reply reaching this device,
+    // so a record counts as on the server, and its later deletion is sent,
+    // from the moment its push starts.
+    if (records.isNotEmpty) {
+      for (final record in sent) {
+        tracker.markOnServer(record.key);
+      }
+      await save();
     }
 
     try {
