@@ -299,4 +299,68 @@ void main() {
       );
     });
   });
+
+  group('packs', () {
+    test('hold many records in records the Worker accepts', () async {
+      final entries = [
+        for (var i = 0; i < 400; i++)
+          SyncPackEntry(
+            SyncRecordKey('vocab', 'w$i'),
+            updatedAt: 1000 + i,
+            data: {'text': _randomText(300, i)},
+          ),
+      ];
+
+      final result = await cipher.pack('device/1', entries, updatedAt: 5000);
+
+      expect(result.tooLarge, isEmpty);
+      // Text gzip cannot shrink still needs several packs.
+      expect(result.packs.length, greaterThan(1));
+      expect(result.packs.length, lessThan(20));
+      final read = <SyncPackEntry>[];
+      for (final pack in result.packs) {
+        expect(pack.record.kind, SyncKinds.pack);
+        expect(pack.record.updatedAt, 5000);
+        expect(
+          utf8.encode(jsonEncode(pack.record.data)).length,
+          lessThanOrEqualTo(SyncRecordCipher.maxEnvelopeBytes),
+        );
+        final payload = await cipher.decode(pack.record) as SyncPack;
+        expect(
+          payload.entries.map((entry) => entry.key),
+          pack.entries.map((entry) => entry.key),
+        );
+        read.addAll(payload.entries);
+      }
+      expect(read.length, 400);
+      expect(read[7].key, const SyncRecordKey('vocab', 'w7'));
+      expect(read[7].updatedAt, 1007);
+      expect(read[7].schema, SyncRecordCipher.schema);
+      expect(read[7].data, {'text': _randomText(300, 7)});
+    });
+
+    test('leave out a record too large for a pack of its own', () async {
+      final large = SyncPackEntry(
+        const SyncRecordKey('lesson_md', 'big'),
+        updatedAt: 1,
+        data: {'markdown': _randomText(60000, 1)},
+      );
+      final small = SyncPackEntry(
+        const SyncRecordKey('lesson', 'l1'),
+        updatedAt: 1,
+        data: {'title': 'Food'},
+      );
+
+      final result = await cipher.pack('p', [small, large], updatedAt: 1);
+
+      expect(result.tooLarge, [large]);
+      expect(result.packs.single.entries, [small]);
+    });
+
+    test('carry a schema an app from before packs does not read', () async {
+      // An older app reads the pack as contents of a newer schema, and
+      // reports that it needs an update instead of losing records.
+      expect(SyncRecordCipher.packSchema, greaterThan(SyncRecordCipher.schema));
+    });
+  });
 }

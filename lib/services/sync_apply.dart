@@ -416,18 +416,25 @@ abstract final class SyncApplier {
     required String Function(T) id,
     required T Function(String id, Map<String, dynamic> json) parse,
   }) {
-    final next = [...items];
+    // Looked up by id, not searched, so a first sync of thousands of items
+    // does not compare each one with every other.
+    final next = <T?>[...items];
+    final indexOf = <String, int>{};
+    for (var index = next.length - 1; index >= 0; index--) {
+      indexOf[id(next[index] as T)] = index;
+    }
     for (final entry in changes.entries) {
-      final index = next.indexWhere((item) => id(item) == entry.key);
+      final index = indexOf[entry.key];
       final json = entry.value;
       if (json == null) {
-        if (index >= 0) next.removeAt(index);
-      } else if (index >= 0) {
+        if (index != null) next[index] = null;
+      } else if (index != null) {
         next[index] = parse(entry.key, json);
       } else {
+        indexOf[entry.key] = next.length;
         next.add(parse(entry.key, json));
       }
     }
-    return next;
+    return next.whereType<T>().toList();
   }
 }

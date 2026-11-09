@@ -117,6 +117,30 @@ class SyncPart extends SyncPayload {
   final List<int> bytes;
 }
 
+/// One record inside a [SyncPack].
+class SyncPackEntry {
+  const SyncPackEntry(
+    this.key, {
+    required this.updatedAt,
+    required this.data,
+    this.schema = SyncRecordCipher.schema,
+  });
+
+  final SyncRecordKey key;
+  final int updatedAt;
+  final int schema;
+  final Map<String, dynamic> data;
+}
+
+/// Many records sent as one server record, for a large push. Each keeps its
+/// own `updatedAt`; a pulled record replaces another only when it is newer,
+/// so an old copy in a pack never wins over a newer one.
+class SyncPack extends SyncPayload {
+  const SyncPack(super.key, this.entries);
+
+  final List<SyncPackEntry> entries;
+}
+
 /// Encrypts records for the server and decrypts them, as "Records" in
 /// `docs/sync.md` describes: AES-256-GCM over gzip(JSON) with the data key,
 /// the kind and server id as associated data, and server ids that are keyed
@@ -139,6 +163,14 @@ class SyncRecordCipher {
   /// Joins a split record's local id and a part number. Ids never contain
   /// it, so a part cannot have the same id as another record.
   static const partSeparator = '\u0000';
+
+  /// Schema written into packs. It is newer than [schema], so an app from
+  /// before packs reports that it needs an update instead of misreading one.
+  static const packSchema = 2;
+
+  /// JSON bytes of records first tried in one pack. gzip shrinks a pack of
+  /// similar records several times; one that is still too large is halved.
+  static const _packJsonBytes = 128 * 1024;
 
   static const _envelopeVersion = 1;
   static final _aes = AesGcm.with256bits();
@@ -232,6 +264,99 @@ class SyncRecordCipher {
     return [...parts, head];
   }
 
+  /// Packs [entries] into as few server records as fit, named [packId]
+  /// followed by a number. Returns them with the entries each holds. An entry
+  /// too large for a pack of its own is returned in `tooLarge`, to be sent
+  /// on its own.
+  Future<
+    ({
+      List<({SyncRecord record, List<SyncPackEntry> entries})> packs,
+      List<SyncPackEntry> tooLarge,
+    })
+  >
+  pack(
+    String packId,
+    List<SyncPackEntry> entries, {
+    required int updatedAt,
+  }) async {
+    final packs = <({SyncRecord record, List<SyncPackEntry> entries})>[];
+    final tooLarge = <SyncPackEntry>[];
+    final encoded = [for (final entry in entries) _packEntryJson(entry)];
+
+    Future<void> add(int start, int end) async {
+      final key = SyncRecordKey(SyncKinds.pack, '$packId/${packs.length}');
+      final record = await _record(
+        key,
+        gzip.encode(
+          utf8.encode(
+            jsonEncode({
+              'localId': key.localId,
+              'schema': packSchema,
+              'data': {'records': encoded.sublist(start, end)},
+            }),
+          ),
+        ),
+        updatedAt,
+      );
+      if (_size(record) <= maxEnvelopeBytes) {
+        packs.add((record: record, entries: entries.sublist(start, end)));
+      } else if (end - start == 1) {
+        tooLarge.add(entries[start]);
+      } else {
+        final middle = start + (end - start) ~/ 2;
+        await add(start, middle);
+        await add(middle, end);
+      }
+    }
+
+    var start = 0;
+    var bytes = 0;
+    for (var index = 0; index < entries.length; index++) {
+      final size = jsonEncode(encoded[index]).length;
+      if (index > start && bytes + size > _packJsonBytes) {
+        await add(start, index);
+        start = index;
+        bytes = 0;
+      }
+      bytes += size;
+    }
+    if (start < entries.length) await add(start, entries.length);
+    return (packs: packs, tooLarge: tooLarge);
+  }
+
+  static Map<String, dynamic> _packEntryJson(SyncPackEntry entry) => {
+    'kind': entry.key.kind,
+    'localId': entry.key.localId,
+    'updatedAt': entry.updatedAt,
+    'schema': entry.schema,
+    'data': entry.data,
+  };
+
+  static SyncPack _readPack(SyncRecordKey key, Map data) {
+    final records = data['records'];
+    if (records is! List) {
+      throw const FormatException('Invalid sync pack.');
+    }
+    return SyncPack(key, [
+      for (final entry in records)
+        if (entry is Map &&
+            entry['kind'] is String &&
+            entry['kind'] != SyncKinds.pack &&
+            entry['localId'] is String &&
+            entry['updatedAt'] is int &&
+            entry['schema'] is int &&
+            entry['data'] is Map)
+          SyncPackEntry(
+            SyncRecordKey(entry['kind'] as String, entry['localId'] as String),
+            updatedAt: entry['updatedAt'] as int,
+            schema: entry['schema'] as int,
+            data: Map<String, dynamic>.from(entry['data'] as Map),
+          )
+        else
+          throw const FormatException('Invalid sync pack entry.'),
+    ]);
+  }
+
   /// A deletion of [key], to push.
   Future<SyncRecord> tombstone(
     SyncRecordKey key, {
@@ -310,6 +435,11 @@ class SyncRecordCipher {
     final data = json['data'];
     if (data is! Map) {
       throw const FormatException('Invalid sync record contents.');
+    }
+    // A pack from a newer app stays contents with its newer schema, which
+    // the engine reports as needing an update.
+    if (key.kind == SyncKinds.pack && schema == packSchema) {
+      return _readPack(key, data);
     }
     return SyncContents(
       key,

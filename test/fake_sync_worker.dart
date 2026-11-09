@@ -12,6 +12,10 @@ class FakeWorker {
   int seq = 0;
   int pushRequests = 0;
 
+  /// Records the account may still write today, as `MAX_WRITES_PER_DAY`;
+  /// a batch that would pass it is refused whole with `429 quota_exceeded`.
+  int? writesLeft;
+
   http.Client client() => MockClient(_handle);
 
   Future<http.Response> _handle(http.Request request) async {
@@ -43,7 +47,26 @@ class FakeWorker {
         });
       case ('POST', '/v1/changes'):
         pushRequests++;
+        // The Worker's body limit for a push.
+        if (utf8.encode(request.body).length > 1024 * 1024) {
+          return json({'error': 'too_large'}, 413);
+        }
         final body = jsonDecode(request.body) as Map<String, dynamic>;
+        final count = (body['records'] as List).length;
+        // The Worker's limits: 100 records a push, 32 KB of data each.
+        if (count > 100 ||
+            (body['records'] as List).any(
+              (record) =>
+                  utf8.encode(jsonEncode(record['data'])).length > 32768,
+            )) {
+          return json({'error': 'invalid_records'}, 400);
+        }
+        if (writesLeft != null) {
+          if (count > writesLeft!) {
+            return json({'error': 'quota_exceeded'}, 429);
+          }
+          writesLeft = writesLeft! - count;
+        }
         var accepted = 0;
         for (final record in body['records'] as List) {
           final row = Map<String, dynamic>.from(record as Map);

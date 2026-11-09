@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:collection';
 
 import 'package:uuid/uuid.dart';
 
@@ -107,7 +108,10 @@ class SyncChangeTracker {
   /// head, then part number, as base64.
   final Map<SyncRecordKey, Map<int, String>> _heldParts;
 
-  Map<SyncRecordKey, SyncRecordState> get records => Map.unmodifiable(_records);
+  /// A read-only view, not a copy: the engine looks records up in loops over
+  /// the whole library.
+  Map<SyncRecordKey, SyncRecordState> get records =>
+      UnmodifiableMapView(_records);
 
   /// Records changed since the last push, oldest change first.
   List<SyncRecordKey> get pending {
