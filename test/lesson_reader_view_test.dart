@@ -154,6 +154,16 @@ void main() {
     expect(find.byTooltip('Edit Markdown'), findsOneWidget);
   });
 
+  testWidgets('shows the virtual path while editing Markdown', (tester) async {
+    await openReader(tester, const Size(1200, 800));
+
+    await tester.tap(find.byTooltip('Edit Markdown'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('/Greetings.md'), findsOneWidget);
+    expect(find.byTooltip('Copy link to this lesson'), findsOneWidget);
+  });
+
   group('lesson links', () {
     Future<(Lesson, Lesson)> openLinked(WidgetTester tester) async {
       final provider = await loadedProvider(tester);

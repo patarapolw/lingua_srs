@@ -246,6 +246,21 @@ class LessonLink {
         _nearest(candidates, from);
   }
 
+  /// [Lesson.virtualPath] as a path from the top folder, the way a `.md`
+  /// link can name it: `/Unit 2/lesson-26.md`.
+  static String virtualPathText(Lesson lesson) =>
+      '/${lesson.virtualPath.join('/')}';
+
+  /// A Markdown link to [lesson] by its virtual path, for pasting into
+  /// another lesson: `[Lesson 26](</Unit 2/lesson-26.md>)`.
+  static String markdownLinkTo(Lesson lesson) {
+    final label = _escapeLabel(lesson.displayTitle);
+    final path = virtualPathText(
+      lesson,
+    ).replaceAllMapped(RegExp(r'[<>\\#?%]'), (m) => Uri.encodeComponent(m[0]!));
+    return '[$label](<$path>)';
+  }
+
   /// A name as folder import would write it, for loose comparison: lower
   /// case, with every run of other characters than letters and digits made
   /// one space (`unit-2`, `Unit 2` and `unit_2` are the same).

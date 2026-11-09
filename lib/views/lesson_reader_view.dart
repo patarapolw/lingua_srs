@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../models/lesson.dart';
@@ -321,26 +322,90 @@ class _LessonMarkdownEditorState extends State<_LessonMarkdownEditor> {
           constraints: const BoxConstraints(maxWidth: 1000),
           child: Padding(
             padding: const EdgeInsets.all(16),
-            child: MarkdownTextField(
-              controller: _controller,
-              enabled: !_saving,
-              expands: true,
-              maxLines: null,
-              textAlignVertical: TextAlignVertical.top,
-              keyboardType: TextInputType.multiline,
-              style: const TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 14,
-                height: 1.5,
-              ),
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                hintText: 'Enter lesson Markdown',
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                VirtualPathBar(lesson: widget.lesson),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: MarkdownTextField(
+                    controller: _controller,
+                    enabled: !_saving,
+                    expands: true,
+                    maxLines: null,
+                    textAlignVertical: TextAlignVertical.top,
+                    keyboardType: TextInputType.multiline,
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 14,
+                      height: 1.5,
+                    ),
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      hintText: 'Enter lesson Markdown',
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Shows where `.md` links find a lesson ([Lesson.virtualPath]), with a
+/// button that copies a Markdown link to it.
+class VirtualPathBar extends StatelessWidget {
+  final Lesson lesson;
+
+  const VirtualPathBar({super.key, required this.lesson});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final path = LessonLink.virtualPathText(lesson);
+    return Row(
+      children: [
+        Tooltip(
+          message: lesson.fileName == null
+              ? 'Virtual path, named after the lesson title. '
+                    '.md links in other lessons find this lesson here.'
+              : 'Virtual path, with the name of the file it was imported '
+                    'from. .md links in other lessons find this lesson here.',
+          child: Icon(
+            Icons.description_outlined,
+            size: 18,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: SelectableText(
+            path,
+            key: const ValueKey('virtual-path'),
+            maxLines: 1,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontFamily: 'monospace',
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+        IconButton(
+          tooltip: 'Copy link to this lesson',
+          icon: const Icon(Icons.link),
+          onPressed: () async {
+            final messenger = ScaffoldMessenger.of(context);
+            await Clipboard.setData(
+              ClipboardData(text: LessonLink.markdownLinkTo(lesson)),
+            );
+            messenger.showSnackBar(
+              const SnackBar(content: Text('Copied a link to this lesson.')),
+            );
+          },
+        ),
+      ],
     );
   }
 }
