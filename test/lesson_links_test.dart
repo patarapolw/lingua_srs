@@ -255,4 +255,38 @@ void main() {
       expect(LessonLink.splitHeadingAttributes('x {#a} y'), ('x {#a} y', null));
     });
   });
+
+  group('virtual path text and copied links', () {
+    test('names a path from the top folder, safe as file names', () {
+      expect(
+        LessonLink.virtualPathText(
+          Lesson(title: 'Lesson 26', unitTitle: 'Unit 2', fileName: 'l26.md'),
+        ),
+        '/Unit 2/l26.md',
+      );
+      expect(
+        LessonLink.virtualPathText(Lesson(title: 'Lesson / 1')),
+        '/Lesson _ 1.md',
+      );
+    });
+
+    test('a copied link finds its lesson again', () {
+      final odd = Lesson(title: 'Q&A #1? 100%', unitTitle: 'Unit 2::Sub/part');
+      final plain = Lesson(title: 'Lesson / 1');
+      final lessons = [odd, plain];
+
+      for (final lesson in lessons) {
+        final markdown = LessonLink.markdownLinkTo(lesson);
+        expect(markdown, startsWith('[${lesson.displayTitle}](<'));
+        final href = RegExp(r'\(<(.*)>\)$')
+            .firstMatch(markdown)![1]!
+            .replaceAll(' ', '%20');
+        final link = LessonLink.fromHref(href)!;
+        expect(
+          LessonLink.resolveFile(lessons, link.file!, from: plain),
+          same(lesson),
+        );
+      }
+    });
+  });
 }

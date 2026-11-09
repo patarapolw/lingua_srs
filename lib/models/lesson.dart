@@ -55,12 +55,17 @@ class Lesson {
   }
 
   /// The lesson's file name in its virtual folder ([folderPath]): the file it
-  /// was imported from, or its title with `.md`.
-  String get virtualFileName => fileName ?? '$displayTitle.md';
+  /// was imported from, or its title with `.md`, made safe as a file name.
+  String get virtualFileName =>
+      safePathSegment(fileName ?? '${safePathSegment(displayTitle)}.md');
 
-  /// [folderPath] followed by [virtualFileName]: where `.md` links between
-  /// lessons look for it.
-  List<String> get virtualPath => [...folderPath, virtualFileName];
+  /// [folderPath] followed by [virtualFileName], each made safe as a file
+  /// name: where `.md` links between lessons look for it, and where export
+  /// writes it.
+  List<String> get virtualPath => [
+    ...folderPath.map(safePathSegment),
+    virtualFileName,
+  ];
 
   void moveToFolder(List<String> folder) {
     final leafTitle = displayTitle;
@@ -149,6 +154,16 @@ class Lesson {
 }
 
 const hierarchySeparator = '::';
+
+/// [value] as one file or folder name: characters that are not allowed in
+/// one (`/`, `:`, `?`, …) become `_`, and trailing dots and spaces go.
+String safePathSegment(String value) {
+  final safe = value
+      .replaceAll(RegExp(r'[\x00-\x1F<>:"/\\|?*]'), '_')
+      .replaceAll(RegExp(r'[. ]+$'), '')
+      .trim();
+  return safe.isEmpty || safe == '.' || safe == '..' ? 'Untitled' : safe;
+}
 
 /// The only place a stored/typed path string is split. Everything else passes
 /// `List<String>` so segments containing `/` or spaces are never mangled.
