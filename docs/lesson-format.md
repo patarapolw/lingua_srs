@@ -139,7 +139,14 @@ The import button stays disabled until the input can be previewed. Fix any displ
 - **Pick Folder** scans Markdown files recursively. Multiple folders can be selected together on macOS; other platforms select one at a time. Nested folder and archive paths preserve lesson hierarchy.
 - Folder and ZIP results start unchecked; select lessons individually or use **Check all** / **Uncheck all**.
 - Only files with a `vocabulary:` key in their frontmatter are imported; other Markdown is ignored.
-- Re-importing updates matching lessons and vocabulary in place, keeping SRS progress and any entries not present in the import.
+- Re-importing updates matching lessons and vocabulary in place, keeping SRS progress and any entries not present in the import. A lesson matches when it is at the same virtual path (see [Links to `.md` files](#links-to-md-files)): the same file in the same folder, or, for a lesson with no file, the same title.
+- **One name per folder.** No two lessons in a folder share a name (ignoring case). When an import brings a lesson whose name is taken in its folder by a lesson at another path, you are asked which one is primary; the other is overwritten by it:
+  - **Saved lesson**: the imported file is skipped.
+  - **Imported file**: the saved lesson takes the file's name, text and words; its words keep their study progress, and words not in the file stay.
+  - **Keep both**: the imported lesson is named with a suffix, `Lesson 1 (2)`, and keeps that name when its file is imported again.
+
+  *Do the same for any other clash in this import* answers the rest at once. A lesson saved before file names were kept takes the file's name whichever lesson is primary, so the next import of that file updates it without asking; one whose title starts with the same `Lesson <number>` as the file's is asked about too, as such lessons used to be merged.
+- Lessons that share a name in a folder can still arrive by sync or from a backup. Those at the same virtual path are one lesson, and are merged when the app starts or syncs. For any others, the lesson list shows a banner; **Sort out** asks the same question for each pair, where overwriting removes the other lesson after moving any words only it has to the primary one, with their study progress.
 - Folder import skips Markdown files that have not changed since you last imported them, and reports how many it skipped.
 
 ### Adding vocabulary to an existing lesson

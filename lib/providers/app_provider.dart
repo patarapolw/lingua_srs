@@ -361,7 +361,8 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     final splitEmphasis = _splitSentenceEmphasis();
     final canonicalized = _canonicalizeSentencePool();
     final deduped = _dedupeSentenceLinks();
-    if (splitEmphasis || canonicalized || deduped) {
+    final mergedLessons = _mergeSameVirtualPathLessons();
+    if (splitEmphasis || canonicalized || deduped || mergedLessons) {
       await StorageService.saveSentences(_sentences);
       await StorageService.saveLessons(_lessons);
     }
@@ -776,6 +777,12 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       if (sentence != null && _carryEmphasisTo(sentence)) carried = true;
     }
     if (carried) changed.add(SyncAppPart.lessons);
+    if (changed.contains(SyncAppPart.lessons) &&
+        _mergeSameVirtualPathLessons()) {
+      changed
+        ..add(SyncAppPart.lessons)
+        ..add(SyncAppPart.sentences);
+    }
     // A pulled sentence can be one this device imported separately: merge
     // them now, the same way on every device, rather than at the next start.
     if (changed.contains(SyncAppPart.sentences) ||
@@ -1195,7 +1202,10 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       defaultUnitTitle: defaultUnitTitle,
     );
     final before = _currentVocabIds();
-    final lesson = _applyParsedLesson(parsed);
+    final lesson = _applyParsedLesson(
+      parsed,
+      existing: _importTarget(parsed.lesson).$1,
+    );
     _linkSharedVocabProgress();
     await _followVocabIdChanges(before);
     await _saveImportedLessons();
@@ -1203,9 +1213,15 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     return lesson;
   }
 
+  /// Imports [parsedLessons] in order. A lesson at the same virtual path as
+  /// one in its folder updates it. One that only shares its name (or, for a
+  /// lesson saved without a file name, the older `Lesson N` match) is a
+  /// [LessonNameClash]: [onClash] picks which lesson is kept, and without
+  /// it the imported lesson overwrites the saved one.
   Future<List<Lesson>> importParsedLessons(
     List<YamlParseResult> parsedLessons, {
     void Function(int current, int total)? onProgress,
+    Future<LessonClashChoice> Function(LessonNameClash clash)? onClash,
   }) async {
     final importedLessons = <Lesson>[];
     final sentenceIndex = <String, List<Sentence>>{};
@@ -1219,9 +1235,36 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     _importSentenceSet = HashSet<Sentence>.identity()..addAll(_sentences);
     try {
       for (var index = 0; index < parsedLessons.length; index++) {
+        final parsed = parsedLessons[index];
+        var (target, ask) = _importTarget(parsed.lesson);
+        if (target != null && ask) {
+          final clash = LessonNameClash(
+            existing: target,
+            incoming: parsed.lesson,
+            renamedTitle: _unusedName(parsed.lesson, parsed.lesson.folderPath),
+          );
+          final choice = onClash == null
+              ? LessonClashChoice.keepIncoming
+              : await onClash(clash);
+          if (choice == LessonClashChoice.keepExisting) {
+            // A lesson saved before file names were kept takes the file's,
+            // so importing that file again finds it without asking.
+            target.fileName ??= parsed.lesson.fileName;
+            importedLessons.add(target);
+            onProgress?.call(index + 1, parsedLessons.length);
+            continue;
+          }
+          if (choice == LessonClashChoice.keepBoth) {
+            if (_sameName(target, parsed.lesson)) {
+              _rename(parsed.lesson, clash.renamedTitle);
+            }
+            target = null;
+          }
+        }
         importedLessons.add(
           _applyParsedLesson(
-            parsedLessons[index],
+            parsed,
+            existing: target,
             sentenceIndex: sentenceIndex,
             vocabIndex: vocabIndex,
           ),
@@ -1259,6 +1302,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
 
   Lesson _applyParsedLesson(
     YamlParseResult parsed, {
+    required Lesson? existing,
     Map<String, List<Sentence>>? sentenceIndex,
     Map<String, VocabItem>? vocabIndex,
   }) {
@@ -1266,6 +1310,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     try {
       return _applyParsedLessonTracked(
         parsed,
+        existing: existing,
         sentenceIndex: sentenceIndex,
         vocabIndex: vocabIndex,
       );
@@ -1276,17 +1321,20 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
 
   Lesson _applyParsedLessonTracked(
     YamlParseResult parsed, {
+    required Lesson? existing,
     Map<String, List<Sentence>>? sentenceIndex,
     Map<String, VocabItem>? vocabIndex,
   }) {
-    final existingIndex = _lessons.indexWhere(
-      (lesson) =>
-          isSameHierarchyPath(lesson.folderPath, parsed.lesson.folderPath) &&
-          _lessonIdentity(lesson) == _lessonIdentity(parsed.lesson),
-    );
-    final existingLesson = existingIndex == -1 ? null : _lessons[existingIndex];
+    final existingLesson = existing;
     if (existingLesson != null) {
-      existingLesson.title = parsed.lesson.title;
+      // Keep a name given to tell it from another lesson in its folder.
+      final nameTaken = _lessons.any(
+        (other) =>
+            !identical(other, existingLesson) &&
+            isSameHierarchyPath(other.folderPath, parsed.lesson.folderPath) &&
+            _sameName(other, parsed.lesson),
+      );
+      if (!nameTaken) existingLesson.title = parsed.lesson.title;
       existingLesson.unitTitle =
           parsed.lesson.unitTitle ?? existingLesson.unitTitle;
       existingLesson.targetLanguage = parsed.lesson.targetLanguage;
@@ -1331,6 +1379,147 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   Future<void> _saveImportedLessons() async {
     await StorageService.saveSentences(_sentences);
     await StorageService.saveLessons(_lessons);
+  }
+
+  /// The saved lesson [incoming] would update, and whether that has to be
+  /// asked (see [importParsedLessons]).
+  (Lesson?, bool) _importTarget(Lesson incoming) {
+    final inFolder = _lessons
+        .where(
+          (lesson) =>
+              isSameHierarchyPath(lesson.folderPath, incoming.folderPath),
+        )
+        .toList();
+    for (final lesson in inFolder) {
+      if (_sameVirtualPath(lesson, incoming)) return (lesson, false);
+    }
+    for (final lesson in inFolder) {
+      if (_sameName(lesson, incoming) ||
+          (lesson.fileName == null &&
+              _lessonIdentity(lesson) == _lessonIdentity(incoming))) {
+        return (lesson, true);
+      }
+    }
+    return (null, false);
+  }
+
+  static bool _sameName(Lesson a, Lesson b) =>
+      a.displayTitle.trim().toLowerCase() ==
+      b.displayTitle.trim().toLowerCase();
+
+  static bool _sameVirtualPath(Lesson a, Lesson b) =>
+      isSameHierarchyPath(a.folderPath, b.folderPath) &&
+      a.virtualFileName.toLowerCase() == b.virtualFileName.toLowerCase();
+
+  /// [lesson]'s name with the first ` (2)`, ` (3)`, … suffix no other lesson
+  /// in [folder] has.
+  String _unusedName(Lesson lesson, List<String> folder) {
+    final taken = {
+      for (final other in _lessons)
+        if (!identical(other, lesson) &&
+            isSameHierarchyPath(other.folderPath, folder))
+          other.displayTitle.trim().toLowerCase(),
+    };
+    final base = lesson.displayTitle.trim();
+    for (var n = 2; ; n++) {
+      final name = '$base ($n)';
+      if (!taken.contains(name.toLowerCase())) return name;
+    }
+  }
+
+  static void _rename(Lesson lesson, String name) {
+    final parts = splitHierarchyPath(lesson.title);
+    lesson.title = parts.length <= 1
+        ? name
+        : joinHierarchyPath([...parts.take(parts.length - 1), name]);
+  }
+
+  /// Saved lessons that share a name with an earlier lesson in their folder
+  /// (each against the first one), for the person to sort out. Lessons at
+  /// the same virtual path are merged without asking when loaded or synced.
+  List<LessonNameClash> get lessonNameClashes {
+    final first = <String, Lesson>{};
+    final clashes = <LessonNameClash>[];
+    for (final lesson in _lessons) {
+      final key =
+          '${hierarchyFolderKey(lesson.folderPath)}'
+          '\n${lesson.displayTitle.trim().toLowerCase()}';
+      final earlier = first[key];
+      if (earlier == null) {
+        first[key] = lesson;
+      } else {
+        clashes.add(
+          LessonNameClash(
+            existing: earlier,
+            incoming: lesson,
+            renamedTitle: _unusedName(lesson, lesson.folderPath),
+          ),
+        );
+      }
+    }
+    return clashes;
+  }
+
+  /// Settles a clash from [lessonNameClashes]: the lesson [choice] keeps
+  /// overwrites the other (which goes, after giving the kept one any words
+  /// it lacks, so no study progress is lost), or the later one is renamed.
+  Future<void> resolveLessonNameClash(
+    LessonNameClash clash,
+    LessonClashChoice choice,
+  ) async {
+    switch (choice) {
+      case LessonClashChoice.keepExisting:
+        _absorbLesson(clash.existing, clash.incoming);
+      case LessonClashChoice.keepIncoming:
+        _absorbLesson(clash.incoming, clash.existing);
+      case LessonClashChoice.keepBoth:
+        _rename(
+          clash.incoming,
+          _unusedName(clash.incoming, clash.incoming.folderPath),
+        );
+    }
+    await saveState();
+  }
+
+  /// Moves [other]'s words that [primary] lacks into [primary], then removes
+  /// [other].
+  void _absorbLesson(Lesson primary, Lesson other) {
+    if (identical(primary, other)) return;
+    final ids = {for (final vocab in primary.vocabularies) vocab.id};
+    for (final vocab in other.vocabularies) {
+      if (ids.add(vocab.id)) primary.vocabularies.add(vocab);
+    }
+    for (final sentence in _sentences) {
+      if (sentence.lessonId == other.id) sentence.lessonId = primary.id;
+    }
+    if (primary.markdownContent.trim().isEmpty) {
+      primary.markdownContent = other.markdownContent;
+    }
+    primary.fileName ??= other.fileName;
+    _lessons.removeWhere((lesson) => identical(lesson, other));
+    if (_selectedLessonId == other.id) _selectedLessonId = primary.id;
+  }
+
+  /// Merges saved lessons at the same virtual path (say, one file imported
+  /// on two devices before they synced) into the first of them. Returns
+  /// whether any were merged.
+  bool _mergeSameVirtualPathLessons() {
+    final first = <String, Lesson>{};
+    final merges = <(Lesson, Lesson)>[];
+    for (final lesson in _lessons) {
+      final key = [for (final part in lesson.virtualPath) part.toLowerCase()]
+          .join('/');
+      final earlier = first[key];
+      if (earlier == null) {
+        first[key] = lesson;
+      } else {
+        merges.add((earlier, lesson));
+      }
+    }
+    for (final (primary, other) in merges) {
+      _absorbLesson(primary, other);
+    }
+    return merges.isNotEmpty;
   }
 
   static String _lessonIdentity(Lesson lesson) {
@@ -2713,4 +2902,34 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     notifyListeners();
     await StorageService.saveLessonFolderExpansion(updatedExpansion);
   }
+}
+
+/// Which lesson stays when two in one folder share a name.
+enum LessonClashChoice {
+  /// [LessonNameClash.existing] stays; the other is overwritten by it (an
+  /// imported file is skipped). Either way, the lesson kept takes the other's
+  /// file name if it has none, so it keeps a virtual path from a file.
+  keepExisting,
+
+  /// [LessonNameClash.incoming] stays and overwrites the other.
+  keepIncoming,
+
+  /// Both stay; the incoming one gets [LessonNameClash.renamedTitle].
+  keepBoth,
+}
+
+/// Two lessons in one folder with the same name: a saved one and an
+/// imported or later one.
+class LessonNameClash {
+  final Lesson existing;
+  final Lesson incoming;
+
+  /// The name [LessonClashChoice.keepBoth] gives [incoming].
+  final String renamedTitle;
+
+  const LessonNameClash({
+    required this.existing,
+    required this.incoming,
+    required this.renamedTitle,
+  });
 }

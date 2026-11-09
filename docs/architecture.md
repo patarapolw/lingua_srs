@@ -93,6 +93,7 @@ lingua_srs/
 │       ├── emphasis_text.dart         # Sentence text with **bold** segments, no Markdown
 │       ├── folder_picker_dialog.dart  # Pick an existing or new folder to move a lesson/folder into
 │       ├── lesson_hierarchy_view.dart # Lesson folder tree with reordering
+│       ├── lesson_clash_dialog.dart   # Asks which of two same-named lessons in a folder is primary
 │       ├── lesson_content_view.dart   # Lesson Markdown reader (native, chunked lazy list)
 │       ├── cached_markdown_image.dart # Online Markdown image shown from the disk cache
 │       ├── markdown_content.dart      # Markdown renderer for notes and chat

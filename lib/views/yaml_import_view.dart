@@ -15,6 +15,7 @@ import '../services/lesson_ai_prompt.dart';
 import '../services/markdown_archive_service.dart';
 import '../services/storage_service.dart';
 import '../services/yaml_parser_service.dart';
+import '../widgets/lesson_clash_dialog.dart';
 
 class YamlImportView extends StatefulWidget {
   /// Prefills the lesson name. Using an existing lesson's name adds the YAML's
@@ -489,6 +490,31 @@ class _YamlImportViewState extends State<YamlImportView>
     });
   }
 
+  /// Asks which lesson is primary when an import of [fileCount] files adds
+  /// a lesson whose name is taken in its folder, remembering an answer given
+  /// for the rest of the import.
+  Future<LessonClashChoice> Function(LessonNameClash) _askAboutClash(
+    int fileCount,
+  ) {
+    LessonClashChoice? forRest;
+    var asked = 0;
+    return (clash) async {
+      final remembered = forRest;
+      if (remembered != null) return remembered;
+      asked++;
+      if (!mounted) return LessonClashChoice.keepBoth;
+      final answer = await showLessonClashDialog(
+        context,
+        clash,
+        importing: true,
+        remaining: fileCount - asked,
+      );
+      final choice = answer?.choice ?? LessonClashChoice.keepBoth;
+      if (answer?.forRest ?? false) forRest = choice;
+      return choice;
+    };
+  }
+
   Future<void> _executeImport() async {
     if (_directoryFiles.isNotEmpty) {
       await _executeDirectoryImport();
@@ -508,8 +534,9 @@ class _YamlImportViewState extends State<YamlImportView>
           isNew: (sentence) => !provider.hasSentenceLike(sentence),
         );
       }
-      final importedLesson = (await provider.importParsedLessons([preview]))
-          .single;
+      final importedLesson = (await provider.importParsedLessons([
+        preview,
+      ], onClash: _askAboutClash(1))).single;
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -547,6 +574,7 @@ class _YamlImportViewState extends State<YamlImportView>
     try {
       final importedLessons = await provider.importParsedLessons(
         selectedFiles.map((file) => file.preview).toList(),
+        onClash: _askAboutClash(selectedFiles.length),
         onProgress: (current, total) {
           if (!mounted) return;
           setState(() {
