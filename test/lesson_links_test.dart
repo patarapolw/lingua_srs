@@ -1,6 +1,9 @@
+import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lingua_srs/models/lesson.dart';
+import 'package:lingua_srs/services/lesson_export_service.dart';
 import 'package:lingua_srs/services/lesson_links.dart';
+import 'package:lingua_srs/services/yaml_parser_service.dart';
 
 void main() {
   group('LessonLink.prepareWikiLinks', () {
@@ -119,6 +122,137 @@ void main() {
         same(unit2),
       );
       expect(LessonLink.resolveLesson(lessons, 'Lesson 26'), same(unit1));
+    });
+  });
+
+  group('.md links', () {
+    test('reads a relative .md link and its heading', () {
+      final link = LessonLink.fromHref(
+        '../unit-2/lesson%2026.md?x=1#Past%20tense',
+      )!;
+
+      expect(link.file, '../unit-2/lesson 26.md');
+      expect(link.heading, 'Past tense');
+      expect(link.isOtherLesson, isTrue);
+    });
+
+    test('leaves web links and other files alone', () {
+      expect(LessonLink.fromHref('https://example.com/a.md'), isNull);
+      expect(LessonLink.fromHref('mailto:a.md'), isNull);
+      expect(LessonLink.fromHref('notes.txt'), isNull);
+    });
+
+    final unit2 = Lesson(
+      title: 'Lesson 26',
+      unitTitle: 'Unit 2',
+      fileName: 'lesson-26.md',
+    );
+    final unit1 = Lesson(
+      title: 'Lesson 26',
+      unitTitle: 'Unit 1',
+      fileName: 'lesson-26.md',
+    );
+    final three = Lesson(title: 'Lesson 3', unitTitle: 'Unit 1');
+    final intro = Lesson(title: 'Intro');
+    final lessons = [unit1, unit2, three, intro];
+
+    test('finds the lesson at a relative virtual path', () {
+      expect(
+        LessonLink.resolveFile(lessons, '../unit-2/lesson-26.md', from: three),
+        same(unit2),
+      );
+      expect(
+        LessonLink.resolveFile(lessons, 'lesson-26.md', from: three),
+        same(unit1),
+      );
+      expect(
+        LessonLink.resolveFile(lessons, '../intro.md', from: unit2),
+        same(intro),
+      );
+    });
+
+    test('starts at the top folder for a leading /', () {
+      expect(
+        LessonLink.resolveFile(lessons, '/Unit_2/Lesson 26.md', from: intro),
+        same(unit2),
+      );
+    });
+
+    test('matches a lesson made in the app by its title', () {
+      expect(
+        LessonLink.resolveFile(lessons, './lesson-3.md', from: unit1),
+        same(three),
+      );
+    });
+
+    test('falls back to the nearest lesson with that name', () {
+      expect(
+        LessonLink.resolveFile(lessons, 'lesson-3.md', from: unit2),
+        same(three),
+      );
+      expect(
+        LessonLink.resolveFile(lessons, 'missing.md', from: intro),
+        isNull,
+      );
+    });
+  });
+
+  group('virtual file names', () {
+    test('folder import keeps the Markdown file name', () {
+      final parsed = YamlParserService.parseLessonYaml(
+        '---\nvocabulary:\n---\n# Lesson 26 {#l26}\n',
+        sourcePath: 'unit-2/lesson-26.md',
+      );
+
+      expect(parsed.lesson.fileName, 'lesson-26.md');
+      expect(parsed.lesson.title, 'Lesson 26');
+      expect(parsed.lesson.virtualPath, ['lesson-26.md']);
+    });
+
+    test('other files and typed lessons fall back to the title', () {
+      final parsed = YamlParserService.parseLessonYaml(
+        'title: Greetings\nvocabulary:\n  nouns:\n    - ko: 단어\n      en: word\n',
+        sourcePath: 'greetings.yaml',
+      );
+
+      expect(parsed.lesson.fileName, isNull);
+      expect(parsed.lesson.virtualFileName, 'Greetings.md');
+    });
+
+    test('is saved and exported', () {
+      final lesson = Lesson(
+        title: 'Lesson 26',
+        unitTitle: 'Unit 2',
+        fileName: 'lesson-26.md',
+      );
+
+      expect(Lesson.fromJson(lesson.toJson()).fileName, 'lesson-26.md');
+      expect(Lesson.fromJson(Lesson(title: 'A').toJson()).fileName, isNull);
+      final zip = ZipDecoder().decodeBytes(
+        LessonExportService.createZip([lesson], const []),
+      );
+      expect(zip.files.single.name, 'Unit 2/lesson-26.md');
+    });
+  });
+
+  group('LessonLink.splitHeadingAttributes', () {
+    test('splits off markdown-it-attrs and returns the id', () {
+      expect(
+        LessonLink.splitHeadingAttributes('Polite {#past-polite .note k=v}'),
+        ('Polite', 'past-polite'),
+      );
+      expect(LessonLink.splitHeadingAttributes('Polite {.note}'), (
+        'Polite',
+        null,
+      ));
+    });
+
+    test('keeps braces that are not attributes', () {
+      expect(LessonLink.splitHeadingAttributes('Set {a b}'), (
+        'Set {a b}',
+        null,
+      ));
+      expect(LessonLink.splitHeadingAttributes('x {#a} y'), ('x {#a} y', null));
     });
   });
 }

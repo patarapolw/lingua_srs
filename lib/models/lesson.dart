@@ -12,6 +12,11 @@ class Lesson {
   List<VocabItem> vocabularies;
   String markdownContent;
 
+  /// Name of the Markdown file the lesson was imported from (`lesson-26.md`),
+  /// so `.md` links between lesson files keep working. Null for lessons made
+  /// in the app; see [virtualFileName].
+  String? fileName;
+
   Lesson({
     String? id,
     required this.title,
@@ -20,6 +25,7 @@ class Lesson {
     this.nativeLanguage = 'en',
     List<VocabItem>? vocabularies,
     this.markdownContent = '',
+    this.fileName,
   }) : id = id ?? const Uuid().v4(),
        vocabularies = vocabularies ?? [];
 
@@ -47,6 +53,14 @@ class Lesson {
     final titleParts = splitHierarchyPath(title);
     return titleParts.isEmpty ? title : titleParts.last;
   }
+
+  /// The lesson's file name in its virtual folder ([folderPath]): the file it
+  /// was imported from, or its title with `.md`.
+  String get virtualFileName => fileName ?? '$displayTitle.md';
+
+  /// [folderPath] followed by [virtualFileName]: where `.md` links between
+  /// lessons look for it.
+  List<String> get virtualPath => [...folderPath, virtualFileName];
 
   void moveToFolder(List<String> folder) {
     final leafTitle = displayTitle;
@@ -112,6 +126,7 @@ class Lesson {
     'unitTitle': unitTitle,
     'targetLanguage': targetLanguage,
     'nativeLanguage': nativeLanguage,
+    'fileName': ?fileName,
     'vocabularies': vocabularies.map((v) => v.toJson()).toList(),
   };
 
@@ -122,6 +137,7 @@ class Lesson {
     targetLanguage: json['targetLanguage'] as String? ?? 'ko',
     nativeLanguage: json['nativeLanguage'] as String? ?? 'en',
     markdownContent: json['markdownContent'] as String? ?? '',
+    fileName: json['fileName'] as String?,
     vocabularies:
         (json['vocabularies'] as List<dynamic>?)
             ?.map(

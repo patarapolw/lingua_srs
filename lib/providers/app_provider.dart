@@ -1294,6 +1294,8 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       if (parsed.lesson.markdownContent.isNotEmpty) {
         existingLesson.markdownContent = parsed.lesson.markdownContent;
       }
+      existingLesson.fileName =
+          parsed.lesson.fileName ?? existingLesson.fileName;
       _mergeImportedLesson(existingLesson, parsed, sentenceIndex);
     } else {
       if (vocabIndex == null) {

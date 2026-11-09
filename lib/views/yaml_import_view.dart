@@ -1253,6 +1253,7 @@ MarkdownDirectoryResult parsePickedMarkdownSources(
         contents,
         defaultTitle: defaultTitle,
         defaultUnitTitle: _unitTitleForPath(hierarchyPath ?? path),
+        sourcePath: hierarchyPath ?? path,
       );
       imports.add(
         MarkdownImportFile(
@@ -1354,6 +1355,7 @@ MarkdownDirectoryResult parseMarkdownFiles(
       final preview = YamlParserService.parseLessonYaml(
         contents,
         defaultUnitTitle: _unitTitleForPath(relativePath),
+        sourcePath: relativePath,
       );
       imports.add(
         MarkdownImportFile(

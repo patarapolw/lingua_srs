@@ -106,7 +106,30 @@ Review [[#Greetings]] before you start.
 - **`|label`** sets the text shown. Without it, the link shows its target, with `›` between parts: `Unit 2 › Lesson 26 › Past tense`.
 - Plain Markdown links to a heading in the same lesson work too: `[greetings](#greetings)` or `[greetings](<#Greetings>)`.
 
-A link to a lesson that does not exist says so when tapped. Brackets inside code (`` `[[...]]` ``) are left as they are.
+A link to a lesson or heading that does not exist says so when tapped. Brackets inside code (`` `[[...]]` ``) are left as they are.
+
+#### Links to `.md` files
+
+Links between lesson files, the way Obsidian, VS Code and GitHub write them, open the lesson they point to:
+
+```markdown
+[Lesson 26](../unit-2/lesson-26.md#past-tense)
+[Intro](/intro.md)
+```
+
+Every lesson has a virtual path: its folders in the app, then a file name. A lesson imported from a folder or ZIP keeps the name of its file (`lesson-26.md`); any other lesson is named after its title (`Lesson 26.md`). A link is followed from the folder of the lesson it is in: `..` goes up a folder, and a leading `/` starts at the top (the folder that was picked, or the ZIP's top level). Folder and file names compare the way folder import names folders, ignoring case and punctuation, so `unit-2/lesson-26.md` finds a lesson in the folder *Unit 2*. The virtual folder follows the lesson when you move it. If no lesson is at that path, for example when only part of a course was imported, the nearest lesson with that file name or title opens. Export writes each lesson to its virtual path, so links still work after exporting and importing again. Lessons imported before file names were kept use their title until they are imported again.
+
+#### Heading ids and repeated headings
+
+When a heading's text repeats, its anchor gets `-1`, `-2`, … in order, as on GitHub: under `## Present` and `## Past`, two `### Polite` headings are `#polite` and `#polite-1`. To give a heading an anchor of its own, end it with an id in braces, as in markdown-it-attrs:
+
+```markdown
+## Past
+
+### Polite {#past-polite}
+```
+
+`{#past-polite}` is not shown, and `[[#past-polite|polite past]]` or `[polite past](#past-polite)` links to that heading (from another lesson, `[[Lesson 26#past-polite]]`). Classes and other attributes (`{#id .note lang=ko}`) are allowed and ignored. A link looks for a heading with that id or anchor first, then for one with that text.
 
 ## Importing
 
