@@ -294,4 +294,95 @@ void main() {
       isEmpty,
     );
   });
+
+  group('lessons follow the paths of unchanged files', () {
+    /// A file the import skipped as unchanged, at `unit-1/<name>`.
+    Lesson skipped(String name, String title) =>
+        YamlParserService.lessonFileInfo(
+          '---\nvocabulary:\n---\n# $title\n',
+          sourcePath: 'unit-1/$name',
+          defaultUnitTitle: 'Unit 1',
+        )!;
+
+    Future<Lesson> legacy(
+      WidgetTester tester,
+      AppProvider provider,
+      String title,
+    ) async => (await tester.runAsync(
+      () => provider.importYaml(
+        '---\nvocabulary:\n---\n# $title\n',
+        defaultUnitTitle: 'Unit 1',
+      ),
+    ))!;
+
+    testWidgets('a lesson from before file paths takes its file\'s', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      final lesson = await legacy(tester, provider, 'Lesson 1');
+      expect(lesson.fileName, isNull);
+
+      final changed = (await tester.runAsync(
+        () => provider.adoptFilePaths([skipped('lesson-1.md', 'Lesson 1')]),
+      ))!;
+
+      expect(changed, 1);
+      expect(lesson.fileName, 'lesson-1.md');
+      expect(lesson.fileFolder, 'unit-1');
+      expect(lesson.virtualPath, ['unit-1', 'lesson-1.md']);
+      // A second time changes nothing.
+      expect(
+        await tester.runAsync(
+          () => provider.adoptFilePaths([skipped('lesson-1.md', 'Lesson 1')]),
+        ),
+        0,
+      );
+    });
+
+    testWidgets('a lesson with that file name takes its folder names', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      await import(tester, provider, [file('a.md', 'Lesson 1')]);
+      final lesson = inUnit1(provider).single..fileFolder = null;
+
+      await tester.runAsync(
+        () => provider.adoptFilePaths([skipped('a.md', 'Renamed heading')]),
+      );
+
+      expect(lesson.fileFolder, 'unit-1');
+      expect(lesson.displayTitle, 'Lesson 1');
+    });
+
+    testWidgets('nothing is guessed when the match is not certain', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      // Two lessons the file could be (as an older version could keep them
+      // side by side): neither takes it.
+      final first = Lesson(title: 'Lesson 3: Food', unitTitle: 'Unit 1');
+      final second = Lesson(title: 'Lesson 3: Drinks', unitTitle: 'Unit 1');
+      provider.lessons.addAll([first, second]);
+      // A lesson that already has another file keeps it.
+      await import(tester, provider, [file('kept.md', 'Lesson 4')]);
+
+      final changed = (await tester.runAsync(
+        () => provider.adoptFilePaths([
+          skipped('lesson-3.md', 'Lesson 3: Snacks'),
+          skipped('other.md', 'Lesson 4'),
+          skipped('nowhere.md', 'Lesson 9'),
+        ]),
+      ))!;
+
+      expect(changed, 0);
+      expect(first.fileName, isNull);
+      expect(second.fileName, isNull);
+      expect(
+        inUnit1(provider)
+            .firstWhere((l) => l.displayTitle == 'Lesson 4')
+            .fileName,
+        'kept.md',
+      );
+    });
+  });
 }

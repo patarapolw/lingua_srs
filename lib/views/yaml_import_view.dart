@@ -231,6 +231,10 @@ class _YamlImportViewState extends State<YamlImportView>
       });
 
       if (!mounted) return;
+      final followed = await context.read<AppProvider>().adoptFilePaths(
+        parseResult.unchangedLessons,
+      );
+      if (!mounted) return;
       setState(() {
         _directoryFiles = parseResult.imports;
         _selectedDirectoryPaths.clear();
@@ -245,6 +249,7 @@ class _YamlImportViewState extends State<YamlImportView>
               ? parseResult.unchanged > 0
                     ? 'No changed Markdown files found. '
                           '${parseResult.unchanged} unchanged files were skipped.'
+                          '${_followedNote(followed)}'
                     : 'No Markdown files with vocabulary frontmatter were found.'
               : describeImportErrors(
                   'No importable files found. ${parseResult.errors.length} '
@@ -253,6 +258,7 @@ class _YamlImportViewState extends State<YamlImportView>
                 );
         }
       });
+      if (parseResult.imports.isNotEmpty) _showFollowed(followed);
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -466,6 +472,10 @@ class _YamlImportViewState extends State<YamlImportView>
     });
 
     if (!mounted) return;
+    final followed = await context.read<AppProvider>().adoptFilePaths(
+      result.unchangedLessons,
+    );
+    if (!mounted) return;
     setState(() {
       _directoryFiles = result.imports;
       _selectedDirectoryPaths.clear();
@@ -480,6 +490,7 @@ class _YamlImportViewState extends State<YamlImportView>
             ? result.unchanged > 0
                   ? 'No changed Markdown files found. '
                         '${result.unchanged} unchanged files were skipped.'
+                        '${_followedNote(followed)}'
                   : 'No Markdown files with a vocabulary frontmatter section were found.'
             : describeImportErrors(
                 'No importable files found. ${result.errors.length} '
@@ -488,6 +499,21 @@ class _YamlImportViewState extends State<YamlImportView>
               );
       }
     });
+    if (result.imports.isNotEmpty) _showFollowed(followed);
+  }
+
+  /// Says that [count] lessons took the file paths of unchanged files
+  /// ([AppProvider.adoptFilePaths]), or nothing.
+  static String _followedNote(int count) => count == 0
+      ? ''
+      : ' ${count == 1 ? '1 lesson' : '$count lessons'} imported before '
+            'file paths were kept now ${count == 1 ? 'follows its' : 'follow their'} '
+            'file.';
+
+  void _showFollowed(int count) {
+    if (count == 0 || !mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(_followedNote(count).trim())));
   }
 
   /// Asks which lesson is primary when an import of [fileCount] files adds
@@ -1214,11 +1240,17 @@ class MarkdownDirectoryResult {
   final int skipped;
   final int unchanged;
 
+  /// The lessons the [unchanged] files are, without vocabulary
+  /// ([YamlParserService.lessonFileInfo]), so the lessons saved from them can
+  /// take their real file paths ([AppProvider.adoptFilePaths]).
+  final List<Lesson> unchangedLessons;
+
   const MarkdownDirectoryResult({
     required this.imports,
     required this.errors,
     required this.skipped,
     required this.unchanged,
+    this.unchangedLessons = const [],
   });
 }
 
@@ -1257,6 +1289,7 @@ MarkdownDirectoryResult parsePickedMarkdownSources(
   final errors = <String>[];
   var skipped = 0;
   var unchanged = 0;
+  final unchangedLessons = <Lesson>[];
 
   void parseMarkdown(
     String path,
@@ -1273,6 +1306,12 @@ MarkdownDirectoryResult parsePickedMarkdownSources(
           (legacySourceKey != null &&
               importedSources[legacySourceKey] == sourceHash)) {
         unchanged++;
+        final lesson = YamlParserService.lessonFileInfo(
+          contents,
+          sourcePath: hierarchyPath ?? path,
+          defaultUnitTitle: _unitTitleForPath(hierarchyPath ?? path),
+        );
+        if (lesson != null) unchangedLessons.add(lesson);
         return;
       }
       if (requireVocabularyFrontmatter &&
@@ -1339,6 +1378,7 @@ MarkdownDirectoryResult parsePickedMarkdownSources(
     errors: errors,
     skipped: skipped,
     unchanged: unchanged,
+    unchangedLessons: unchangedLessons,
   );
 }
 
@@ -1351,6 +1391,7 @@ MarkdownDirectoryResult parseMarkdownFiles(
   final errors = <String>[];
   var skipped = 0;
   var unchanged = 0;
+  final unchangedLessons = <Lesson>[];
   final normalizedDirectories =
       directoryPaths.map((path) => path.replaceAll('\\', '/')).toList()
         ..sort((first, second) => first.length.compareTo(second.length));
@@ -1378,6 +1419,12 @@ MarkdownDirectoryResult parseMarkdownFiles(
       final sourceHash = sha256.convert(utf8.encode(contents)).toString();
       if (importedSources[_markdownSourceKey(path)] == sourceHash) {
         unchanged++;
+        final lesson = YamlParserService.lessonFileInfo(
+          contents,
+          sourcePath: relativePath,
+          defaultUnitTitle: _unitTitleForPath(relativePath),
+        );
+        if (lesson != null) unchangedLessons.add(lesson);
         continue;
       }
       if (!YamlParserService.hasVocabularyFrontmatter(contents)) {
@@ -1406,6 +1453,7 @@ MarkdownDirectoryResult parseMarkdownFiles(
     errors: errors,
     skipped: skipped,
     unchanged: unchanged,
+    unchangedLessons: unchangedLessons,
   );
 }
 
@@ -1416,6 +1464,7 @@ MarkdownDirectoryResult _combineMarkdownDirectoryResults(
   errors: results.expand((result) => result.errors).toList(),
   skipped: results.fold(0, (total, result) => total + result.skipped),
   unchanged: results.fold(0, (total, result) => total + result.unchanged),
+  unchangedLessons: [for (final result in results) ...result.unchangedLessons],
 );
 
 /// The key a ZIP entry's fingerprint is saved under, to skip it when it is

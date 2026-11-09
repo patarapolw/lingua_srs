@@ -220,6 +220,25 @@ void main() {
       expect(again.imports.single.sourceKey, zipEntrySourceKey('unit1/b.md'));
     });
 
+    test('lists the lessons of skipped entries, with their paths', () {
+      final source = zip('course.zip', {
+        'unit-1/a.md': _lesson('Lesson A', [('배', '**배**가 커요')]),
+      });
+      final first = parsePickedMarkdownSources([source], const {});
+      final saved = {
+        for (final file in first.imports) file.sourceKey: file.sourceHash,
+      };
+
+      final again = parsePickedMarkdownSources([source], saved);
+
+      expect(again.unchanged, 1);
+      final lesson = again.unchangedLessons.single;
+      expect(lesson.fileName, 'a.md');
+      expect(lesson.fileFolder, 'unit-1');
+      expect(lesson.folderPath, ['Unit 1']);
+      expect(lesson.vocabularies, isEmpty);
+    });
+
     test('still skips entries saved under the zip location', () {
       final source = zip('course.zip', {
         'a.md': _lesson('A', [('배', '**배**가 커요')]),

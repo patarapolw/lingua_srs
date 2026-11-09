@@ -1451,6 +1451,53 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
         : joinHierarchyPath([...parts.take(parts.length - 1), name]);
   }
 
+  /// Gives saved lessons the real file paths of [files] (lessons without
+  /// vocabulary, from [YamlParserService.lessonFileInfo]): files a folder or
+  /// ZIP import skipped because they had not changed, so a lesson imported
+  /// before file paths were kept still follows its file. A lesson in the
+  /// same app folder with the same file name takes the file's folder names;
+  /// one with no file name takes both, when it is the only lesson in that
+  /// folder that the file matches the way an import would (by name, or the
+  /// older `Lesson <number>` rule). Returns how many lessons changed.
+  Future<int> adoptFilePaths(List<Lesson> files) async {
+    var changed = 0;
+    for (final file in files) {
+      final name = file.fileName?.toLowerCase();
+      if (name == null) continue;
+      final inFolder = _lessons
+          .where(
+            (lesson) => isSameHierarchyPath(lesson.folderPath, file.folderPath),
+          )
+          .toList();
+      final same = inFolder
+          .where((lesson) => lesson.fileName?.toLowerCase() == name)
+          .toList();
+      if (same.length == 1) {
+        if (same.single.fileFolder != file.fileFolder) {
+          same.single.fileFolder = file.fileFolder;
+          changed++;
+        }
+        continue;
+      }
+      if (same.isNotEmpty) continue;
+      final matches = inFolder
+          .where(
+            (lesson) =>
+                lesson.fileName == null &&
+                (_sameName(lesson, file) ||
+                    _lessonIdentity(lesson) == _lessonIdentity(file)),
+          )
+          .toList();
+      if (matches.length != 1) continue;
+      matches.single
+        ..fileName = file.fileName
+        ..fileFolder = file.fileFolder;
+      changed++;
+    }
+    if (changed > 0) await saveState();
+    return changed;
+  }
+
   /// Saved lessons that share a name with an earlier lesson in their folder
   /// (each against the first one), for the person to sort out. Lessons at
   /// the same virtual path are merged without asking when loaded or synced.

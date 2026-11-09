@@ -128,7 +128,7 @@ A lesson folder can also be published as a website (with a site generator such a
 - **Following a link:** it starts from the folder of the lesson it is in. `..` goes up a folder, and a leading `/` starts at the top: the folder that was picked, or the ZIP's top level, which is the site's root when you pick the folder the site is built from. Folder and file names compare ignoring case and punctuation, so `unit-2/lesson-26` also finds a lesson in the folder *Unit 2*. If no lesson is at that path, for example when only part of a course was imported, the nearest lesson with that file name or title opens.
 - **Korean names** are kept as whole syllables. macOS can store a name such as `한국어` as separate jamo, which looks the same but would not match, so the app composes it when the lesson is imported, loaded or synced.
 - **Export** writes each lesson to its virtual path, so links still work after exporting and importing again.
-- **Older lessons:** lessons imported before file and folder names were kept use their title and app folders until they are imported again.
+- **Older lessons:** a lesson imported before file and folder names were kept takes them the next time you import its folder or ZIP, even if its file has not changed and is skipped. It takes them when the file is the only lesson in that app folder it matches by name; until then it uses its title and app folders. Virtual paths follow the real files: there is nothing to rename by hand.
 - **Site vs app:** `[[...]]` links are only understood by the app. In files you also publish as a site, use links like the ones above. Heading ids in braces (`{#past-polite}`, below) work in both.
 
 #### Heading ids and repeated headings
