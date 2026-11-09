@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/scheduler.dart';
 
+import '../services/lesson_links.dart';
 import 'markdown_content.dart';
 
 /// A heading found in a lesson, used for the table of contents.
@@ -156,9 +157,9 @@ class LessonContent {
       .trim();
 
   /// Turns the lesson components (`<YouTube>`, `<AudioButton>`, `<TTS>`,
-  /// `<Details>`, spoiler spans) into what [MarkdownContent] renders, and
-  /// drops scripts, quizzes, unknown components and HTML comments. Chunk
-  /// markers are kept for [parse].
+  /// `<Details>`, spoiler spans) and `[[lesson links]]` into what
+  /// [MarkdownContent] renders, and drops scripts, quizzes, unknown
+  /// components and HTML comments. Chunk markers are kept for [parse].
   static String preprocess(String markdown) {
     final fencedCodeBlocks = <String>[];
     var text = markdown.replaceAll('\r\n', '\n').replaceAllMapped(
@@ -233,6 +234,7 @@ class LessonContent {
       RegExp(r'<!--(?!\s*chunk(?::start|:end)?\s*-->)[\s\S]*?-->'),
       '',
     );
+    text = LessonLink.prepareWikiLinks(text);
 
     return text.replaceAllMapped(
       RegExp(r'LINGUA_CODE_BLOCK_(\d+)'),
@@ -244,8 +246,14 @@ class LessonContent {
 /// Lets a parent widget ask [LessonContentView] to scroll to a heading.
 class LessonContentController {
   void Function(LessonHeading heading)? _scrollTo;
+  bool Function(String target)? _scrollToNamed;
 
   void scrollToHeading(LessonHeading heading) => _scrollTo?.call(heading);
+
+  /// Scrolls to the first heading whose text or anchor is [target]; returns
+  /// false if there is none.
+  bool scrollToHeadingNamed(String target) =>
+      _scrollToNamed?.call(target) ?? false;
 }
 
 /// Renders a lesson natively: its Markdown is cut into chunks (see
@@ -257,11 +265,21 @@ class LessonContentView extends StatefulWidget {
   final LessonContent? content;
   final LessonContentController? controller;
 
+  /// Called for a tapped link to another lesson, such as
+  /// `[[Lesson 26#Past tense]]`. Links to a heading in this lesson scroll to
+  /// it without calling this.
+  final void Function(LessonLink link)? onLessonLink;
+
+  /// Text or anchor of a heading to scroll to once the lesson is shown.
+  final String? initialHeading;
+
   const LessonContentView({
     super.key,
     required this.markdown,
     this.content,
     this.controller,
+    this.onLessonLink,
+    this.initialHeading,
   });
 
   @override
@@ -285,8 +303,24 @@ class _LessonContentViewState extends State<LessonContentView> {
   @override
   void initState() {
     super.initState();
-    widget.controller?._scrollTo = _scrollTo;
+    _attach(widget.controller);
     _parse();
+    final initialHeading = widget.initialHeading;
+    if (initialHeading != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _scrollToNamed(initialHeading);
+      });
+    }
+  }
+
+  void _attach(LessonContentController? controller) {
+    controller?._scrollTo = _scrollTo;
+    controller?._scrollToNamed = _scrollToNamed;
+  }
+
+  void _detach(LessonContentController? controller) {
+    controller?._scrollTo = null;
+    controller?._scrollToNamed = null;
   }
 
   @override
@@ -310,8 +344,8 @@ class _LessonContentViewState extends State<LessonContentView> {
   void didUpdateWidget(LessonContentView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != widget.controller) {
-      oldWidget.controller?._scrollTo = null;
-      widget.controller?._scrollTo = _scrollTo;
+      _detach(oldWidget.controller);
+      _attach(widget.controller);
     }
     if (oldWidget.markdown != widget.markdown ||
         oldWidget.content != widget.content) {
@@ -321,7 +355,7 @@ class _LessonContentViewState extends State<LessonContentView> {
 
   @override
   void dispose() {
-    widget.controller?._scrollTo = null;
+    _detach(widget.controller);
     _scroll.dispose();
     super.dispose();
   }
@@ -413,28 +447,27 @@ class _LessonContentViewState extends State<LessonContentView> {
     }
   }
 
-  /// GitHub-style anchor for a heading: `Hello, World!` becomes `hello-world`.
-  static String _slug(String text) => text
-      .toLowerCase()
-      .replaceAll(RegExp(r'[^\p{L}\p{N}\s_-]', unicode: true), '')
-      .trim()
-      .replaceAll(RegExp(r'\s'), '-');
-
-  /// Handles `#anchor` links by scrolling to the matching heading.
-  bool _onLink(String href) {
-    if (!href.startsWith('#')) return false;
-    String target;
-    try {
-      target = Uri.decodeComponent(href.substring(1));
-    } catch (_) {
-      target = href.substring(1);
-    }
-    target = target.toLowerCase();
+  /// Scrolls to the first heading whose text or anchor is [target].
+  bool _scrollToNamed(String target) {
     for (final heading in _content.headings) {
-      if (_slug(heading.text) == target) {
+      if (LessonLink.headingMatches(heading.text, target)) {
         _scrollTo(heading);
-        break;
+        return true;
       }
+    }
+    return false;
+  }
+
+  /// Handles `#anchor` and `[[#Heading]]` links by scrolling to the heading,
+  /// and passes links to other lessons to [LessonContentView.onLessonLink].
+  bool _onLink(String href) {
+    final link = LessonLink.fromHref(href);
+    if (link == null) return false;
+    final lesson = link.lesson;
+    if (lesson == null) {
+      _scrollToNamed(link.heading!);
+    } else {
+      widget.onLessonLink?.call(link);
     }
     return true;
   }
