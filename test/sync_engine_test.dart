@@ -184,6 +184,29 @@ void main() {
       expect(b.tracker.pending, isEmpty);
     });
 
+    test('syncing a large library takes seconds, not minutes', () async {
+      // Sync runs on the UI isolate, so time spent here freezes the app.
+      // Each step must grow with the library, not with its square: copying
+      // the tracker's records on every lookup took about 18 s here.
+      for (var i = 0; i < 6000; i++) {
+        a.store.records[SyncRecordKey('card', 'c$i')] = {'due': i, 'reps': 1};
+      }
+      final watch = Stopwatch()..start();
+
+      await a.sync();
+      clock.now += 1000;
+      a.store.records[const SyncRecordKey('card', 'c1')] = {
+        'due': 1,
+        'reps': 2,
+      };
+      await a.sync();
+      clock.now += 1000;
+      await b.sync();
+
+      expect(b.store.records, a.store.records);
+      expect(watch.elapsed, lessThan(const Duration(seconds: 5)));
+    });
+
     test('a later change of a packed record reaches a new device', () async {
       addLessons(a, 300);
       await a.sync();
