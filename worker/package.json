@@ -8,14 +8,12 @@
     "deploy": "wrangler deploy",
     "migrate": "wrangler d1 migrations apply DB --remote",
     "migrate:local": "wrangler d1 migrations apply DB --local",
-    "typecheck": "tsc --noEmit && tsc -p scripts",
-    "check-db": "node scripts/d1-repair.ts",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "^1.5.0",
     "@cloudflare/workers-types": "^5.20261103.1",
-    "@types/node": "^22.20.5",
     "typescript": "~5.9.3",
     "vitest": "^4.1.12",
     "wrangler": "^4.156.2"
