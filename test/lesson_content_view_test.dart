@@ -155,6 +155,13 @@ void main() {
       expect(content.headingFor('Past'), same(content.headings[2]));
       expect(content.headingFor('nothing'), isNull);
     });
+
+    test('a site generator\'s anchor finds its heading', () {
+      // VitePress writes `1. Intro` as `#_1-intro`.
+      final content = LessonContent.parse('## 1. Intro\n\ntext');
+
+      expect(content.headingFor('_1-intro'), same(content.headings.single));
+    });
   });
 
   group('setext headings', () {

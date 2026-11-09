@@ -289,4 +289,109 @@ void main() {
       }
     });
   });
+
+  group('links that also work on a site built from the folder', () {
+    test('read page links, links without an extension and folders', () {
+      expect(
+        LessonLink.fromHref('../unit-2/lesson-26#past')!.file,
+        '../unit-2/lesson-26',
+      );
+      expect(LessonLink.fromHref('./lesson-26.html')!.file, './lesson-26.html');
+      expect(LessonLink.fromHref('/unit-2/')!.file, '/unit-2/index.md');
+      expect(LessonLink.fromHref('worksheet.pdf'), isNull);
+      expect(LessonLink.fromHref('photo.png'), isNull);
+      expect(LessonLink.fromHref('//cdn.example.com/a'), isNull);
+    });
+
+    final lesson = Lesson(
+      title: 'Lesson 26',
+      unitTitle: 'Unit 2::Past Tense',
+      fileName: 'lesson-26.md',
+      fileFolder: 'unit-2/past_tense',
+    );
+    final index = Lesson(
+      title: 'Unit 1',
+      unitTitle: 'Unit 1',
+      fileName: 'index.md',
+      fileFolder: 'unit-1',
+    );
+    final top = Lesson(title: 'Intro');
+    final lessons = [lesson, index, top];
+
+    test('find the lesson by its page or extensionless path', () {
+      for (final href in [
+        '../../unit-2/past_tense/lesson-26',
+        '/unit-2/past_tense/lesson-26.html',
+        '../../unit-2/past_tense/lesson-26.md',
+      ]) {
+        final link = LessonLink.fromHref(href)!;
+        expect(
+          LessonLink.resolveFile(lessons, link.file!, from: index),
+          same(lesson),
+          reason: href,
+        );
+      }
+      final folder = LessonLink.fromHref('../../unit-1/')!;
+      expect(
+        LessonLink.resolveFile(lessons, folder.file!, from: lesson),
+        same(index),
+      );
+    });
+  });
+
+  group('original folder names', () {
+    test('are kept in the virtual path while the lesson stays put', () {
+      final lesson = Lesson(
+        title: 'Lesson 26',
+        unitTitle: 'Unit 2::Past Tense',
+        fileName: 'lesson-26.md',
+        fileFolder: 'unit-2/past_tense',
+      );
+
+      expect(lesson.folderPath, ['Unit 2', 'Past Tense']);
+      expect(
+        LessonLink.virtualPathText(lesson),
+        '/unit-2/past_tense/lesson-26.md',
+      );
+      expect(Lesson.fromJson(lesson.toJson()).fileFolder, 'unit-2/past_tense');
+      final zip = ZipDecoder().decodeBytes(
+        LessonExportService.createZip([lesson], const []),
+      );
+      expect(zip.files.single.name, 'unit-2/past_tense/lesson-26.md');
+    });
+
+    test('give way to the app folders after a move', () {
+      final lesson = Lesson(
+        title: 'Lesson 26',
+        unitTitle: 'Unit 2',
+        fileName: 'lesson-26.md',
+        fileFolder: 'unit-2',
+      )..moveToFolder(['Review']);
+
+      expect(lesson.virtualFolder, ['Review']);
+      expect(LessonLink.virtualPathText(lesson), '/Review/lesson-26.md');
+    });
+
+    test('come from the imported path', () {
+      final parsed = YamlParserService.parseLessonYaml(
+        '---\nvocabulary:\n---\n# Lesson 26\n',
+        defaultUnitTitle: 'Unit 2::Past Tense',
+        sourcePath: 'unit-2/past_tense/lesson-26.md',
+      );
+
+      expect(parsed.lesson.fileFolder, 'unit-2/past_tense');
+      expect(parsed.lesson.virtualPath, [
+        'unit-2',
+        'past_tense',
+        'lesson-26.md',
+      ]);
+      expect(
+        YamlParserService.parseLessonYaml(
+          '---\nvocabulary:\n---\n# A\n',
+          sourcePath: 'a.md',
+        ).lesson.fileFolder,
+        isNull,
+      );
+    });
+  });
 }

@@ -110,14 +110,26 @@ A link to a lesson or heading that does not exist says so when tapped. Brackets 
 
 #### Links to `.md` files
 
-Links between lesson files, the way Obsidian, VS Code and GitHub write them, open the lesson they point to:
+A lesson folder can also be published as a website (with a site generator such as VitePress), and the same links work in both. Links between lesson files, the way a site generator, Obsidian, VS Code and GitHub write them, open the lesson they point to:
 
 ```markdown
 [Lesson 26](../unit-2/lesson-26.md#past-tense)
+[Lesson 26](../unit-2/lesson-26#past-tense)
+[Unit 2](../unit-2/)
 [Intro](/intro.md)
 ```
 
-Every lesson has a virtual path: its folders in the app, then a file name. A lesson imported from a folder or ZIP keeps the name of its file (`lesson-26.md`); any other lesson is named after its title (`Lesson 26.md`), with characters a file name cannot hold (`/`, `:`, `?`, …) made `_`. The lesson's Markdown editor (**Edit Markdown** in the reader) shows its virtual path, such as `/Unit 2/lesson-26.md`, and its link button copies a Markdown link to the lesson to paste into another one. A link is followed from the folder of the lesson it is in: `..` goes up a folder, and a leading `/` starts at the top (the folder that was picked, or the ZIP's top level). Folder and file names compare the way folder import names folders, ignoring case and punctuation, so `unit-2/lesson-26.md` finds a lesson in the folder *Unit 2*. The virtual folder follows the lesson when you move it. Korean in lesson, folder and file names is kept as whole syllables: macOS can store a name such as `한국어` as separate jamo, which looks the same but would not match, so the app composes it when the lesson is imported, loaded or synced. If no lesson is at that path, for example when only part of a course was imported, the nearest lesson with that file name or title opens. Export writes each lesson to its virtual path, so links still work after exporting and importing again. Lessons imported before file names were kept use their title until they are imported again.
+- **Forms:** a link may name the file (`lesson-26.md`), the page a site makes of it (`lesson-26.html`, or `lesson-26` with no extension), or a folder (`unit-2/`), which opens its `index.md`. Links to other files, such as `worksheet.pdf`, and links with a scheme (`https:`) are left alone.
+- **Virtual path:** every lesson has one, made of folders and a file name.
+  - A lesson imported from a folder or ZIP keeps the names of its file and folders as they were on disk (`/unit-2/past_tense/lesson-26.md`), while the app shows the folders renamed (*Unit 2 › Past Tense*).
+  - Any other lesson uses its app folders and its title (`/Unit 2/Lesson 26.md`), with characters a file name cannot hold (`/`, `:`, `?`, …) made `_`.
+  - When you move a lesson to another folder, its virtual folder follows the app folders.
+- **Seeing it:** the lesson's Markdown editor (**Edit Markdown** in the reader) shows its virtual path, and its link button copies a Markdown link to the lesson to paste into another one.
+- **Following a link:** it starts from the folder of the lesson it is in. `..` goes up a folder, and a leading `/` starts at the top: the folder that was picked, or the ZIP's top level, which is the site's root when you pick the folder the site is built from. Folder and file names compare ignoring case and punctuation, so `unit-2/lesson-26` also finds a lesson in the folder *Unit 2*. If no lesson is at that path, for example when only part of a course was imported, the nearest lesson with that file name or title opens.
+- **Korean names** are kept as whole syllables. macOS can store a name such as `한국어` as separate jamo, which looks the same but would not match, so the app composes it when the lesson is imported, loaded or synced.
+- **Export** writes each lesson to its virtual path, so links still work after exporting and importing again.
+- **Older lessons:** lessons imported before file and folder names were kept use their title and app folders until they are imported again.
+- **Site vs app:** `[[...]]` links are only understood by the app. In files you also publish as a site, use links like the ones above. Heading ids in braces (`{#past-polite}`, below) work in both.
 
 #### Heading ids and repeated headings
 
@@ -129,7 +141,7 @@ When a heading's text repeats, its anchor gets `-1`, `-2`, … in order, as on G
 ### Polite {#past-polite}
 ```
 
-`{#past-polite}` is not shown, and `[[#past-polite|polite past]]` or `[polite past](#past-polite)` links to that heading (from another lesson, `[[Lesson 26#past-polite]]`). Classes and other attributes (`{#id .note lang=ko}`) are allowed and ignored. A link looks for a heading with that id or anchor first, then for one with that text.
+`{#past-polite}` is not shown, and `[[#past-polite|polite past]]` or `[polite past](#past-polite)` links to that heading (from another lesson, `[[Lesson 26#past-polite]]`). Classes and other attributes (`{#id .note lang=ko}`) are allowed and ignored. A link looks for a heading with that id or anchor first, then for one with that text, then for one with the same letters and digits, so an anchor a site generator made (VitePress writes `1. Intro` as `#_1-intro`) finds its heading too.
 
 ## Importing
 
