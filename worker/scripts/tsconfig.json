@@ -1,0 +1,16 @@
+{
+  // Admin scripts run by Node (22.18 or later runs TypeScript as is), not by
+  // the Worker, so they get Node's types instead of the Workers ones.
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["*.ts"]
+}

@@ -58,6 +58,10 @@ abstract final class SyncKinds {
   static const lessonOrder = 'lesson_order';
   static const settings = 'settings';
 
+  /// Many records in one server record, written for a large push such as a
+  /// first sync (see "Packs" in `docs/sync.md`). Never a record of the app.
+  static const pack = 'pack';
+
   /// Kept when nothing uses them any more: whether a word is still used
   /// depends on every device, so removing one could lose progress.
   static const keptWhenUnused = {vocab, card};

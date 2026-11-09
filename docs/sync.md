@@ -161,6 +161,7 @@ Times inside records (a card's due date, last review and first review, a message
 | `activity` | device and day | That device's review count for the day, the same reviews counted per rating (`ratings`, such as `{"good": 3, "again": 1}`), how many of them started a new card (`newCards`), and its review times while they still count toward the rolling 24-hour limits. Days counted before ratings and new cards were recorded, and records from older app versions, have no `ratings` or `newCards`, so a day's ratings can add up to less than its count. | None: only that device writes it. |
 | `lesson_order` | account (one record) | The lesson tree's manual order. | Newest wins. |
 | `settings` | account (one record) | Review limits per 24 hours, autoplay, and the pronunciation lines shown. | Newest wins. |
+| `pack` | large push | Many records of the kinds above, each with its own `updatedAt` (see Packs). | Never changed after it is written. |
 
 Why it is split this way:
 
@@ -203,6 +204,19 @@ The Worker refuses `data` over 32 KB, which leaves about 24 KB of compressed con
 - Parts are pushed before the record that lists them. A device assembles the content only when every part is present and the hash matches; until then it keeps its own copy.
 - Parts that are no longer needed (after the content shrinks) are deleted.
 
+### Packs
+
+A first sync uploads the whole library: at least a `vocab` and a `card` record per word, so thousands of records, more than the Worker's daily write limit (see Staying inside the free plans) allows. A push of at least 200 records (`SyncEngine.packThreshold`) therefore goes in packs, on any device and at any time, such as after importing a large lesson:
+
+- A pack is a record of kind `pack` whose contents list whole records, each with its kind, local id, `updatedAt`, schema and contents. gzip shrinks a list of similar records several times, so one pack holds a few hundred records, and a library of 10,000 records costs a few dozen writes instead of 10,000.
+- Its local id is the device id, the time and a number, so packs never replace each other. A pack is never changed or deleted after it is written; a later change to a record in it is pushed on its own, as usual.
+- A pulled record replaces another copy of it only when its `updatedAt` is newer, whether the copies came in the same pull or not. An old copy in a pack, pulled after a newer one, is ignored.
+- A pulled deletion is matched against the records in packs as well as this device's, so a record deleted after it was packed stays deleted on a device that joins later.
+- Deletions, and records that were split or are too large for a pack, are pushed on their own.
+- A pack has schema 2. An app from before packs reports that it needs an update instead of misreading one.
+
+A pack's contents stay on the server after its records change, so the server holds up to about twice the library. Reading is not limited, and a device that joins later pulls them all once.
+
 ### Deleting
 
 Deleting a lesson, sentence, merge record, discussion, typed question or Markdown pushes a tombstone for it, and for its parts. A typed question is deleted when it is removed from the suggestions, or when it is one of the least recently used past the 100 kept.
@@ -211,7 +225,7 @@ Deleting a lesson, sentence, merge record, discussion, typed question or Markdow
 
 ### Change tracking
 
-The device notices changes by comparing contents instead of marking each edit, so no edit path can be missed. `SyncSnapshot` builds every record from the app's state, and `SyncChangeTracker` keeps a hash of each one. A record whose hash changed gets `updatedAt` set to the time the change was noticed and becomes pending. A record that is gone becomes a pending deletion, except `vocab` and `card` records. The first run after signing in sees every record as new, which is how data from before sync gets pushed. If the device clock has been set back, the new `updatedAt` is still later than the last one.
+The device notices changes by comparing contents instead of marking each edit, so no edit path can be missed. `SyncSnapshot` builds every record from the app's state, and `SyncChangeTracker` keeps a hash of each one. A record whose hash changed gets `updatedAt` set to the time the change was noticed and becomes pending. A record that is gone becomes a pending deletion, except `vocab` and `card` records, and records the server never had. Those are forgotten instead, since a deletion would cost a write and change nothing: on a first sync, for example, lessons and sentences this device merges into pulled copies with other ids. A record counts as on the server once a pull has shown it, or once a push holding it has started, since a push can reach the server without its reply reaching the device. The first run after signing in sees every record as new, which is how data from before sync gets pushed. If the device clock has been set back, the new `updatedAt` is still later than the last one.
 
 The tracker also keeps the pull cursor and a random device id, which names this device's `activity` records. It is stored on the device only (`lingua_srs_sync_state`), never in a backup, and a restore leaves it alone. Signing out forgets the records and the cursor but keeps the device id, so signing in again does not count this device's activity twice. Restoring a backup on a signed-in device is seen as edits: records missing from the backup become deletions.
 
@@ -230,7 +244,7 @@ Changes are checked by `AppProvider.trackSyncChanges`. The sync engine calls it 
    - changed on this device too: the newer `updatedAt` wins, except AI discussions, whose messages are merged and pushed, and a sentence this device edited that another device deleted, whose edit is kept and pushed with a newer `updatedAt` (another device deletes a sentence when it merges duplicates, #90);
    - otherwise applied.
 5. Applies the pulled records through a `SyncRecordStore`, notes what they now hash to so they are not pushed back, and saves the cursor.
-6. Pushes what is still pending: whole records, or parts followed by their head, deletions as tombstones, and tombstones for parts a record no longer needs.
+6. Pushes what is still pending: packs when there are many (see Packs), whole records, or parts followed by their head, deletions as tombstones, and tombstones for parts a record no longer needs. A record counts as pushed once the batch holding it, and all its parts, reaches the server, so a push stopped partway goes on from there next time. The app sends at most 100 records and about 900 KB a request, under the Worker's 1 MB body limit; packs are near 32 KB each, so a batch of them holds about 28.
 
 ### Applying pulled records
 
@@ -267,7 +281,7 @@ The same sentence imported separately on two devices arrives as two records with
 
 ### Write budget
 
-A review writes one `card` record. The engine merges repeated changes to a record into one push, and writes a day's `activity` record once per push rather than once per review. The Worker allows 2,000 record writes per account per day, which covers several hundred reviews a day even when each one is pushed on its own.
+A review writes one `card` record. The engine merges repeated changes to a record into one push, and writes a day's `activity` record once per push rather than once per review. The Worker allows 2,000 record writes per account per day, which covers several hundred reviews a day even when each one is pushed on its own. A first sync, or any push of 200 records or more, goes in packs (see Packs), so a whole library fits in a day's limit. If a push does pass the limit, it stops with `429 quota_exceeded`, the batches that got through stay marked as pushed, and the next sync after midnight UTC sends only the rest.
 
 ## Staying inside the free plans
 

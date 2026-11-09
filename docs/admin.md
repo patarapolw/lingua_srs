@@ -31,3 +31,59 @@ Users can also delete their own account in the app (Settings, Sync, Delete accou
 ## Let a user start over
 
 If someone cannot sign in because the password is forgotten, the synced data is encrypted and cannot be recovered without it. Delete the account as above; they can then create a new one with the same email.
+
+## Check and repair the database
+
+`scripts/d1-repair.ts` checks the sync database and reports what it finds. It needs Node 22.18 or later, which runs TypeScript as it is. Run it from `worker/`:
+
+```
+npm run check-db -- --remote
+```
+
+Without `--remote` it checks the local development database. Nothing is changed unless you add `--repair`. The script then repairs what can be repaired safely and checks again:
+
+```
+npm run check-db -- --remote --repair
+```
+
+Back up first. Either export the database (`npx wrangler d1 export lingua-srs-sync --remote --output backup.sql`), or note the time and use D1 Time Travel (`npx wrangler d1 time-travel restore lingua-srs-sync --timestamp <time>`) to undo a repair.
+
+Other options:
+
+- `--stats` lists each account's records (how many, how many deleted, how many packs, total size, last change) and its writes today against the daily limit. Add `--email user@example.com` to see one account's records by kind.
+- `--write-limit <n>` is the Worker's `MAX_WRITES_PER_DAY`, if you changed it from 2000.
+- `--json` prints the report as JSON.
+- `--database <name>` and `--config <path>` pick the database (default: the `DB` binding) and wrangler config (default: `wrangler.jsonc`).
+
+The exit code is 1 while an error-level finding remains, so the script can run on a schedule.
+
+### What it checks
+
+The server cannot read synced data: record ids are keyed hashes and their contents are encrypted (see [sync.md](sync.md#records)). So the script cannot see duplicate lessons, missing parts of a split record, or anything else about what a record holds; only the account owner's app can. It checks what sync itself relies on.
+
+| Check | Level | Repair |
+| --- | --- | --- |
+| `write_limit_reached`: accounts that have written as many records today as `MAX_WRITES_PER_DAY` allows. Their pushes stop with `429 quota_exceeded` until midnight UTC; the app keeps what got through and sends the rest then. | warning | None. To let an account finish today, delete today's counter (below). |
+| `duplicate_seq`: records of one account sharing a `seq`, or with `seq` below 1. Devices pull in `seq` order and remember the last one they saw, so such a record can be skipped for good. | error | Moves all but one of each `seq` to new positions at the end of the account. Devices pull them again and ignore the ones they already have. |
+| `bad_envelope`: a record that is not deleted, whose data is not `{"v":1,"n":…,"c":…}`. Devices skip it as unreadable. | error | None. Deleting it would delete that record on every device. |
+| `invalid_fields`: a kind, id, deleted flag or `updated_at` the Worker would refuse. | error | None. Look at the rows, and delete them by hand if they are junk. |
+| `future_updated_at`: dated more than a day ahead. Such a record wins every conflict until then. | warning | None. Whether to keep it is up to the owner. |
+| `oversized_records`: data larger than the Worker accepts (32 KiB). | warning | None. |
+| `tombstone_data`: a deleted record that still holds data. | cleanup | Empties it. Devices ignore it either way. |
+| `orphan_usage`: write counters of an account that no longer exists. `usage` has no foreign key; the other tables do, and D1 always enforces them. | cleanup | Deletes them. |
+| `stale_unconfirmed`: unconfirmed signups older than 7 days. | cleanup | Deletes them, with their codes. The Worker would do this at the next signup. |
+| `expired_email_codes`, `expired_pairing_invites`, `old_usage`: rows that can no longer be used. | cleanup | Deletes them. The Worker drops them lazily too. |
+
+Records of kind `pack` each hold many records: a large push, such as a first sync, sends them so a whole library fits the daily limit (see [sync.md](sync.md#packs)). The app never changes or deletes a pack, so packs stay on the server after their records change. That is expected; `--stats` counts them.
+
+### Let an account finish syncing today
+
+The daily write limit keeps the free plan. To let one account past it today, delete today's counter (UTC date):
+
+```
+npx wrangler d1 execute lingua-srs-sync --remote --command "DELETE FROM usage WHERE scope='w:user@example.com' AND day='2026-11-09'"
+```
+
+The account can then write `MAX_WRITES_PER_DAY` more records today.
+
+The checks live in `scripts/repair.ts` and are tested against a local D1 in `test/repair.test.ts`.

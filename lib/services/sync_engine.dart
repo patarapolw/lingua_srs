@@ -91,6 +91,9 @@ class SyncEngine {
     int Function()? clock,
   }) : _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch);
 
+  /// A push of at least this many records goes in packs.
+  static const packThreshold = 200;
+
   final SyncClient client;
   final SyncRecordCipher cipher;
   final SyncRecordStore store;
@@ -135,14 +138,23 @@ class SyncEngine {
   _pull() async {
     final page = await client.pullAll(since: tracker.cursor);
     final local = store.snapshot(tracker.deviceId);
-    final ids = await _knownIds(local.keys);
     final incoming = <SyncRecordKey, _Remote>{};
+    final needsAppUpdate = <SyncRecordKey>[];
     var unreadable = 0;
 
+    // A record can arrive more than once, in packs and on its own, and an
+    // old pack can come after a newer copy: keep the newest.
+    void offer(SyncRecordKey key, _Remote remote) {
+      final known = incoming[key];
+      if (known == null || remote.updatedAt >= known.updatedAt) {
+        incoming[key] = remote;
+      }
+    }
+
+    final deletions = <SyncRecord>[];
     for (final record in page.records) {
       if (record.deleted) {
-        final key = ids[record.id];
-        if (key != null) incoming[key] = _Remote(updatedAt: record.updatedAt);
+        deletions.add(record);
         continue;
       }
       final SyncPayload payload;
@@ -165,27 +177,61 @@ class SyncEngine {
             continue;
           }
           tracker.releaseParts(payload.key);
-          incoming[payload.key] = _Remote(
-            updatedAt: record.updatedAt,
-            data: joined.data,
-            schema: joined.schema,
-            parts: payload.parts,
+          offer(
+            payload.key,
+            _Remote(
+              updatedAt: record.updatedAt,
+              data: joined.data,
+              schema: joined.schema,
+              parts: payload.parts,
+            ),
           );
+        case SyncPack():
+          for (final entry in payload.entries) {
+            offer(
+              entry.key,
+              _Remote(
+                updatedAt: entry.updatedAt,
+                data: entry.data,
+                schema: entry.schema,
+              ),
+            );
+          }
+        case SyncContents() when payload.key.kind == SyncKinds.pack:
+          // A pack from a newer app; one from this version is a SyncPack.
+          if (payload.schema > SyncRecordCipher.packSchema) {
+            needsAppUpdate.add(payload.key);
+          } else {
+            unreadable++;
+          }
         case SyncContents():
-          incoming[payload.key] = _Remote(
-            updatedAt: record.updatedAt,
-            data: payload.data,
-            schema: payload.schema,
+          offer(
+            payload.key,
+            _Remote(
+              updatedAt: record.updatedAt,
+              data: payload.data,
+              schema: payload.schema,
+            ),
           );
+      }
+    }
+    // Deletions carry no contents, only the server id. Records that came in
+    // packs are recognized too, so one deleted after it was packed stays
+    // deleted on a device that joins later.
+    if (deletions.isNotEmpty) {
+      final ids = await _knownIds({...local.keys, ...incoming.keys});
+      for (final record in deletions) {
+        final key = ids[record.id];
+        if (key != null) offer(key, _Remote(updatedAt: record.updatedAt));
       }
     }
 
     final changes = <SyncRecordKey, Map<String, dynamic>?>{};
     final merged = <SyncRecordKey, int>{};
-    final needsAppUpdate = <SyncRecordKey>[];
     for (final entry in incoming.entries) {
       final key = entry.key;
       final remote = entry.value;
+      tracker.markOnServer(key);
       final state = tracker.records[key];
 
       // This device's own push coming back, or a version it already has.
@@ -193,6 +239,13 @@ class SyncEngine {
           !state.pending &&
           !state.blocked &&
           state.updatedAt == remote.updatedAt) {
+        continue;
+      }
+      // An older copy, from a pack written before this device's version.
+      if (state != null &&
+          !state.pending &&
+          !state.blocked &&
+          remote.updatedAt < state.updatedAt) {
         continue;
       }
       if (remote.schema > SyncRecordCipher.schema) {
@@ -297,10 +350,53 @@ class SyncEngine {
     _track(snapshot);
 
     final records = <SyncRecord>[];
-    final sent = <({SyncRecordKey key, int updatedAt, int parts})>[];
-    for (final key in tracker.pending) {
+    // Each record's entries end at [end] in [records]: parts, then the head,
+    // then tombstones for parts it no longer needs; or the pack holding it.
+    final sent = <({SyncRecordKey key, int updatedAt, int parts, int end})>[];
+    final pending = [
+      for (final key in tracker.pending)
+        if (!tracker.records[key]!.blocked) key,
+    ];
+
+    // A large push, such as a first sync or a big import, goes in packs, so
+    // it costs a few server records instead of one per record and stays
+    // within the daily write limit. A record that was split stays on its
+    // own, so its parts are replaced by its own newer copy.
+    final packed = <SyncRecordKey>{};
+    final packable = [
+      for (final key in pending)
+        if (!tracker.records[key]!.deleted &&
+            tracker.records[key]!.parts == 0 &&
+            snapshot[key] != null)
+          key,
+    ];
+    if (packable.length >= packThreshold) {
+      final now = _clock();
+      final result = await cipher.pack('${tracker.deviceId}/$now', [
+        for (final key in packable)
+          SyncPackEntry(
+            key,
+            updatedAt: tracker.records[key]!.updatedAt,
+            data: snapshot[key]!,
+          ),
+      ], updatedAt: now);
+      for (final pack in result.packs) {
+        records.add(pack.record);
+        for (final entry in pack.entries) {
+          packed.add(entry.key);
+          sent.add((
+            key: entry.key,
+            updatedAt: entry.updatedAt,
+            parts: 0,
+            end: records.length,
+          ));
+        }
+      }
+    }
+
+    for (final key in pending) {
+      if (packed.contains(key)) continue;
       final state = tracker.records[key]!;
-      if (state.blocked) continue;
       var parts = 0;
       if (state.deleted) {
         records.add(await cipher.tombstone(key, updatedAt: state.updatedAt));
@@ -323,14 +419,42 @@ class SyncEngine {
           ),
         );
       }
-      sent.add((key: key, updatedAt: state.updatedAt, parts: parts));
+      sent.add((
+        key: key,
+        updatedAt: state.updatedAt,
+        parts: parts,
+        end: records.length,
+      ));
     }
 
-    if (records.isNotEmpty) await client.push(records);
-    for (final record in sent) {
-      tracker.markPushed(record.key, record.updatedAt, parts: record.parts);
+    // Marks each record pushed once all its entries are on the server, and
+    // saves that even when a later batch fails, so a push the daily write
+    // limit stops partway goes on from there next time instead of sending
+    // (and counting) the same records again.
+    var marked = 0;
+    void markUpTo(int count) {
+      while (marked < sent.length && sent[marked].end <= count) {
+        final record = sent[marked++];
+        tracker.markPushed(record.key, record.updatedAt, parts: record.parts);
+      }
     }
-    await save();
+
+    // A batch can reach the server without its reply reaching this device,
+    // so a record counts as on the server, and its later deletion is sent,
+    // from the moment its push starts.
+    if (records.isNotEmpty) {
+      for (final record in sent) {
+        tracker.markOnServer(record.key);
+      }
+      await save();
+    }
+
+    try {
+      if (records.isNotEmpty) await client.push(records, onBatch: markUpTo);
+      markUpTo(records.length);
+    } finally {
+      await save();
+    }
     return sent.length;
   }
 

@@ -58,6 +58,24 @@ class KeepingStore extends MemoryStore {
   }) => super.apply(deviceId, {...changes}..remove(kept), firstSync: firstSync);
 }
 
+/// Merges its own copy of [merged] into a record pulled on the first sync,
+/// as the app does with a lesson or sentence both devices imported.
+class MergingStore extends MemoryStore {
+  MergingStore(this.merged);
+
+  final SyncRecordKey merged;
+
+  @override
+  Future<void> apply(
+    String deviceId,
+    Map<SyncRecordKey, Map<String, dynamic>?> changes, {
+    bool firstSync = false,
+  }) async {
+    await super.apply(deviceId, changes, firstSync: firstSync);
+    if (firstSync) records.remove(merged);
+  }
+}
+
 class Device {
   Device(
     this.worker,
@@ -74,6 +92,10 @@ class Device {
   final MemoryStore store;
   final tracker = SyncChangeTracker();
 
+  /// Runs at each save of the sync state, after the pull and after the
+  /// push; throwing stops the sync there, as when the app is closed.
+  Future<void> Function()? onSave;
+
   Future<SyncResult> sync() => SyncEngine(
     client: SyncClient(
       endpoint: Uri.parse('https://sync.example.com'),
@@ -85,7 +107,7 @@ class Device {
     store: store,
     tracker: tracker,
     accountCreatedAt: createdAt,
-    save: () async {},
+    save: () async => onSave?.call(),
     clock: () => clock.now,
   ).sync();
 }
@@ -123,6 +145,151 @@ void main() {
     expect(b.tracker.pending, isEmpty);
   });
 
+  test('a push stopped by the daily write limit goes on from there', () async {
+    // Fewer records than go in packs, so each is a server record.
+    for (var i = 0; i < 150; i++) {
+      a.store.records[SyncRecordKey('vocab', 'w$i')] = {'word': 'w$i'};
+    }
+    worker.writesLeft = 100;
+
+    await expectLater(
+      a.sync(),
+      throwsA(
+        isA<SyncException>().having((e) => e.statusCode, 'statusCode', 429),
+      ),
+    );
+
+    // The batch that got through is kept as pushed.
+    expect(worker.rows.length, 100);
+    expect(a.tracker.pending.length, 50);
+
+    // The next day only the rest is sent.
+    worker.writesLeft = 50;
+    clock.now += 1000;
+    final next = await a.sync();
+
+    expect(next.outcome, SyncOutcome.synced);
+    expect(next.pushed, 50);
+    expect(worker.rows.length, 150);
+    expect(a.tracker.pending, isEmpty);
+  });
+
+  group('a large push goes in packs', () {
+    SyncRecordKey lesson(int i) => SyncRecordKey('lesson', 'l$i');
+
+    void addLessons(Device device, int count) {
+      for (var i = 0; i < count; i++) {
+        device.store.records[lesson(i)] = {
+          'title': 'Lesson $i',
+          'text': 'Some words to study in lesson number $i. ' * 10,
+        };
+      }
+    }
+
+    test('a first sync of a large library fits the daily limit', () async {
+      addLessons(a, 3000);
+      // Far fewer than one write per record.
+      worker.writesLeft = 100;
+
+      final pushed = await a.sync();
+
+      expect(pushed.pushed, 3000);
+      expect(worker.rows.length, lessThan(100));
+      expect(a.tracker.pending, isEmpty);
+
+      clock.now += 1000;
+      final pulled = await b.sync();
+
+      expect(pulled.pulled, 3000);
+      expect(pulled.unreadable, 0);
+      expect(b.store.records, a.store.records);
+      expect(b.tracker.pending, isEmpty);
+    });
+
+    test('syncing a large library takes seconds, not minutes', () async {
+      // Sync runs on the UI isolate, so time spent here freezes the app.
+      // Each step must grow with the library, not with its square: copying
+      // the tracker's records on every lookup took about 18 s here.
+      for (var i = 0; i < 6000; i++) {
+        a.store.records[SyncRecordKey('card', 'c$i')] = {'due': i, 'reps': 1};
+      }
+      final watch = Stopwatch()..start();
+
+      await a.sync();
+      clock.now += 1000;
+      a.store.records[const SyncRecordKey('card', 'c1')] = {
+        'due': 1,
+        'reps': 2,
+      };
+      await a.sync();
+      clock.now += 1000;
+      await b.sync();
+
+      expect(b.store.records, a.store.records);
+      expect(watch.elapsed, lessThan(const Duration(seconds: 5)));
+    });
+
+    test('a later change of a packed record reaches a new device', () async {
+      addLessons(a, 300);
+      await a.sync();
+
+      clock.now += 1000;
+      a.store.records[lesson(7)] = {'title': 'Changed'};
+      a.store.records.remove(lesson(8));
+      await a.sync();
+
+      clock.now += 1000;
+      await b.sync();
+
+      expect(b.store.records[lesson(7)], {'title': 'Changed'});
+      // A deletion after the pack keeps the record deleted.
+      expect(b.store.records.containsKey(lesson(8)), isFalse);
+      expect(b.store.records.length, 299);
+    });
+
+    test('an older copy in a pack does not undo a newer one', () async {
+      a.store.records[lesson(1)] = {'title': 'First'};
+      await a.sync();
+      // An edit after the first sync is stamped with the time.
+      clock.now += 5000;
+      a.store.records[lesson(1)] = {'title': 'New'};
+      await a.sync();
+      expect(a.tracker.records[lesson(1)]!.updatedAt, clock.now);
+      // Pull that edit back, so the pack below comes in a pull of its own.
+      await a.sync();
+
+      // Another device's pack, written with an older copy.
+      final packs = await cipher.pack('other', [
+        SyncPackEntry(
+          lesson(1),
+          updatedAt: clock.now - 4000,
+          data: {'title': 'Old'},
+        ),
+        SyncPackEntry(
+          lesson(2),
+          updatedAt: clock.now - 4000,
+          data: {'title': 'Two'},
+        ),
+      ], updatedAt: clock.now);
+      await SyncClient(
+        endpoint: Uri.parse('https://sync.example.com'),
+        email: 'reader@example.com',
+        authKey: 'test-auth-key',
+        client: worker.client(),
+      ).push([for (final pack in packs.packs) pack.record]);
+
+      clock.now += 1000;
+      await a.sync();
+      await b.sync();
+
+      for (final device in [a, b]) {
+        expect(device.store.records[lesson(1)], {'title': 'New'});
+        expect(device.store.records[lesson(2)], {'title': 'Two'});
+      }
+      expect(a.tracker.pending, isEmpty);
+    });
+  });
+
   test('a second sync with nothing changed sends nothing', () async {
     a.store.records[_lesson] = {'title': 'Food'};
     await a.sync();
@@ -155,6 +322,93 @@ void main() {
       worker.isDeleted('sentence', await cipher.recordId(_sentence)),
       isTrue,
     );
+  });
+
+  group('deletions', () {
+    test('a copy merged on a first sync is not sent as a deletion', () async {
+      const mine = SyncRecordKey('lesson', 'mine');
+      a.store.records[_lesson] = {'title': 'Food'};
+      await a.sync();
+      final joining = Device(worker, cipher, clock, store: MergingStore(mine))
+        ..store.records[mine] = {'title': 'Food'}
+        ..store.records[_sentence] = {'text': 'Hi'};
+
+      clock.now += 1000;
+      final rowsBefore = worker.rows.length;
+      await joining.sync();
+
+      // Only the sentence was new to the server.
+      expect(worker.rows.length, rowsBefore + 1);
+      expect(
+        worker.rows.values.where((row) => row['deleted'] == true),
+        isEmpty,
+      );
+      expect(joining.tracker.records.containsKey(mine), isFalse);
+      expect(joining.tracker.pending, isEmpty);
+    });
+
+    test('a record this device pushed is deleted on the server', () async {
+      a.store.records[_sentence] = {'text': 'Hi'};
+      await a.sync();
+
+      clock.now += 1000;
+      a.store.records.remove(_sentence);
+      await a.sync();
+
+      expect(
+        worker.isDeleted('sentence', await cipher.recordId(_sentence)),
+        isTrue,
+      );
+    });
+
+    test(
+      'a record whose push reply was lost is deleted on the server',
+      () async {
+        a.store.records[_sentence] = {'text': 'Hi'};
+        worker.loseNextReply = true;
+        await expectLater(a.sync(), throwsA(isA<SyncException>()));
+        // The server has it, though this device never heard so.
+        expect(
+          worker.rows.containsKey(
+            'sentence/${await cipher.recordId(_sentence)}',
+          ),
+          isTrue,
+        );
+
+        clock.now += 1000;
+        a.store.records.remove(_sentence);
+        await a.sync();
+
+        expect(
+          worker.isDeleted('sentence', await cipher.recordId(_sentence)),
+          isTrue,
+        );
+      },
+    );
+
+    test('a record the server showed is deleted there, even if this device '
+        'stopped before pushing its own copy', () async {
+      await b.sync();
+      a.store.records[_sentence] = {'text': 'Hi'};
+      await a.sync();
+
+      // b's copy is newer than the server's, so b keeps it, but b stops
+      // after the pull, before pushing it.
+      clock.now += 1000;
+      b.store.records[_sentence] = {'text': 'Hello'};
+      b.onSave = () => throw StateError('closed');
+      await expectLater(b.sync(), throwsStateError);
+
+      clock.now += 1000;
+      b.store.records.remove(_sentence);
+      b.onSave = null;
+      await b.sync();
+
+      expect(
+        worker.isDeleted('sentence', await cipher.recordId(_sentence)),
+        isTrue,
+      );
+    });
   });
 
   test('when both edit offline, the later edit wins on both', () async {

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:collection';
 
 import 'package:uuid/uuid.dart';
 
@@ -15,6 +16,7 @@ class SyncRecordState {
     this.pending = true,
     this.parts = 0,
     this.blocked = false,
+    this.localOnly = false,
   });
 
   /// Hash of the contents, from [SyncSnapshot.hash]; empty once deleted.
@@ -35,14 +37,22 @@ class SyncRecordState {
   /// device must not overwrite it until the app is updated.
   final bool blocked;
 
-  SyncRecordState copyWith({bool? pending, int? parts}) => SyncRecordState(
-    hash: hash,
-    updatedAt: updatedAt,
-    deleted: deleted,
-    pending: pending ?? this.pending,
-    parts: parts ?? this.parts,
-    blocked: blocked,
-  );
+  /// The server has never had this record: it was made on this device and
+  /// not sent yet, and no pull has shown it. Once gone, it is forgotten
+  /// instead of sent as a deletion, which would cost a write and change
+  /// nothing. False when not known, so the deletion is sent.
+  final bool localOnly;
+
+  SyncRecordState copyWith({bool? pending, int? parts, bool? localOnly}) =>
+      SyncRecordState(
+        hash: hash,
+        updatedAt: updatedAt,
+        deleted: deleted,
+        pending: pending ?? this.pending,
+        parts: parts ?? this.parts,
+        blocked: blocked,
+        localOnly: localOnly ?? this.localOnly,
+      );
 
   Map<String, dynamic> toJson() => {
     'hash': hash,
@@ -51,6 +61,7 @@ class SyncRecordState {
     if (pending) 'pending': true,
     if (parts > 0) 'parts': parts,
     if (blocked) 'blocked': true,
+    if (localOnly) 'localOnly': true,
   };
 
   factory SyncRecordState.fromJson(Map<String, dynamic> json) {
@@ -66,6 +77,7 @@ class SyncRecordState {
       pending: json['pending'] == true,
       parts: json['parts'] is int ? json['parts'] as int : 0,
       blocked: json['blocked'] == true,
+      localOnly: json['localOnly'] == true,
     );
   }
 }
@@ -107,7 +119,10 @@ class SyncChangeTracker {
   /// head, then part number, as base64.
   final Map<SyncRecordKey, Map<int, String>> _heldParts;
 
-  Map<SyncRecordKey, SyncRecordState> get records => Map.unmodifiable(_records);
+  /// A read-only view, not a copy: the engine looks records up in loops over
+  /// the whole library.
+  Map<SyncRecordKey, SyncRecordState> get records =>
+      UnmodifiableMapView(_records);
 
   /// Records changed since the last push, oldest change first.
   List<SyncRecordKey> get pending {
@@ -125,7 +140,8 @@ class SyncChangeTracker {
   /// before, at [now] in milliseconds. New and changed records, and records
   /// that are gone, become pending, and are returned. A gone record is kept
   /// as deleted so the deletion syncs, except for kinds in
-  /// [SyncKinds.keptWhenUnused].
+  /// [SyncKinds.keptWhenUnused]. A gone record the server never had
+  /// ([SyncRecordState.localOnly]) is forgotten, and not returned.
   ///
   /// The first run sees every record as new, which is how data from before
   /// sync was set up gets pushed. Before [hasPulled], a record seen for the
@@ -156,6 +172,7 @@ class SyncChangeTracker {
             : stamp(previous),
         parts: previous?.parts ?? 0,
         blocked: previous?.blocked ?? false,
+        localOnly: previous == null || previous.localOnly,
       );
       changed.add(entry.key);
     }
@@ -164,6 +181,11 @@ class SyncChangeTracker {
       final previous = _records[key]!;
       if (previous.deleted || snapshot.containsKey(key)) continue;
       if (SyncKinds.keptWhenUnused.contains(key.kind)) continue;
+      if (previous.localOnly) {
+        // Such as a card or lesson merged into a pulled one on a first sync.
+        _records.remove(key);
+        continue;
+      }
       _records[key] = SyncRecordState(
         hash: '',
         updatedAt: stamp(previous),
@@ -182,7 +204,19 @@ class SyncChangeTracker {
   void markPushed(SyncRecordKey key, int updatedAt, {int? parts}) {
     final state = _records[key];
     if (state == null || state.updatedAt != updatedAt) return;
-    _records[key] = state.copyWith(pending: false, parts: parts);
+    _records[key] = state.copyWith(
+      pending: false,
+      parts: parts,
+      localOnly: false,
+    );
+  }
+
+  /// The server has, or may have, a version of [key]: it was pulled, or a
+  /// push holding it was started, so a later deletion has to be sent.
+  void markOnServer(SyncRecordKey key) {
+    final state = _records[key];
+    if (state == null || !state.localOnly) return;
+    _records[key] = state.copyWith(localOnly: false);
   }
 
   /// Records a version pulled from the server, and now applied on this

@@ -34,6 +34,16 @@ String describeSyncError(Object error, {bool signedIn = false}) {
             : 'Wrong email or password, or this account does not exist.';
       case 403:
         return 'This account still needs email confirmation.';
+      case 429 when error.message.contains('quota_exceeded'):
+        // A first sync uploads the whole library, which can pass the
+        // account's daily write limit. What got through is kept, and the
+        // next sync goes on from there.
+        return "This account has used today's sync allowance. Everything "
+            'sent so far is saved, and the rest is sent when you sync after '
+            'midnight UTC. Your lessons and progress stay on this device.';
+      case 429 when error.message.contains('signups_paused'):
+        return 'The sync server has sent all the confirmation emails it can '
+            'today. Create the account again after midnight UTC.';
       case 429:
         return 'The sync server is busy or has reached its daily limit. '
             'Try again later.';

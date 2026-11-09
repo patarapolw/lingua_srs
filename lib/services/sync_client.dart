@@ -122,6 +122,11 @@ class SyncException implements Exception {
 /// caller.
 class SyncClient {
   static const maxPushBatch = 100;
+
+  /// The Worker refuses a push body over 1 MB with `413 too_large`. Packs and
+  /// split parts are close to 32 KB each, so a batch is also cut by size,
+  /// with room left for the JSON around the records.
+  static const maxPushBytes = 900 * 1024;
   static const _timeout = Duration(seconds: 30);
 
   final Uri endpoint;
@@ -276,22 +281,37 @@ class SyncClient {
     }
   }
 
-  /// Sends [records] in batches of [maxPushBatch]. Returns how many the server
-  /// kept; an older copy of a record it already has newer is not kept.
-  Future<int> push(List<SyncRecord> records) async {
+  /// Sends [records] in batches of at most [maxPushBatch] records and
+  /// [maxPushBytes] of JSON. Returns how many the server kept; an older copy
+  /// of a record it already has newer is not kept. [onBatch] is told how many
+  /// records the server has taken so far after each batch, so a push stopped
+  /// partway, such as by the daily write limit, keeps what got through.
+  Future<int> push(
+    List<SyncRecord> records, {
+    void Function(int sent)? onBatch,
+  }) async {
     var accepted = 0;
-    for (var start = 0; start < records.length; start += maxPushBatch) {
-      final batch = records.skip(start).take(maxPushBatch);
+    var start = 0;
+    while (start < records.length) {
+      final batch = <Map<String, dynamic>>[];
+      var bytes = 0;
+      var end = start;
+      while (end < records.length && batch.length < maxPushBatch) {
+        final json = records[end].toJson();
+        final size = utf8.encode(jsonEncode(json)).length + 1;
+        if (batch.isNotEmpty && bytes + size > maxPushBytes) break;
+        batch.add(json);
+        bytes += size;
+        end++;
+      }
       final json = _object(
-        await _send(
-          'POST',
-          ['changes'],
-          body: {'records': batch.map((record) => record.toJson()).toList()},
-        ),
+        await _send('POST', ['changes'], body: {'records': batch}),
       );
       final count = json['accepted'];
       if (count is! int) throw _invalid();
       accepted += count;
+      start = end;
+      onBatch?.call(end);
     }
     return accepted;
   }
