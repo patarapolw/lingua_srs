@@ -15,6 +15,7 @@ import '../models/vocab_item.dart';
 import '../models/vocab_merge_record.dart';
 import '../services/ai_discussion_search.dart';
 import '../services/deepseek_service.dart';
+import '../services/lesson_ai_prompt.dart';
 import '../services/new_card_quota.dart';
 import '../services/srs_service.dart';
 import '../services/storage_service.dart';
@@ -361,13 +362,13 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     final splitEmphasis = _splitSentenceEmphasis();
     final canonicalized = _canonicalizeSentencePool();
     final deduped = _dedupeSentenceLinks();
-    final mergedLessons = _mergeSameVirtualPathLessons();
-    if (splitEmphasis || canonicalized || deduped || mergedLessons) {
+    final merged = _mergeSameVirtualPathLessons();
+    if (splitEmphasis || canonicalized || deduped || merged.lessons) {
       await StorageService.saveSentences(_sentences);
       await StorageService.saveLessons(_lessons);
     }
     _linkSharedVocabProgress();
-    if (_canonicalizeAiDiscussions()) {
+    if (_canonicalizeAiDiscussions() || merged.chats) {
       await StorageService.saveAiDiscussions(_aiDiscussions);
     }
 
@@ -777,11 +778,14 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       if (sentence != null && _carryEmphasisTo(sentence)) carried = true;
     }
     if (carried) changed.add(SyncAppPart.lessons);
-    if (changed.contains(SyncAppPart.lessons) &&
-        _mergeSameVirtualPathLessons()) {
-      changed
-        ..add(SyncAppPart.lessons)
-        ..add(SyncAppPart.sentences);
+    if (changed.contains(SyncAppPart.lessons)) {
+      final merged = _mergeSameVirtualPathLessons();
+      if (merged.lessons) {
+        changed
+          ..add(SyncAppPart.lessons)
+          ..add(SyncAppPart.sentences);
+      }
+      if (merged.chats) changed.add(SyncAppPart.aiDiscussions);
     }
     // A pulled sentence can be one this device imported separately: merge
     // them now, the same way on every device, rather than at the next start.
@@ -1467,24 +1471,27 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     LessonNameClash clash,
     LessonClashChoice choice,
   ) async {
+    var chatsMoved = false;
     switch (choice) {
       case LessonClashChoice.keepExisting:
-        _absorbLesson(clash.existing, clash.incoming);
+        chatsMoved = _absorbLesson(clash.existing, clash.incoming);
       case LessonClashChoice.keepIncoming:
-        _absorbLesson(clash.incoming, clash.existing);
+        chatsMoved = _absorbLesson(clash.incoming, clash.existing);
       case LessonClashChoice.keepBoth:
         _rename(
           clash.incoming,
           _unusedName(clash.incoming, clash.incoming.folderPath),
         );
     }
+    if (chatsMoved) await StorageService.saveAiDiscussions(_aiDiscussions);
     await saveState();
   }
 
-  /// Moves [other]'s words that [primary] lacks into [primary], then removes
-  /// [other].
-  void _absorbLesson(Lesson primary, Lesson other) {
-    if (identical(primary, other)) return;
+  /// Moves [other]'s words that [primary] lacks into [primary], joins
+  /// [other]'s AI chat into [primary]'s (oldest message first), then removes
+  /// [other]. Returns whether a chat moved.
+  bool _absorbLesson(Lesson primary, Lesson other) {
+    if (identical(primary, other)) return false;
     final ids = {for (final vocab in primary.vocabularies) vocab.id};
     for (final vocab in other.vocabularies) {
       if (ids.add(vocab.id)) primary.vocabularies.add(vocab);
@@ -1498,12 +1505,18 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     primary.fileName ??= other.fileName;
     _lessons.removeWhere((lesson) => identical(lesson, other));
     if (_selectedLessonId == other.id) _selectedLessonId = primary.id;
+    if (primary.id == other.id) return false;
+    final chat = _aiDiscussions.remove(LessonAiPrompt.discussionId(other.id));
+    if (chat == null) return false;
+    _joinAiDiscussion(LessonAiPrompt.discussionId(primary.id), chat);
+    return true;
   }
 
   /// Merges saved lessons at the same virtual path (say, one file imported
-  /// on two devices before they synced) into the first of them. Returns
-  /// whether any were merged.
-  bool _mergeSameVirtualPathLessons() {
+  /// on two devices before they synced) into the first of them, with their
+  /// AI chats. Returns whether any lessons were merged, and whether any
+  /// chats moved.
+  ({bool lessons, bool chats}) _mergeSameVirtualPathLessons() {
     final first = <String, Lesson>{};
     final merges = <(Lesson, Lesson)>[];
     for (final lesson in _lessons) {
@@ -1516,10 +1529,11 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
         merges.add((earlier, lesson));
       }
     }
+    var chats = false;
     for (final (primary, other) in merges) {
-      _absorbLesson(primary, other);
+      if (_absorbLesson(primary, other)) chats = true;
     }
-    return merges.isNotEmpty;
+    return (lessons: merges.isNotEmpty, chats: chats);
   }
 
   static String _lessonIdentity(Lesson lesson) {
