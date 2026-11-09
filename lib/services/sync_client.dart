@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:http/http.dart' as http;
 
@@ -278,7 +279,13 @@ class SyncClient {
 
   /// Sends [records] in batches of [maxPushBatch]. Returns how many the server
   /// kept; an older copy of a record it already has newer is not kept.
-  Future<int> push(List<SyncRecord> records) async {
+  /// [onBatch] is told how many records the server has taken so far after
+  /// each batch, so a push stopped partway, such as by the daily write
+  /// limit, keeps what got through.
+  Future<int> push(
+    List<SyncRecord> records, {
+    void Function(int sent)? onBatch,
+  }) async {
     var accepted = 0;
     for (var start = 0; start < records.length; start += maxPushBatch) {
       final batch = records.skip(start).take(maxPushBatch);
@@ -292,6 +299,7 @@ class SyncClient {
       final count = json['accepted'];
       if (count is! int) throw _invalid();
       accepted += count;
+      onBatch?.call(min(start + maxPushBatch, records.length));
     }
     return accepted;
   }

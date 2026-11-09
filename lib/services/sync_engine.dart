@@ -297,7 +297,9 @@ class SyncEngine {
     _track(snapshot);
 
     final records = <SyncRecord>[];
-    final sent = <({SyncRecordKey key, int updatedAt, int parts})>[];
+    // Each record's entries end at [end] in [records]: parts, then the head,
+    // then tombstones for parts it no longer needs.
+    final sent = <({SyncRecordKey key, int updatedAt, int parts, int end})>[];
     for (final key in tracker.pending) {
       final state = tracker.records[key]!;
       if (state.blocked) continue;
@@ -323,14 +325,32 @@ class SyncEngine {
           ),
         );
       }
-      sent.add((key: key, updatedAt: state.updatedAt, parts: parts));
+      sent.add((
+        key: key,
+        updatedAt: state.updatedAt,
+        parts: parts,
+        end: records.length,
+      ));
     }
 
-    if (records.isNotEmpty) await client.push(records);
-    for (final record in sent) {
-      tracker.markPushed(record.key, record.updatedAt, parts: record.parts);
+    // Marks each record pushed once all its entries are on the server, and
+    // saves that even when a later batch fails, so a push the daily write
+    // limit stops partway goes on from there next time instead of sending
+    // (and counting) the same records again.
+    var marked = 0;
+    void markUpTo(int count) {
+      while (marked < sent.length && sent[marked].end <= count) {
+        final record = sent[marked++];
+        tracker.markPushed(record.key, record.updatedAt, parts: record.parts);
+      }
     }
-    await save();
+
+    try {
+      if (records.isNotEmpty) await client.push(records, onBatch: markUpTo);
+      markUpTo(records.length);
+    } finally {
+      await save();
+    }
     return sent.length;
   }
 

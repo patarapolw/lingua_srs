@@ -267,7 +267,7 @@ The same sentence imported separately on two devices arrives as two records with
 
 ### Write budget
 
-A review writes one `card` record. The engine merges repeated changes to a record into one push, and writes a day's `activity` record once per push rather than once per review. The Worker allows 2,000 record writes per account per day, which covers several hundred reviews a day even when each one is pushed on its own.
+A review writes one `card` record. The engine merges repeated changes to a record into one push, and writes a day's `activity` record once per push rather than once per review. The Worker allows 2,000 record writes per account per day, which covers several hundred reviews a day even when each one is pushed on its own. A first sync uploads the whole library (a `vocab` and a `card` record per word, and more), which can pass that limit: the push stops with `429 quota_exceeded`, the batches that got through stay marked as pushed, and the next sync after midnight UTC sends only the rest. An operator expecting large libraries can raise `MAX_WRITES_PER_DAY`.
 
 ## Staying inside the free plans
 

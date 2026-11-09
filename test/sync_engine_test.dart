@@ -123,6 +123,35 @@ void main() {
     expect(b.tracker.pending, isEmpty);
   });
 
+  test('a push stopped by the daily write limit goes on from there', () async {
+    // A first sync of a large library passes the daily limit.
+    for (var i = 0; i < 250; i++) {
+      a.store.records[SyncRecordKey('vocab', 'w$i')] = {'word': 'w$i'};
+    }
+    worker.writesLeft = 200;
+
+    await expectLater(
+      a.sync(),
+      throwsA(
+        isA<SyncException>().having((e) => e.statusCode, 'statusCode', 429),
+      ),
+    );
+
+    // The two batches that got through are kept as pushed.
+    expect(worker.rows.length, 200);
+    expect(a.tracker.pending.length, 50);
+
+    // The next day only the rest is sent.
+    worker.writesLeft = 50;
+    clock.now += 1000;
+    final next = await a.sync();
+
+    expect(next.outcome, SyncOutcome.synced);
+    expect(next.pushed, 50);
+    expect(worker.rows.length, 250);
+    expect(a.tracker.pending, isEmpty);
+  });
+
   test('a second sync with nothing changed sends nothing', () async {
     a.store.records[_lesson] = {'title': 'Food'};
     await a.sync();

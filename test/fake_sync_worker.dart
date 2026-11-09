@@ -12,6 +12,10 @@ class FakeWorker {
   int seq = 0;
   int pushRequests = 0;
 
+  /// Records the account may still write today, as `MAX_WRITES_PER_DAY`;
+  /// a batch that would pass it is refused whole with `429 quota_exceeded`.
+  int? writesLeft;
+
   http.Client client() => MockClient(_handle);
 
   Future<http.Response> _handle(http.Request request) async {
@@ -44,6 +48,13 @@ class FakeWorker {
       case ('POST', '/v1/changes'):
         pushRequests++;
         final body = jsonDecode(request.body) as Map<String, dynamic>;
+        final count = (body['records'] as List).length;
+        if (writesLeft != null) {
+          if (count > writesLeft!) {
+            return json({'error': 'quota_exceeded'}, 429);
+          }
+          writesLeft = writesLeft! - count;
+        }
         var accepted = 0;
         for (final record in body['records'] as List) {
           final row = Map<String, dynamic>.from(record as Map);

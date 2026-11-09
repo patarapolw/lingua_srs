@@ -42,6 +42,25 @@ void main() {
       expect(describeSyncError(_error(502)), contains('email could not'));
     });
 
+    test('a daily write limit says progress is kept and when it resumes', () {
+      final text = describeSyncError(
+        _error(429, '{"error":"quota_exceeded"}'),
+        signedIn: true,
+      );
+
+      expect(text, contains("today's sync allowance"));
+      expect(text, contains('saved'));
+      expect(text, contains('midnight UTC'));
+      expect(text, isNot(contains('busy')));
+    });
+
+    test('paused signups say to create the account again tomorrow', () {
+      final text = describeSyncError(_error(429, '{"error":"signups_paused"}'));
+
+      expect(text, contains('confirmation emails'));
+      expect(text, contains('midnight UTC'));
+    });
+
     test('a refused code names every reason the server cannot tell', () {
       final text = describeSyncError(_error(400, '{"error":"invalid_code"}'));
 
