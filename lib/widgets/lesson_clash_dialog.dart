@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/lesson.dart';
+import '../models/vocab_item.dart';
 import '../providers/app_provider.dart';
 import '../services/lesson_links.dart';
 
@@ -56,27 +57,83 @@ class _LessonClashDialogState extends State<LessonClashDialog> {
         '$words ${words == 1 ? 'word' : 'words'}';
   }
 
+  /// Words of [from] that [into] does not have, matched the way an import
+  /// matches them: by id, or by the same word and meaning.
+  static int _wordsOnlyIn(Lesson from, Lesson into) {
+    String meaning(VocabItem vocab) =>
+        '${vocab.targetWord.trim().toLowerCase()}\u0000'
+        '${vocab.translation.trim().toLowerCase()}';
+    final ids = {for (final vocab in into.vocabularies) vocab.id};
+    final meanings = {for (final vocab in into.vocabularies) meaning(vocab)};
+    return from.vocabularies
+        .where(
+          (vocab) =>
+              !ids.contains(vocab.id) && !meanings.contains(meaning(vocab)),
+        )
+        .length;
+  }
+
+  static String _words(int count) => count == 1 ? '1 word' : '$count words';
+
+  /// What the choice does.
   String get _consequence {
     final importing = widget.importing;
+    final other = importing ? 'imported' : 'second';
     return switch (_choice) {
       LessonClashChoice.keepExisting =>
         importing
-            ? 'The imported file is skipped.'
-            : 'The other lesson is removed. Words only it has move to the '
-                  'primary one, with their study progress, and its AI chat '
-                  'joins the primary one’s.',
+            ? 'The imported file is skipped. The saved lesson stays as it is.'
+            : 'The first lesson keeps its name and text. The second lesson '
+                  'is removed, and its AI chat joins the first one’s.',
       LessonClashChoice.keepIncoming =>
         importing
-            ? 'The saved lesson takes the imported name, text and words. Its '
-                  'words keep their study progress, and words not in the '
-                  'file stay.'
-            : 'The saved lesson is removed. Words only it has move to the '
-                  'primary one, with their study progress, and its AI chat '
-                  'joins the primary one’s.',
+            ? 'The saved lesson takes the file’s name and text, and its words '
+                  'are updated from the file, keeping their study progress.'
+            : 'The second lesson keeps its name and text. The first lesson '
+                  'is removed, and its AI chat joins the second one’s.',
       LessonClashChoice.keepBoth =>
-        'The ${importing ? 'imported' : 'other'} lesson is named '
+        'Both lessons stay. The $other one is named '
             '“${widget.clash.renamedTitle}”.',
     };
+  }
+
+  /// What the choice keeps that the person may not expect, or null.
+  String? get _warning {
+    final clash = widget.clash;
+    final (kept, gone) = switch (_choice) {
+      LessonClashChoice.keepExisting => (clash.existing, clash.incoming),
+      LessonClashChoice.keepIncoming => (clash.incoming, clash.existing),
+      LessonClashChoice.keepBoth => (null, null),
+    };
+    if (kept == null || gone == null) return null;
+    if (widget.importing) {
+      if (_choice != LessonClashChoice.keepIncoming) return null;
+      final extra = _wordsOnlyIn(clash.existing, clash.incoming);
+      if (extra == 0) return null;
+      return '${_words(extra)} in the saved lesson ${extra == 1 ? 'is' : 'are'} '
+          'not in the file. ${extra == 1 ? 'It is' : 'They are'} not deleted: '
+          '${extra == 1 ? 'it stays' : 'they stay'} in the lesson with '
+          '${extra == 1 ? 'its' : 'their'} study progress. Delete '
+          '${extra == 1 ? 'it' : 'them'} from the lesson’s vocabulary if you no '
+          'longer want ${extra == 1 ? 'it' : 'them'}.';
+    }
+    final moved = _wordsOnlyIn(gone, kept);
+    final name = identical(kept, clash.existing) ? 'first' : 'second';
+    final goneName = name == 'first' ? 'second' : 'first';
+    // The removed lesson's text goes, unless the kept one has none, which
+    // then takes it (AppProvider._absorbLesson).
+    final goneText = gone.markdownContent.trim();
+    final keptText = kept.markdownContent.trim();
+    final text =
+        goneText.isNotEmpty && keptText.isNotEmpty && goneText != keptText
+        ? ' The $goneName lesson’s text is not kept.'
+        : '';
+    if (moved == 0) return text.isEmpty ? null : text.trim();
+    return '${_words(moved)} only the $goneName lesson has '
+        '${moved == 1 ? 'moves' : 'move'} into the $name, with '
+        '${moved == 1 ? 'its' : 'their'} study progress. No words are deleted; '
+        'remove ${moved == 1 ? 'it' : 'them'} from the lesson’s vocabulary if '
+        'you don’t want ${moved == 1 ? 'it' : 'them'}.$text';
   }
 
   @override
@@ -136,6 +193,29 @@ class _LessonClashDialogState extends State<LessonClashDialog> {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
+            if (_warning case final warning?)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.warning_amber_rounded,
+                      size: 18,
+                      color: Theme.of(context).colorScheme.tertiary,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        warning,
+                        key: const ValueKey('clash-warning'),
+                        style: Theme.of(context).textTheme.bodySmall
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             if (remaining > 0)
               CheckboxListTile(
                 contentPadding: EdgeInsets.zero,
