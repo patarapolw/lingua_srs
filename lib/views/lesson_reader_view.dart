@@ -127,8 +127,9 @@ class _LessonReaderViewState extends State<LessonReaderView> {
     );
   }
 
-  /// Opens the lesson a `[[Lesson#Heading]]` link names, at its heading, or
-  /// scrolls to the heading if the link names this lesson.
+  /// Opens the lesson a `[[Lesson#Heading]]` or `lesson.md#heading` link
+  /// names, at its heading, or scrolls to the heading if the link names this
+  /// lesson.
   void _openLessonLink(
     BuildContext context,
     AppProvider provider,
@@ -136,14 +137,23 @@ class _LessonReaderViewState extends State<LessonReaderView> {
     LessonLink link,
   ) {
     final messenger = ScaffoldMessenger.of(context);
-    final target = LessonLink.resolveLesson(
-      provider.lessons,
-      link.lesson!,
-      from: current,
-    );
+    final file = link.file;
+    final target = file != null
+        ? LessonLink.resolveFile(provider.lessons, file, from: current)
+        : LessonLink.resolveLesson(
+            provider.lessons,
+            link.lesson!,
+            from: current,
+          );
     if (target == null) {
       messenger.showSnackBar(
-        SnackBar(content: Text('No lesson named “${link.lesson}”.')),
+        SnackBar(
+          content: Text(
+            file != null
+                ? 'No lesson at “$file”.'
+                : 'No lesson named “${link.lesson}”.',
+          ),
+        ),
       );
       return;
     }

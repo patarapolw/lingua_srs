@@ -15,7 +15,11 @@ class LessonHeading {
   /// Index of the chunk the heading starts in (or is inside, in a group).
   final int chunk;
 
-  const LessonHeading(this.level, this.text, this.chunk);
+  /// What `#anchor` links to the heading use: its `{#id}`, or a GitHub-style
+  /// anchor of its text, with `-1`, `-2`, … for repeated headings.
+  final String anchor;
+
+  const LessonHeading(this.level, this.text, this.chunk, {this.anchor = ''});
 }
 
 /// A lesson's Markdown cut into chunks that are rendered lazily, one by one.
@@ -24,6 +28,20 @@ class LessonContent {
   final List<LessonHeading> headings;
 
   const LessonContent(this.chunks, this.headings);
+
+  /// The heading a link names: by its [LessonHeading.anchor] first, then by
+  /// its text (the first such heading). Case does not matter.
+  LessonHeading? headingFor(String target) {
+    final wanted = target.trim().toLowerCase();
+    if (wanted.isEmpty) return null;
+    for (final heading in headings) {
+      if (heading.anchor.toLowerCase() == wanted) return heading;
+    }
+    for (final heading in headings) {
+      if (LessonLink.headingMatches(heading.text, target)) return heading;
+    }
+    return null;
+  }
 
   /// A chunk is closed at the next safe blank line once it is this long.
   static const defaultChunkChars = 3000;
@@ -53,6 +71,20 @@ class LessonContent {
     var size = 0;
     var grouped = false;
     String? fence;
+    final anchors = <String>{};
+
+    String anchorFor(String text, String? id) {
+      if (id != null) {
+        anchors.add(id.toLowerCase());
+        return id;
+      }
+      final base = LessonLink.slug(text);
+      var anchor = base;
+      for (var n = 1; !anchors.add(anchor); n++) {
+        anchor = '$base-$n';
+      }
+      return anchor;
+    }
 
     void flush() {
       final text = current.join('\n').trim();
@@ -92,13 +124,24 @@ class LessonContent {
         final setextLevel = _setextLevel(lines, i);
         if (heading != null || setextLevel != null) {
           if (!grouped) flush();
+          final raw = heading != null ? heading[2]! : line.trim();
+          final (title, id) = LessonLink.splitHeadingAttributes(raw);
+          final text = _plainText(title);
           headings.add(
             LessonHeading(
               heading != null ? heading[1]!.length : setextLevel!,
-              _plainText(heading != null ? heading[2]! : line.trim()),
+              text,
               chunks.length,
+              anchor: anchorFor(text, id),
             ),
           );
+          if (title != raw) {
+            current.add(
+              heading != null ? '${heading[1]} ${title.trim()}' : title,
+            );
+            size += line.length + 1;
+            continue;
+          }
         } else if (!grouped &&
             size >= maxChars &&
             line.trim().isEmpty &&
@@ -447,15 +490,12 @@ class _LessonContentViewState extends State<LessonContentView> {
     }
   }
 
-  /// Scrolls to the first heading whose text or anchor is [target].
+  /// Scrolls to the heading [target] names (see [LessonContent.headingFor]).
   bool _scrollToNamed(String target) {
-    for (final heading in _content.headings) {
-      if (LessonLink.headingMatches(heading.text, target)) {
-        _scrollTo(heading);
-        return true;
-      }
-    }
-    return false;
+    final heading = _content.headingFor(target);
+    if (heading == null) return false;
+    _scrollTo(heading);
+    return true;
   }
 
   /// Handles `#anchor` and `[[#Heading]]` links by scrolling to the heading,
@@ -463,11 +503,12 @@ class _LessonContentViewState extends State<LessonContentView> {
   bool _onLink(String href) {
     final link = LessonLink.fromHref(href);
     if (link == null) return false;
-    final lesson = link.lesson;
-    if (lesson == null) {
-      _scrollToNamed(link.heading!);
-    } else {
+    if (link.isOtherLesson) {
       widget.onLessonLink?.call(link);
+    } else if (!_scrollToNamed(link.heading!)) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(content: Text('No heading “${link.heading}” in this lesson.')),
+      );
     }
     return true;
   }

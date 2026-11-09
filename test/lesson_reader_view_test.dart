@@ -168,7 +168,8 @@ void main() {
       final source = (await tester.runAsync(
         () => provider.importYaml(
           '$vocab# Start\n\n[[Unit 2::Lesson 26#Past tense]]\n\n'
-          '[[Missing lesson]]\n',
+          '[[Missing lesson]]\n\n'
+          '[as a file](unit-2/lesson-26.md#past-tense)\n',
           defaultTitle: 'Start',
         ),
       ))!;
@@ -204,6 +205,19 @@ void main() {
         find.textContaining('Past text.', findRichText: true),
         findsWidgets,
       );
+    });
+
+    testWidgets('opens the lesson a .md link points to', (tester) async {
+      final (_, target) = await openLinked(tester);
+
+      await tester.tap(find.text('as a file', findRichText: true));
+      await tester.pumpAndSettle();
+
+      final reader = tester.widget<LessonReaderView>(
+        find.byType(LessonReaderView).last,
+      );
+      expect(reader.lessonId, target.id);
+      expect(reader.initialHeading, 'past-tense');
     });
 
     testWidgets('says when the linked lesson does not exist', (tester) async {

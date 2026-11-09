@@ -6,6 +6,7 @@ import 'package:yaml/yaml.dart';
 import '../models/lesson.dart';
 import '../models/vocab_item.dart';
 import '../models/sentence.dart';
+import 'lesson_links.dart';
 
 class YamlParseResult {
   final Lesson lesson;
@@ -141,6 +142,7 @@ class YamlParserService {
     String? defaultTitle,
     String? defaultUnitTitle,
     bool allowMarkdown = true,
+    String? sourcePath,
   }) {
     var frontMatter = yamlString.trim();
     String? markdownTitle;
@@ -159,7 +161,10 @@ class YamlParserService {
         r'^#\s+(.+)$',
         multiLine: true,
       ).firstMatch(markdownBody)?.group(1)?.trim();
-      markdownTitle = headingTitle?.replaceAll(r'\~', '~');
+      markdownTitle = headingTitle == null
+          ? null
+          : LessonLink.splitHeadingAttributes(headingTitle).$1
+                .replaceAll(r'\~', '~');
       frontMatter = frontMatterParts.$1;
     }
 
@@ -360,6 +365,7 @@ class YamlParserService {
       nativeLanguage: nativeLang,
       vocabularies: vocabList,
       markdownContent: markdownContent,
+      fileName: _markdownFileName(sourcePath),
     );
 
     if (missingEmphasis.isNotEmpty) {
@@ -643,6 +649,14 @@ class YamlParserService {
       removed: removed,
       possibleDuplicates: possibleDuplicates,
     );
+  }
+
+  /// The file name of a Markdown [path] (`unit-2/lesson-26.md` gives
+  /// `lesson-26.md`), or null for other files.
+  static String? _markdownFileName(String? path) {
+    if (path == null) return null;
+    final name = path.split(RegExp(r'[/\\]')).last.trim();
+    return name.toLowerCase().endsWith('.md') && name.length > 3 ? name : null;
   }
 
   static bool hasVocabularyFrontmatter(String markdown) {

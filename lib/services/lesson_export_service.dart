@@ -28,7 +28,7 @@ class LessonExportService {
 
   static String _lessonPath(Lesson lesson) => [
     ...lesson.folderPath.map(_safeSegment),
-    '${_safeSegment(lesson.displayTitle)}.md',
+    _safeSegment(lesson.virtualFileName),
   ].join('/');
 
   static String _uniquePath(

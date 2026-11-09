@@ -116,6 +116,47 @@ void main() {
     });
   });
 
+  group('heading anchors', () {
+    const markdown =
+        '## Present\n\n### Polite\n\n## Past\n\n### Polite\n\n'
+        '## Future\n\n### Polite {#future-polite .note}\n\n'
+        'Plain\n=====\n\nSetext {#setext}\n------';
+
+    test('number repeated headings and use {#id}', () {
+      final content = LessonContent.parse(markdown);
+
+      expect(content.headings.map((h) => h.anchor), [
+        'present',
+        'polite',
+        'past',
+        'polite-1',
+        'future',
+        'future-polite',
+        'plain',
+        'setext',
+      ]);
+      expect(content.headings[5].text, 'Polite');
+      expect(content.headings[7].text, 'Setext');
+    });
+
+    test('drop {#id} from the rendered heading', () {
+      final content = LessonContent.parse(markdown);
+
+      expect(content.chunks[5], '### Polite');
+      expect(content.chunks[7], startsWith('Setext\n---'));
+    });
+
+    test('a link finds a heading by anchor, then by text', () {
+      final content = LessonContent.parse(markdown);
+
+      expect(content.headingFor('polite'), same(content.headings[1]));
+      expect(content.headingFor('Polite-1'), same(content.headings[3]));
+      expect(content.headingFor('future-polite'), same(content.headings[5]));
+      expect(content.headingFor('Past'), same(content.headings[2]));
+      expect(content.headingFor('nothing'), isNull);
+    });
+  });
+
   group('setext headings', () {
     test('are listed and start a chunk', () {
       final content = LessonContent.parse(
