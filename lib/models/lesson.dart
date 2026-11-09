@@ -1,5 +1,6 @@
 import 'package:uuid/uuid.dart';
 
+import '../services/hangul_text.dart';
 import 'vocab_item.dart';
 import 'srs_card.dart';
 
@@ -17,16 +18,23 @@ class Lesson {
   /// in the app; see [virtualFileName].
   String? fileName;
 
+  /// [title], [unitTitle] and [fileName] are kept with Korean syllables
+  /// composed ([composeHangul]), so names from a Mac, which can store them as
+  /// separate jamo, match the same names from anywhere else. Every lesson is
+  /// made here, whether parsed, loaded, synced or restored.
   Lesson({
     String? id,
-    required this.title,
-    this.unitTitle,
+    required String title,
+    String? unitTitle,
     this.targetLanguage = 'ko',
     this.nativeLanguage = 'en',
     List<VocabItem>? vocabularies,
     this.markdownContent = '',
-    this.fileName,
+    String? fileName,
   }) : id = id ?? const Uuid().v4(),
+       title = composeHangul(title),
+       unitTitle = unitTitle == null ? null : composeHangul(unitTitle),
+       fileName = fileName == null ? null : composeHangul(fileName),
        vocabularies = vocabularies ?? [];
 
   /// Folder segments containing this lesson, from [unitTitle] plus any leading

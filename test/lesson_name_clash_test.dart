@@ -185,6 +185,30 @@ void main() {
     );
   });
 
+  testWidgets('a folder whose names a Mac stored as jamo matches', (
+    tester,
+  ) async {
+    final provider = await loadedProvider(tester);
+    // `1단원/과거.md` as macOS can store it (NFD), then as typed (NFC).
+    const unit = '1\u1103\u1161\u11ab\u110b\u116f\u11ab';
+    const file = '\u1100\u116a\u1100\u1165.md';
+    YamlParseResult lesson(String folder, String name) =>
+        YamlParserService.parseLessonYaml(
+          '---\nvocabulary:\n---\n# 과거\n',
+          defaultUnitTitle: folder,
+          sourcePath: '$folder/$name',
+        );
+
+    await import(tester, provider, [lesson(unit, file)]);
+    final asked = await import(tester, provider, [lesson('1단원', '과거.md')]);
+
+    expect(asked, 0);
+    final saved = provider.lessons
+        .where((lesson) => isSameHierarchyPath(lesson.folderPath, ['1단원']))
+        .single;
+    expect(saved.fileName, '과거.md');
+  });
+
   testWidgets('different files sharing a lesson number stay apart', (
     tester,
   ) async {
