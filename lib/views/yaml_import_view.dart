@@ -1265,10 +1265,13 @@ MarkdownDirectoryResult parsePickedMarkdownSources(
     required String? defaultTitle,
     required bool requireVocabularyFrontmatter,
     String? hierarchyPath,
+    String? legacySourceKey,
   }) {
     try {
       final sourceHash = sha256.convert(utf8.encode(contents)).toString();
-      if (importedSources[sourceKey] == sourceHash) {
+      if (importedSources[sourceKey] == sourceHash ||
+          (legacySourceKey != null &&
+              importedSources[legacySourceKey] == sourceHash)) {
         unchanged++;
         return;
       }
@@ -1302,16 +1305,17 @@ MarkdownDirectoryResult parsePickedMarkdownSources(
         for (final file in MarkdownArchiveService.readMarkdownFiles(
           source.bytes,
         )) {
-          final sourceKey = _markdownSourceKey(
-            '${source.sourceKey}!/${file.path}',
-          );
           parseMarkdown(
             '${source.name}/${file.path}',
-            sourceKey,
+            zipEntrySourceKey(file.path),
             file.contents,
             defaultTitle: null,
             requireVocabularyFrontmatter: true,
             hierarchyPath: file.path,
+            // Saved before ZIP entries were keyed by their path alone.
+            legacySourceKey: _markdownSourceKey(
+              '${source.sourceKey}!/${file.path}',
+            ),
           );
         }
       } else {
@@ -1413,6 +1417,15 @@ MarkdownDirectoryResult _combineMarkdownDirectoryResults(
   skipped: results.fold(0, (total, result) => total + result.skipped),
   unchanged: results.fold(0, (total, result) => total + result.unchanged),
 );
+
+/// The key a ZIP entry's fingerprint is saved under, to skip it when it is
+/// imported again unchanged: its path inside the ZIP alone. The ZIP's own
+/// location is no use, since a picker can copy it somewhere new every time
+/// (Android does) and a downloaded copy can be renamed (`course (1).zip`).
+/// Two ZIPs with an entry at the same path share a key, which is safe: an
+/// entry is only skipped when its contents are the same, and the same path
+/// is the same lesson.
+String zipEntrySourceKey(String path) => 'zip:${path.replaceAll('\\', '/')}';
 
 String _markdownSourceKey(String path) {
   final normalizedPath = path.replaceAll('\\', '/');
