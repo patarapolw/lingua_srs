@@ -418,6 +418,15 @@ List<RemovedQueueItem> wrapUpQueue({
   return removed;
 }
 
+/// Puts [queue] back as it was before the wrap up in [record]: takes out
+/// the Again copies it added and restores the cards it dropped.
+void undoWrapUpQueue(List<StudyCardItem> queue, WrapUpRecord record) {
+  for (final item in record.added) {
+    queue.remove(item); // StudyCardItem has no ==, so identity
+  }
+  restoreRemovedItems(queue, record.removed);
+}
+
 /// Re-picks the sentence of every card in [queue] from [fromIndex] on that
 /// shows [vocab], when its sentence was deselected from the vocab (or the vocab
 /// had none and now has some). Earlier cards are left as they were answered.
@@ -1224,10 +1233,7 @@ class _StudyViewState extends State<StudyView> {
 
   void _undoWrapUp(WrapUpRecord record) {
     setState(() {
-      for (final item in record.added) {
-        _queue.remove(item); // StudyCardItem has no ==, so identity
-      }
-      restoreRemovedItems(_queue, record.removed);
+      undoWrapUpQueue(_queue, record);
       _wrappedUp = false;
       _currentIndex = min(record.fromIndex, _queue.length);
       _answeredCount = min(_answeredCount, _currentIndex);

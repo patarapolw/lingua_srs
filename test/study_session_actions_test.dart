@@ -229,6 +229,33 @@ void main() {
       expect(identical(queue[2], a), isFalse, reason: 'a new copy');
       expect(words([for (final r in removed) r.item]), ['b']);
     });
+
+    test('undo takes out the added Again copy and restores the rest', () {
+      final a = itemFor('a');
+      final r = itemFor('r')..card.status = SrsStatus.review;
+      // a was answered Again with no copy re-queued; b is new and r is due.
+      final queue = [itemFor('x'), a, itemFor('b'), r];
+      final before = List.of(queue);
+
+      final lengthBefore = queue.length;
+      final removed = wrapUpQueue(
+        queue: queue,
+        fromIndex: 2,
+        againCardIds: {a.card.id},
+        makeDuplicate: (id) => dupOf(queue.lastWhere((i) => i.card.id == id)),
+      );
+      expect(words(queue), ['x', 'a', 'r', 'a']);
+      final record = WrapUpRecord(
+        fromIndex: 2,
+        removed: removed,
+        added: queue.sublist(lengthBefore - removed.length),
+      );
+      expect(record.added, hasLength(1));
+
+      undoWrapUpQueue(queue, record);
+
+      expect(queue, before);
+    });
   });
 
   group('Study session actions', () {
