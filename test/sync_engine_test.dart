@@ -58,6 +58,24 @@ class KeepingStore extends MemoryStore {
   }) => super.apply(deviceId, {...changes}..remove(kept), firstSync: firstSync);
 }
 
+/// Merges its own copy of [merged] into a record pulled on the first sync,
+/// as the app does with a lesson or sentence both devices imported.
+class MergingStore extends MemoryStore {
+  MergingStore(this.merged);
+
+  final SyncRecordKey merged;
+
+  @override
+  Future<void> apply(
+    String deviceId,
+    Map<SyncRecordKey, Map<String, dynamic>?> changes, {
+    bool firstSync = false,
+  }) async {
+    await super.apply(deviceId, changes, firstSync: firstSync);
+    if (firstSync) records.remove(merged);
+  }
+}
+
 class Device {
   Device(
     this.worker,
@@ -74,6 +92,10 @@ class Device {
   final MemoryStore store;
   final tracker = SyncChangeTracker();
 
+  /// Runs at each save of the sync state, after the pull and after the
+  /// push; throwing stops the sync there, as when the app is closed.
+  Future<void> Function()? onSave;
+
   Future<SyncResult> sync() => SyncEngine(
     client: SyncClient(
       endpoint: Uri.parse('https://sync.example.com'),
@@ -85,7 +107,7 @@ class Device {
     store: store,
     tracker: tracker,
     accountCreatedAt: createdAt,
-    save: () async {},
+    save: () async => onSave?.call(),
     clock: () => clock.now,
   ).sync();
 }
@@ -300,6 +322,93 @@ void main() {
       worker.isDeleted('sentence', await cipher.recordId(_sentence)),
       isTrue,
     );
+  });
+
+  group('deletions', () {
+    test('a copy merged on a first sync is not sent as a deletion', () async {
+      const mine = SyncRecordKey('lesson', 'mine');
+      a.store.records[_lesson] = {'title': 'Food'};
+      await a.sync();
+      final joining = Device(worker, cipher, clock, store: MergingStore(mine))
+        ..store.records[mine] = {'title': 'Food'}
+        ..store.records[_sentence] = {'text': 'Hi'};
+
+      clock.now += 1000;
+      final rowsBefore = worker.rows.length;
+      await joining.sync();
+
+      // Only the sentence was new to the server.
+      expect(worker.rows.length, rowsBefore + 1);
+      expect(
+        worker.rows.values.where((row) => row['deleted'] == true),
+        isEmpty,
+      );
+      expect(joining.tracker.records.containsKey(mine), isFalse);
+      expect(joining.tracker.pending, isEmpty);
+    });
+
+    test('a record this device pushed is deleted on the server', () async {
+      a.store.records[_sentence] = {'text': 'Hi'};
+      await a.sync();
+
+      clock.now += 1000;
+      a.store.records.remove(_sentence);
+      await a.sync();
+
+      expect(
+        worker.isDeleted('sentence', await cipher.recordId(_sentence)),
+        isTrue,
+      );
+    });
+
+    test(
+      'a record whose push reply was lost is deleted on the server',
+      () async {
+        a.store.records[_sentence] = {'text': 'Hi'};
+        worker.loseNextReply = true;
+        await expectLater(a.sync(), throwsA(isA<SyncException>()));
+        // The server has it, though this device never heard so.
+        expect(
+          worker.rows.containsKey(
+            'sentence/${await cipher.recordId(_sentence)}',
+          ),
+          isTrue,
+        );
+
+        clock.now += 1000;
+        a.store.records.remove(_sentence);
+        await a.sync();
+
+        expect(
+          worker.isDeleted('sentence', await cipher.recordId(_sentence)),
+          isTrue,
+        );
+      },
+    );
+
+    test('a record the server showed is deleted there, even if this device '
+        'stopped before pushing its own copy', () async {
+      await b.sync();
+      a.store.records[_sentence] = {'text': 'Hi'};
+      await a.sync();
+
+      // b's copy is newer than the server's, so b keeps it, but b stops
+      // after the pull, before pushing it.
+      clock.now += 1000;
+      b.store.records[_sentence] = {'text': 'Hello'};
+      b.onSave = () => throw StateError('closed');
+      await expectLater(b.sync(), throwsStateError);
+
+      clock.now += 1000;
+      b.store.records.remove(_sentence);
+      b.onSave = null;
+      await b.sync();
+
+      expect(
+        worker.isDeleted('sentence', await cipher.recordId(_sentence)),
+        isTrue,
+      );
+    });
   });
 
   test('when both edit offline, the later edit wins on both', () async {
