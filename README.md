@@ -43,7 +43,7 @@ SRS that puts language learning first: custom lessons, lesson-by-lesson vocabula
 - **Pronunciation cues**: optional romanization (RR) and IPA lines for Korean words and sentences, shown on the back of the card.
 - **Adaptive review**:
   - *Again* cards return a few cards later, interleaved with new cards. In addition, *Again* is due again after 1 hour and *Hard* after 12 hours.
-  - Rolling 24-hour limits for reviews and new cards; the short *Again* and *Hard* repeats are never held back by them.
+  - Rolling 24-hour review limit, and a daily new-card limit that refills 16 hours after a batch; the short *Again* and *Hard* repeats are never held back by them.
   - Review recent mistakes across lessons at any time.
   - Reset SRS progress for a lesson or a single word without changing card visibility.
 - **Review controls**:
