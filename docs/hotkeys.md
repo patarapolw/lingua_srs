@@ -15,6 +15,6 @@ Anki-style hotkeys for the study view.
 | `E` | Edit the current card |
 | `B` | **Send to back**: move the card on screen to the end of the session without rating it |
 | `P` | **Suspend** the card on screen (asks first) |
-| `W` | **Wrap up** the session: no more unseen cards, only the *Again* cards already started |
+| `W` | **Wrap up** the session: no more new cards, only the *Again* cards still to clear and the next 5 reviews |
 
 In the AI discussion chat, `Enter` sends a message; `Shift+Enter` or `Ctrl+Enter` adds a new line.

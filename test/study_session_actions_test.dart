@@ -178,6 +178,57 @@ void main() {
 
       expect(queue, before);
     });
+
+    test('keeps the next unseen reviews but drops new cards', () {
+      final seen = [
+        for (final w in ['r1', 'r2', 'r3']) itemFor(w),
+      ];
+      for (final i in seen) {
+        i.card.status = SrsStatus.review;
+      }
+      final r4 = itemFor('r4')..card.status = SrsStatus.learning;
+      // n is new; r1..r4 are reviews; only the first two reviews are kept.
+      final queue = [itemFor('done'), itemFor('n'), ...seen, r4];
+
+      final removed = wrapUpQueue(
+        queue: queue,
+        fromIndex: 1,
+        againCardIds: {},
+        reviewCount: 2,
+      );
+
+      expect(words(queue), ['done', 'r1', 'r2']);
+      expect(words([for (final r in removed) r.item]), ['n', 'r3', 'r4']);
+    });
+
+    test('keeps 5 reviews by default, after the Again cards', () {
+      final a = itemFor('a');
+      final reviews = [
+        for (var i = 1; i <= 7; i++)
+          itemFor('r$i')..card.status = SrsStatus.review,
+      ];
+      final queue = [a, ...reviews.take(2), dupOf(a), ...reviews.skip(2)];
+
+      wrapUpQueue(queue: queue, fromIndex: 1, againCardIds: {a.card.id});
+
+      expect(words(queue), ['a', 'r1', 'r2', 'a', 'r3', 'r4', 'r5']);
+    });
+
+    test('brings back an Again card with no copy left ahead', () {
+      final a = itemFor('a');
+      final queue = [itemFor('x'), a, itemFor('b')];
+
+      final removed = wrapUpQueue(
+        queue: queue,
+        fromIndex: 2,
+        againCardIds: {a.card.id},
+        makeDuplicate: (id) => dupOf(queue.lastWhere((i) => i.card.id == id)),
+      );
+
+      expect(words(queue), ['x', 'a', 'a']);
+      expect(identical(queue[2], a), isFalse, reason: 'a new copy');
+      expect(words([for (final r in removed) r.item]), ['b']);
+    });
   });
 
   group('Study session actions', () {
@@ -404,7 +455,7 @@ void main() {
       expect(find.text('NEW'), findsNothing);
       expect(find.textContaining('(1/1)'), findsOneWidget);
       expect(seeded.fresh.status, SrsStatus.isNew);
-      expect(find.text('Wrapping up: 1 Again card left.'), findsOneWidget);
+      expect(find.text('Wrapping up: 1 mistake left.'), findsOneWidget);
 
       // Let the snackbar close; it covers the rating buttons.
       await tester.pump(const Duration(seconds: 2));
@@ -416,7 +467,7 @@ void main() {
       expect(seeded.fresh.status, SrsStatus.isNew);
     });
 
-    testWidgets('wrap up with no Again card ends the session at once', (
+    testWidgets('wrap up with no Again card keeps the due review', (
       tester,
     ) async {
       final provider = await loadedProvider(tester);
@@ -426,8 +477,36 @@ void main() {
 
       await chooseFromMenu(tester, 'Wrap up session');
 
+      // 사과 is due and stays on screen; the new 바나나 is dropped.
+      expect(find.text('Session Complete!'), findsNothing);
+      expect(find.text('NEW'), findsNothing);
+      expect(find.textContaining('(1/1)'), findsOneWidget);
+      expect(find.text('Wrapping up: 1 review left.'), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+
+      await reveal(tester);
+      await rate(tester, 'Good');
       expect(find.text('Session Complete!'), findsOneWidget);
-      expect(seeded.due.repetitions, repetitions);
+      expect(seeded.due.repetitions, greaterThan(repetitions));
+      expect(seeded.fresh.status, SrsStatus.isNew);
+    });
+
+    testWidgets('wrap up with only new cards left ends the session at once', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      final seeded = await seed(tester, provider);
+      await openStudy(tester, provider, seeded.lesson);
+
+      await reveal(tester);
+      await rate(tester, 'Good');
+      expect(find.text('NEW'), findsOneWidget);
+
+      await chooseFromMenu(tester, 'Wrap up session');
+
+      expect(find.text('Session Complete!'), findsOneWidget);
       expect(seeded.fresh.status, SrsStatus.isNew);
     });
   });

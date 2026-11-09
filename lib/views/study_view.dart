@@ -311,11 +311,17 @@ class SuspendRecord implements SessionUndoEntry {
   });
 }
 
-/// The session was wrapped up: the unseen cards it dropped.
+/// The session was wrapped up: the unseen cards it dropped, and the copies
+/// of Again cards it added back.
 class WrapUpRecord implements SessionUndoEntry {
   final int fromIndex;
   final List<RemovedQueueItem> removed;
-  WrapUpRecord({required this.fromIndex, required this.removed});
+  final List<StudyCardItem> added;
+  WrapUpRecord({
+    required this.fromIndex,
+    required this.removed,
+    this.added = const [],
+  });
 }
 
 /// Moves the unanswered card at [index] to the end of [queue], unrated.
@@ -371,14 +377,46 @@ List<RemovedQueueItem> removeCardFromSession({
   return _removeFrom(queue, fromIndex, (i) => i.card.id == card.id);
 }
 
-/// Wraps up a session: from [fromIndex] (the first unanswered position) on,
-/// keeps only the re-queued copies of cards rated Again this session, and
-/// drops every card not yet seen. Mutates [queue].
+/// How many unseen due reviews a wrapped-up session still shows.
+const wrapUpReviewCount = 5;
+
+/// Wraps up a session. From [fromIndex] (the first unanswered position) on,
+/// it keeps the re-queued copies of cards rated Again this session, so the
+/// mistakes can still be cleared, and the next [reviewCount] unseen reviews
+/// (cards that are not new). It drops the other unseen cards, new cards
+/// included. A card in [againCardIds] with no copy left ahead gets one at
+/// the end from [makeDuplicate], when given. Mutates [queue].
 List<RemovedQueueItem> wrapUpQueue({
   required List<StudyCardItem> queue,
   required int fromIndex,
   required Set<String> againCardIds,
-}) => _removeFrom(queue, fromIndex, (i) => !againCardIds.contains(i.card.id));
+  int reviewCount = wrapUpReviewCount,
+  StudyCardItem Function(String cardId)? makeDuplicate,
+}) {
+  final from = max(fromIndex, 0);
+  final keptReviews = <String>{};
+  for (var i = from; i < queue.length; i++) {
+    final card = queue[i].card;
+    if (keptReviews.length >= reviewCount) break;
+    if (againCardIds.contains(card.id) || card.status == SrsStatus.isNew) {
+      continue;
+    }
+    keptReviews.add(card.id);
+  }
+  final removed = _removeFrom(
+    queue,
+    from,
+    (i) =>
+        !againCardIds.contains(i.card.id) && !keptReviews.contains(i.card.id),
+  );
+  if (makeDuplicate != null) {
+    final ahead = {for (final i in queue.skip(from)) i.card.id};
+    for (final id in againCardIds) {
+      if (!ahead.contains(id)) queue.add(makeDuplicate(id));
+    }
+  }
+  return removed;
+}
 
 /// Re-picks the sentence of every card in [queue] from [fromIndex] on that
 /// shows [vocab], when its sentence was deselected from the vocab (or the vocab
@@ -1142,33 +1180,53 @@ class _StudyViewState extends State<StudyView> {
   void _wrapUp() {
     if (_wrappedUp || _queue.isEmpty) return;
     context.read<AudioService>().stop();
+    final provider = context.read<AppProvider>();
     final from = _answeredCount;
     final onScreen = _currentIndex < _queue.length
         ? _queue[_currentIndex]
         : null;
     setState(() {
+      final lengthBefore = _queue.length;
       final removed = wrapUpQueue(
         queue: _queue,
         fromIndex: from,
         againCardIds: _againCardIds,
+        makeDuplicate: (cardId) {
+          final source = _queue.lastWhere((i) => i.card.id == cardId);
+          return StudyCardItem(
+            vocab: source.vocab,
+            card: source.card,
+            lesson: source.lesson,
+            sentence: provider.getRandomSentenceForVocab(source.vocab),
+          );
+        },
       );
-      _undoStack.add(WrapUpRecord(fromIndex: from, removed: removed));
+      final added = _queue.sublist(lengthBefore - removed.length);
+      _undoStack.add(
+        WrapUpRecord(fromIndex: from, removed: removed, added: added),
+      );
       _wrappedUp = true;
       if (_currentIndex >= _queue.length || _queue[_currentIndex] != onScreen) {
         _isAnswerRevealed = false;
       }
     });
     _triggerPreload(_currentIndex);
-    final left = _queue.length - from;
-    if (left > 0) {
-      _showSnack(
-        'Wrapping up: $left Again ${left == 1 ? 'card' : 'cards'} left.',
-      );
+    final mistakes = _againCardIds.length;
+    final reviews = distinctCardCount(_queue.sublist(from)) - mistakes;
+    final parts = [
+      if (mistakes > 0) '$mistakes ${mistakes == 1 ? 'mistake' : 'mistakes'}',
+      if (reviews > 0) '$reviews ${reviews == 1 ? 'review' : 'reviews'}',
+    ];
+    if (parts.isNotEmpty) {
+      _showSnack('Wrapping up: ${parts.join(' and ')} left.');
     }
   }
 
   void _undoWrapUp(WrapUpRecord record) {
     setState(() {
+      for (final item in record.added) {
+        _queue.remove(item); // StudyCardItem has no ==, so identity
+      }
       restoreRemovedItems(_queue, record.removed);
       _wrappedUp = false;
       _currentIndex = min(record.fromIndex, _queue.length);
