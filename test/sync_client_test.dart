@@ -338,6 +338,37 @@ void main() {
       expect(accepted, 250);
     });
 
+    test('keeps each push body under the Worker\'s 1 MB limit', () async {
+      final batchSizes = <int>[];
+      final sent = <int>[];
+      final client = _syncClient(
+        client: MockClient((request) async {
+          // The Worker answers 413 too_large past 1 MB.
+          if (utf8.encode(request.body).length > 1024 * 1024) {
+            return _json({'error': 'too_large'}, 413);
+          }
+          final records =
+              (jsonDecode(request.body) as Map<String, dynamic>)['records']
+                  as List;
+          batchSizes.add(records.length);
+          return _json({'accepted': records.length});
+        }),
+      );
+
+      // Packs are close to the 32 KB record limit, so 100 of them are ~3 MB.
+      final blob = 'x' * 30000;
+      final accepted = await client.push([
+        for (var i = 0; i < 100; i++)
+          SyncRecord(kind: 'pack', id: '$i', updatedAt: i, data: {'b': blob}),
+      ], onBatch: sent.add);
+
+      expect(accepted, 100);
+      expect(batchSizes.length, greaterThan(3));
+      expect(batchSizes.reduce((a, b) => a + b), 100);
+      expect(sent.last, 100);
+      expect(sent, orderedEquals([...sent]..sort()));
+    });
+
     test('sends nothing when there is nothing to push', () async {
       var requests = 0;
       final client = _syncClient(

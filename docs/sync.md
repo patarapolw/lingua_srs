@@ -244,7 +244,7 @@ Changes are checked by `AppProvider.trackSyncChanges`. The sync engine calls it 
    - changed on this device too: the newer `updatedAt` wins, except AI discussions, whose messages are merged and pushed, and a sentence this device edited that another device deleted, whose edit is kept and pushed with a newer `updatedAt` (another device deletes a sentence when it merges duplicates, #90);
    - otherwise applied.
 5. Applies the pulled records through a `SyncRecordStore`, notes what they now hash to so they are not pushed back, and saves the cursor.
-6. Pushes what is still pending: packs when there are many (see Packs), whole records, or parts followed by their head, deletions as tombstones, and tombstones for parts a record no longer needs. A record counts as pushed once the batch holding it, and all its parts, reaches the server, so a push stopped partway goes on from there next time.
+6. Pushes what is still pending: packs when there are many (see Packs), whole records, or parts followed by their head, deletions as tombstones, and tombstones for parts a record no longer needs. A record counts as pushed once the batch holding it, and all its parts, reaches the server, so a push stopped partway goes on from there next time. The app sends at most 100 records and about 900 KB a request, under the Worker's 1 MB body limit; packs are near 32 KB each, so a batch of them holds about 28.
 
 ### Applying pulled records
 

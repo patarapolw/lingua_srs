@@ -47,6 +47,10 @@ class FakeWorker {
         });
       case ('POST', '/v1/changes'):
         pushRequests++;
+        // The Worker's body limit for a push.
+        if (utf8.encode(request.body).length > 1024 * 1024) {
+          return json({'error': 'too_large'}, 413);
+        }
         final body = jsonDecode(request.body) as Map<String, dynamic>;
         final count = (body['records'] as List).length;
         // The Worker's limits: 100 records a push, 32 KB of data each.
