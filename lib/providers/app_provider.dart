@@ -1254,7 +1254,10 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
           if (choice == LessonClashChoice.keepExisting) {
             // A lesson saved before file names were kept takes the file's,
             // so importing that file again finds it without asking.
-            target.fileName ??= parsed.lesson.fileName;
+            if (target.fileName == null) {
+              target.fileName = parsed.lesson.fileName;
+              target.fileFolder = parsed.lesson.fileFolder;
+            }
             importedLessons.add(target);
             onProgress?.call(index + 1, parsedLessons.length);
             continue;
@@ -1347,8 +1350,10 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       if (parsed.lesson.markdownContent.isNotEmpty) {
         existingLesson.markdownContent = parsed.lesson.markdownContent;
       }
-      existingLesson.fileName =
-          parsed.lesson.fileName ?? existingLesson.fileName;
+      if (parsed.lesson.fileName != null) {
+        existingLesson.fileName = parsed.lesson.fileName;
+        existingLesson.fileFolder = parsed.lesson.fileFolder;
+      }
       _mergeImportedLesson(existingLesson, parsed, sentenceIndex);
     } else {
       if (vocabIndex == null) {
@@ -1510,7 +1515,10 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     if (primary.markdownContent.trim().isEmpty) {
       primary.markdownContent = other.markdownContent;
     }
-    primary.fileName ??= other.fileName;
+    if (primary.fileName == null) {
+      primary.fileName = other.fileName;
+      primary.fileFolder = other.fileFolder;
+    }
     _lessons.removeWhere((lesson) => identical(lesson, other));
     if (_selectedLessonId == other.id) _selectedLessonId = primary.id;
     if (primary.id == other.id) return false;
@@ -1528,8 +1536,13 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     final first = <String, Lesson>{};
     final merges = <(Lesson, Lesson)>[];
     for (final lesson in _lessons) {
-      final key = [for (final part in lesson.virtualPath) part.toLowerCase()]
-          .join('/');
+      // As [_sameVirtualPath]: the app folders and the file name, so a
+      // lesson saved before original folder names were kept compares the
+      // same as one imported since.
+      final key = [
+        for (final part in [...lesson.folderPath, lesson.virtualFileName])
+          part.toLowerCase(),
+      ].join('/');
       final earlier = first[key];
       if (earlier == null) {
         first[key] = lesson;

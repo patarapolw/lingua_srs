@@ -366,6 +366,9 @@ class YamlParserService {
       vocabularies: vocabList,
       markdownContent: markdownContent,
       fileName: _markdownFileName(sourcePath),
+      fileFolder: _markdownFileName(sourcePath) == null
+          ? null
+          : _folderOf(sourcePath!),
     );
 
     if (missingEmphasis.isNotEmpty) {
@@ -657,6 +660,17 @@ class YamlParserService {
     if (path == null) return null;
     final name = path.split(RegExp(r'[/\\]')).last.trim();
     return name.toLowerCase().endsWith('.md') && name.length > 3 ? name : null;
+  }
+
+  /// The folders of [path], `/`-separated (`unit-2/lesson-26.md` gives
+  /// `unit-2`), or null for a file at the top.
+  static String? _folderOf(String path) {
+    final parts = path
+        .split(RegExp(r'[/\\]'))
+        .map((part) => part.trim())
+        .where((part) => part.isNotEmpty && part != '.')
+        .toList();
+    return parts.length < 2 ? null : parts.take(parts.length - 1).join('/');
   }
 
   static bool hasVocabularyFrontmatter(String markdown) {

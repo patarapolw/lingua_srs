@@ -34,8 +34,9 @@ class LessonLink {
   static final _otherScheme = RegExp(r'^[a-zA-Z][a-zA-Z0-9+.-]*:');
 
   /// Reads a tapped link: a `lingua-lesson:` link, a `#heading` link, or a
-  /// relative link to a `.md` file. Returns null for any other link, such as
-  /// a web address.
+  /// relative link to a lesson file or its page (see [_isLessonPath]), so the
+  /// links that work on a site built from the lesson folder work here too.
+  /// Returns null for any other link, such as a web address.
   static LessonLink? fromHref(String href) {
     if (href.startsWith('#')) {
       final heading = _decode(href.substring(1)).trim();
@@ -48,7 +49,9 @@ class LessonLink {
       final query = path.indexOf('?');
       if (query >= 0) path = path.substring(0, query);
       path = _decode(path).trim();
-      if (!path.toLowerCase().endsWith('.md')) return null;
+      if (!_isLessonPath(path)) return null;
+      // A folder, as a site links to its index page.
+      if (path.endsWith('/')) path = '${path}index.md';
       final heading = hash < 0 ? '' : _decode(href.substring(hash + 1)).trim();
       return LessonLink(file: path, heading: heading.isEmpty ? null : heading);
     }
@@ -67,6 +70,21 @@ class LessonLink {
     final heading = param('heading');
     if (lesson == null && heading == null) return null;
     return LessonLink(lesson: lesson, heading: heading);
+  }
+
+  /// Whether [path], a link with no scheme, can name a lesson file the way a
+  /// site built from the same folder links to it: `lesson-26.md`, the page
+  /// it becomes (`lesson-26.html`, or `lesson-26` with no extension), or a
+  /// folder (`unit-2/`) for its `index.md`. Other files, such as
+  /// `worksheet.pdf`, are not lessons.
+  static bool _isLessonPath(String path) {
+    if (path.isEmpty || path.startsWith('//')) return false;
+    if (path.endsWith('/')) return true;
+    final name = path.substring(path.lastIndexOf('/') + 1).toLowerCase();
+    if (name.isEmpty || name == '.' || name == '..') return false;
+    final dot = name.lastIndexOf('.');
+    if (dot <= 0) return true;
+    return const {'.md', '.html', '.htm'}.contains(name.substring(dot));
   }
 
   static String _decode(String text) {
@@ -216,7 +234,7 @@ class LessonLink {
     String file, {
     required Lesson from,
   }) {
-    final path = file.startsWith('/') ? <String>[] : [...from.folderPath];
+    final path = file.startsWith('/') ? <String>[] : [...from.virtualFolder];
     for (final part in file.split(RegExp(r'[/\\]'))) {
       if (part.trim().isEmpty || part == '.') continue;
       if (part == '..') {
@@ -236,7 +254,7 @@ class LessonLink {
         _fileKey(lesson.virtualFileName) == name ||
         _key(lesson.displayTitle) == name;
     bool inFolder(Lesson lesson) {
-      final lessonFolder = lesson.folderPath;
+      final lessonFolder = lesson.virtualFolder;
       if (lessonFolder.length != folder.length) return false;
       for (var i = 0; i < folder.length; i++) {
         if (_key(lessonFolder[i]) != folder[i]) return false;
@@ -264,19 +282,13 @@ class LessonLink {
     return '[$label](<$path>)';
   }
 
-  /// A name as folder import would write it, for loose comparison: lower
-  /// case, with every run of other characters than letters and digits made
-  /// one space (`unit-2`, `Unit 2` and `unit_2` are the same).
-  static String _key(String name) =>
-      composeHangul(name)
-          .toLowerCase()
-          .replaceAll(RegExp(r'[^\p{L}\p{N}]+', unicode: true), ' ')
-          .trim();
+  /// See [looseNameKey].
+  static String _key(String name) => looseNameKey(name);
 
+  /// [name] without `.md`, `.html` or `.htm`, as [_key]: a lesson's file
+  /// and the page a site makes of it compare the same.
   static String _fileKey(String name) => _key(
-    name.toLowerCase().endsWith('.md')
-        ? name.substring(0, name.length - 3)
-        : name,
+    name.replaceFirst(RegExp(r'\.(md|html?)$', caseSensitive: false), ''),
   );
 
   /// Of [lessons], the one sharing the most leading folders with [from]; the

@@ -18,7 +18,13 @@ class Lesson {
   /// in the app; see [virtualFileName].
   String? fileName;
 
-  /// [title], [unitTitle] and [fileName] are kept with Korean syllables
+  /// The folders that file was in, relative to the folder or ZIP imported
+  /// (`unit-2/grammar`), with their names as they were. The app shows them
+  /// renamed (`Unit 2 › Grammar`); see [virtualFolder]. Null at the top, or
+  /// for lessons made in the app.
+  String? fileFolder;
+
+  /// [title], [unitTitle], [fileName] and [fileFolder] are kept with Korean syllables
   /// composed ([composeHangul]), so names from a Mac, which can store them as
   /// separate jamo, match the same names from anywhere else. Every lesson is
   /// made here, whether parsed, loaded, synced or restored.
@@ -31,10 +37,14 @@ class Lesson {
     List<VocabItem>? vocabularies,
     this.markdownContent = '',
     String? fileName,
+    String? fileFolder,
   }) : id = id ?? const Uuid().v4(),
        title = composeHangul(title),
        unitTitle = unitTitle == null ? null : composeHangul(unitTitle),
        fileName = fileName == null ? null : composeHangul(fileName),
+       fileFolder = fileFolder == null || fileFolder.isEmpty
+           ? null
+           : composeHangul(fileFolder),
        vocabularies = vocabularies ?? [];
 
   /// Folder segments containing this lesson, from [unitTitle] plus any leading
@@ -62,16 +72,33 @@ class Lesson {
     return titleParts.isEmpty ? title : titleParts.last;
   }
 
-  /// The lesson's file name in its virtual folder ([folderPath]): the file it
-  /// was imported from, or its title with `.md`, made safe as a file name.
+  /// The folders of the lesson's virtual path: those of the file it was
+  /// imported from ([fileFolder]), with their names as they were, while the
+  /// lesson is still in the app folders they were imported as; otherwise,
+  /// such as after a move, its app folders ([folderPath]).
+  ///
+  /// Folder import turns `unit-2` into `Unit 2` and `past_tense` into
+  /// `Past Tense`, so a folder counts as the same when [looseNameKey] says so.
+  List<String> get virtualFolder {
+    final app = folderPath;
+    final original = fileFolder?.split('/') ?? const <String>[];
+    if (original.isEmpty || original.length != app.length) return app;
+    for (var i = 0; i < app.length; i++) {
+      if (looseNameKey(original[i]) != looseNameKey(app[i])) return app;
+    }
+    return original;
+  }
+
+  /// The lesson's file name in its virtual folder ([virtualFolder]): the file
+  /// it was imported from, or its title with `.md`, made safe as a file name.
   String get virtualFileName =>
       safePathSegment(fileName ?? '${safePathSegment(displayTitle)}.md');
 
-  /// [folderPath] followed by [virtualFileName], each made safe as a file
+  /// [virtualFolder] followed by [virtualFileName], each made safe as a file
   /// name: where `.md` links between lessons look for it, and where export
   /// writes it.
   List<String> get virtualPath => [
-    ...folderPath.map(safePathSegment),
+    ...virtualFolder.map(safePathSegment),
     virtualFileName,
   ];
 
@@ -140,6 +167,7 @@ class Lesson {
     'targetLanguage': targetLanguage,
     'nativeLanguage': nativeLanguage,
     'fileName': ?fileName,
+    'fileFolder': ?fileFolder,
     'vocabularies': vocabularies.map((v) => v.toJson()).toList(),
   };
 
@@ -151,6 +179,7 @@ class Lesson {
     nativeLanguage: json['nativeLanguage'] as String? ?? 'en',
     markdownContent: json['markdownContent'] as String? ?? '',
     fileName: json['fileName'] as String?,
+    fileFolder: json['fileFolder'] as String?,
     vocabularies:
         (json['vocabularies'] as List<dynamic>?)
             ?.map(
@@ -162,6 +191,15 @@ class Lesson {
 }
 
 const hierarchySeparator = '::';
+
+/// [name] for loose comparison: Korean composed, lower case, and every run
+/// of other characters than letters and digits made one space, so `unit-2`,
+/// `Unit 2` and `unit_2` are the same, as folder import names folders.
+String looseNameKey(String name) =>
+    composeHangul(name)
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^\p{L}\p{N}]+', unicode: true), ' ')
+        .trim();
 
 /// [value] as one file or folder name: characters that are not allowed in
 /// one (`/`, `:`, `?`, …) become `_`, and trailing dots and spaces go.

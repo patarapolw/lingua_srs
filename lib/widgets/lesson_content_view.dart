@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/scheduler.dart';
 
+import '../models/lesson.dart' show looseNameKey;
 import '../services/lesson_links.dart';
 import 'markdown_content.dart';
 
@@ -30,7 +31,8 @@ class LessonContent {
   const LessonContent(this.chunks, this.headings);
 
   /// The heading a link names: by its [LessonHeading.anchor] first, then by
-  /// its text (the first such heading). Case does not matter.
+  /// its text (the first such heading), then by the letters and digits of
+  /// its text. Case does not matter.
   LessonHeading? headingFor(String target) {
     final wanted = target.trim().toLowerCase();
     if (wanted.isEmpty) return null;
@@ -39,6 +41,14 @@ class LessonContent {
     }
     for (final heading in headings) {
       if (LessonLink.headingMatches(heading.text, target)) return heading;
+    }
+    // An anchor another tool made, such as a site generator's `_1-intro`
+    // for `1. Intro`: the same letters and digits.
+    final loose = looseNameKey(target);
+    for (final heading in headings) {
+      if (loose.isNotEmpty && looseNameKey(heading.text) == loose) {
+        return heading;
+      }
     }
     return null;
   }
