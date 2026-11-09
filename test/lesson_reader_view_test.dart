@@ -153,4 +153,66 @@ void main() {
     expect(find.byTooltip('Ask AI about lesson'), findsNothing);
     expect(find.byTooltip('Edit Markdown'), findsOneWidget);
   });
+
+  group('lesson links', () {
+    Future<(Lesson, Lesson)> openLinked(WidgetTester tester) async {
+      final provider = await loadedProvider(tester);
+      const vocab = '---\nvocabulary:\n---\n';
+      final target = (await tester.runAsync(
+        () => provider.importYaml(
+          '$vocab# Lesson 26\n\n## Past tense\n\nPast text.\n',
+          defaultTitle: 'Lesson 26',
+          defaultUnitTitle: 'Unit 2',
+        ),
+      ))!;
+      final source = (await tester.runAsync(
+        () => provider.importYaml(
+          '$vocab# Start\n\n[[Unit 2::Lesson 26#Past tense]]\n\n'
+          '[[Missing lesson]]\n',
+          defaultTitle: 'Start',
+        ),
+      ))!;
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AppProvider>.value(value: provider),
+            ChangeNotifierProvider<AudioService>(
+              create: (_) => _SilentAudioService(),
+            ),
+          ],
+          child: MaterialApp(home: LessonReaderView(lessonId: source.id)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      return (source, target);
+    }
+
+    testWidgets('opens the linked lesson at its heading', (tester) async {
+      final (_, target) = await openLinked(tester);
+
+      await tester.tap(
+        find.text('Unit 2 › Lesson 26 › Past tense', findRichText: true),
+      );
+      await tester.pumpAndSettle();
+
+      final reader = tester.widget<LessonReaderView>(
+        find.byType(LessonReaderView).last,
+      );
+      expect(reader.lessonId, target.id);
+      expect(reader.initialHeading, 'Past tense');
+      expect(
+        find.textContaining('Past text.', findRichText: true),
+        findsWidgets,
+      );
+    });
+
+    testWidgets('says when the linked lesson does not exist', (tester) async {
+      await openLinked(tester);
+
+      await tester.tap(find.text('Missing lesson', findRichText: true));
+      await tester.pump();
+
+      expect(find.text('No lesson named “Missing lesson”.'), findsOneWidget);
+    });
+  });
 }

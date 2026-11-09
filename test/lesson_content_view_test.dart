@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:lingua_srs/services/lesson_links.dart';
 import 'package:lingua_srs/widgets/lesson_content_view.dart';
 
 void main() {
@@ -98,6 +99,15 @@ void main() {
       expect(text, contains('<!-- chunk -->'));
     });
 
+    test('turns [[lesson links]] into Markdown links', () {
+      final text = LessonContent.preprocess(
+        '[[Lesson 26#Past tense]]\n\n```\n[[Lesson 26]]\n```',
+      );
+
+      expect(text, contains('[Lesson 26 › Past tense](<lingua-lesson:'));
+      expect(text, contains('```\n[[Lesson 26]]\n```'));
+    });
+
     test('does not alter fenced code content', () {
       final text = LessonContent.preprocess('```\n<YouTube id="x" />\n```');
 
@@ -181,5 +191,78 @@ void main() {
       find.byType(MarkdownBody),
     );
     expect(markdownBox.size.width, greaterThan(700));
+  });
+
+  group('lesson links', () {
+    final markdown = [
+      '[[#Section 39]]',
+      '[[Other lesson#Part two|other]]',
+      for (var i = 0; i < 40; i++) '# Section $i\n\n${'word ' * 300}',
+    ].join('\n\n');
+
+    testWidgets('a [[#Heading]] link scrolls to the heading', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: LessonContentView(markdown: markdown)),
+        ),
+      );
+      expect(
+        find.textContaining('Section 39', findRichText: true),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Section 39', findRichText: true));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('Section 0', findRichText: true),
+        findsNothing,
+      );
+      expect(
+        find.textContaining('Section 39', findRichText: true),
+        findsWidgets,
+      );
+    });
+
+    testWidgets('a link to another lesson goes to onLessonLink', (
+      tester,
+    ) async {
+      final links = <LessonLink>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: LessonContentView(
+              markdown: markdown,
+              onLessonLink: links.add,
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('other', findRichText: true));
+      await tester.pump();
+
+      expect(links.single.lesson, 'Other lesson');
+      expect(links.single.heading, 'Part two');
+    });
+
+    testWidgets('opens at initialHeading', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: LessonContentView(
+              markdown: markdown,
+              initialHeading: 'section-39',
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('Section 0', findRichText: true),
+        findsNothing,
+      );
+    });
   });
 }

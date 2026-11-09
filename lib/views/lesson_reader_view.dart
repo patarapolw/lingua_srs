@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/lesson.dart';
 import '../providers/app_provider.dart';
 import '../services/lesson_ai_prompt.dart';
+import '../services/lesson_links.dart';
 import '../widgets/lesson_content_view.dart';
 import '../widgets/markdown_text_field.dart';
 import 'ai_discussion_dialog.dart';
@@ -12,7 +13,15 @@ import 'lesson_detail_view.dart';
 class LessonReaderView extends StatefulWidget {
   final String lessonId;
 
-  const LessonReaderView({super.key, required this.lessonId});
+  /// Text or anchor of a heading to scroll to on opening, for a link such as
+  /// `[[Lesson 26#Past tense]]`.
+  final String? initialHeading;
+
+  const LessonReaderView({
+    super.key,
+    required this.lessonId,
+    this.initialHeading,
+  });
 
   @override
   State<LessonReaderView> createState() => _LessonReaderViewState();
@@ -111,7 +120,49 @@ class _LessonReaderViewState extends State<LessonReaderView> {
               markdown: selectedLesson.markdownContent,
               content: content,
               controller: _contentController,
+              initialHeading: widget.initialHeading,
+              onLessonLink: (link) =>
+                  _openLessonLink(context, provider, selectedLesson, link),
             ),
+    );
+  }
+
+  /// Opens the lesson a `[[Lesson#Heading]]` link names, at its heading, or
+  /// scrolls to the heading if the link names this lesson.
+  void _openLessonLink(
+    BuildContext context,
+    AppProvider provider,
+    Lesson current,
+    LessonLink link,
+  ) {
+    final messenger = ScaffoldMessenger.of(context);
+    final target = LessonLink.resolveLesson(
+      provider.lessons,
+      link.lesson!,
+      from: current,
+    );
+    if (target == null) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('No lesson named “${link.lesson}”.')),
+      );
+      return;
+    }
+    final heading = link.heading;
+    if (target.id == current.id) {
+      if (heading != null &&
+          !_contentController.scrollToHeadingNamed(heading)) {
+        messenger.showSnackBar(
+          SnackBar(content: Text('No heading “$heading” in this lesson.')),
+        );
+      }
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            LessonReaderView(lessonId: target.id, initialHeading: heading),
+      ),
     );
   }
 

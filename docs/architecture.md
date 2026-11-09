@@ -27,6 +27,7 @@ lingua_srs/
 │   │   ├── card_preview.dart          # Picks the new cards a preview shows; study_view shuffles and shows them
 │   │   ├── study_queue_order.dart     # Study queue order: part-of-speech interleaving, new cards mixed into reviews
 │   │   ├── yaml_parser_service.dart   # Markdown/YAML lesson & sentence parser
+│   │   ├── lesson_links.dart          # `[[Lesson#Heading]]` links in lesson Markdown and the lessons they name
 │   │   ├── audio_service.dart         # Audio playback, TTS and offline caching
 │   │   ├── tts_text.dart              # Splits a `zh-TW:`-style locale prefix off TTS text
 │   │   ├── locale_names.dart          # English names of locale tags (`zh-TW` → Chinese (Taiwan))

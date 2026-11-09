@@ -90,6 +90,24 @@ Everything up to the end marker stays in one chunk, however long.
 <!-- chunk:end -->
 ```
 
+### Links between lessons and to sections
+
+Link to another lesson, or to a section, by its name in double brackets. The link reads as what it names, so the source stays readable as plain text:
+
+```markdown
+See [[Lesson 26]] for the vocabulary.
+The past tense is in [[Unit 2::Lesson 26#Past tense]].
+Review [[#Greetings]] before you start.
+[[Lesson 26#Past tense|the past-tense table]]
+```
+
+- **`[[Lesson 26]]`** opens the lesson titled *Lesson 26*. When two lessons share a title, add folders in front with `::` (`[[Unit 2::Lesson 26]]`), the same way lesson names are written; otherwise the one nearest in the folder tree to the lesson with the link opens. Case does not matter.
+- **`#Heading`** after a lesson name opens that lesson at the heading. On its own (`[[#Greetings]]`) it scrolls to the heading in the same lesson. Write the heading's text as it reads; case and punctuation do not matter, so `[[#Hello, World!]]` and `[[#hello-world]]` find the same heading.
+- **`|label`** sets the text shown. Without it, the link shows its target, with `›` between parts: `Unit 2 › Lesson 26 › Past tense`.
+- Plain Markdown links to a heading in the same lesson work too: `[greetings](#greetings)` or `[greetings](<#Greetings>)`.
+
+A link to a lesson that does not exist says so when tapped. Brackets inside code (`` `[[...]]` ``) are left as they are.
+
 ## Importing
 
 The import button stays disabled until the input can be previewed. Fix any displayed parse errors, review the preview, then import.
