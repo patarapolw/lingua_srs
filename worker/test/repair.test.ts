@@ -204,28 +204,61 @@ describe('checkDatabase', () => {
   });
 });
 
+describe('the daily write limit', () => {
+  it("reports accounts that reached today's limit", async () => {
+    await exec(
+      account(EMAIL),
+      account(OTHER_EMAIL),
+      `INSERT INTO usage (scope, day, n) VALUES ('w:${EMAIL}', '2026-11-03', 2000)`,
+      `INSERT INTO usage (scope, day, n) VALUES ('w:${OTHER_EMAIL}', '2026-11-03', 1999)`,
+    );
+
+    const findings = await checkDatabase(sql, START);
+    expect(found(findings)).toEqual({ write_limit_reached: 1 });
+    expect(findings[0].samples).toEqual([{ email: EMAIL, day: '2026-11-03', writes: 2000 }]);
+    expect(findings[0].repairable).toBe(false);
+
+    // A Worker with a lower MAX_WRITES_PER_DAY.
+    expect(found(await checkDatabase(sql, START, { writeLimit: 500 }))).toEqual({ write_limit_reached: 2 });
+    // Nothing is changed.
+    expect(await repairDatabase(sql, findings, START)).toEqual([]);
+  });
+
+  it('does not count yesterday', async () => {
+    await exec(account(EMAIL), `INSERT INTO usage (scope, day, n) VALUES ('w:${EMAIL}', '2026-11-03', 2500)`);
+
+    expect(found(await checkDatabase(sql, START + DAY))).toEqual({ old_usage: 1 });
+  });
+});
+
 describe('stats', () => {
-  it('counts records and bytes per account and kind', async () => {
+  it('counts records, packs, bytes and writes per account and kind', async () => {
     await exec(
       account(EMAIL),
       account(OTHER_EMAIL),
       record(EMAIL, 'a', 1),
       record(EMAIL, 'b', 2, { deleted: 1, data: '{}' }),
       record(EMAIL, 'c', 3, { kind: 'card', updatedAt: START }),
+      record(EMAIL, 'p', 4, { kind: 'pack' }),
+      `INSERT INTO usage (scope, day, n) VALUES ('w:${EMAIL}', '2026-11-03', 42)`,
+      `INSERT INTO usage (scope, day, n) VALUES ('w:${EMAIL}', '2026-11-02', 7)`,
     );
 
-    const accounts = await accountStats(sql);
-    expect(accounts.map((row) => [row.email, row.records, row.deleted, row.max_seq])).toEqual([
-      [OTHER_EMAIL, 0, 0, null],
-      [EMAIL, 3, 1, 3],
+    const accounts = await accountStats(sql, START);
+    expect(
+      accounts.map((row) => [row.email, row.records, row.deleted, row.max_seq, row.packs, row.writes_today]),
+    ).toEqual([
+      [OTHER_EMAIL, 0, 0, null, 0, 0],
+      [EMAIL, 4, 1, 4, 1, 42],
     ]);
     expect(accounts[1].last_updated_at).toBe(START);
-    expect(accounts[1].bytes).toBe(ENVELOPE.length * 2 + 2);
-    expect(await accountStats(sql, EMAIL)).toHaveLength(1);
+    expect(accounts[1].bytes).toBe(ENVELOPE.length * 3 + 2);
+    expect(await accountStats(sql, START, EMAIL)).toHaveLength(1);
 
     expect(await kindStats(sql, EMAIL)).toEqual([
       { kind: 'card', records: 1, deleted: 0, bytes: ENVELOPE.length },
       { kind: 'lesson', records: 2, deleted: 1, bytes: ENVELOPE.length + 2 },
+      { kind: 'pack', records: 1, deleted: 0, bytes: ENVELOPE.length },
     ]);
   });
 });

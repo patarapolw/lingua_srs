@@ -49,10 +49,13 @@ interface Check {
   title: string;
   advice: string;
   /** Selects the rows found: a whole SELECT, without LIMIT. */
-  select(now: number): string;
+  select(now: number, writeLimit: number): string;
   /** Repairs them; returns rows changed. Absent when only a person can decide. */
   repair?(sql: SqlRunner, now: number): Promise<number>;
 }
+
+/** The Worker's default MAX_WRITES_PER_DAY. */
+export const DEFAULT_WRITE_LIMIT = 2000;
 
 export const SAMPLE_LIMIT = 5;
 
@@ -74,6 +77,22 @@ function utcDay(now: number): string {
 
 const CHECKS: Check[] = [
   {
+    id: 'write_limit_reached',
+    severity: 'warning',
+    title: "Accounts at today's write limit",
+    advice:
+      'The account has written as many records today as MAX_WRITES_PER_DAY ' +
+      'allows, so its pushes stop with 429 quota_exceeded until midnight UTC. ' +
+      'The app keeps what got through and sends the rest then. A first sync ' +
+      'goes in packs and should not get here, so this account pushes unusually ' +
+      'much: compare its records with --stats --email. To let it finish today, ' +
+      "delete today's counter (docs/admin.md). Not repaired: the limit is " +
+      'there to keep the free plan.',
+    select: (now, writeLimit) =>
+      "SELECT substr(scope, 3) AS email, day, n AS writes FROM usage WHERE scope LIKE 'w:%' " +
+      `AND day = ${sqlString(utcDay(now))} AND n >= ${writeLimit}`,
+  },
+  {
     id: 'duplicate_seq',
     severity: 'error',
     title: 'Records sharing a cursor position (seq), or with none',
@@ -91,7 +110,7 @@ const CHECKS: Check[] = [
       '(o.kind < r.kind OR (o.kind = r.kind AND o.id < r.id))) ' +
       'ORDER BY r.email, r.seq, r.kind, r.id',
     repair: async (sql, now) => {
-      const rows = await sql.all(CHECKS_BY_ID.duplicate_seq.select(now));
+      const rows = await sql.all(CHECKS_BY_ID.duplicate_seq.select(now, DEFAULT_WRITE_LIMIT));
       let changed = 0;
       for (const row of rows) {
         changed += await sql.run(
@@ -242,11 +261,18 @@ const CHECKS_BY_ID: Record<string, Check> = Object.fromEntries(CHECKS.map((check
 /** The ids of every check, in the order they run. */
 export const CHECK_IDS = CHECKS.map((check) => check.id);
 
-/** Runs every check at [now] (milliseconds) and returns the ones that found something. */
-export async function checkDatabase(sql: SqlRunner, now: number): Promise<Finding[]> {
+/**
+ * Runs every check at [now] (milliseconds) and returns the ones that found
+ * something. [writeLimit] is the Worker's MAX_WRITES_PER_DAY.
+ */
+export async function checkDatabase(
+  sql: SqlRunner,
+  now: number,
+  { writeLimit = DEFAULT_WRITE_LIMIT }: { writeLimit?: number } = {},
+): Promise<Finding[]> {
   const findings: Finding[] = [];
   for (const check of CHECKS) {
-    const query = check.select(now);
+    const query = check.select(now, writeLimit);
     const [{ n }] = (await sql.all(`SELECT COUNT(*) AS n FROM (${query})`)) as { n: number }[];
     if (n === 0) continue;
     findings.push({
@@ -285,14 +311,21 @@ export interface AccountStats {
   max_seq: number | null;
   bytes: number;
   last_updated_at: number | null;
+  /** Records of kind `pack`, each holding many records (docs/sync.md, "Packs"). */
+  packs: number;
+  /** Records written today (UTC), as counted against MAX_WRITES_PER_DAY. */
+  writes_today: number;
 }
 
-/** Record counts and sizes per account, or for [email] alone. */
-export async function accountStats(sql: SqlRunner, email?: string): Promise<AccountStats[]> {
+/** Record counts and sizes per account at [now], or for [email] alone. */
+export async function accountStats(sql: SqlRunner, now: number, email?: string): Promise<AccountStats[]> {
   return (await sql.all(
     'SELECT a.email, a.verified_at, a.created_at, COUNT(r.id) AS records, ' +
       'COALESCE(SUM(r.deleted), 0) AS deleted, MAX(r.seq) AS max_seq, ' +
-      'COALESCE(SUM(length(CAST(r.data AS BLOB))), 0) AS bytes, MAX(r.updated_at) AS last_updated_at ' +
+      'COALESCE(SUM(length(CAST(r.data AS BLOB))), 0) AS bytes, MAX(r.updated_at) AS last_updated_at, ' +
+      "COALESCE(SUM(r.kind = 'pack'), 0) AS packs, " +
+      "COALESCE((SELECT n FROM usage u WHERE u.scope = 'w:' || a.email AND " +
+      `u.day = ${sqlString(utcDay(now))}), 0) AS writes_today ` +
       'FROM accounts a LEFT JOIN records r ON r.email = a.email ' +
       (email === undefined ? '' : `WHERE a.email = ${sqlString(email)} `) +
       'GROUP BY a.email ORDER BY a.email',

@@ -50,7 +50,8 @@ Back up first. Either export the database (`npx wrangler d1 export lingua-srs-sy
 
 Other options:
 
-- `--stats` lists each account's records (how many, how many deleted, total size, last change). Add `--email user@example.com` to see one account's records by kind.
+- `--stats` lists each account's records (how many, how many deleted, how many packs, total size, last change) and its writes today against the daily limit. Add `--email user@example.com` to see one account's records by kind.
+- `--write-limit <n>` is the Worker's `MAX_WRITES_PER_DAY`, if you changed it from 2000.
 - `--json` prints the report as JSON.
 - `--database <name>` and `--config <path>` pick the database (default: the `DB` binding) and wrangler config (default: `wrangler.jsonc`).
 
@@ -62,6 +63,7 @@ The server cannot read synced data: record ids are keyed hashes and their conten
 
 | Check | Level | Repair |
 | --- | --- | --- |
+| `write_limit_reached`: accounts that have written as many records today as `MAX_WRITES_PER_DAY` allows. Their pushes stop with `429 quota_exceeded` until midnight UTC; the app keeps what got through and sends the rest then. | warning | None. To let an account finish today, delete today's counter (below). |
 | `duplicate_seq`: records of one account sharing a `seq`, or with `seq` below 1. Devices pull in `seq` order and remember the last one they saw, so such a record can be skipped for good. | error | Moves all but one of each `seq` to new positions at the end of the account. Devices pull them again and ignore the ones they already have. |
 | `bad_envelope`: a record that is not deleted, whose data is not `{"v":1,"n":…,"c":…}`. Devices skip it as unreadable. | error | None. Deleting it would delete that record on every device. |
 | `invalid_fields`: a kind, id, deleted flag or `updated_at` the Worker would refuse. | error | None. Look at the rows, and delete them by hand if they are junk. |
@@ -71,5 +73,17 @@ The server cannot read synced data: record ids are keyed hashes and their conten
 | `orphan_usage`: write counters of an account that no longer exists. `usage` has no foreign key; the other tables do, and D1 always enforces them. | cleanup | Deletes them. |
 | `stale_unconfirmed`: unconfirmed signups older than 7 days. | cleanup | Deletes them, with their codes. The Worker would do this at the next signup. |
 | `expired_email_codes`, `expired_pairing_invites`, `old_usage`: rows that can no longer be used. | cleanup | Deletes them. The Worker drops them lazily too. |
+
+Records of kind `pack` each hold many records: a large push, such as a first sync, sends them so a whole library fits the daily limit (see [sync.md](sync.md#packs)). The app never changes or deletes a pack, so packs stay on the server after their records change. That is expected; `--stats` counts them.
+
+### Let an account finish syncing today
+
+The daily write limit keeps the free plan. To let one account past it today, delete today's counter (UTC date):
+
+```
+npx wrangler d1 execute lingua-srs-sync --remote --command "DELETE FROM usage WHERE scope='w:user@example.com' AND day='2026-11-09'"
+```
+
+The account can then write `MAX_WRITES_PER_DAY` more records today.
 
 The checks live in `scripts/repair.ts` and are tested against a local D1 in `test/repair.test.ts`.

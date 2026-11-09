@@ -15,6 +15,7 @@ import { parseArgs } from 'node:util';
 import {
   accountStats,
   checkDatabase,
+  DEFAULT_WRITE_LIMIT,
   kindStats,
   repairDatabase,
   type Finding,
@@ -30,6 +31,7 @@ without --repair.
   --repair           Repair what can be repaired safely, then check again
   --stats            Records and size per account
   --email <email>    With --stats: one account, by kind
+  --write-limit <n>  The Worker's MAX_WRITES_PER_DAY (default: 2000)
   --database <name>  Database name or binding (default: DB)
   --config <path>    Wrangler config (default: wrangler.jsonc)
   --json             Print the report as JSON
@@ -42,6 +44,7 @@ const { values } = parseArgs({
     repair: { type: 'boolean', default: false },
     stats: { type: 'boolean', default: false },
     email: { type: 'string' },
+    'write-limit': { type: 'string' },
     database: { type: 'string', default: 'DB' },
     config: { type: 'string' },
     json: { type: 'boolean', default: false },
@@ -51,6 +54,12 @@ const { values } = parseArgs({
 if (values.help) {
   process.stdout.write(USAGE);
   process.exit(0);
+}
+
+const writeLimit = Number(values['write-limit'] ?? DEFAULT_WRITE_LIMIT);
+if (!Number.isSafeInteger(writeLimit) || writeLimit < 1) {
+  process.stderr.write(`--write-limit must be a whole number above 0\n\n${USAGE}`);
+  process.exit(2);
 }
 
 const require = createRequire(import.meta.url);
@@ -119,7 +128,7 @@ async function main(): Promise<void> {
   const report: Record<string, unknown> = { database: target, checkedAt: new Date(now).toISOString() };
 
   if (values.stats) {
-    const accounts = await accountStats(sql, values.email);
+    const accounts = await accountStats(sql, now, values.email);
     report.accounts = accounts;
     if (values.email !== undefined) report.kinds = await kindStats(sql, values.email);
     if (!values.json) {
@@ -127,7 +136,8 @@ async function main(): Promise<void> {
       for (const account of accounts) {
         console.log(
           `  ${account.email}: ${account.records} records (${account.deleted} deleted), ` +
-            `${account.bytes} bytes, seq ${account.max_seq ?? '-'}, ` +
+            `${account.packs} packs, ${account.bytes} bytes, seq ${account.max_seq ?? '-'}, ` +
+            `${account.writes_today}/${writeLimit} writes today, ` +
             `last change ${account.last_updated_at === null ? '-' : time(account.last_updated_at)}, ` +
             (account.verified_at === null ? 'unconfirmed' : `confirmed ${time(account.verified_at)}`),
         );
@@ -139,7 +149,7 @@ async function main(): Promise<void> {
     }
   }
 
-  const findings = await checkDatabase(sql, now);
+  const findings = await checkDatabase(sql, now, { writeLimit });
   report.findings = findings;
   if (!values.json) {
     console.log(`Checked ${target}.`);
@@ -148,7 +158,7 @@ async function main(): Promise<void> {
 
   if (values.repair) {
     const repairs = await repairDatabase(sql, findings, now);
-    const after = await checkDatabase(sql, Date.now());
+    const after = await checkDatabase(sql, Date.now(), { writeLimit });
     report.repairs = repairs;
     report.afterRepair = after;
     if (!values.json) {
