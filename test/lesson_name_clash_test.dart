@@ -2,8 +2,10 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lingua_srs/models/ai_discussion_message.dart';
 import 'package:lingua_srs/models/lesson.dart';
 import 'package:lingua_srs/providers/app_provider.dart';
+import 'package:lingua_srs/services/lesson_ai_prompt.dart';
 import 'package:lingua_srs/services/yaml_parser_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -224,5 +226,48 @@ void main() {
       '둘',
     });
     expect(provider.lessonNameClashes, isEmpty);
+  });
+
+  testWidgets('the removed lesson\'s AI chat joins the kept one\'s', (
+    tester,
+  ) async {
+    final provider = await loadedProvider(tester);
+    await import(tester, provider, [file('a.md', 'Lesson 1')]);
+    await import(tester, provider, [file('b.md', 'Lesson 1')]);
+    final [first, second] = inUnit1(provider);
+    second.title = 'Lesson 1';
+
+    Future<void> say(Lesson lesson, String text, int minute) => tester.runAsync(
+      () => provider.addAiDiscussionMessage(
+        LessonAiPrompt.discussionId(lesson.id),
+        AiDiscussionMessage(
+          role: 'user',
+          content: text,
+          createdAt: DateTime.utc(2026, 1, 1, 0, minute),
+        ),
+      ),
+    );
+    await say(first, 'first, early', 1);
+    await say(second, 'second, middle', 2);
+    await say(first, 'first, late', 3);
+
+    await tester.runAsync(
+      () => provider.resolveLessonNameClash(
+        provider.lessonNameClashes.single,
+        LessonClashChoice.keepExisting,
+      ),
+    );
+
+    expect(inUnit1(provider).single, same(first));
+    expect(
+      provider
+          .getAiDiscussion(LessonAiPrompt.discussionId(first.id))
+          .map((message) => message.content),
+      ['first, early', 'second, middle', 'first, late'],
+    );
+    expect(
+      provider.getAiDiscussion(LessonAiPrompt.discussionId(second.id)),
+      isEmpty,
+    );
   });
 }

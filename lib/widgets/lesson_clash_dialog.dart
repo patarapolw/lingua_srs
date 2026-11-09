@@ -63,14 +63,16 @@ class _LessonClashDialogState extends State<LessonClashDialog> {
         importing
             ? 'The imported file is skipped.'
             : 'The other lesson is removed. Words only it has move to the '
-                  'primary one, with their study progress.',
+                  'primary one, with their study progress, and its AI chat '
+                  'joins the primary one’s.',
       LessonClashChoice.keepIncoming =>
         importing
             ? 'The saved lesson takes the imported name, text and words. Its '
                   'words keep their study progress, and words not in the '
                   'file stay.'
             : 'The saved lesson is removed. Words only it has move to the '
-                  'primary one, with their study progress.',
+                  'primary one, with their study progress, and its AI chat '
+                  'joins the primary one’s.',
       LessonClashChoice.keepBoth =>
         'The ${importing ? 'imported' : 'other'} lesson is named '
             '“${widget.clash.renamedTitle}”.',
