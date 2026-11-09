@@ -124,11 +124,11 @@ void main() {
   });
 
   test('a push stopped by the daily write limit goes on from there', () async {
-    // A first sync of a large library passes the daily limit.
-    for (var i = 0; i < 250; i++) {
+    // Fewer records than go in packs, so each is a server record.
+    for (var i = 0; i < 150; i++) {
       a.store.records[SyncRecordKey('vocab', 'w$i')] = {'word': 'w$i'};
     }
-    worker.writesLeft = 200;
+    worker.writesLeft = 100;
 
     await expectLater(
       a.sync(),
@@ -137,8 +137,8 @@ void main() {
       ),
     );
 
-    // The two batches that got through are kept as pushed.
-    expect(worker.rows.length, 200);
+    // The batch that got through is kept as pushed.
+    expect(worker.rows.length, 100);
     expect(a.tracker.pending.length, 50);
 
     // The next day only the rest is sent.
@@ -148,8 +148,101 @@ void main() {
 
     expect(next.outcome, SyncOutcome.synced);
     expect(next.pushed, 50);
-    expect(worker.rows.length, 250);
+    expect(worker.rows.length, 150);
     expect(a.tracker.pending, isEmpty);
+  });
+
+  group('a large push goes in packs', () {
+    SyncRecordKey lesson(int i) => SyncRecordKey('lesson', 'l$i');
+
+    void addLessons(Device device, int count) {
+      for (var i = 0; i < count; i++) {
+        device.store.records[lesson(i)] = {
+          'title': 'Lesson $i',
+          'text': 'Some words to study in lesson number $i. ' * 10,
+        };
+      }
+    }
+
+    test('a first sync of a large library fits the daily limit', () async {
+      addLessons(a, 3000);
+      // Far fewer than one write per record.
+      worker.writesLeft = 100;
+
+      final pushed = await a.sync();
+
+      expect(pushed.pushed, 3000);
+      expect(worker.rows.length, lessThan(100));
+      expect(a.tracker.pending, isEmpty);
+
+      clock.now += 1000;
+      final pulled = await b.sync();
+
+      expect(pulled.pulled, 3000);
+      expect(pulled.unreadable, 0);
+      expect(b.store.records, a.store.records);
+      expect(b.tracker.pending, isEmpty);
+    });
+
+    test('a later change of a packed record reaches a new device', () async {
+      addLessons(a, 300);
+      await a.sync();
+
+      clock.now += 1000;
+      a.store.records[lesson(7)] = {'title': 'Changed'};
+      a.store.records.remove(lesson(8));
+      await a.sync();
+
+      clock.now += 1000;
+      await b.sync();
+
+      expect(b.store.records[lesson(7)], {'title': 'Changed'});
+      // A deletion after the pack keeps the record deleted.
+      expect(b.store.records.containsKey(lesson(8)), isFalse);
+      expect(b.store.records.length, 299);
+    });
+
+    test('an older copy in a pack does not undo a newer one', () async {
+      a.store.records[lesson(1)] = {'title': 'First'};
+      await a.sync();
+      // An edit after the first sync is stamped with the time.
+      clock.now += 5000;
+      a.store.records[lesson(1)] = {'title': 'New'};
+      await a.sync();
+      expect(a.tracker.records[lesson(1)]!.updatedAt, clock.now);
+      // Pull that edit back, so the pack below comes in a pull of its own.
+      await a.sync();
+
+      // Another device's pack, written with an older copy.
+      final packs = await cipher.pack('other', [
+        SyncPackEntry(
+          lesson(1),
+          updatedAt: clock.now - 4000,
+          data: {'title': 'Old'},
+        ),
+        SyncPackEntry(
+          lesson(2),
+          updatedAt: clock.now - 4000,
+          data: {'title': 'Two'},
+        ),
+      ], updatedAt: clock.now);
+      await SyncClient(
+        endpoint: Uri.parse('https://sync.example.com'),
+        email: 'reader@example.com',
+        authKey: 'test-auth-key',
+        client: worker.client(),
+      ).push([for (final pack in packs.packs) pack.record]);
+
+      clock.now += 1000;
+      await a.sync();
+      await b.sync();
+
+      for (final device in [a, b]) {
+        expect(device.store.records[lesson(1)], {'title': 'New'});
+        expect(device.store.records[lesson(2)], {'title': 'Two'});
+      }
+      expect(a.tracker.pending, isEmpty);
+    });
   });
 
   test('a second sync with nothing changed sends nothing', () async {

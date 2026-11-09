@@ -49,6 +49,14 @@ class FakeWorker {
         pushRequests++;
         final body = jsonDecode(request.body) as Map<String, dynamic>;
         final count = (body['records'] as List).length;
+        // The Worker's limits: 100 records a push, 32 KB of data each.
+        if (count > 100 ||
+            (body['records'] as List).any(
+              (record) =>
+                  utf8.encode(jsonEncode(record['data'])).length > 32768,
+            )) {
+          return json({'error': 'invalid_records'}, 400);
+        }
         if (writesLeft != null) {
           if (count > writesLeft!) {
             return json({'error': 'quota_exceeded'}, 429);
