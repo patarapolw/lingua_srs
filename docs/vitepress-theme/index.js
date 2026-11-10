@@ -2,10 +2,10 @@
 // Copy this folder to `.vitepress/theme/` in the folder VitePress serves.
 // See ../vitepress.md.
 import DefaultTheme from 'vitepress/theme'
-import AudioButton from './components/AudioButton.vue/index.js'
-import Nothing from './components/Nothing.vue/index.js'
+import AudioButton from './components/AudioButton.vue'
+import Nothing from './components/Nothing.vue'
 import TTS from './components/TTS.vue'
-import YouTube from './components/YouTube.vue/index.js'
+import YouTube from './components/YouTube.vue'
 import './lesson.css'
 
 export default {

@@ -23,7 +23,7 @@ cp -r path/to/lingua_srs/docs/vitepress-theme lessons/.vitepress/theme
 npx vitepress dev lessons
 ```
 
-VitePress loads `.vitepress/theme/index.js` by itself. If you already have a theme, copy the `.vue` files and `lesson.css` next to it, and add the `app.component(...)` lines and the CSS import from [`index.js`](vitepress-theme/index.js) to your own.
+VitePress loads `.vitepress/theme/index.js` by itself. If you already have a theme, copy the `components/` folder and `lesson.css` next to it, and add the `app.component(...)` lines and the CSS import from [`index.js`](vitepress-theme/index.js) to your own.
 
 The app imports only Markdown files with `vocabulary:` frontmatter, so `.vitepress/` can stay in the folder you import.
 
@@ -39,7 +39,8 @@ The app imports only Markdown files with `vocabulary:` frontmatter, so `.vitepre
 Some HTML that VitePress renders is not rendered by the app yet:
 
 - **Markdown inside a spoiler** is shown as typed: `<span class="spoiler">my **brother**</span>` reveals `my **brother**`.
-- **`<br>` in a table cell** ends the line, so the table is shown as plain text.
-- **`<ins>`, `<mark>`, `<sup>` and other inline HTML** are shown as typed, tags included. `<del>` is the exception: it is struck through.
-- **`<details>` and `<summary>`**
-- **`<ruby>` and associated tags**. See <https://github.com/patarapolw/lingua_srs/issues/158>.
+- **`<br>` in a table cell** ends the line, so the table is shown as plain text. Outside a table, `<br>`, `<p>` and `<hr>` work.
+- **Inline HTML** is shown as typed, tags included: `<ins>`, `<u>`, `<mark>`, `<sup>`, `<sub>`, `<em>`, `<i>`, `<strong>`, `<b>`, `<kbd>`, `<small>`, `<a href>`, `<img>`, and a `<span>` that is not a spoiler. `<del>` is the exception: it is struck through. Use Markdown where it has a form (`**bold**`, `_italic_`, `[text](link)`, `![alt](image)`).
+- **Block HTML** is not shown at all, its text included: a block that starts with a tag such as `<ul>`, `<div>` or `<center>`. Write lists and tables in Markdown.
+- **`<details>` and `<summary>`** do not fold. With the tags on lines of their own, the summary is not shown and the content is always open; inside a line of text, the tags are shown as typed.
+- **`<ruby>`, `<rt>` and `<rp>`** are shown as typed, so `<ruby>漢字<rt>한자</rt></ruby>` shows its tags, not a reading above the text. See [issue 158](https://github.com/patarapolw/lingua_srs/issues/158).
