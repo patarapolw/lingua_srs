@@ -560,9 +560,15 @@ class _YamlImportViewState extends State<YamlImportView>
           isNew: (sentence) => !provider.hasSentenceLike(sentence),
         );
       }
-      final importedLesson = (await provider.importParsedLessons([
-        preview,
-      ], onClash: _askAboutClash(1))).single;
+      final importedLesson = (await provider.importParsedLessons(
+        [preview],
+        // Adding vocabulary names the lesson to add to, so a lesson with that
+        // name is that lesson, even when it came from a file (whose virtual
+        // path the typed name does not have): nothing to ask.
+        onClash: widget.vocabularyOnly
+            ? (_) async => LessonClashChoice.keepIncoming
+            : _askAboutClash(1),
+      )).single;
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

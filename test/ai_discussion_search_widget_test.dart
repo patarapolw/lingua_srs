@@ -1770,6 +1770,89 @@ void main() {
       expect(notesOf('배가 달아요.'), 'Mine.');
     });
 
+    testWidgets('adds to a lesson from a file without asking about a clash', (
+      tester,
+    ) async {
+      final (provider, _) = await loadedProvider(tester);
+      // Imported from a folder: its virtual path is unit-1/words-1.md, not
+      // the Lesson 1.md a typed name gives.
+      await tester.runAsync(
+        () => provider.importParsedLessons([
+          YamlParserService.parseLessonYaml(
+            '---\nvocabulary:\n  nouns:\n    - ko: "사과"\n'
+            '      en: "apple"\n---\n# Lesson 1\n\nText.\n',
+            defaultUnitTitle: 'Unit 1',
+            sourcePath: 'unit-1/words-1.md',
+          ),
+        ]),
+      );
+      final lessonsBefore = provider.lessons.length;
+      const yaml =
+          'vocabulary:\n'
+          '  nouns:\n'
+          '    - ko: "배"\n'
+          '      en: "pear"\n';
+      await pumpWith(
+        tester,
+        provider,
+        Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const YamlImportView(
+                    initialLessonName: 'Unit 1::Lesson 1',
+                    initialYaml: yaml,
+                    previewInitialYaml: true,
+                    vocabularyOnly: true,
+                  ),
+                ),
+              ),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 500)),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('Add Vocabulary').last);
+      bool added() => provider.lessons
+          .expand((lesson) => lesson.vocabularies)
+          .any((vocab) => vocab.targetWord == '배');
+      for (var i = 0; i < 100 && !added(); i++) {
+        expect(find.text('Two lessons with one name'), findsNothing);
+        await tester.pump(const Duration(milliseconds: 20));
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+      }
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 20));
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+      }
+      expect(added(), isTrue, reason: 'the import never finished');
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+
+      // Added to the same lesson, which keeps its file and text.
+      expect(provider.lessons, hasLength(lessonsBefore));
+      final lesson = provider.lessons.singleWhere(
+        (lesson) => lesson.displayTitle == 'Lesson 1',
+      );
+      expect(lesson.vocabularies.map((vocab) => vocab.targetWord), ['사과', '배']);
+      expect(lesson.fileName, 'words-1.md');
+      expect(lesson.markdownContent, contains('Text.'));
+    });
+
     testWidgets('a word chat has no button', (tester) async {
       final (provider, _) = await loadedProvider(
         tester,
