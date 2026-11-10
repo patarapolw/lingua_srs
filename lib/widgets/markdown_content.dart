@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'audio_button.dart';
 import 'cached_markdown_image.dart';
+import 'markdown_details.dart';
 import 'markdown_heading.dart';
 import 'markdown_inline_html.dart';
 import 'youtube_embed.dart';
@@ -113,8 +114,37 @@ class MarkdownContent extends StatelessWidget {
     );
   }
 
+  /// The Markdown around `<details>` blocks, and each block as a summary
+  /// that shows and hides its own Markdown.
+  Widget _buildWithDetails(List<MarkdownDetailsPart> parts) {
+    MarkdownContent markdown(String text) => MarkdownContent(
+      content: text,
+      style: style,
+      selectable: selectable,
+      onLink: onLink,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final part in parts)
+          if (part.isDetails)
+            MarkdownDetails(
+              initiallyOpen: part.open,
+              summary: markdown(part.summary!),
+              child: markdown(part.text),
+            )
+          else
+            markdown(part.text),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final parts = MarkdownDetailsPart.split(content);
+    if (parts != null) return _buildWithDetails(parts);
+
     final theme = Theme.of(context);
     final normalized = _normalizeContent(content);
 

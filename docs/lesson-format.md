@@ -73,10 +73,22 @@ The reader renders `<AudioButton src="...">` and `<TTS>...</TTS>` controls, and 
 
 A few inline HTML tags are rendered too: `<ins>` and `<u>` underline, `<mark>` highlights, `<sup>` and `<sub>` raise and lower, `<del>` and `<s>` strike through, and `<em>`, `<i>`, `<strong>` and `<b>` work like their Markdown forms. Markdown inside them is rendered. `<br>` breaks the line, also inside a table cell. Other HTML is shown as typed.
 
+A `<details>` block folds part of a lesson away until its `<summary>` is tapped. Markdown works inside it, headings included; `<details open>` starts unfolded, and a block can sit inside another:
+
+```html
+<details>
+<summary>Examples</summary>
+
+- 저는 **학생**이에요
+- 저는 **선생님**이에요
+
+</details>
+```
+
 Tap a YouTube thumbnail to start its embedded player. If the video cannot play,
 use **Open on YouTube** to open the video or playlist outside the player.
 
-The reader renders the lesson natively, a chunk at a time, so long lessons stay responsive. A chunk starts at every heading, and a long section is also cut at a blank line (never inside a code block, list or table). If a lesson splits badly, add HTML comments, which render as nothing anywhere:
+The reader renders the lesson natively, a chunk at a time, so long lessons stay responsive. A chunk starts at every heading, and a long section is also cut at a blank line (never inside a code block, list, table or `<details>` block). If a lesson splits badly, add HTML comments, which render as nothing anywhere:
 
 ```markdown
 Text before.
