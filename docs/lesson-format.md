@@ -69,6 +69,8 @@ Lesson notes go here.
 
 Frontmatter-only Markdown imports the same as equivalent plain YAML. The body is kept for reading from the lesson list and can be edited and saved at any time.
 
+A `## Vocabulary` section in the body is left out when the lesson is imported, from that heading up to the next `## ` heading: the words are in the frontmatter, and the app lists them under **View Vocabulary**. The section is not stored, so the reader does not show it and an export does not write it back. It is kept when it is the last `## ` section of the file, or when its heading is written any other way (`## Vocabulary list`, `### Vocabulary`).
+
 The reader renders `<AudioButton src="...">` and `<TTS>...</TTS>` controls, and `<YouTube id="...">` embeds (also `list` or `src` attributes). Spoiler spans (`<span class="spoiler">...</span>`) are blurred until hovered on desktop or tapped on touch devices. Scripts, and capitalised tags the reader does not know (`<VocabQuiz />`), are left out.
 
 Tap a YouTube thumbnail to start its embedded player. If the video cannot play,
@@ -155,6 +157,7 @@ npx vitepress dev lessons   # preview the folder `lessons` in a browser
 - **Links** written as [links to `.md` files](#links-to-md-files) open the same lesson and heading in the preview and in the app. A link starting with `/` does too when the folder you import is the one VitePress serves.
 - **Headings** take `{#id}` in both (see [Heading ids and repeated headings](#heading-ids-and-repeated-headings)).
 - **Frontmatter** (`vocabulary:` and the rest) is read by the app only; VitePress does not show it.
+- **A `## Vocabulary` section** is shown by VitePress and left out by the app (see [Markdown frontmatter](#markdown-frontmatter)), so it can hold a word list for the preview alone.
 - **App-only syntax:** `[[...]]` links and the `<!-- chunk -->` comments mean nothing to VitePress. `<AudioButton>`, `<TTS>` and `<YouTube>` are rendered by the app's reader; VitePress shows them once its theme has components with those names. [vitepress.md](vitepress.md) has a theme that adds them.
 - **Edits made in the app** (**Edit Markdown**) stay in the app until you export. Export writes each lesson back to its virtual path, so an exported ZIP unpacks over the original folder.
 
