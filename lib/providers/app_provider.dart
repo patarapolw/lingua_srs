@@ -1246,7 +1246,11 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
           final clash = LessonNameClash(
             existing: target,
             incoming: parsed.lesson,
-            renamedTitle: _unusedName(parsed.lesson, parsed.lesson.folderPath),
+            // Keep both renames it only when the names are the same, not
+            // for a clash by the older `Lesson <number>` rule.
+            renamedTitle: _sameName(target, parsed.lesson)
+                ? _unusedName(parsed.lesson, parsed.lesson.folderPath)
+                : parsed.lesson.displayTitle,
           );
           final choice = onClash == null
               ? LessonClashChoice.keepIncoming
@@ -1502,31 +1506,55 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   /// (each against the first one), for the person to sort out. Lessons at
   /// the same virtual path are merged without asking when loaded or synced.
   List<LessonNameClash> get lessonNameClashes {
-    final first = <String, Lesson>{};
+    final byName = <String, Lesson>{};
+    final byPath = <String, Lesson>{};
     final clashes = <LessonNameClash>[];
     for (final lesson in _lessons) {
-      final key =
+      final nameKey =
           '${hierarchyFolderKey(lesson.folderPath)}'
           '\n${lesson.displayTitle.trim().toLowerCase()}';
-      final earlier = first[key];
+      final pathKey = _pathKey(lesson);
+      final earlier = byName[nameKey] ?? byPath[pathKey];
       if (earlier == null) {
-        first[key] = lesson;
-      } else {
-        clashes.add(
-          LessonNameClash(
-            existing: earlier,
-            incoming: lesson,
-            renamedTitle: _unusedName(lesson, lesson.folderPath),
-          ),
-        );
+        byName[nameKey] = lesson;
+        byPath[pathKey] = lesson;
+        continue;
       }
+      final sameName = _sameName(earlier, lesson);
+      clashes.add(
+        LessonNameClash(
+          existing: earlier,
+          incoming: lesson,
+          renamedTitle: sameName
+              ? _unusedName(lesson, lesson.folderPath)
+              : lesson.displayTitle,
+          sameFile: _pathKey(earlier) == pathKey,
+        ),
+      );
     }
     return clashes;
   }
 
+  /// The app folders and file name of [lesson], ignoring case: two lessons
+  /// with the same one come from the same file ([_sameVirtualPath]).
+  static String _pathKey(Lesson lesson) => [
+    for (final part in [...lesson.folderPath, lesson.virtualFileName])
+      part.toLowerCase(),
+  ].join('/');
+
+  /// Whether merging [a] and [b] keeps all their text: the same text, or
+  /// one of them has none.
+  static bool _textFits(Lesson a, Lesson b) {
+    final textA = a.markdownContent.trim();
+    final textB = b.markdownContent.trim();
+    return textA.isEmpty || textB.isEmpty || textA == textB;
+  }
+
   /// Settles a clash from [lessonNameClashes]: the lesson [choice] keeps
   /// overwrites the other (which goes, after giving the kept one any words
-  /// it lacks, so no study progress is lost), or the later one is renamed.
+  /// it lacks, so no study progress is lost), or both stay: the later one
+  /// is renamed if the names match, and lets go of the file if they share
+  /// one.
   Future<void> resolveLessonNameClash(
     LessonNameClash clash,
     LessonClashChoice choice,
@@ -1538,10 +1566,20 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       case LessonClashChoice.keepIncoming:
         chatsMoved = _absorbLesson(clash.incoming, clash.existing);
       case LessonClashChoice.keepBoth:
-        _rename(
-          clash.incoming,
-          _unusedName(clash.incoming, clash.incoming.folderPath),
-        );
+        // Two lessons from one file: the first keeps it, so the next import
+        // of the file updates that one, and the second goes back to a
+        // virtual path from its title.
+        if (clash.sameFile) {
+          clash.incoming
+            ..fileName = null
+            ..fileFolder = null;
+        }
+        if (_sameName(clash.existing, clash.incoming)) {
+          _rename(
+            clash.incoming,
+            _unusedName(clash.incoming, clash.incoming.folderPath),
+          );
+        }
     }
     if (chatsMoved) await StorageService.saveAiDiscussions(_aiDiscussions);
     await saveState();
@@ -1577,7 +1615,8 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
 
   /// Merges saved lessons at the same virtual path (say, one file imported
   /// on two devices before they synced) into the first of them, with their
-  /// AI chats. Returns whether any lessons were merged, and whether any
+  /// AI chats, when that keeps all their text: the same text, or one has
+  /// none. Pairs whose texts differ are left for [lessonNameClashes]. Returns whether any lessons were merged, and whether any
   /// chats moved.
   ({bool lessons, bool chats}) _mergeSameVirtualPathLessons() {
     final first = <String, Lesson>{};
@@ -1586,16 +1625,16 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       // As [_sameVirtualPath]: the app folders and the file name, so a
       // lesson saved before original folder names were kept compares the
       // same as one imported since.
-      final key = [
-        for (final part in [...lesson.folderPath, lesson.virtualFileName])
-          part.toLowerCase(),
-      ].join('/');
+      final key = _pathKey(lesson);
       final earlier = first[key];
       if (earlier == null) {
         first[key] = lesson;
-      } else {
+      } else if (_textFits(earlier, lesson)) {
         merges.add((earlier, lesson));
       }
+      // Otherwise merging would drop one lesson's text: the pair is left
+      // for the person to sort out ([lessonNameClashes]), where the
+      // warning says so.
     }
     var chats = false;
     for (final (primary, other) in merges) {
@@ -3006,12 +3045,19 @@ class LessonNameClash {
   final Lesson existing;
   final Lesson incoming;
 
-  /// The name [LessonClashChoice.keepBoth] gives [incoming].
+  /// The name [LessonClashChoice.keepBoth] gives [incoming]: its own when
+  /// the two only share a file.
   final String renamedTitle;
+
+  /// The two come from the same file (the same app folder and file name),
+  /// such as one file imported on two devices before they synced, with
+  /// different text.
+  final bool sameFile;
 
   const LessonNameClash({
     required this.existing,
     required this.incoming,
     required this.renamedTitle,
+    this.sameFile = false,
   });
 }

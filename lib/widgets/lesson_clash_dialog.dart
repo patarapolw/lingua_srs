@@ -91,9 +91,15 @@ class _LessonClashDialogState extends State<LessonClashDialog> {
                   'are updated from the file, keeping their study progress.'
             : 'The second lesson keeps its name and text. The first lesson '
                   'is removed, and its AI chat joins the second one’s.',
-      LessonClashChoice.keepBoth =>
-        'Both lessons stay. The $other one is named '
-            '“${widget.clash.renamedTitle}”.',
+      LessonClashChoice.keepBoth => [
+        'Both lessons stay.',
+        if (widget.clash.renamedTitle != widget.clash.incoming.displayTitle)
+          'The $other one is named “${widget.clash.renamedTitle}”.',
+        if (widget.clash.sameFile)
+          'Only the first keeps the file '
+              '${widget.clash.existing.virtualFileName}; the next import of '
+              'it updates that one.',
+      ].join(' '),
     };
   }
 
@@ -147,17 +153,27 @@ class _LessonClashDialogState extends State<LessonClashDialog> {
     final remaining = widget.remaining;
 
     return AlertDialog(
-      title: const Text('Two lessons with one name'),
+      title: Text(
+        clash.sameFile
+            ? 'Two lessons from one file'
+            : 'Two lessons with one name',
+      ),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'A folder can hold only one lesson named '
-              '“${clash.existing.displayTitle}”, and '
-              '${importing ? 'the import adds another' : 'there are two'} '
-              '$where. Which one is primary? The other is overwritten by it.',
+              clash.sameFile
+                  ? 'Two lessons $where come from the file '
+                        '${clash.existing.virtualFileName}, with different '
+                        'text. Which one is primary? The other is '
+                        'overwritten by it.'
+                  : 'A folder can hold only one lesson named '
+                        '“${clash.existing.displayTitle}”, and '
+                        '${importing ? 'the import adds another' : 'there are two'} '
+                        '$where. Which one is primary? The other is '
+                        'overwritten by it.',
             ),
             const SizedBox(height: 8),
             RadioGroup<LessonClashChoice>(
@@ -179,7 +195,10 @@ class _LessonClashDialogState extends State<LessonClashDialog> {
                     value: LessonClashChoice.keepBoth,
                     title: const Text('Keep both'),
                     subtitle: Text(
-                      'Rename the ${importing ? 'imported' : 'second'} one',
+                      clash.sameFile &&
+                              clash.renamedTitle == clash.incoming.displayTitle
+                          ? 'The second one lets go of the file'
+                          : 'Rename the ${importing ? 'imported' : 'second'} one',
                     ),
                   ),
                 ],

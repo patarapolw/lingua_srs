@@ -1,12 +1,17 @@
 import 'dart:io';
 
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lingua_srs/models/ai_discussion_message.dart';
 import 'package:lingua_srs/models/lesson.dart';
+import 'package:lingua_srs/models/vocab_item.dart';
 import 'package:lingua_srs/providers/app_provider.dart';
 import 'package:lingua_srs/services/lesson_ai_prompt.dart';
+import 'package:lingua_srs/services/sync_records.dart';
 import 'package:lingua_srs/services/yaml_parser_service.dart';
+import 'package:lingua_srs/views/lesson_list_view.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'secret_storage_mock.dart';
@@ -39,10 +44,17 @@ void main() {
     }
   });
 
-  Future<AppProvider> loadedProvider(WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({
-      'lingua_srs_windows_legacy_migration_complete': true,
-    });
+  /// A provider, loaded from empty storage, or with [fresh] false from what
+  /// an earlier one saved (as the app does when it starts again).
+  Future<AppProvider> loadedProvider(
+    WidgetTester tester, {
+    bool fresh = true,
+  }) async {
+    if (fresh) {
+      SharedPreferences.setMockInitialValues({
+        'lingua_srs_windows_legacy_migration_complete': true,
+      });
+    }
     final provider = AppProvider();
     addTearDown(provider.dispose);
     for (var i = 0; i < 100 && provider.isLoading; i++) {
@@ -383,6 +395,222 @@ void main() {
             .fileName,
         'kept.md',
       );
+    });
+  });
+
+  group('saved lessons from one file', () {
+    /// A copy of the lesson from `unit-1/a.md` as another device has it:
+    /// another id, with [text] and the word [word].
+    Map<SyncRecordKey, Map<String, dynamic>> pulledCopy(
+      String text,
+      String word,
+    ) {
+      final copy = Lesson(
+        id: 'pulled',
+        title: 'Lesson 1',
+        unitTitle: 'Unit 1',
+        fileName: 'a.md',
+        fileFolder: 'unit-1',
+        vocabularies: [
+          VocabItem(targetWord: word, translation: 'two', pos: 'nouns'),
+        ],
+      );
+      return {
+        const SyncRecordKey(SyncKinds.lesson, 'pulled'): copy.toJson(),
+        const SyncRecordKey(SyncKinds.lessonMarkdown, 'pulled'): {
+          'markdown': text,
+        },
+      };
+    }
+
+    testWidgets('a pulled copy with the same text merges, with its chat', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      await import(tester, provider, [file('a.md', 'Lesson 1', word: '하나')]);
+      final saved = inUnit1(provider).single;
+      await tester.runAsync(
+        () => provider.addAiDiscussionMessage(
+          LessonAiPrompt.discussionId('pulled'),
+          const AiDiscussionMessage(role: 'user', content: 'from the copy'),
+        ),
+      );
+
+      await tester.runAsync(
+        () => provider.apply(
+          'other-device',
+          pulledCopy(saved.markdownContent, '둘'),
+        ),
+      );
+
+      final lesson = inUnit1(provider).single;
+      expect(lesson, same(saved));
+      expect(lesson.vocabularies.map((vocab) => vocab.targetWord).toSet(), {
+        '하나',
+        '둘',
+      });
+      expect(
+        provider
+            .getAiDiscussion(LessonAiPrompt.discussionId(saved.id))
+            .map((message) => message.content),
+        ['from the copy'],
+      );
+      expect(provider.lessonNameClashes, isEmpty);
+    });
+
+    testWidgets('a pulled copy with other text is left to sort out', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      await import(tester, provider, [file('a.md', 'Lesson 1', word: '하나')]);
+      final saved = inUnit1(provider).single;
+
+      await tester.runAsync(
+        () => provider.apply(
+          'other-device',
+          pulledCopy('# Lesson 1\n\nEdited elsewhere.', '둘'),
+        ),
+      );
+
+      // Nothing merged, so neither text is lost.
+      expect(inUnit1(provider), hasLength(2));
+      final clash = provider.lessonNameClashes.single;
+      expect(clash.existing, same(saved));
+      expect(clash.incoming.id, 'pulled');
+      expect(clash.sameFile, isTrue);
+      expect(clash.incoming.markdownContent, contains('Edited elsewhere.'));
+
+      // Keeping both: the second lets go of the file and is renamed.
+      await tester.runAsync(
+        () =>
+            provider.resolveLessonNameClash(clash, LessonClashChoice.keepBoth),
+      );
+      expect(clash.incoming.fileName, isNull);
+      expect(clash.incoming.displayTitle, 'Lesson 1 (2)');
+      expect(saved.fileName, 'a.md');
+      expect(provider.lessonNameClashes, isEmpty);
+    });
+
+    testWidgets('lists a pair from one file even with different names', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      await import(tester, provider, [file('a.md', 'Lesson 1')]);
+      provider.lessons.add(
+        Lesson(
+          title: 'Retitled',
+          unitTitle: 'Unit 1',
+          fileName: 'a.md',
+          markdownContent: '# Retitled\n\nOther text.',
+        ),
+      );
+
+      final clash = provider.lessonNameClashes.single;
+      expect(clash.sameFile, isTrue);
+      // Different names: keep both only lets go of the file.
+      expect(clash.renamedTitle, 'Retitled');
+      await tester.runAsync(
+        () =>
+            provider.resolveLessonNameClash(clash, LessonClashChoice.keepBoth),
+      );
+      expect(clash.incoming.displayTitle, 'Retitled');
+      expect(clash.incoming.fileName, isNull);
+      expect(provider.lessonNameClashes, isEmpty);
+    });
+
+    testWidgets('on start, merges copies only when no text is lost', (
+      tester,
+    ) async {
+      final first = await loadedProvider(tester);
+      await import(tester, first, [file('a.md', 'Lesson 1', word: '하나')]);
+      await import(tester, first, [file('b.md', 'Lesson 2', word: '셋')]);
+      final a = inUnit1(first).firstWhere((l) => l.fileName == 'a.md');
+      final b = inUnit1(first).firstWhere((l) => l.fileName == 'b.md');
+      first.lessons.addAll([
+        // a.md again, with no text: merges.
+        Lesson(
+          title: 'Lesson 1',
+          unitTitle: 'Unit 1',
+          fileName: 'a.md',
+          vocabularies: [
+            VocabItem(targetWord: '둘', translation: 'two', pos: 'nouns'),
+          ],
+        ),
+        // b.md again, with other text: kept, to sort out.
+        Lesson(
+          title: 'Lesson 2',
+          unitTitle: 'Unit 1',
+          fileName: 'b.md',
+          markdownContent: '# Lesson 2\n\nOther text.',
+        ),
+      ]);
+      await tester.runAsync(first.saveState);
+
+      final started = await loadedProvider(tester, fresh: false);
+
+      final lessons = inUnit1(started);
+      expect(lessons.where((l) => l.fileName == 'a.md'), hasLength(1));
+      final merged = lessons.singleWhere((l) => l.fileName == 'a.md');
+      expect(merged.id, a.id);
+      expect(merged.vocabularies.map((v) => v.targetWord).toSet(), {'하나', '둘'});
+      expect(lessons.where((l) => l.fileName == 'b.md'), hasLength(2));
+      final clash = started.lessonNameClashes.single;
+      expect(clash.existing.id, b.id);
+      expect(clash.sameFile, isTrue);
+    });
+
+    testWidgets('Sort out in the lesson list settles the pair', (tester) async {
+      final provider = await loadedProvider(tester);
+      await import(tester, provider, [file('a.md', 'Lesson 1', word: '하나')]);
+      final saved = inUnit1(provider).single;
+      await tester.runAsync(
+        () => provider.apply(
+          'other-device',
+          pulledCopy('# Lesson 1\n\nEdited elsewhere.', '둘'),
+        ),
+      );
+      await tester.pumpWidget(
+        ChangeNotifierProvider<AppProvider>.value(
+          value: provider,
+          child: MaterialApp(
+            home: Scaffold(
+              body: LessonNameClashBanner(
+                count: provider.lessonNameClashes.length,
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(
+        find.text(
+          'A lesson has the same name or file as another in its folder.',
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Sort out'));
+      await tester.pumpAndSettle();
+      expect(find.text('Two lessons from one file'), findsOneWidget);
+      await tester.tap(find.text('First lesson'));
+      await tester.pump();
+      // Keeping the first drops the copy's text, and the dialog says so.
+      expect(
+        find.textContaining('The second lesson’s text is not kept.'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Continue'));
+      for (var i = 0; i < 20 && provider.lessonNameClashes.isNotEmpty; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+      await tester.pumpAndSettle();
+
+      expect(provider.lessonNameClashes, isEmpty);
+      expect(find.text('Two lessons from one file'), findsNothing);
+      expect(inUnit1(provider).single, same(saved));
+      expect(saved.markdownContent, isNot(contains('Edited elsewhere.')));
     });
   });
 }

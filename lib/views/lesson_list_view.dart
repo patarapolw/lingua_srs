@@ -1010,8 +1010,9 @@ class LessonListView extends StatelessWidget {
   }
 }
 
-/// Says that saved lessons share a name with another in their folder (as
-/// sync or a restore can bring), and asks which of each pair is primary.
+/// Says that saved lessons share a name or a file with another in their
+/// folder (as sync or a restore can bring), and asks which of each pair is
+/// primary.
 class LessonNameClashBanner extends StatelessWidget {
   final int count;
 
@@ -1055,9 +1056,10 @@ class LessonNameClashBanner extends StatelessWidget {
           ),
           title: Text(
             count == 1
-                ? 'A lesson has the same name as another in its folder.'
-                : '$count lessons have the same name as another in their '
-                      'folder.',
+                ? 'A lesson has the same name or file as another in its '
+                      'folder.'
+                : '$count lessons have the same name or file as another in '
+                      'their folder.',
             style: TextStyle(color: theme.colorScheme.onErrorContainer),
           ),
           trailing: TextButton(
