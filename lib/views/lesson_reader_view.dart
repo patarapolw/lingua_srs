@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../models/lesson.dart';
 import '../providers/app_provider.dart';
 import '../services/lesson_ai_prompt.dart';
+import '../services/lesson_links.dart';
 import '../widgets/lesson_content_view.dart';
 import '../widgets/markdown_text_field.dart';
 import 'ai_discussion_dialog.dart';
@@ -12,7 +14,15 @@ import 'lesson_detail_view.dart';
 class LessonReaderView extends StatefulWidget {
   final String lessonId;
 
-  const LessonReaderView({super.key, required this.lessonId});
+  /// Text or anchor of a heading to scroll to on opening, for a link such as
+  /// `[[Lesson 26#Past tense]]`.
+  final String? initialHeading;
+
+  const LessonReaderView({
+    super.key,
+    required this.lessonId,
+    this.initialHeading,
+  });
 
   @override
   State<LessonReaderView> createState() => _LessonReaderViewState();
@@ -111,7 +121,60 @@ class _LessonReaderViewState extends State<LessonReaderView> {
               markdown: selectedLesson.markdownContent,
               content: content,
               controller: _contentController,
+              initialHeading: widget.initialHeading,
+              scrollKey: selectedLesson.id,
+              onLessonLink: (link) =>
+                  _openLessonLink(context, provider, selectedLesson, link),
             ),
+    );
+  }
+
+  /// Opens the lesson a `[[Lesson#Heading]]` or `lesson.md#heading` link
+  /// names, at its heading, or scrolls to the heading if the link names this
+  /// lesson.
+  void _openLessonLink(
+    BuildContext context,
+    AppProvider provider,
+    Lesson current,
+    LessonLink link,
+  ) {
+    final messenger = ScaffoldMessenger.of(context);
+    final file = link.file;
+    final target = file != null
+        ? LessonLink.resolveFile(provider.lessons, file, from: current)
+        : LessonLink.resolveLesson(
+            provider.lessons,
+            link.lesson!,
+            from: current,
+          );
+    if (target == null) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            file != null
+                ? 'No lesson at “$file”.'
+                : 'No lesson named “${link.lesson}”.',
+          ),
+        ),
+      );
+      return;
+    }
+    final heading = link.heading;
+    if (target.id == current.id) {
+      if (heading != null &&
+          !_contentController.scrollToHeadingNamed(heading)) {
+        messenger.showSnackBar(
+          SnackBar(content: Text('No heading “$heading” in this lesson.')),
+        );
+      }
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            LessonReaderView(lessonId: target.id, initialHeading: heading),
+      ),
     );
   }
 
@@ -260,26 +323,90 @@ class _LessonMarkdownEditorState extends State<_LessonMarkdownEditor> {
           constraints: const BoxConstraints(maxWidth: 1000),
           child: Padding(
             padding: const EdgeInsets.all(16),
-            child: MarkdownTextField(
-              controller: _controller,
-              enabled: !_saving,
-              expands: true,
-              maxLines: null,
-              textAlignVertical: TextAlignVertical.top,
-              keyboardType: TextInputType.multiline,
-              style: const TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 14,
-                height: 1.5,
-              ),
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                hintText: 'Enter lesson Markdown',
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                VirtualPathBar(lesson: widget.lesson),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: MarkdownTextField(
+                    controller: _controller,
+                    enabled: !_saving,
+                    expands: true,
+                    maxLines: null,
+                    textAlignVertical: TextAlignVertical.top,
+                    keyboardType: TextInputType.multiline,
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 14,
+                      height: 1.5,
+                    ),
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      hintText: 'Enter lesson Markdown',
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Shows where `.md` links find a lesson ([Lesson.virtualPath]), with a
+/// button that copies a Markdown link to it.
+class VirtualPathBar extends StatelessWidget {
+  final Lesson lesson;
+
+  const VirtualPathBar({super.key, required this.lesson});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final path = LessonLink.virtualPathText(lesson);
+    return Row(
+      children: [
+        Tooltip(
+          message: lesson.fileName == null
+              ? 'Virtual path, named after the lesson title. '
+                    '.md links in other lessons find this lesson here.'
+              : 'Virtual path, with the name of the file it was imported '
+                    'from. .md links in other lessons find this lesson here.',
+          child: Icon(
+            Icons.description_outlined,
+            size: 18,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: SelectableText(
+            path,
+            key: const ValueKey('virtual-path'),
+            maxLines: 1,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontFamily: 'monospace',
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+        IconButton(
+          tooltip: 'Copy link to this lesson',
+          icon: const Icon(Icons.link),
+          onPressed: () async {
+            final messenger = ScaffoldMessenger.of(context);
+            await Clipboard.setData(
+              ClipboardData(text: LessonLink.markdownLinkTo(lesson)),
+            );
+            messenger.showSnackBar(
+              const SnackBar(content: Text('Copied a link to this lesson.')),
+            );
+          },
+        ),
+      ],
     );
   }
 }

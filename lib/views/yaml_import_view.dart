@@ -15,6 +15,7 @@ import '../services/lesson_ai_prompt.dart';
 import '../services/markdown_archive_service.dart';
 import '../services/storage_service.dart';
 import '../services/yaml_parser_service.dart';
+import '../widgets/lesson_clash_dialog.dart';
 
 class YamlImportView extends StatefulWidget {
   /// Prefills the lesson name. Using an existing lesson's name adds the YAML's
@@ -230,6 +231,10 @@ class _YamlImportViewState extends State<YamlImportView>
       });
 
       if (!mounted) return;
+      final followed = await context.read<AppProvider>().adoptFilePaths(
+        parseResult.unchangedLessons,
+      );
+      if (!mounted) return;
       setState(() {
         _directoryFiles = parseResult.imports;
         _selectedDirectoryPaths.clear();
@@ -244,6 +249,7 @@ class _YamlImportViewState extends State<YamlImportView>
               ? parseResult.unchanged > 0
                     ? 'No changed Markdown files found. '
                           '${parseResult.unchanged} unchanged files were skipped.'
+                          '${_followedNote(followed)}'
                     : 'No Markdown files with vocabulary frontmatter were found.'
               : describeImportErrors(
                   'No importable files found. ${parseResult.errors.length} '
@@ -252,6 +258,7 @@ class _YamlImportViewState extends State<YamlImportView>
                 );
         }
       });
+      if (parseResult.imports.isNotEmpty) _showFollowed(followed);
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -465,6 +472,10 @@ class _YamlImportViewState extends State<YamlImportView>
     });
 
     if (!mounted) return;
+    final followed = await context.read<AppProvider>().adoptFilePaths(
+      result.unchangedLessons,
+    );
+    if (!mounted) return;
     setState(() {
       _directoryFiles = result.imports;
       _selectedDirectoryPaths.clear();
@@ -479,6 +490,7 @@ class _YamlImportViewState extends State<YamlImportView>
             ? result.unchanged > 0
                   ? 'No changed Markdown files found. '
                         '${result.unchanged} unchanged files were skipped.'
+                        '${_followedNote(followed)}'
                   : 'No Markdown files with a vocabulary frontmatter section were found.'
             : describeImportErrors(
                 'No importable files found. ${result.errors.length} '
@@ -487,6 +499,46 @@ class _YamlImportViewState extends State<YamlImportView>
               );
       }
     });
+    if (result.imports.isNotEmpty) _showFollowed(followed);
+  }
+
+  /// Says that [count] lessons took the file paths of unchanged files
+  /// ([AppProvider.adoptFilePaths]), or nothing.
+  static String _followedNote(int count) => count == 0
+      ? ''
+      : ' ${count == 1 ? '1 lesson' : '$count lessons'} imported before '
+            'file paths were kept now ${count == 1 ? 'follows its' : 'follow their'} '
+            'file.';
+
+  void _showFollowed(int count) {
+    if (count == 0 || !mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(_followedNote(count).trim())));
+  }
+
+  /// Asks which lesson is primary when an import of [fileCount] files adds
+  /// a lesson whose name is taken in its folder, remembering an answer given
+  /// for the rest of the import.
+  Future<LessonClashChoice> Function(LessonNameClash) _askAboutClash(
+    int fileCount,
+  ) {
+    LessonClashChoice? forRest;
+    var asked = 0;
+    return (clash) async {
+      final remembered = forRest;
+      if (remembered != null) return remembered;
+      asked++;
+      if (!mounted) return LessonClashChoice.keepBoth;
+      final answer = await showLessonClashDialog(
+        context,
+        clash,
+        importing: true,
+        remaining: fileCount - asked,
+      );
+      final choice = answer?.choice ?? LessonClashChoice.keepBoth;
+      if (answer?.forRest ?? false) forRest = choice;
+      return choice;
+    };
   }
 
   Future<void> _executeImport() async {
@@ -508,8 +560,15 @@ class _YamlImportViewState extends State<YamlImportView>
           isNew: (sentence) => !provider.hasSentenceLike(sentence),
         );
       }
-      final importedLesson = (await provider.importParsedLessons([preview]))
-          .single;
+      final importedLesson = (await provider.importParsedLessons(
+        [preview],
+        // Adding vocabulary names the lesson to add to, so a lesson with that
+        // name is that lesson, even when it came from a file (whose virtual
+        // path the typed name does not have): nothing to ask.
+        onClash: widget.vocabularyOnly
+            ? (_) async => LessonClashChoice.keepIncoming
+            : _askAboutClash(1),
+      )).single;
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -547,6 +606,7 @@ class _YamlImportViewState extends State<YamlImportView>
     try {
       final importedLessons = await provider.importParsedLessons(
         selectedFiles.map((file) => file.preview).toList(),
+        onClash: _askAboutClash(selectedFiles.length),
         onProgress: (current, total) {
           if (!mounted) return;
           setState(() {
@@ -1186,11 +1246,17 @@ class MarkdownDirectoryResult {
   final int skipped;
   final int unchanged;
 
+  /// The lessons the [unchanged] files are, without vocabulary
+  /// ([YamlParserService.lessonFileInfo]), so the lessons saved from them can
+  /// take their real file paths ([AppProvider.adoptFilePaths]).
+  final List<Lesson> unchangedLessons;
+
   const MarkdownDirectoryResult({
     required this.imports,
     required this.errors,
     required this.skipped,
     required this.unchanged,
+    this.unchangedLessons = const [],
   });
 }
 
@@ -1229,6 +1295,7 @@ MarkdownDirectoryResult parsePickedMarkdownSources(
   final errors = <String>[];
   var skipped = 0;
   var unchanged = 0;
+  final unchangedLessons = <Lesson>[];
 
   void parseMarkdown(
     String path,
@@ -1237,11 +1304,20 @@ MarkdownDirectoryResult parsePickedMarkdownSources(
     required String? defaultTitle,
     required bool requireVocabularyFrontmatter,
     String? hierarchyPath,
+    String? legacySourceKey,
   }) {
     try {
       final sourceHash = sha256.convert(utf8.encode(contents)).toString();
-      if (importedSources[sourceKey] == sourceHash) {
+      if (importedSources[sourceKey] == sourceHash ||
+          (legacySourceKey != null &&
+              importedSources[legacySourceKey] == sourceHash)) {
         unchanged++;
+        final lesson = YamlParserService.lessonFileInfo(
+          contents,
+          sourcePath: hierarchyPath ?? path,
+          defaultUnitTitle: _unitTitleForPath(hierarchyPath ?? path),
+        );
+        if (lesson != null) unchangedLessons.add(lesson);
         return;
       }
       if (requireVocabularyFrontmatter &&
@@ -1253,6 +1329,7 @@ MarkdownDirectoryResult parsePickedMarkdownSources(
         contents,
         defaultTitle: defaultTitle,
         defaultUnitTitle: _unitTitleForPath(hierarchyPath ?? path),
+        sourcePath: hierarchyPath ?? path,
       );
       imports.add(
         MarkdownImportFile(
@@ -1273,16 +1350,17 @@ MarkdownDirectoryResult parsePickedMarkdownSources(
         for (final file in MarkdownArchiveService.readMarkdownFiles(
           source.bytes,
         )) {
-          final sourceKey = _markdownSourceKey(
-            '${source.sourceKey}!/${file.path}',
-          );
           parseMarkdown(
             '${source.name}/${file.path}',
-            sourceKey,
+            zipEntrySourceKey(file.path),
             file.contents,
             defaultTitle: null,
             requireVocabularyFrontmatter: true,
             hierarchyPath: file.path,
+            // Saved before ZIP entries were keyed by their path alone.
+            legacySourceKey: _markdownSourceKey(
+              '${source.sourceKey}!/${file.path}',
+            ),
           );
         }
       } else {
@@ -1306,6 +1384,7 @@ MarkdownDirectoryResult parsePickedMarkdownSources(
     errors: errors,
     skipped: skipped,
     unchanged: unchanged,
+    unchangedLessons: unchangedLessons,
   );
 }
 
@@ -1318,6 +1397,7 @@ MarkdownDirectoryResult parseMarkdownFiles(
   final errors = <String>[];
   var skipped = 0;
   var unchanged = 0;
+  final unchangedLessons = <Lesson>[];
   final normalizedDirectories =
       directoryPaths.map((path) => path.replaceAll('\\', '/')).toList()
         ..sort((first, second) => first.length.compareTo(second.length));
@@ -1345,6 +1425,12 @@ MarkdownDirectoryResult parseMarkdownFiles(
       final sourceHash = sha256.convert(utf8.encode(contents)).toString();
       if (importedSources[_markdownSourceKey(path)] == sourceHash) {
         unchanged++;
+        final lesson = YamlParserService.lessonFileInfo(
+          contents,
+          sourcePath: relativePath,
+          defaultUnitTitle: _unitTitleForPath(relativePath),
+        );
+        if (lesson != null) unchangedLessons.add(lesson);
         continue;
       }
       if (!YamlParserService.hasVocabularyFrontmatter(contents)) {
@@ -1354,6 +1440,7 @@ MarkdownDirectoryResult parseMarkdownFiles(
       final preview = YamlParserService.parseLessonYaml(
         contents,
         defaultUnitTitle: _unitTitleForPath(relativePath),
+        sourcePath: relativePath,
       );
       imports.add(
         MarkdownImportFile(
@@ -1372,6 +1459,7 @@ MarkdownDirectoryResult parseMarkdownFiles(
     errors: errors,
     skipped: skipped,
     unchanged: unchanged,
+    unchangedLessons: unchangedLessons,
   );
 }
 
@@ -1382,7 +1470,17 @@ MarkdownDirectoryResult _combineMarkdownDirectoryResults(
   errors: results.expand((result) => result.errors).toList(),
   skipped: results.fold(0, (total, result) => total + result.skipped),
   unchanged: results.fold(0, (total, result) => total + result.unchanged),
+  unchangedLessons: [for (final result in results) ...result.unchangedLessons],
 );
+
+/// The key a ZIP entry's fingerprint is saved under, to skip it when it is
+/// imported again unchanged: its path inside the ZIP alone. The ZIP's own
+/// location is no use, since a picker can copy it somewhere new every time
+/// (Android does) and a downloaded copy can be renamed (`course (1).zip`).
+/// Two ZIPs with an entry at the same path share a key, which is safe: an
+/// entry is only skipped when its contents are the same, and the same path
+/// is the same lesson.
+String zipEntrySourceKey(String path) => 'zip:${path.replaceAll('\\', '/')}';
 
 String _markdownSourceKey(String path) {
   final normalizedPath = path.replaceAll('\\', '/');

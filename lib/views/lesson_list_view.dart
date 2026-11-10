@@ -9,6 +9,7 @@ import '../models/lesson.dart';
 import '../providers/app_provider.dart';
 import '../services/lesson_export_service.dart';
 import '../widgets/folder_picker_dialog.dart';
+import '../widgets/lesson_clash_dialog.dart';
 import '../widgets/lesson_hierarchy_view.dart';
 import 'activity_heatmap_view.dart';
 import 'lesson_detail_view.dart';
@@ -732,6 +733,12 @@ class LessonListView extends StatelessWidget {
           ? const Center(child: CircularProgressIndicator())
           : CustomScrollView(
               slivers: [
+                if (provider.lessonNameClashes.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: LessonNameClashBanner(
+                      count: provider.lessonNameClashes.length,
+                    ),
+                  ),
                 // Top Statistics Banner
                 SliverToBoxAdapter(
                   child: Padding(
@@ -999,6 +1006,68 @@ class LessonListView extends StatelessWidget {
                 ],
               ],
             ),
+    );
+  }
+}
+
+/// Says that saved lessons share a name or a file with another in their
+/// folder (as sync or a restore can bring), and asks which of each pair is
+/// primary.
+class LessonNameClashBanner extends StatelessWidget {
+  final int count;
+
+  const LessonNameClashBanner({super.key, required this.count});
+
+  Future<void> _resolve(BuildContext context) async {
+    final provider = context.read<AppProvider>();
+    LessonClashChoice? forRest;
+    while (true) {
+      final clashes = provider.lessonNameClashes;
+      if (clashes.isEmpty) return;
+      final clash = clashes.first;
+      var choice = forRest;
+      if (choice == null) {
+        if (!context.mounted) return;
+        final answer = await showLessonClashDialog(
+          context,
+          clash,
+          importing: false,
+          remaining: clashes.length - 1,
+        );
+        if (answer == null) return;
+        choice = answer.choice;
+        if (answer.forRest) forRest = choice;
+      }
+      await provider.resolveLessonNameClash(clash, choice);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: Card(
+        color: theme.colorScheme.errorContainer,
+        child: ListTile(
+          leading: Icon(
+            Icons.warning_amber_rounded,
+            color: theme.colorScheme.onErrorContainer,
+          ),
+          title: Text(
+            count == 1
+                ? 'A lesson has the same name or file as another in its '
+                      'folder.'
+                : '$count lessons have the same name or file as another in '
+                      'their folder.',
+            style: TextStyle(color: theme.colorScheme.onErrorContainer),
+          ),
+          trailing: TextButton(
+            onPressed: () => _resolve(context),
+            child: const Text('Sort out'),
+          ),
+        ),
+      ),
     );
   }
 }

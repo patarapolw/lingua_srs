@@ -90,6 +90,59 @@ Everything up to the end marker stays in one chunk, however long.
 <!-- chunk:end -->
 ```
 
+### Links between lessons and to sections
+
+Link to another lesson, or to a section, by its name in double brackets. The link reads as what it names, so the source stays readable as plain text:
+
+```markdown
+See [[Lesson 26]] for the vocabulary.
+The past tense is in [[Unit 2::Lesson 26#Past tense]].
+Review [[#Greetings]] before you start.
+[[Lesson 26#Past tense|the past-tense table]]
+```
+
+- **`[[Lesson 26]]`** opens the lesson titled *Lesson 26*. When two lessons share a title, add folders in front with `::` (`[[Unit 2::Lesson 26]]`), the same way lesson names are written; otherwise the one nearest in the folder tree to the lesson with the link opens. Case does not matter.
+- **`#Heading`** after a lesson name opens that lesson at the heading. On its own (`[[#Greetings]]`) it scrolls to the heading in the same lesson. Write the heading's text as it reads; case and punctuation do not matter, so `[[#Hello, World!]]` and `[[#hello-world]]` find the same heading.
+- **`|label`** sets the text shown. Without it, the link shows its target, with `›` between parts: `Unit 2 › Lesson 26 › Past tense`.
+- Plain Markdown links to a heading in the same lesson work too: `[greetings](#greetings)` or `[greetings](<#Greetings>)`.
+
+A link to a lesson or heading that does not exist says so when tapped. Brackets inside code (`` `[[...]]` ``) are left as they are.
+
+#### Links to `.md` files
+
+A lesson folder can also be published as a website (with a site generator such as VitePress), and the same links work in both. Links between lesson files, the way a site generator, Obsidian, VS Code and GitHub write them, open the lesson they point to:
+
+```markdown
+[Lesson 26](../unit-2/lesson-26.md#past-tense)
+[Lesson 26](../unit-2/lesson-26#past-tense)
+[Unit 2](../unit-2/)
+[Intro](/intro.md)
+```
+
+- **Forms:** a link may name the file (`lesson-26.md`), the page a site makes of it (`lesson-26.html`, or `lesson-26` with no extension), or a folder (`unit-2/`), which opens its `index.md`. Links to other files, such as `worksheet.pdf`, and links with a scheme (`https:`) are left alone.
+- **Virtual path:** every lesson has one, made of folders and a file name.
+  - A lesson imported from a folder or ZIP keeps the names of its file and folders as they were on disk (`/unit-2/past_tense/lesson-26.md`), while the app shows the folders renamed (*Unit 2 › Past Tense*).
+  - Any other lesson uses its app folders and its title (`/Unit 2/Lesson 26.md`), with characters a file name cannot hold (`/`, `:`, `?`, …) made `_`.
+  - When you move a lesson to another folder, its virtual folder follows the app folders.
+- **Seeing it:** the lesson's Markdown editor (**Edit Markdown** in the reader) shows its virtual path, and its link button copies a Markdown link to the lesson to paste into another one.
+- **Following a link:** it starts from the folder of the lesson it is in. `..` goes up a folder, and a leading `/` starts at the top: the folder that was picked, or the ZIP's top level, which is the site's root when you pick the folder the site is built from. Folder and file names compare ignoring case and punctuation, so `unit-2/lesson-26` also finds a lesson in the folder *Unit 2*. If no lesson is at that path, for example when only part of a course was imported, the nearest lesson with that file name or title opens.
+- **Korean names** are kept as whole syllables. macOS can store a name such as `한국어` as separate jamo, which looks the same but would not match, so the app composes it when the lesson is imported, loaded or synced.
+- **Export** writes each lesson to its virtual path, so links still work after exporting and importing again.
+- **Older lessons:** a lesson imported before file and folder names were kept takes them the next time you import its folder or ZIP, even if its file has not changed and is skipped. It takes them when the file is the only lesson in that app folder it matches by name; until then it uses its title and app folders. Virtual paths follow the real files: there is nothing to rename by hand.
+- **Site vs app:** `[[...]]` links are only understood by the app. In files you also publish as a site, use links like the ones above. Heading ids in braces (`{#past-polite}`, below) work in both.
+
+#### Heading ids and repeated headings
+
+When a heading's text repeats, its anchor gets `-1`, `-2`, … in order, as on GitHub: under `## Present` and `## Past`, two `### Polite` headings are `#polite` and `#polite-1`. To give a heading an anchor of its own, end it with an id in braces, as in markdown-it-attrs:
+
+```markdown
+## Past
+
+### Polite {#past-polite}
+```
+
+`{#past-polite}` is not shown, and `[[#past-polite|polite past]]` or `[polite past](#past-polite)` links to that heading (from another lesson, `[[Lesson 26#past-polite]]`). Classes and other attributes (`{#id .note lang=ko}`) are allowed and ignored. A link looks for a heading with that id or anchor first, then for one with that text, then for one with the same letters and digits, so an anchor a site generator made (VitePress writes `1. Intro` as `#_1-intro`) finds its heading too.
+
 ## Importing
 
 The import button stays disabled until the input can be previewed. Fix any displayed parse errors, review the preview, then import.
@@ -98,8 +151,17 @@ The import button stays disabled until the input can be previewed. Fix any displ
 - **Pick Folder** scans Markdown files recursively. Multiple folders can be selected together on macOS; other platforms select one at a time. Nested folder and archive paths preserve lesson hierarchy.
 - Folder and ZIP results start unchecked; select lessons individually or use **Check all** / **Uncheck all**.
 - Only files with a `vocabulary:` key in their frontmatter are imported; other Markdown is ignored.
-- Re-importing updates matching lessons and vocabulary in place, keeping SRS progress and any entries not present in the import.
-- Folder import skips Markdown files that have not changed since you last imported them, and reports how many it skipped.
+- Re-importing updates matching lessons and vocabulary in place, keeping SRS progress and any entries not present in the import. A lesson matches when it is at the same virtual path (see [Links to `.md` files](#links-to-md-files)): the same file in the same folder, or, for a lesson with no file, the same title.
+- **One name per folder.** No two lessons in a folder share a name (ignoring case). When an import brings a lesson whose name is taken in its folder by a lesson at another path, you are asked which one is primary; the other is overwritten by it:
+  - **Saved lesson**: the imported file is skipped.
+  - **Imported file**: the saved lesson takes the file's name, text and words; its words keep their study progress, and words not in the file stay.
+  - **Keep both**: the imported lesson is named with a suffix, `Lesson 1 (2)`, and keeps that name when its file is imported again.
+
+  Overwriting never deletes words: the dialog warns how many words of the saved lesson are not in the file, and they stay in the lesson with their study progress. Delete them from the lesson's vocabulary if you no longer want them. *Do the same for any other clash in this import* answers the rest at once. A lesson saved before file names were kept takes the file's name whichever lesson is primary, so the next import of that file updates it without asking; one whose title starts with the same `Lesson <number>` as the file's is asked about too, as such lessons used to be merged.
+- Lessons that share a name or a file in a folder can still arrive by sync or from a backup, such as one file imported on two devices before they synced.
+  - **Same file, nothing lost by merging:** lessons in the same folder from the same file are merged into one when the app starts or syncs, if their text is the same or one of them has none. Words only one has are kept, with their study progress, and AI chats are joined, oldest message first.
+  - **Anything else:** the lesson list shows a banner: same file with different text, or the same name. **Sort out** asks which lesson of each pair is primary, and says what would be lost. Overwriting removes the other lesson, after moving any words only it has to the primary one (with their study progress) and joining its AI chat into the primary one's. **Keep both** renames the second lesson if the names match; if the two share a file, the second one lets go of it, so the next import of the file updates the first.
+- Folder and ZIP import skip Markdown files that have not changed since you last imported them, and report how many they skipped. A ZIP's files are recognised by their path inside the ZIP, so this works however the ZIP is named or wherever it is picked from (Android copies a picked file somewhere new every time).
 
 ### Adding vocabulary to an existing lesson
 

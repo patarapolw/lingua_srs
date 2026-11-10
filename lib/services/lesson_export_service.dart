@@ -26,10 +26,7 @@ class LessonExportService {
 
   static String fileName(String name) => '${_safeSegment(name)}.zip';
 
-  static String _lessonPath(Lesson lesson) => [
-    ...lesson.folderPath.map(_safeSegment),
-    '${_safeSegment(lesson.displayTitle)}.md',
-  ].join('/');
+  static String _lessonPath(Lesson lesson) => lesson.virtualPath.join('/');
 
   static String _uniquePath(
     String path,
@@ -54,13 +51,7 @@ class LessonExportService {
     return candidate;
   }
 
-  static String _safeSegment(String value) {
-    final safe = value
-        .replaceAll(RegExp(r'[\x00-\x1F<>:"/\\|?*]'), '_')
-        .replaceAll(RegExp(r'[. ]+$'), '')
-        .trim();
-    return safe.isEmpty || safe == '.' || safe == '..' ? 'Untitled' : safe;
-  }
+  static String _safeSegment(String value) => safePathSegment(value);
 
   static String _lessonMarkdown(
     Lesson lesson,

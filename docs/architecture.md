@@ -27,6 +27,7 @@ lingua_srs/
 │   │   ├── card_preview.dart          # Picks the new cards a preview shows; study_view shuffles and shows them
 │   │   ├── study_queue_order.dart     # Study queue order: part-of-speech interleaving, new cards mixed into reviews
 │   │   ├── yaml_parser_service.dart   # Markdown/YAML lesson & sentence parser
+│   │   ├── lesson_links.dart          # `[[Lesson#Heading]]` links in lesson Markdown and the lessons they name
 │   │   ├── audio_service.dart         # Audio playback, TTS and offline caching
 │   │   ├── tts_text.dart              # Splits a `zh-TW:`-style locale prefix off TTS text
 │   │   ├── locale_names.dart          # English names of locale tags (`zh-TW` → Chinese (Taiwan))
@@ -52,6 +53,7 @@ lingua_srs/
 │   │   ├── typed_questions.dart       # Questions typed in AI chats, kept and offered again
 │   │   ├── suggested_vocabulary_hints.dart # AI-suggested words to consider editing out: other Korean forms of a known word
 │   │   ├── ai_discussion_search.dart  # Ids, search and related-word suggestions for saved AI chats
+│   │   ├── hangul_text.dart           # Composes Korean jamo (macOS NFD names) into syllables
 │   │   ├── korean_text_search.dart    # Korean-aware sentence search tokenizer
 │   │   ├── vocab_picker_search.dart   # Ranks vocabulary for the merge picker; scores a typed query
 │   │   ├── vocab_pool_search.dart     # Browse, search and POS filter for the Vocab Pool
@@ -92,6 +94,7 @@ lingua_srs/
 │       ├── emphasis_text.dart         # Sentence text with **bold** segments, no Markdown
 │       ├── folder_picker_dialog.dart  # Pick an existing or new folder to move a lesson/folder into
 │       ├── lesson_hierarchy_view.dart # Lesson folder tree with reordering
+│       ├── lesson_clash_dialog.dart   # Asks which of two same-named lessons in a folder is primary
 │       ├── lesson_content_view.dart   # Lesson Markdown reader (native, chunked lazy list)
 │       ├── cached_markdown_image.dart # Online Markdown image shown from the disk cache
 │       ├── markdown_content.dart      # Markdown renderer for notes and chat

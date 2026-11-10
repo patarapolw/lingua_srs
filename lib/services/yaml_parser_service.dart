@@ -6,6 +6,7 @@ import 'package:yaml/yaml.dart';
 import '../models/lesson.dart';
 import '../models/vocab_item.dart';
 import '../models/sentence.dart';
+import 'lesson_links.dart';
 
 class YamlParseResult {
   final Lesson lesson;
@@ -141,6 +142,7 @@ class YamlParserService {
     String? defaultTitle,
     String? defaultUnitTitle,
     bool allowMarkdown = true,
+    String? sourcePath,
   }) {
     var frontMatter = yamlString.trim();
     String? markdownTitle;
@@ -159,7 +161,10 @@ class YamlParserService {
         r'^#\s+(.+)$',
         multiLine: true,
       ).firstMatch(markdownBody)?.group(1)?.trim();
-      markdownTitle = headingTitle?.replaceAll(r'\~', '~');
+      markdownTitle = headingTitle == null
+          ? null
+          : LessonLink.splitHeadingAttributes(headingTitle).$1
+                .replaceAll(r'\~', '~');
       frontMatter = frontMatterParts.$1;
     }
 
@@ -360,6 +365,10 @@ class YamlParserService {
       nativeLanguage: nativeLang,
       vocabularies: vocabList,
       markdownContent: markdownContent,
+      fileName: _markdownFileName(sourcePath),
+      fileFolder: _markdownFileName(sourcePath) == null
+          ? null
+          : _folderOf(sourcePath!),
     );
 
     if (missingEmphasis.isNotEmpty) {
@@ -642,6 +651,63 @@ class YamlParserService {
       keptEntries: kept,
       removed: removed,
       possibleDuplicates: possibleDuplicates,
+    );
+  }
+
+  /// The file name of a Markdown [path] (`unit-2/lesson-26.md` gives
+  /// `lesson-26.md`), or null for other files.
+  static String? _markdownFileName(String? path) {
+    if (path == null) return null;
+    final name = path.split(RegExp(r'[/\\]')).last.trim();
+    return name.toLowerCase().endsWith('.md') && name.length > 3 ? name : null;
+  }
+
+  /// The folders of [path], `/`-separated (`unit-2/lesson-26.md` gives
+  /// `unit-2`), or null for a file at the top.
+  static String? _folderOf(String path) {
+    final parts = path
+        .split(RegExp(r'[/\\]'))
+        .map((part) => part.trim())
+        .where((part) => part.isNotEmpty && part != '.')
+        .toList();
+    return parts.length < 2 ? null : parts.take(parts.length - 1).join('/');
+  }
+
+  /// The lesson a Markdown file at [sourcePath] is, without its vocabulary:
+  /// its title (the first `#` heading, or the frontmatter's `title`), its
+  /// folders ([defaultUnitTitle]) and its file and folder names. For a file
+  /// that import skips because it has not changed, so the lesson made from
+  /// it can still take its file path. Null if it is not a lesson file.
+  static Lesson? lessonFileInfo(
+    String markdown, {
+    required String sourcePath,
+    String? defaultUnitTitle,
+  }) {
+    final fileName = _markdownFileName(sourcePath);
+    if (fileName == null || !hasVocabularyFrontmatter(markdown)) return null;
+    final body = _splitMarkdownFrontmatter(markdown.trim()).$2;
+    final heading = RegExp(
+      r'^#\s+(.+)$',
+      multiLine: true,
+    ).firstMatch(body)?.group(1)?.trim();
+    if (heading == null) {
+      // No heading: the title is in the frontmatter, so read it all.
+      try {
+        return parseLessonYaml(
+          markdown,
+          defaultUnitTitle: defaultUnitTitle,
+          sourcePath: sourcePath,
+        ).lesson;
+      } on FormatException {
+        return null;
+      }
+    }
+    return Lesson(
+      title: LessonLink.splitHeadingAttributes(heading).$1
+          .replaceAll(r'\~', '~'),
+      unitTitle: defaultUnitTitle,
+      fileName: fileName,
+      fileFolder: _folderOf(sourcePath),
     );
   }
 

@@ -1,9 +1,12 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollCacheExtent;
+import 'package:flutter/rendering.dart'
+    show RenderAbstractViewport, ScrollCacheExtent;
 import 'package:flutter/scheduler.dart';
 
+import '../models/lesson.dart' show looseNameKey;
+import '../services/lesson_links.dart';
 import 'markdown_content.dart';
 
 /// A heading found in a lesson, used for the table of contents.
@@ -14,7 +17,11 @@ class LessonHeading {
   /// Index of the chunk the heading starts in (or is inside, in a group).
   final int chunk;
 
-  const LessonHeading(this.level, this.text, this.chunk);
+  /// What `#anchor` links to the heading use: its `{#id}`, or a GitHub-style
+  /// anchor of its text, with `-1`, `-2`, … for repeated headings.
+  final String anchor;
+
+  const LessonHeading(this.level, this.text, this.chunk, {this.anchor = ''});
 }
 
 /// A lesson's Markdown cut into chunks that are rendered lazily, one by one.
@@ -23,6 +30,29 @@ class LessonContent {
   final List<LessonHeading> headings;
 
   const LessonContent(this.chunks, this.headings);
+
+  /// The heading a link names: by its [LessonHeading.anchor] first, then by
+  /// its text (the first such heading), then by the letters and digits of
+  /// its text. Case does not matter.
+  LessonHeading? headingFor(String target) {
+    final wanted = target.trim().toLowerCase();
+    if (wanted.isEmpty) return null;
+    for (final heading in headings) {
+      if (heading.anchor.toLowerCase() == wanted) return heading;
+    }
+    for (final heading in headings) {
+      if (LessonLink.headingMatches(heading.text, target)) return heading;
+    }
+    // An anchor another tool made, such as a site generator's `_1-intro`
+    // for `1. Intro`: the same letters and digits.
+    final loose = looseNameKey(target);
+    for (final heading in headings) {
+      if (loose.isNotEmpty && looseNameKey(heading.text) == loose) {
+        return heading;
+      }
+    }
+    return null;
+  }
 
   /// A chunk is closed at the next safe blank line once it is this long.
   static const defaultChunkChars = 3000;
@@ -52,6 +82,20 @@ class LessonContent {
     var size = 0;
     var grouped = false;
     String? fence;
+    final anchors = <String>{};
+
+    String anchorFor(String text, String? id) {
+      if (id != null) {
+        anchors.add(id.toLowerCase());
+        return id;
+      }
+      final base = LessonLink.slug(text);
+      var anchor = base;
+      for (var n = 1; !anchors.add(anchor); n++) {
+        anchor = '$base-$n';
+      }
+      return anchor;
+    }
 
     void flush() {
       final text = current.join('\n').trim();
@@ -91,13 +135,24 @@ class LessonContent {
         final setextLevel = _setextLevel(lines, i);
         if (heading != null || setextLevel != null) {
           if (!grouped) flush();
+          final raw = heading != null ? heading[2]! : line.trim();
+          final (title, id) = LessonLink.splitHeadingAttributes(raw);
+          final text = _plainText(title);
           headings.add(
             LessonHeading(
               heading != null ? heading[1]!.length : setextLevel!,
-              _plainText(heading != null ? heading[2]! : line.trim()),
+              text,
               chunks.length,
+              anchor: anchorFor(text, id),
             ),
           );
+          if (title != raw) {
+            current.add(
+              heading != null ? '${heading[1]} ${title.trim()}' : title,
+            );
+            size += line.length + 1;
+            continue;
+          }
         } else if (!grouped &&
             size >= maxChars &&
             line.trim().isEmpty &&
@@ -156,9 +211,9 @@ class LessonContent {
       .trim();
 
   /// Turns the lesson components (`<YouTube>`, `<AudioButton>`, `<TTS>`,
-  /// `<Details>`, spoiler spans) into what [MarkdownContent] renders, and
-  /// drops scripts, quizzes, unknown components and HTML comments. Chunk
-  /// markers are kept for [parse].
+  /// `<Details>`, spoiler spans) and `[[lesson links]]` into what
+  /// [MarkdownContent] renders, and drops scripts, quizzes, unknown
+  /// components and HTML comments. Chunk markers are kept for [parse].
   static String preprocess(String markdown) {
     final fencedCodeBlocks = <String>[];
     var text = markdown.replaceAll('\r\n', '\n').replaceAllMapped(
@@ -233,6 +288,7 @@ class LessonContent {
       RegExp(r'<!--(?!\s*chunk(?::start|:end)?\s*-->)[\s\S]*?-->'),
       '',
     );
+    text = LessonLink.prepareWikiLinks(text);
 
     return text.replaceAllMapped(
       RegExp(r'LINGUA_CODE_BLOCK_(\d+)'),
@@ -244,8 +300,28 @@ class LessonContent {
 /// Lets a parent widget ask [LessonContentView] to scroll to a heading.
 class LessonContentController {
   void Function(LessonHeading heading)? _scrollTo;
+  bool Function(String target)? _scrollToNamed;
 
   void scrollToHeading(LessonHeading heading) => _scrollTo?.call(heading);
+
+  /// Scrolls to the first heading whose text or anchor is [target]; returns
+  /// false if there is none.
+  bool scrollToHeadingNamed(String target) =>
+      _scrollToNamed?.call(target) ?? false;
+}
+
+/// Where a lesson was scrolled to: the chunk at the top of the view and how
+/// far into it, and the pixel offset as a fallback above the first chunk.
+typedef _SavedScroll = ({int? chunk, double offset, double pixels, int text});
+
+/// Scroll positions of lessons left this session, by [LessonContentView.
+/// scrollKey], so going back to the lesson list and opening the lesson again
+/// returns to the same place. In memory only.
+abstract final class LessonScrollMemory {
+  static final Map<String, _SavedScroll> _saved = {};
+
+  /// Forgets every saved position, for tests.
+  static void clear() => _saved.clear();
 }
 
 /// Renders a lesson natively: its Markdown is cut into chunks (see
@@ -257,11 +333,27 @@ class LessonContentView extends StatefulWidget {
   final LessonContent? content;
   final LessonContentController? controller;
 
+  /// Called for a tapped link to another lesson, such as
+  /// `[[Lesson 26#Past tense]]`. Links to a heading in this lesson scroll to
+  /// it without calling this.
+  final void Function(LessonLink link)? onLessonLink;
+
+  /// Text or anchor of a heading to scroll to once the lesson is shown.
+  final String? initialHeading;
+
+  /// Keeps the scroll position under this key ([LessonScrollMemory]), such as
+  /// the lesson's id, and returns to it when the lesson is shown again,
+  /// unless [initialHeading] is given or the text has changed.
+  final String? scrollKey;
+
   const LessonContentView({
     super.key,
     required this.markdown,
     this.content,
     this.controller,
+    this.onLessonLink,
+    this.initialHeading,
+    this.scrollKey,
   });
 
   @override
@@ -282,11 +374,102 @@ class _LessonContentViewState extends State<LessonContentView> {
   double? _textScale;
   double? _bodyFontSize;
 
+  /// Hides the list while it jumps back to a saved position, so the lesson
+  /// does not flash at the top first.
+  bool _restoring = false;
+
   @override
   void initState() {
     super.initState();
-    widget.controller?._scrollTo = _scrollTo;
+    _attach(widget.controller);
     _parse();
+    final initialHeading = widget.initialHeading;
+    final key = widget.scrollKey;
+    final saved = key == null ? null : LessonScrollMemory._saved[key];
+    if (initialHeading != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _scrollToNamed(initialHeading);
+      });
+    } else if (saved != null && saved.text == _textHash) {
+      _restoring = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _restore(saved));
+    }
+  }
+
+  int get _textHash => Object.hash(widget.markdown, _content.chunks.length);
+
+  /// The chunk at the top of the view and how far it is scrolled into it.
+  _SavedScroll? _position() {
+    if (!_scroll.hasClients) return null;
+    final pixels = _scroll.position.pixels;
+    int? chunk;
+    var offset = 0.0;
+    for (var index = 0; index < _keys.length; index++) {
+      final top = _chunkTop(index);
+      if (top == null || top > pixels + 0.5) continue;
+      if (chunk == null || index > chunk) {
+        chunk = index;
+        offset = pixels - top;
+      }
+    }
+    return (chunk: chunk, offset: offset, pixels: pixels, text: _textHash);
+  }
+
+  /// The scroll offset at which chunk [index] starts at the top of the view,
+  /// or null while it is not built.
+  double? _chunkTop(int index) {
+    final box = _keys[index].currentContext?.findRenderObject();
+    if (box is! RenderBox || !box.attached || !box.hasSize) return null;
+    return RenderAbstractViewport.of(box).getOffsetToReveal(box, 0).offset;
+  }
+
+  /// Saves where the lesson is scrolled to. With [onlyAnchored], only when a
+  /// chunk can still be measured: while the view is being taken down its
+  /// chunks may already be detached, and the place saved when scrolling
+  /// stopped is better than a bare pixel offset.
+  void _savePosition({bool onlyAnchored = false}) {
+    final key = widget.scrollKey;
+    if (key == null || _restoring) return;
+    final position = _position();
+    if (position == null || (onlyAnchored && position.chunk == null)) return;
+    LessonScrollMemory._saved[key] = position;
+  }
+
+  /// Jumps back to [saved]: to its chunk (by its estimated offset until it
+  /// is built), then into it, until the place settles.
+  Future<void> _restore(_SavedScroll saved) async {
+    try {
+      for (var attempt = 0; attempt < 10; attempt++) {
+        if (!mounted || !_scroll.hasClients) return;
+        final position = _scroll.position;
+        final chunk = saved.chunk;
+        double target;
+        if (chunk == null || chunk >= _keys.length) {
+          target = saved.pixels;
+        } else {
+          final top = _chunkTop(chunk);
+          target = (top ?? _estimatedOffsetForChunk(chunk)) + saved.offset;
+          if (top != null && (position.pixels - target).abs() <= 1) return;
+        }
+        position.jumpTo(
+          target.clamp(position.minScrollExtent, position.maxScrollExtent),
+        );
+        await SchedulerBinding.instance.endOfFrame;
+        if (chunk == null) return;
+      }
+    } finally {
+      if (mounted) setState(() => _restoring = false);
+    }
+  }
+
+  void _attach(LessonContentController? controller) {
+    controller?._scrollTo = _scrollTo;
+    controller?._scrollToNamed = _scrollToNamed;
+  }
+
+  void _detach(LessonContentController? controller) {
+    controller?._scrollTo = null;
+    controller?._scrollToNamed = null;
   }
 
   @override
@@ -310,8 +493,8 @@ class _LessonContentViewState extends State<LessonContentView> {
   void didUpdateWidget(LessonContentView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != widget.controller) {
-      oldWidget.controller?._scrollTo = null;
-      widget.controller?._scrollTo = _scrollTo;
+      _detach(oldWidget.controller);
+      _attach(widget.controller);
     }
     if (oldWidget.markdown != widget.markdown ||
         oldWidget.content != widget.content) {
@@ -320,8 +503,16 @@ class _LessonContentViewState extends State<LessonContentView> {
   }
 
   @override
+  void deactivate() {
+    // Leaving the lesson, such as going back to the list: keep the place,
+    // in case scrolling had not settled.
+    _savePosition(onlyAnchored: true);
+    super.deactivate();
+  }
+
+  @override
   void dispose() {
-    widget.controller?._scrollTo = null;
+    _detach(widget.controller);
     _scroll.dispose();
     super.dispose();
   }
@@ -413,34 +604,41 @@ class _LessonContentViewState extends State<LessonContentView> {
     }
   }
 
-  /// GitHub-style anchor for a heading: `Hello, World!` becomes `hello-world`.
-  static String _slug(String text) => text
-      .toLowerCase()
-      .replaceAll(RegExp(r'[^\p{L}\p{N}\s_-]', unicode: true), '')
-      .trim()
-      .replaceAll(RegExp(r'\s'), '-');
+  /// Scrolls to the heading [target] names (see [LessonContent.headingFor]).
+  bool _scrollToNamed(String target) {
+    final heading = _content.headingFor(target);
+    if (heading == null) return false;
+    _scrollTo(heading);
+    return true;
+  }
 
-  /// Handles `#anchor` links by scrolling to the matching heading.
+  /// Handles `#anchor` and `[[#Heading]]` links by scrolling to the heading,
+  /// and passes links to other lessons to [LessonContentView.onLessonLink].
   bool _onLink(String href) {
-    if (!href.startsWith('#')) return false;
-    String target;
-    try {
-      target = Uri.decodeComponent(href.substring(1));
-    } catch (_) {
-      target = href.substring(1);
-    }
-    target = target.toLowerCase();
-    for (final heading in _content.headings) {
-      if (_slug(heading.text) == target) {
-        _scrollTo(heading);
-        break;
-      }
+    final link = LessonLink.fromHref(href);
+    if (link == null) return false;
+    if (link.isOtherLesson) {
+      widget.onLessonLink?.call(link);
+    } else if (!_scrollToNamed(link.heading!)) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(content: Text('No heading “${link.heading}” in this lesson.')),
+      );
     }
     return true;
   }
 
   @override
   Widget build(BuildContext context) {
+    return NotificationListener<ScrollEndNotification>(
+      onNotification: (_) {
+        _savePosition();
+        return false;
+      },
+      child: Opacity(opacity: _restoring ? 0 : 1, child: _list(context)),
+    );
+  }
+
+  Widget _list(BuildContext context) {
     return SelectionArea(
       child: ListView.builder(
         controller: _scroll,

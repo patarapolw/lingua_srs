@@ -153,4 +153,90 @@ void main() {
     expect(find.byTooltip('Ask AI about lesson'), findsNothing);
     expect(find.byTooltip('Edit Markdown'), findsOneWidget);
   });
+
+  testWidgets('shows the virtual path while editing Markdown', (tester) async {
+    await openReader(tester, const Size(1200, 800));
+
+    await tester.tap(find.byTooltip('Edit Markdown'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('/Greetings.md'), findsOneWidget);
+    expect(find.byTooltip('Copy link to this lesson'), findsOneWidget);
+  });
+
+  group('lesson links', () {
+    Future<(Lesson, Lesson)> openLinked(WidgetTester tester) async {
+      final provider = await loadedProvider(tester);
+      const vocab = '---\nvocabulary:\n---\n';
+      final target = (await tester.runAsync(
+        () => provider.importYaml(
+          '$vocab# Lesson 26\n\n## Past tense\n\nPast text.\n',
+          defaultTitle: 'Lesson 26',
+          defaultUnitTitle: 'Unit 2',
+        ),
+      ))!;
+      final source = (await tester.runAsync(
+        () => provider.importYaml(
+          '$vocab# Start\n\n[[Unit 2::Lesson 26#Past tense]]\n\n'
+          '[[Missing lesson]]\n\n'
+          '[as a file](unit-2/lesson-26.md#past-tense)\n',
+          defaultTitle: 'Start',
+        ),
+      ))!;
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AppProvider>.value(value: provider),
+            ChangeNotifierProvider<AudioService>(
+              create: (_) => _SilentAudioService(),
+            ),
+          ],
+          child: MaterialApp(home: LessonReaderView(lessonId: source.id)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      return (source, target);
+    }
+
+    testWidgets('opens the linked lesson at its heading', (tester) async {
+      final (_, target) = await openLinked(tester);
+
+      await tester.tap(
+        find.text('Unit 2 › Lesson 26 › Past tense', findRichText: true),
+      );
+      await tester.pumpAndSettle();
+
+      final reader = tester.widget<LessonReaderView>(
+        find.byType(LessonReaderView).last,
+      );
+      expect(reader.lessonId, target.id);
+      expect(reader.initialHeading, 'Past tense');
+      expect(
+        find.textContaining('Past text.', findRichText: true),
+        findsWidgets,
+      );
+    });
+
+    testWidgets('opens the lesson a .md link points to', (tester) async {
+      final (_, target) = await openLinked(tester);
+
+      await tester.tap(find.text('as a file', findRichText: true));
+      await tester.pumpAndSettle();
+
+      final reader = tester.widget<LessonReaderView>(
+        find.byType(LessonReaderView).last,
+      );
+      expect(reader.lessonId, target.id);
+      expect(reader.initialHeading, 'past-tense');
+    });
+
+    testWidgets('says when the linked lesson does not exist', (tester) async {
+      await openLinked(tester);
+
+      await tester.tap(find.text('Missing lesson', findRichText: true));
+      await tester.pump();
+
+      expect(find.text('No lesson named “Missing lesson”.'), findsOneWidget);
+    });
+  });
 }
