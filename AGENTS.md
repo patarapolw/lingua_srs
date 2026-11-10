@@ -43,15 +43,8 @@ If `flutter` or `dart` isn't available, you can't run tests or `flutter analyze`
 - If the Dart SDK can't be installed either, hand-format to Dart style: 2-space indent, trailing commas on multi-line argument lists and collections, lines ≤ 80 columns, and expect `dart format` to change something.
 - Still add or update tests in `test/`, written carefully since they can't be run.
 - Keep changes small and focused so they are easy to fix locally.
-- In the PR description, list the checks that were not run as unticked boxes, for the person to tick once they run them locally:
-
-  ```markdown
-  - [ ] `flutter test`
-  - [ ] `flutter analyze`
-  - [ ] `dart format lib test`
-  ```
-
-  Never tick a box, or write that a check ran locally, unless the person says so. When told a check passed without being told where it ran (CI, locally, or the IDE's analyzer), ask rather than guess.
+- In the PR description, state that tests, analyze and format were not run here. CI runs all three; once CI passes, count them as done, with no checkbox.
+- Give checkboxes only to checks CI doesn't cover: manual checks (below) and checks that must be run locally, such as `flutter test integration_test -d macos` when `desktop.yml` didn't run it. Leave them unticked for the person; never tick one, or write that a check ran locally, unless the person says so. When told a check passed without being told where it ran, ask rather than guess.
 - Open the PR anyway. It's fine for CI to fail on format, analyze or tests; a local agent with Flutter will fix it on the same PR.
 - CI runs on your pushes, `flutter test` before the format check. You may fix a failure from here only when the log names its cause: an analyzer warning at a file and line, or a failing test whose expected/actual or stack trace points into the changed code. Push at most one fix per failure. If CI still fails, or finding the cause needs the app or a debugger, stop and leave it for a local session.
 - Never push for formatting alone. The next local commit formats.
