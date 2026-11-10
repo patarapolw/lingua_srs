@@ -331,4 +331,186 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(ImageFiltered), findsOneWidget);
   });
+
+  group('inline HTML', () {
+    /// Whether any run of the rendered text passes [test], which gets the
+    /// run's text and its style merged with those of the spans around it.
+    bool anySpan(
+      WidgetTester tester,
+      bool Function(String? text, TextStyle style) test,
+    ) {
+      bool visit(InlineSpan span, TextStyle inherited) {
+        if (span is! TextSpan) return false;
+        final style = inherited.merge(span.style);
+        return test(span.text, style) ||
+            (span.children?.any((child) => visit(child, style)) ?? false);
+      }
+
+      return tester
+          .widgetList<RichText>(find.byType(RichText))
+          .any((richText) => visit(richText.text, const TextStyle()));
+    }
+
+    String shown(WidgetTester tester) => tester
+        .widgetList<RichText>(find.byType(RichText))
+        .map((richText) => richText.text.toPlainText())
+        .join('\n');
+
+    Future<void> pump(WidgetTester tester, String content) => tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: MarkdownContent(content: content)),
+      ),
+    );
+
+    testWidgets('ins, mark and sup are styled, not shown as tags', (
+      tester,
+    ) async {
+      await pump(tester, '<mark>나는</mark> _너를_ <ins>사랑해</ins> x<sup>2</sup>');
+
+      expect(shown(tester), contains('나는 너를 사랑해 x2'));
+      expect(shown(tester), isNot(contains('<')));
+      expect(
+        anySpan(
+          tester,
+          (text, style) =>
+              text == '사랑해' && style.decoration == TextDecoration.underline,
+        ),
+        isTrue,
+      );
+      expect(
+        anySpan(
+          tester,
+          (text, style) => text == '나는' && style.backgroundColor != null,
+        ),
+        isTrue,
+      );
+      expect(
+        anySpan(
+          tester,
+          (text, style) =>
+              text == '2' && (style.fontFeatures?.isNotEmpty ?? false),
+        ),
+        isTrue,
+      );
+    });
+
+    testWidgets('em, strong, s and Markdown inside a tag are rendered', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        '<em>slanted</em> <strong>heavy</strong> <s>gone</s> '
+        '<ins>under **both**</ins>',
+      );
+
+      expect(shown(tester), contains('slanted heavy gone under both'));
+      expect(
+        anySpan(
+          tester,
+          (text, style) =>
+              text == 'slanted' && style.fontStyle == FontStyle.italic,
+        ),
+        isTrue,
+      );
+      expect(
+        anySpan(
+          tester,
+          (text, style) =>
+              text == 'heavy' && style.fontWeight == FontWeight.bold,
+        ),
+        isTrue,
+      );
+      expect(
+        anySpan(
+          tester,
+          (text, style) =>
+              text == 'gone' && style.decoration == TextDecoration.lineThrough,
+        ),
+        isTrue,
+      );
+      expect(
+        anySpan(
+          tester,
+          (text, style) =>
+              text == 'both' &&
+              style.fontWeight == FontWeight.bold &&
+              style.decoration == TextDecoration.underline,
+        ),
+        isTrue,
+      );
+    });
+
+    testWidgets('tags in code are left as typed', (tester) async {
+      await pump(tester, 'Write `<ins>new</ins>` for new text.');
+
+      expect(shown(tester), contains('<ins>new</ins>'));
+    });
+
+    testWidgets('ins in a heading is underlined', (tester) async {
+      await pump(tester, '## The <ins>verb</ins>');
+
+      expect(shown(tester), contains('The verb'));
+      expect(
+        anySpan(
+          tester,
+          (text, style) =>
+              text == 'verb' && style.decoration == TextDecoration.underline,
+        ),
+        isTrue,
+      );
+    });
+
+    testWidgets('br in a table cell keeps the table', (tester) async {
+      await pump(
+        tester,
+        '| | 걷다<br>To walk | 걸다<br/>To hang |\n'
+        '| --- | :---: | :---: |\n'
+        '| Past | 걸었어요 | 걸었어요 |',
+      );
+
+      expect(find.byType(Table), findsOneWidget);
+      expect(shown(tester), contains('걷다\nTo walk'));
+      expect(shown(tester), contains('걸다\nTo hang'));
+      expect(shown(tester), isNot(contains('<br')));
+      expect(shown(tester), isNot(contains('---')));
+    });
+
+    testWidgets('br outside a table still breaks the line', (tester) async {
+      await pump(tester, 'first<br>second');
+
+      final markdown = tester.widget<MarkdownBody>(find.byType(MarkdownBody));
+      expect(markdown.data, 'first\nsecond');
+    });
+
+    testWidgets('Markdown inside a spoiler is rendered', (tester) async {
+      await pump(
+        tester,
+        MarkdownContent.prepareSpoilerSpans(
+          '<span class="md spoiler">my **brother** is _tall_</span>',
+        ),
+      );
+
+      await tester.tap(find.byType(SpoilerText));
+      await tester.pumpAndSettle();
+
+      expect(find.text('my brother is tall'), findsOneWidget);
+      expect(shown(tester), isNot(contains('*')));
+      expect(
+        anySpan(
+          tester,
+          (text, style) =>
+              text == 'brother' && style.fontWeight == FontWeight.bold,
+        ),
+        isTrue,
+      );
+      expect(
+        anySpan(
+          tester,
+          (text, style) =>
+              text == 'tall' && style.fontStyle == FontStyle.italic,
+        ),
+        isTrue,
+      );
+    });
+  });
 }

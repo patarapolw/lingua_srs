@@ -98,7 +98,7 @@ class _MarkdownHeadingTextState extends State<MarkdownHeadingText> {
       'del' || 's' => sheet.del,
       'code' => sheet.code,
       'a' => sheet.a,
-      _ => null,
+      _ => sheet.styles[tag],
     };
     if (style == null) return null;
     return TextStyle(
@@ -108,6 +108,7 @@ class _MarkdownHeadingTextState extends State<MarkdownHeadingText> {
       fontStyle: style.fontStyle,
       fontFamily: style.fontFamily,
       decoration: style.decoration,
+      fontFeatures: style.fontFeatures,
     );
   }
 

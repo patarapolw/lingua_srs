@@ -69,7 +69,9 @@ Lesson notes go here.
 
 Frontmatter-only Markdown imports the same as equivalent plain YAML. The body is kept for reading from the lesson list and can be edited and saved at any time.
 
-The reader renders `<AudioButton src="...">` and `<TTS>...</TTS>` controls, and `<YouTube id="...">` embeds (also `list` or `src` attributes). Spoiler spans (`<span class="spoiler">...</span>`) are blurred until hovered on desktop or tapped on touch devices.
+The reader renders `<AudioButton src="...">` and `<TTS>...</TTS>` controls, and `<YouTube id="...">` embeds (also `list` or `src` attributes). Spoiler spans (`<span class="spoiler">...</span>`) are blurred until hovered on desktop or tapped on touch devices. Markdown inside a spoiler is rendered: `<span class="spoiler">my **brother**</span>`.
+
+A few inline HTML tags are rendered too: `<ins>` and `<u>` underline, `<mark>` highlights, `<sup>` and `<sub>` raise and lower, `<del>` and `<s>` strike through, and `<em>`, `<i>`, `<strong>` and `<b>` work like their Markdown forms. Markdown inside them is rendered. `<br>` breaks the line, also inside a table cell. Other HTML is shown as typed.
 
 Tap a YouTube thumbnail to start its embedded player. If the video cannot play,
 use **Open on YouTube** to open the video or playlist outside the player.
