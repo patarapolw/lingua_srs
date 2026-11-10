@@ -3,7 +3,6 @@
 // See ../vitepress.md.
 import DefaultTheme from 'vitepress/theme'
 import AudioButton from './AudioButton.vue'
-import Details from './Details.vue'
 import Nothing from './Nothing.vue'
 import TTS from './TTS.vue'
 import YouTube from './YouTube.vue'
@@ -15,7 +14,6 @@ export default {
     app.component('AudioButton', AudioButton)
     app.component('TTS', TTS)
     app.component('YouTube', YouTube)
-    app.component('Details', Details)
     // The app shows nothing for these.
     app.component('VocabQuiz', Nothing)
     app.component('SentenceQuiz', Nothing)
