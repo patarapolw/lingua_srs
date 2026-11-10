@@ -1125,12 +1125,14 @@ vocabulary:
 
       await openMore(tester);
       expect(find.text('Turn autoplay off'), findsOneWidget);
+      expect(find.byIcon(Icons.volume_up), findsOneWidget);
       await tester.tap(menuItem('autoplay'));
       await tester.pumpAndSettle();
       expect(provider.autoplayAudio, isFalse);
 
       await openMore(tester);
       expect(find.text('Turn autoplay on'), findsOneWidget);
+      expect(find.byIcon(Icons.volume_off), findsOneWidget);
     });
 
     testWidgets('nothing for a non-Korean lesson', (tester) async {

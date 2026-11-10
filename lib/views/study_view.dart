@@ -1301,8 +1301,8 @@ class _StudyViewState extends State<StudyView> {
     final back = distinctCardCount([for (final r in record.removed) r.item]);
     _showSnack(
       back == 0
-          ? 'Stopped wrapping up.'
-          : 'Stopped wrapping up: $back ${back == 1 ? 'card' : 'cards'} back.',
+          ? 'Wrap up cancelled.'
+          : 'Wrap up cancelled: $back ${back == 1 ? 'card' : 'cards'} back.',
     );
   }
 
@@ -1694,11 +1694,9 @@ class _StudyViewState extends State<StudyView> {
                   ],
                   if (_wrapUpRecord?.removed.isNotEmpty ?? false) ...[
                     FilledButton.tonalIcon(
-                      icon: const Icon(Icons.flag),
+                      icon: const Icon(Icons.redo),
                       label: Text(
-                        _showKeyHints
-                            ? 'Stop Wrapping Up (W)'
-                            : 'Stop Wrapping Up',
+                        _showKeyHints ? 'Cancel Wrap Up (W)' : 'Cancel Wrap Up',
                       ),
                       onPressed: _resumeSession,
                     ),
@@ -1943,6 +1941,8 @@ class _StudyViewState extends State<StudyView> {
                     _showKeyHints ? 'Undo (Z / Ctrl+Z)' : 'Undo',
                     enabled: canUndo,
                   ),
+                  // The icon shows the current state; the title says what
+                  // tapping does.
                   moreItem(
                     'autoplay',
                     provider.autoplayAudio ? Icons.volume_up : Icons.volume_off,
@@ -1983,18 +1983,18 @@ class _StudyViewState extends State<StudyView> {
                   'Reset card to New',
                   enabled: _canResetCurrentCard,
                 ),
-                if (_wrappedUp)
-                  moreItem(
-                    'wrapup',
-                    Icons.flag,
-                    _showKeyHints ? 'Stop wrapping up (W)' : 'Stop wrapping up',
-                  )
-                else
-                  moreItem(
-                    'wrapup',
-                    Icons.flag_outlined,
-                    _showKeyHints ? 'Wrap up session (W)' : 'Wrap up session',
-                  ),
+                // Unlike autoplay, the icon shows the action, like the
+                // other items: finish up, or carry on with the full session.
+                moreItem(
+                  'wrapup',
+                  _wrappedUp ? Icons.redo : Icons.sports_score,
+                  switch ((_wrappedUp, _showKeyHints)) {
+                    (true, true) => 'Cancel wrap up (W)',
+                    (true, false) => 'Cancel wrap up',
+                    (false, true) => 'Wrap up session (W)',
+                    (false, false) => 'Wrap up session',
+                  },
+                ),
                 if (item.lesson.targetLanguage == 'ko') ...[
                   const PopupMenuDivider(),
                   PronunciationToggleMenuEntry(enabled: _isAnswerRevealed),
