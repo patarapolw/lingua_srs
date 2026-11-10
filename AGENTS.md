@@ -24,6 +24,7 @@ Flutter app (Dart, `provider` state management). See [README.md](README.md) for 
 - Run `dart format lib test` before every commit and commit everything it changes, including files you didn't edit. Cloud agents often can't run the formatter, so unformatted code can reach `main`; the next local commit cleans it up.
 - Every behavior change or bug fix needs a test in `test/`.
 - When the lesson syntax changes, update `docs/lesson-format.md`. `test/docs_test.dart` parses its examples and will fail if they break.
+- When you add, rename or delete a Dart file under `lib/`, update its line in `docs/architecture.md`. `test/docs_test.dart` fails if a file is missing from it or listed after it is gone.
 - Keep `README.md` short; put detail in `docs/`.
 - Don't commit machine-specific paths or personal study data.
 - Don't commit secrets. Real values go in the git-ignored `env.json`, `worker/.dev.vars` and `worker/wrangler.jsonc`, or in `wrangler secret put`; commit only the `*.example*` files. GitGuardian scans every PR as a GitHub App, outside `ci.yml`. If it flags a real secret, revoke the secret at its provider; removing it from the branch is not enough.
