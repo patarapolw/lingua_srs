@@ -642,30 +642,37 @@ void main() {
       expect(seeded.fresh.status, SrsStatus.isNew);
     });
 
-    testWidgets('the wrap up menu item shows a switch for its state', (
+    testWidgets('the wrap up menu item shows its state like a toggle button', (
       tester,
     ) async {
       final provider = await loadedProvider(tester);
       final seeded = await seed(tester, provider);
       await openStudy(tester, provider, seeded.lesson);
 
-      Future<bool> switchOn() async {
+      // Whether the item is highlighted, after checking its icon matches.
+      Future<bool> shownOn() async {
         await tester.tap(find.byTooltip('More'));
         await tester.pumpAndSettle();
-        final on = tester
-            .widget<Switch>(find.byKey(const ValueKey('wrapup-switch')))
-            .value;
+        final tile = find.byKey(const ValueKey('wrapup-toggle'));
+        final on = tester.widget<ListTile>(tile).selected;
+        expect(
+          find.descendant(
+            of: tile,
+            matching: find.byIcon(on ? Icons.flag : Icons.flag_outlined),
+          ),
+          findsOneWidget,
+        );
         // Close the menu without choosing anything.
         await tester.tapAt(Offset.zero);
         await tester.pumpAndSettle();
         return on;
       }
 
-      expect(await switchOn(), isFalse);
+      expect(await shownOn(), isFalse);
       await chooseFromMenu(tester, 'Wrap up session');
-      expect(await switchOn(), isTrue);
+      expect(await shownOn(), isTrue);
       await chooseFromMenu(tester, 'Wrap up session');
-      expect(await switchOn(), isFalse);
+      expect(await shownOn(), isFalse);
     });
   });
 }

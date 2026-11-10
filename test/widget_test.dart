@@ -1123,20 +1123,27 @@ vocabulary:
       expect(find.byTooltip('Autoplay audio'), findsNothing);
       expect(provider.autoplayAudio, isTrue);
 
-      // The item keeps its name; its switch shows the current state.
-      bool switchOn() => tester
-          .widget<Switch>(find.byKey(const ValueKey('autoplay-switch')))
-          .value;
+      // The item keeps its name; its icon shows the current state and it is
+      // highlighted while on, like the toolbar button.
+      bool highlighted() => tester
+          .widget<ListTile>(find.byKey(const ValueKey('autoplay-toggle')))
+          .selected;
+      Finder icon(IconData data) => find.descendant(
+        of: find.byKey(const ValueKey('autoplay-toggle')),
+        matching: find.byIcon(data),
+      );
       await openMore(tester);
       expect(find.text('Autoplay audio'), findsOneWidget);
-      expect(switchOn(), isTrue);
+      expect(highlighted(), isTrue);
+      expect(icon(Icons.volume_up), findsOneWidget);
       await tester.tap(menuItem('autoplay'));
       await tester.pumpAndSettle();
       expect(provider.autoplayAudio, isFalse);
 
       await openMore(tester);
       expect(find.text('Autoplay audio'), findsOneWidget);
-      expect(switchOn(), isFalse);
+      expect(highlighted(), isFalse);
+      expect(icon(Icons.volume_off), findsOneWidget);
     });
 
     testWidgets('nothing for a non-Korean lesson', (tester) async {

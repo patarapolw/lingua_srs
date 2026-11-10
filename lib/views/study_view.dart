@@ -1789,28 +1789,24 @@ class _StudyViewState extends State<StudyView> {
       ),
     );
 
-    // A setting that stays on until turned off: a fixed icon and name, and
-    // a switch that shows whether it is on now. Tapping the item flips it.
+    // A setting that stays on until turned off, styled like a toolbar toggle
+    // button: the item keeps the feature's name, its icon shows the current
+    // state, and it is highlighted while on. Tapping the item flips it.
     PopupMenuItem<String> toggleItem(
       String value,
-      IconData icon,
+      IconData offIcon,
+      IconData onIcon,
       String title, {
       required bool on,
     }) => PopupMenuItem<String>(
       value: value,
       child: ListTile(
+        key: ValueKey('$value-toggle'),
         dense: true,
         contentPadding: EdgeInsets.zero,
-        leading: Icon(icon),
+        selected: on,
+        leading: Icon(on ? onIcon : offIcon),
         title: Text(title),
-        // The tap goes to the menu item, which closes the menu.
-        trailing: IgnorePointer(
-          child: Switch(
-            key: ValueKey('$value-switch'),
-            value: on,
-            onChanged: (_) {},
-          ),
-        ),
       ),
     );
 
@@ -1970,7 +1966,8 @@ class _StudyViewState extends State<StudyView> {
                   ),
                   toggleItem(
                     'autoplay',
-                    Icons.volume_up_outlined,
+                    Icons.volume_off,
+                    Icons.volume_up,
                     'Autoplay audio',
                     on: provider.autoplayAudio,
                   ),
@@ -2010,6 +2007,7 @@ class _StudyViewState extends State<StudyView> {
                 toggleItem(
                   'wrapup',
                   Icons.flag_outlined,
+                  Icons.flag,
                   _showKeyHints ? 'Wrap up session (W)' : 'Wrap up session',
                   on: _wrappedUp,
                 ),
