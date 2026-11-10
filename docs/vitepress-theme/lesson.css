@@ -1,0 +1,50 @@
+.lesson-audio {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75em;
+  height: 1.75em;
+  margin: 0 0.15em;
+  border-radius: 50%;
+  font-size: 0.8em;
+  line-height: 1;
+  vertical-align: middle;
+  color: var(--vp-c-brand-1);
+  background: var(--vp-c-brand-soft);
+  transition: background-color 0.2s;
+}
+
+.lesson-audio:hover,
+.lesson-audio.playing {
+  color: var(--vp-c-white);
+  background: var(--vp-c-brand-1);
+}
+
+.lesson-audio.failed {
+  color: var(--vp-c-danger-1);
+  background: var(--vp-c-danger-soft);
+}
+
+.lesson-youtube {
+  max-width: 640px;
+  margin: 16px 0;
+}
+
+.lesson-youtube iframe {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 0;
+  border-radius: 8px;
+}
+
+/* <span class="spoiler">: blurred until hovered or tapped. */
+.spoiler {
+  filter: blur(0.3em);
+  transition: filter 0.2s;
+}
+
+.spoiler:hover,
+.spoiler:active {
+  filter: none;
+}

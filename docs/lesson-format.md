@@ -1,6 +1,6 @@
 # Lesson Format
 
-Lessons are Markdown files with YAML frontmatter (or plain YAML). Write them in the app via **Add Lessons**, or import files, folders and ZIP archives.
+Lessons are Markdown files with YAML frontmatter (or plain YAML). Write them in the app via **Add Lessons**, or import files, folders and ZIP archives. To write them on a computer with a live preview, see [Editing lessons outside the app](#editing-lessons-outside-the-app).
 
 ## Lesson name and hierarchy
 
@@ -69,7 +69,9 @@ Lesson notes go here.
 
 Frontmatter-only Markdown imports the same as equivalent plain YAML. The body is kept for reading from the lesson list and can be edited and saved at any time.
 
-The reader renders `<AudioButton src="...">` and `<TTS>...</TTS>` controls, and `<YouTube id="...">` embeds (also `list` or `src` attributes). Spoiler spans (`<span class="spoiler">...</span>`) are blurred until hovered on desktop or tapped on touch devices.
+A `## Vocabulary` section in the body is left out when the lesson is imported, from that heading up to the next `## ` heading: the words are in the frontmatter, and the app lists them under **View Vocabulary**. The section is not stored, so the reader does not show it and an export does not write it back. It is kept when it is the last `## ` section of the file, or when its heading is written any other way (`## Vocabulary list`, `### Vocabulary`).
+
+The reader renders `<AudioButton src="...">` and `<TTS>...</TTS>` controls, and `<YouTube id="...">` embeds (also `list` or `src` attributes). Spoiler spans (`<span class="spoiler">...</span>`) are blurred until hovered on desktop or tapped on touch devices. Scripts, and capitalised tags the reader does not know (`<VocabQuiz />`), are left out.
 
 Tap a YouTube thumbnail to start its embedded player. If the video cannot play,
 use **Open on YouTube** to open the video or playlist outside the player.
@@ -110,7 +112,7 @@ A link to a lesson or heading that does not exist says so when tapped. Brackets 
 
 #### Links to `.md` files
 
-A lesson folder can also be published as a website (with a site generator such as VitePress), and the same links work in both. Links between lesson files, the way a site generator, Obsidian, VS Code and GitHub write them, open the lesson they point to:
+A lesson folder can also be written and previewed outside the app (see [Editing lessons outside the app](#editing-lessons-outside-the-app)), and the same links work in both. Links between lesson files, the way VitePress, Obsidian, VS Code and GitHub write them, open the lesson they point to:
 
 ```markdown
 [Lesson 26](../unit-2/lesson-26.md#past-tense)
@@ -119,17 +121,17 @@ A lesson folder can also be published as a website (with a site generator such a
 [Intro](/intro.md)
 ```
 
-- **Forms:** a link may name the file (`lesson-26.md`), the page a site makes of it (`lesson-26.html`, or `lesson-26` with no extension), or a folder (`unit-2/`), which opens its `index.md`. Links to other files, such as `worksheet.pdf`, and links with a scheme (`https:`) are left alone.
+- **Forms:** a link may name the file (`lesson-26.md`), the page VitePress makes of it (`lesson-26.html`, or `lesson-26` with no extension), or a folder (`unit-2/`), which opens its `index.md`. Links to other files, such as `worksheet.pdf`, and links with a scheme (`https:`) are left alone.
 - **Virtual path:** every lesson has one, made of folders and a file name.
   - A lesson imported from a folder or ZIP keeps the names of its file and folders as they were on disk (`/unit-2/past_tense/lesson-26.md`), while the app shows the folders renamed (*Unit 2 › Past Tense*).
   - Any other lesson uses its app folders and its title (`/Unit 2/Lesson 26.md`), with characters a file name cannot hold (`/`, `:`, `?`, …) made `_`.
   - When you move a lesson to another folder, its virtual folder follows the app folders.
 - **Seeing it:** the lesson's Markdown editor (**Edit Markdown** in the reader) shows its virtual path, and its link button copies a Markdown link to the lesson to paste into another one.
-- **Following a link:** it starts from the folder of the lesson it is in. `..` goes up a folder, and a leading `/` starts at the top: the folder that was picked, or the ZIP's top level, which is the site's root when you pick the folder the site is built from. Folder and file names compare ignoring case and punctuation, so `unit-2/lesson-26` also finds a lesson in the folder *Unit 2*. If no lesson is at that path, for example when only part of a course was imported, the nearest lesson with that file name or title opens.
+- **Following a link:** it starts from the folder of the lesson it is in. `..` goes up a folder, and a leading `/` starts at the top: the folder that was picked, or the ZIP's top level, which is the same place as in the VitePress preview when you pick the folder VitePress serves. Folder and file names compare ignoring case and punctuation, so `unit-2/lesson-26` also finds a lesson in the folder *Unit 2*. If no lesson is at that path, for example when only part of a course was imported, the nearest lesson with that file name or title opens.
 - **Korean names** are kept as whole syllables. macOS can store a name such as `한국어` as separate jamo, which looks the same but would not match, so the app composes it when the lesson is imported, loaded or synced.
 - **Export** writes each lesson to its virtual path, so links still work after exporting and importing again.
 - **Older lessons:** a lesson imported before file and folder names were kept takes them the next time you import its folder or ZIP, even if its file has not changed and is skipped. It takes them when the file is the only lesson in that app folder it matches by name; until then it uses its title and app folders. Virtual paths follow the real files: there is nothing to rename by hand.
-- **Site vs app:** `[[...]]` links are only understood by the app. In files you also publish as a site, use links like the ones above. Heading ids in braces (`{#past-polite}`, below) work in both.
+- **Editor vs app:** `[[...]]` links are understood by the app, and by Obsidian for file names, but not by VitePress, VS Code or GitHub. In files you also preview there, use links like the ones above. Heading ids in braces (`{#past-polite}`, below) work in the app and in VitePress.
 
 #### Heading ids and repeated headings
 
@@ -141,7 +143,25 @@ When a heading's text repeats, its anchor gets `-1`, `-2`, … in order, as on G
 ### Polite {#past-polite}
 ```
 
-`{#past-polite}` is not shown, and `[[#past-polite|polite past]]` or `[polite past](#past-polite)` links to that heading (from another lesson, `[[Lesson 26#past-polite]]`). Classes and other attributes (`{#id .note lang=ko}`) are allowed and ignored. A link looks for a heading with that id or anchor first, then for one with that text, then for one with the same letters and digits, so an anchor a site generator made (VitePress writes `1. Intro` as `#_1-intro`) finds its heading too.
+`{#past-polite}` is not shown, and `[[#past-polite|polite past]]` or `[polite past](#past-polite)` links to that heading (from another lesson, `[[Lesson 26#past-polite]]`). Classes and other attributes (`{#id .note lang=ko}`) are allowed and ignored. A link looks for a heading with that id or anchor first, then for one with that text, then for one with the same letters and digits, so an anchor copied from another tool (VitePress writes `1. Intro` as `#_1-intro`) finds its heading too.
+
+## Editing lessons outside the app
+
+Lessons are plain Markdown files, so a folder of them can be written in any editor and then imported. [VitePress](https://vitepress.dev) is used here as an editing tool: its dev server shows each lesson as a page while you write it, and updates the page when the file is saved. The app does not need it, and nothing has to be published; the app reads the same `.md` files, not the pages VitePress builds.
+
+```bash
+npx vitepress dev lessons   # preview the folder `lessons` in a browser
+```
+
+- **Write** in the folder VitePress serves, then bring the lessons into the app with **Pick Folder**, or a ZIP of the folder on Android (see [Importing](#importing)). Importing again after more edits updates the lessons in place and skips unchanged files.
+- **Links** written as [links to `.md` files](#links-to-md-files) open the same lesson and heading in the preview and in the app. A link starting with `/` does too when the folder you import is the one VitePress serves.
+- **Headings** take `{#id}` in both (see [Heading ids and repeated headings](#heading-ids-and-repeated-headings)).
+- **Frontmatter** (`vocabulary:` and the rest) is read by the app only; VitePress does not show it.
+- **A `## Vocabulary` section** is shown by VitePress and left out by the app (see [Markdown frontmatter](#markdown-frontmatter)), so it can hold a word list for the preview alone.
+- **App-only syntax:** `[[...]]` links and the `<!-- chunk -->` comments mean nothing to VitePress. `<AudioButton>`, `<TTS>` and `<YouTube>` are rendered by the app's reader; VitePress shows them once its theme has components with those names. [vitepress.md](vitepress.md) has a theme that adds them.
+- **Edits made in the app** (**Edit Markdown**) stay in the app until you export. Export writes each lesson back to its virtual path, so an exported ZIP unpacks over the original folder.
+
+Obsidian, VS Code's Markdown preview and GitHub work for the same files, without VitePress's `{#id}` headings.
 
 ## Importing
 
