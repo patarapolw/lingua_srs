@@ -9,7 +9,6 @@ Out of the box, VitePress does not know the tags the app's reader renders. The t
 | `<AudioButton src="..." />` | A button that plays the file. |
 | `<TTS>안녕하세요</TTS>` | The text, then a button that speaks it. Markdown inside is rendered (`<TTS>**안녕**하세요</TTS>`) and left out of what is spoken. |
 | `<YouTube id="..." />` | A player. Also takes `list` for a playlist, and `src` with a video id or any YouTube link. Quotes can be left out: `<YouTube id=wMRfpE9JdUo />`. |
-| `<Details>...</Details>` | The content, always open. With `summary="..."` (or `title`), that text is shown in bold above it. |
 | `<span class="spoiler">...</span>` | Blurred until hovered or tapped. Other classes can be there too (`class="md spoiler"`). |
 | `<VocabQuiz />`, `<SentenceQuiz />` | Nothing. The app leaves out every other capitalised tag as well; the theme covers these two, so add a line to `index.js` for any other you use. |
 
