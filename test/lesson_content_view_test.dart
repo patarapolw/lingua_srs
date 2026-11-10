@@ -72,6 +72,50 @@ void main() {
     });
   });
 
+  group('details blocks', () {
+    test('stay in one chunk, headings and blank lines included', () {
+      final content = LessonContent.parse(
+        'before\n\n<details>\n<summary>More</summary>\n\n'
+        '## Inside\n\none\n\ntwo\n\n</details>\n\n## After\n\nend',
+        maxChars: 1,
+      );
+
+      // before | the whole block | ## After | end
+      expect(content.chunks, hasLength(4));
+      expect(content.chunks[1], startsWith('<details>'));
+      expect(content.chunks[1], contains('## Inside'));
+      expect(content.chunks[1], endsWith('</details>'));
+      expect(content.chunks[2], startsWith('## After'));
+      expect(content.headings.map((h) => h.chunk), [1, 2]);
+    });
+
+    test('a tag in code does not start one', () {
+      final content = LessonContent.parse(
+        'Write `<details>` to fold text.\n\n## Next\n\nend',
+      );
+
+      expect(content.chunks, hasLength(2));
+    });
+
+    test('the Details component is gone: only its content is kept', () {
+      final text = LessonContent.preprocess(
+        '<Details summary="Examples">\n\ninside\n\n</Details>',
+      );
+
+      expect(text.trim(), 'inside');
+    });
+
+    test('details and summary tags are kept for the renderer', () {
+      final text = LessonContent.preprocess(
+        '<details open>\n<summary>More</summary>\n\ninside\n\n</details>',
+      );
+
+      expect(text, contains('<details open>'));
+      expect(text, contains('<summary>More</summary>'));
+      expect(text, contains('</details>'));
+    });
+  });
+
   group('LessonContent.preprocess', () {
     test('turns components into what MarkdownContent renders', () {
       final text = LessonContent.preprocess(

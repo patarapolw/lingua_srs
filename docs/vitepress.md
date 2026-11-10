@@ -9,6 +9,7 @@ Out of the box, VitePress does not know the tags the app's reader renders. The t
 | `<AudioButton src="..." />` | A button that plays the file. |
 | `<TTS>안녕하세요</TTS>` | The text, then a button that speaks it. Markdown inside is rendered (`<TTS>**안녕**하세요</TTS>`) and left out of what is spoken. |
 | `<YouTube id="..." />` | A player. Also takes `list` for a playlist, and `src` with a video id or any YouTube link. Quotes can be left out: `<YouTube id=wMRfpE9JdUo />`. |
+| `<details>` with a `<summary>` | A block that is closed until its summary is tapped, or open from the start with `<details open>`. Plain HTML, so VitePress shows it without the theme. |
 | `<span class="spoiler">...</span>` | Blurred until hovered or tapped. Other classes can be there too (`class="md spoiler"`). |
 | `<VocabQuiz />`, `<Nothing />` | Nothing. The app leaves out every other capitalised tag as well. |
 
@@ -34,13 +35,11 @@ The app imports only Markdown files with `vocabulary:` frontmatter, so `.vitepre
 - **Audio paths.** A full URL plays in both. In the preview, a path starting with `/` is a file in the `public/` folder of the folder VitePress serves.
 - **Speech** uses the voices the browser has, in Korean unless the tag has `lang="..."`. It sounds different from the app, and is silent in a browser with no voice for the language.
 - **YouTube** is the regular embedded player. The app shows a thumbnail first, and offers **Open on YouTube**.
+- **`<details>`** needs a blank line after `<summary>...</summary>` and before `</details>` for VitePress to render the Markdown inside. The app renders it either way.
 - **`[[...]]` links and `<!-- chunk -->` comments** are for the app only; see [Editing lessons outside the app](lesson-format.md#editing-lessons-outside-the-app).
 
 Some HTML that VitePress renders is not rendered by the app yet:
 
-- **Markdown inside a spoiler** is shown as typed: `<span class="spoiler">my **brother**</span>` reveals `my **brother**`.
-- **`<br>` in a table cell** ends the line, so the table is shown as plain text. Outside a table, `<br>`, `<p>` and `<hr>` work.
-- **Inline HTML** is shown as typed, tags included: `<ins>`, `<u>`, `<mark>`, `<sup>`, `<sub>`, `<em>`, `<i>`, `<strong>`, `<b>`, `<kbd>`, `<small>`, `<a href>`, `<img>`, and a `<span>` that is not a spoiler. `<del>` is the exception: it is struck through. Use Markdown where it has a form (`**bold**`, `_italic_`, `[text](link)`, `![alt](image)`).
-- **Block HTML** is not shown at all, its text included: a block that starts with a tag such as `<ul>`, `<div>` or `<center>`. Write lists and tables in Markdown.
-- **`<details>` and `<summary>`** do not fold. With the tags on lines of their own, the summary is not shown and the content is always open; inside a line of text, the tags are shown as typed.
+- **Inline HTML** other than `<ins>`, `<u>`, `<mark>`, `<sup>`, `<sub>`, `<del>`, `<s>`, `<em>`, `<i>`, `<strong>`, `<b>` and `<br>` is shown as typed, tags included: `<kbd>`, `<small>`, `<a href>`, `<img>`, and a `<span>` that is not a spoiler. Use Markdown where it has a form (`[text](link)`, `![alt](image)`).
+- **Block HTML** is not shown at all, its text included: a block that starts with a tag such as `<ul>`, `<div>` or `<center>`. Write lists and tables in Markdown. `<details>` is the exception.
 - **`<ruby>`, `<rt>` and `<rp>`** are shown as typed, so `<ruby>漢字<rt>한자</rt></ruby>` shows its tags, not a reading above the text. See [issue 158](https://github.com/patarapolw/lingua_srs/issues/158).

@@ -98,7 +98,9 @@ lingua_srs/
 │       ├── lesson_content_view.dart   # Lesson Markdown reader (native, chunked lazy list)
 │       ├── cached_markdown_image.dart # Online Markdown image shown from the disk cache
 │       ├── markdown_content.dart      # Markdown renderer for notes and chat
+│       ├── markdown_details.dart      # `<details>` blocks in Markdown: a summary that shows and hides text
 │       ├── markdown_heading.dart      # Markdown headings: bold or code keeps the heading size
+│       ├── markdown_inline_html.dart  # Inline HTML in Markdown: `<br>`, `<ins>`, `<mark>`, `<sup>`
 │       ├── markdown_notes_field.dart  # Notes form field: Add button, rendered notes, Edit/Preview
 │       ├── icon_switch.dart           # Switch flanked by icons, e.g. light and dark
 │       ├── markdown_text_field.dart   # Markdown text field that converts pasted HTML

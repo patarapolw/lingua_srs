@@ -6,7 +6,9 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'audio_button.dart';
 import 'cached_markdown_image.dart';
+import 'markdown_details.dart';
 import 'markdown_heading.dart';
+import 'markdown_inline_html.dart';
 import 'youtube_embed.dart';
 
 class MarkdownContent extends StatelessWidget {
@@ -64,7 +66,8 @@ class MarkdownContent extends StatelessWidget {
     // Replace <p> with empty or single newline and </p> with double newlines
     text = text.replaceAll(RegExp(r'<p\s*>', caseSensitive: false), '');
     text = text.replaceAll(RegExp(r'</p\s*>', caseSensitive: false), '\n\n');
-    text = text.replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n');
+    // `<br>` is left for [HtmlBreakSyntax], which makes it a line break
+    // wherever it is, a table cell included.
     text = text.replaceAll(
       RegExp(r'<hr\b[^>]*\/?>', caseSensitive: false),
       '\n\n---\n\n',
@@ -102,8 +105,37 @@ class MarkdownContent extends StatelessWidget {
     );
   }
 
+  /// The Markdown around `<details>` blocks, and each block as a summary
+  /// that shows and hides its own Markdown.
+  Widget _buildWithDetails(List<MarkdownDetailsPart> parts) {
+    MarkdownContent markdown(String text) => MarkdownContent(
+      content: text,
+      style: style,
+      selectable: selectable,
+      onLink: onLink,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final part in parts)
+          if (part.isDetails)
+            MarkdownDetails(
+              initiallyOpen: part.open,
+              summary: markdown(part.summary!),
+              child: markdown(part.text),
+            )
+          else
+            markdown(part.text),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final parts = MarkdownDetailsPart.split(content);
+    if (parts != null) return _buildWithDetails(parts);
+
     final theme = Theme.of(context);
     final normalized = _normalizeContent(content);
 
@@ -171,6 +203,10 @@ class MarkdownContent extends StatelessWidget {
         border: Border(top: BorderSide(width: 1, color: theme.dividerColor)),
       ),
     );
+    // For headings, which are built from this sheet. Body text gets these
+    // styles from [InlineHtmlBuilder]: the renderer copies the sheet and
+    // drops styles it does not know.
+    mdStyle.styles.addAll(inlineHtmlStyles(theme));
 
     Future<void> openLink(String href) async {
       if (onLink?.call(href) ?? false) return;
@@ -219,7 +255,9 @@ class MarkdownContent extends StatelessWidget {
       data: normalized,
       selectable: selectable,
       styleSheet: mdStyle,
+      inlineSyntaxes: inlineHtmlSyntaxes(),
       builders: {
+        ...InlineHtmlBuilder.all(theme),
         'h1': headingBuilder(mdStyle.h1Padding),
         'h2': headingBuilder(mdStyle.h2Padding),
         'h3': headingBuilder(mdStyle.h3Padding),
@@ -290,9 +328,13 @@ class _SpoilerTextState extends State<SpoilerText> {
 
   @override
   Widget build(BuildContext context) {
-    final style = Theme.of(context).textTheme.bodyMedium;
+    final theme = Theme.of(context);
+    final content = TextSpan(
+      style: theme.textTheme.bodyMedium,
+      children: inlineMarkdownSpans(widget.text, theme),
+    );
     return Semantics(
-      label: _revealed ? widget.text : 'Spoiler. Tap to reveal.',
+      label: _revealed ? content.toPlainText() : 'Spoiler. Tap to reveal.',
       child: MouseRegion(
         onEnter: (_) => setState(() => _hovered = true),
         onExit: (_) => setState(() => _hovered = false),
@@ -302,15 +344,11 @@ class _SpoilerTextState extends State<SpoilerText> {
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 150),
             child: _revealed
-                ? Text(
-                    widget.text,
-                    key: const ValueKey('revealed'),
-                    style: style,
-                  )
+                ? Text.rich(content, key: const ValueKey('revealed'))
                 : ImageFiltered(
                     key: const ValueKey('blurred'),
                     imageFilter: ui.ImageFilter.blur(sigmaX: 5, sigmaY: 5),
-                    child: Text(widget.text, style: style),
+                    child: Text.rich(content),
                   ),
           ),
         ),

@@ -71,12 +71,26 @@ Frontmatter-only Markdown imports the same as equivalent plain YAML. The body is
 
 A `## Vocabulary` section in the body is left out when the lesson is imported, from that heading up to the next `## ` heading: the words are in the frontmatter, and the app lists them under **View Vocabulary**. The section is not stored, so the reader does not show it and an export does not write it back. It is kept when it is the last `## ` section of the file, or when its heading is written any other way (`## Vocabulary list`, `### Vocabulary`).
 
-The reader renders `<AudioButton src="...">` and `<TTS>...</TTS>` controls, and `<YouTube id="...">` embeds (also `list` or `src` attributes). Spoiler spans (`<span class="spoiler">...</span>`) are blurred until hovered on desktop or tapped on touch devices. Scripts, and capitalised tags the reader does not know (`<VocabQuiz />`), are left out.
+The reader renders `<AudioButton src="...">` and `<TTS>...</TTS>` controls, and `<YouTube id="...">` embeds (also `list` or `src` attributes). Spoiler spans (`<span class="spoiler">...</span>`) are blurred until hovered on desktop or tapped on touch devices. Markdown inside a spoiler is rendered: `<span class="spoiler">my **brother**</span>`. Scripts, and capitalised tags the reader does not know (`<VocabQuiz />`), are left out.
+
+A few inline HTML tags are rendered too: `<ins>` and `<u>` underline, `<mark>` highlights, `<sup>` and `<sub>` raise and lower, `<del>` and `<s>` strike through, and `<em>`, `<i>`, `<strong>` and `<b>` work like their Markdown forms. Markdown inside them is rendered. `<br>` breaks the line, also inside a table cell. Other inline HTML is shown as typed, and a block that starts with another HTML tag (`<ul>`, `<div>`) is not shown.
+
+A `<details>` block folds part of a lesson away until its `<summary>` is tapped. Markdown works inside it, headings included; `<details open>` starts unfolded, and a block can sit inside another:
+
+```html
+<details>
+<summary>Examples</summary>
+
+- 저는 **학생**이에요
+- 저는 **선생님**이에요
+
+</details>
+```
 
 Tap a YouTube thumbnail to start its embedded player. If the video cannot play,
 use **Open on YouTube** to open the video or playlist outside the player.
 
-The reader renders the lesson natively, a chunk at a time, so long lessons stay responsive. A chunk starts at every heading, and a long section is also cut at a blank line (never inside a code block, list or table). If a lesson splits badly, add HTML comments, which render as nothing anywhere:
+The reader renders the lesson natively, a chunk at a time, so long lessons stay responsive. A chunk starts at every heading, and a long section is also cut at a blank line (never inside a code block, list, table or `<details>` block). If a lesson splits badly, add HTML comments, which render as nothing anywhere:
 
 ```markdown
 Text before.
