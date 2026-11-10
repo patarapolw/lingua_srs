@@ -230,7 +230,7 @@ void main() {
       expect(words([for (final r in removed) r.item]), ['b']);
     });
 
-    test('undo takes out the added Again copy and restores the rest', () {
+    test('turning it off takes out the added copy, restores the rest', () {
       final a = itemFor('a');
       final r = itemFor('r')..card.status = SrsStatus.review;
       // a was answered Again with no copy re-queued; b is new and r is due.
@@ -252,9 +252,45 @@ void main() {
       );
       expect(record.added, hasLength(1));
 
-      undoWrapUpQueue(queue, record);
+      resumeWrappedUpQueue(queue, record, answeredCount: 2);
 
       expect(queue, before);
+    });
+
+    test('turning it off later never puts a card among the answered ones', () {
+      final r = itemFor('r')..card.status = SrsStatus.review;
+      // n1 and n2 are new; r is due.
+      final queue = [itemFor('x'), itemFor('n1'), r, itemFor('n2')];
+      final removed = wrapUpQueue(queue: queue, fromIndex: 1, againCardIds: {});
+      expect(words(queue), ['x', 'r']);
+      final record = WrapUpRecord(fromIndex: 1, removed: removed);
+
+      // r is answered after the wrap up; n1 used to be before it.
+      resumeWrappedUpQueue(queue, record, answeredCount: 2);
+
+      expect(words(queue), ['x', 'r', 'n1', 'n2']);
+    });
+
+    test('turning it off keeps an added copy that was already answered', () {
+      final a = itemFor('a');
+      final queue = [itemFor('x'), a, itemFor('b')];
+      final lengthBefore = queue.length;
+      final removed = wrapUpQueue(
+        queue: queue,
+        fromIndex: 2,
+        againCardIds: {a.card.id},
+        makeDuplicate: (id) => dupOf(queue.lastWhere((i) => i.card.id == id)),
+      );
+      final record = WrapUpRecord(
+        fromIndex: 2,
+        removed: removed,
+        added: queue.sublist(lengthBefore - removed.length),
+      );
+
+      // The copy of a is answered, then wrap up is turned off.
+      resumeWrappedUpQueue(queue, record, answeredCount: 3);
+
+      expect(words(queue), ['x', 'a', 'a', 'b']);
     });
   });
 
@@ -534,6 +570,75 @@ void main() {
       await chooseFromMenu(tester, 'Wrap up session');
 
       expect(find.text('Session Complete!'), findsOneWidget);
+      expect(seeded.fresh.status, SrsStatus.isNew);
+    });
+
+    testWidgets('turning wrap up off from the menu brings the cards back', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      final seeded = await seed(tester, provider);
+      await openStudy(tester, provider, seeded.lesson);
+
+      await chooseFromMenu(tester, 'Wrap up session');
+      expect(find.textContaining('(1/1)'), findsOneWidget);
+      // Let the first snackbar close, so the next one shows.
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+
+      await chooseFromMenu(tester, 'Stop wrapping up');
+
+      expect(find.textContaining('(1/2)'), findsOneWidget);
+      expect(find.text('Stopped wrapping up: 1 card back.'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+
+      await reveal(tester);
+      await rate(tester, 'Good');
+      expect(find.text('NEW'), findsOneWidget, reason: 'the new card is back');
+    });
+
+    testWidgets('undo takes back a rating but leaves wrap up on', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      final seeded = await seed(tester, provider);
+      final repetitions = seeded.due.repetitions;
+      await openStudy(tester, provider, seeded.lesson);
+
+      await chooseFromMenu(tester, 'Wrap up session');
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+      await reveal(tester);
+      await rate(tester, 'Good');
+      expect(find.text('Session Complete!'), findsOneWidget);
+
+      await tester.tap(find.text('Undo Last Card'));
+      await tester.pumpAndSettle();
+
+      expect(seeded.due.repetitions, repetitions);
+      expect(find.text('NEW'), findsNothing);
+      expect(find.textContaining('(1/1)'), findsOneWidget);
+
+      // Still wrapped up: the menu offers to stop, which brings 바나나 back.
+      await chooseFromMenu(tester, 'Stop wrapping up');
+      expect(find.textContaining('(1/2)'), findsOneWidget);
+    });
+
+    testWidgets('the finish screen can turn wrap up off', (tester) async {
+      final provider = await loadedProvider(tester);
+      final seeded = await seed(tester, provider);
+      await openStudy(tester, provider, seeded.lesson);
+
+      await reveal(tester);
+      await rate(tester, 'Good');
+      await chooseFromMenu(tester, 'Wrap up session');
+      expect(find.text('Session Complete!'), findsOneWidget);
+
+      await tester.tap(find.text('Stop Wrapping Up'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('NEW'), findsOneWidget);
       expect(seeded.fresh.status, SrsStatus.isNew);
     });
   });
