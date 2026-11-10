@@ -12,7 +12,8 @@ List<md.InlineSyntax> inlineHtmlSyntaxes() => [
   HtmlSpanSyntax(),
 ];
 
-/// `<br>` as a line break. Unlike a newline, it can sit in a table cell.
+/// `<br>`, `<br/>` and `<br />` as a line break: in a paragraph, a list item,
+/// a heading or a table cell.
 class HtmlBreakSyntax extends md.InlineSyntax {
   HtmlBreakSyntax() : super(r'<br\s*/?>', caseSensitive: false);
 

@@ -475,11 +475,24 @@ void main() {
       expect(shown(tester), isNot(contains('---')));
     });
 
-    testWidgets('br outside a table still breaks the line', (tester) async {
-      await pump(tester, 'first<br>second');
+    testWidgets('br breaks the line, however it is written', (tester) async {
+      await pump(
+        tester,
+        'one<br>two<br/>three<br />four<BR>five\n\n'
+        '- item<br>more\n\n'
+        '## Head<br>line',
+      );
 
-      final markdown = tester.widget<MarkdownBody>(find.byType(MarkdownBody));
-      expect(markdown.data, 'first\nsecond');
+      expect(shown(tester), contains('one\ntwo\nthree\nfour\nfive'));
+      expect(shown(tester), contains('item\nmore'));
+      expect(shown(tester), contains('Head\nline'));
+      expect(shown(tester), isNot(contains('<')));
+    });
+
+    testWidgets('br in code is left as typed', (tester) async {
+      await pump(tester, 'Write `a<br>b` for a break.');
+
+      expect(shown(tester), contains('a<br>b'));
     });
 
     testWidgets('Markdown inside a spoiler is rendered', (tester) async {

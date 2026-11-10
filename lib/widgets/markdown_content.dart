@@ -66,17 +66,8 @@ class MarkdownContent extends StatelessWidget {
     // Replace <p> with empty or single newline and </p> with double newlines
     text = text.replaceAll(RegExp(r'<p\s*>', caseSensitive: false), '');
     text = text.replaceAll(RegExp(r'</p\s*>', caseSensitive: false), '\n\n');
-    // A newline would end a table row, so `<br>` stays in one and is made a
-    // line break by [HtmlBreakSyntax].
-    final lineBreak = RegExp(r'<br\s*/?>', caseSensitive: false);
-    text = text
-        .split('\n')
-        .map(
-          (line) => line.trimLeft().startsWith('|')
-              ? line
-              : line.replaceAll(lineBreak, '\n'),
-        )
-        .join('\n');
+    // `<br>` is left for [HtmlBreakSyntax], which makes it a line break
+    // wherever it is, a table cell included.
     text = text.replaceAll(
       RegExp(r'<hr\b[^>]*\/?>', caseSensitive: false),
       '\n\n---\n\n',
