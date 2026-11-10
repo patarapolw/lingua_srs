@@ -1123,14 +1123,20 @@ vocabulary:
       expect(find.byTooltip('Autoplay audio'), findsNothing);
       expect(provider.autoplayAudio, isTrue);
 
+      // The item keeps its name; its switch shows the current state.
+      bool switchOn() => tester
+          .widget<Switch>(find.byKey(const ValueKey('autoplay-switch')))
+          .value;
       await openMore(tester);
-      expect(find.text('Turn autoplay off'), findsOneWidget);
+      expect(find.text('Autoplay audio'), findsOneWidget);
+      expect(switchOn(), isTrue);
       await tester.tap(menuItem('autoplay'));
       await tester.pumpAndSettle();
       expect(provider.autoplayAudio, isFalse);
 
       await openMore(tester);
-      expect(find.text('Turn autoplay on'), findsOneWidget);
+      expect(find.text('Autoplay audio'), findsOneWidget);
+      expect(switchOn(), isFalse);
     });
 
     testWidgets('nothing for a non-Korean lesson', (tester) async {

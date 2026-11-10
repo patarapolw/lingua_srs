@@ -586,7 +586,7 @@ void main() {
       await tester.pump(const Duration(seconds: 2));
       await tester.pumpAndSettle();
 
-      await chooseFromMenu(tester, 'Stop wrapping up');
+      await chooseFromMenu(tester, 'Wrap up session');
 
       expect(find.textContaining('(1/2)'), findsOneWidget);
       expect(find.text('Stopped wrapping up: 1 card back.'), findsOneWidget);
@@ -621,7 +621,7 @@ void main() {
       expect(find.textContaining('(1/1)'), findsOneWidget);
 
       // Still wrapped up: the menu offers to stop, which brings 바나나 back.
-      await chooseFromMenu(tester, 'Stop wrapping up');
+      await chooseFromMenu(tester, 'Wrap up session');
       expect(find.textContaining('(1/2)'), findsOneWidget);
     });
 
@@ -640,6 +640,32 @@ void main() {
 
       expect(find.text('NEW'), findsOneWidget);
       expect(seeded.fresh.status, SrsStatus.isNew);
+    });
+
+    testWidgets('the wrap up menu item shows a switch for its state', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      final seeded = await seed(tester, provider);
+      await openStudy(tester, provider, seeded.lesson);
+
+      Future<bool> switchOn() async {
+        await tester.tap(find.byTooltip('More'));
+        await tester.pumpAndSettle();
+        final on = tester
+            .widget<Switch>(find.byKey(const ValueKey('wrapup-switch')))
+            .value;
+        // Close the menu without choosing anything.
+        await tester.tapAt(Offset.zero);
+        await tester.pumpAndSettle();
+        return on;
+      }
+
+      expect(await switchOn(), isFalse);
+      await chooseFromMenu(tester, 'Wrap up session');
+      expect(await switchOn(), isTrue);
+      await chooseFromMenu(tester, 'Wrap up session');
+      expect(await switchOn(), isFalse);
     });
   });
 }

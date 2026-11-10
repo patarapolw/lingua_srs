@@ -1789,6 +1789,31 @@ class _StudyViewState extends State<StudyView> {
       ),
     );
 
+    // A setting that stays on until turned off: a fixed icon and name, and
+    // a switch that shows whether it is on now. Tapping the item flips it.
+    PopupMenuItem<String> toggleItem(
+      String value,
+      IconData icon,
+      String title, {
+      required bool on,
+    }) => PopupMenuItem<String>(
+      value: value,
+      child: ListTile(
+        dense: true,
+        contentPadding: EdgeInsets.zero,
+        leading: Icon(icon),
+        title: Text(title),
+        // The tap goes to the menu item, which closes the menu.
+        trailing: IgnorePointer(
+          child: Switch(
+            key: ValueKey('$value-switch'),
+            value: on,
+            onChanged: (_) {},
+          ),
+        ),
+      ),
+    );
+
     return KeyboardListener(
       focusNode: _keyboardFocusNode,
       autofocus: true,
@@ -1943,12 +1968,11 @@ class _StudyViewState extends State<StudyView> {
                     _showKeyHints ? 'Undo (Z / Ctrl+Z)' : 'Undo',
                     enabled: canUndo,
                   ),
-                  moreItem(
+                  toggleItem(
                     'autoplay',
-                    provider.autoplayAudio ? Icons.volume_up : Icons.volume_off,
-                    provider.autoplayAudio
-                        ? 'Turn autoplay off'
-                        : 'Turn autoplay on',
+                    Icons.volume_up_outlined,
+                    'Autoplay audio',
+                    on: provider.autoplayAudio,
                   ),
                   moreItem(
                     'edit',
@@ -1983,18 +2007,12 @@ class _StudyViewState extends State<StudyView> {
                   'Reset card to New',
                   enabled: _canResetCurrentCard,
                 ),
-                if (_wrappedUp)
-                  moreItem(
-                    'wrapup',
-                    Icons.flag,
-                    _showKeyHints ? 'Stop wrapping up (W)' : 'Stop wrapping up',
-                  )
-                else
-                  moreItem(
-                    'wrapup',
-                    Icons.flag_outlined,
-                    _showKeyHints ? 'Wrap up session (W)' : 'Wrap up session',
-                  ),
+                toggleItem(
+                  'wrapup',
+                  Icons.flag_outlined,
+                  _showKeyHints ? 'Wrap up session (W)' : 'Wrap up session',
+                  on: _wrappedUp,
+                ),
                 if (item.lesson.targetLanguage == 'ko') ...[
                   const PopupMenuDivider(),
                   PronunciationToggleMenuEntry(enabled: _isAnswerRevealed),
