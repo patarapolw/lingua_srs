@@ -1857,9 +1857,7 @@ class _StudyViewState extends State<StudyView> {
               IconButton(
                 icon: const Icon(Icons.undo),
                 tooltip: canUndo
-                    ? (_showKeyHints
-                          ? 'Undo Last Rating (Z / Ctrl+Z)'
-                          : 'Undo Last Rating')
+                    ? (_showKeyHints ? 'Undo (Z / Ctrl+Z)' : 'Undo')
                     : 'Nothing to undo',
                 onPressed: canUndo ? _undo : null,
               ),
@@ -1903,9 +1901,7 @@ class _StudyViewState extends State<StudyView> {
                   moreItem(
                     'undo',
                     Icons.undo,
-                    _showKeyHints
-                        ? 'Undo last rating (Z / Ctrl+Z)'
-                        : 'Undo last rating',
+                    _showKeyHints ? 'Undo (Z / Ctrl+Z)' : 'Undo',
                     enabled: canUndo,
                   ),
                   moreItem(

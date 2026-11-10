@@ -369,7 +369,7 @@ void main() {
     }
 
     Future<void> undo(WidgetTester tester) async {
-      await tester.tap(find.byTooltip('Undo Last Rating'));
+      await tester.tap(find.byTooltip('Undo'));
       await tester.pumpAndSettle();
     }
 
