@@ -155,7 +155,7 @@ npx vitepress dev lessons   # preview the folder `lessons` in a browser
 - **Links** written as [links to `.md` files](#links-to-md-files) open the same lesson and heading in the preview and in the app. A link starting with `/` does too when the folder you import is the one VitePress serves.
 - **Headings** take `{#id}` in both (see [Heading ids and repeated headings](#heading-ids-and-repeated-headings)).
 - **Frontmatter** (`vocabulary:` and the rest) is read by the app only; VitePress does not show it.
-- **App-only syntax:** `[[...]]` links and the `<!-- chunk -->` comments mean nothing to VitePress. `<AudioButton>`, `<TTS>` and `<YouTube>` are rendered by the app's reader; VitePress shows them only if its theme registers components with those names.
+- **App-only syntax:** `[[...]]` links and the `<!-- chunk -->` comments mean nothing to VitePress. `<AudioButton>`, `<TTS>` and `<YouTube>` are rendered by the app's reader; VitePress shows them once its theme has components with those names. [vitepress.md](vitepress.md) has a theme that adds them.
 - **Edits made in the app** (**Edit Markdown**) stay in the app until you export. Export writes each lesson back to its virtual path, so an exported ZIP unpacks over the original folder.
 
 Obsidian, VS Code's Markdown preview and GitHub work for the same files, without VitePress's `{#id}` headings.
