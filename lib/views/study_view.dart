@@ -26,8 +26,9 @@ import 'ai_discussion_dialog.dart';
 import 'vocab_edit_dialog.dart';
 
 /// A study-session action that Undo takes back, newest last: a rating
-/// ([ReviewHistoryRecord]), [SendToBackRecord], [SuspendRecord],
-/// [ResetSkipRecord] or [WrapUpRecord].
+/// ([ReviewHistoryRecord]), [SendToBackRecord], [SuspendRecord] or
+/// [ResetSkipRecord]. Wrap up is not one: it is turned on and off on its
+/// own ([WrapUpRecord]).
 sealed class SessionUndoEntry {}
 
 class ReviewHistoryRecord implements SessionUndoEntry {
@@ -331,9 +332,10 @@ class ResetSkipRecord implements SessionUndoEntry {
   });
 }
 
-/// The session was wrapped up: the unseen cards it dropped, and the copies
-/// of Again cards it added back.
-class WrapUpRecord implements SessionUndoEntry {
+/// The session is wrapped up: the unseen cards it dropped, and the copies
+/// of Again cards it added back. Turning wrap up off ([resumeWrappedUpQueue])
+/// uses it to bring the dropped cards back.
+class WrapUpRecord {
   final int fromIndex;
   final List<RemovedQueueItem> removed;
   final List<StudyCardItem> added;
@@ -438,13 +440,29 @@ List<RemovedQueueItem> wrapUpQueue({
   return removed;
 }
 
-/// Puts [queue] back as it was before the wrap up in [record]: takes out
-/// the Again copies it added and restores the cards it dropped.
-void undoWrapUpQueue(List<StudyCardItem> queue, WrapUpRecord record) {
+/// Turns off the wrap up in [record]: takes out the Again copies it added
+/// that are not answered yet, and brings back the cards it dropped, in their
+/// order. Nothing goes before [answeredCount], so cards answered since the
+/// wrap up keep their places; with nothing answered since, [queue] is back
+/// as it was. Mutates [queue].
+void resumeWrappedUpQueue(
+  List<StudyCardItem> queue,
+  WrapUpRecord record, {
+  required int answeredCount,
+}) {
   for (final item in record.added) {
-    queue.remove(item); // StudyCardItem has no ==, so identity
+    final at = queue.indexOf(item); // StudyCardItem has no ==, so identity
+    if (at >= answeredCount) queue.removeAt(at);
   }
-  restoreRemovedItems(queue, record.removed);
+  var previous = -1;
+  for (final r in record.removed) {
+    final at = min(
+      max(max(r.index, previous + 1), answeredCount),
+      queue.length,
+    );
+    queue.insert(at, r.item);
+    previous = at;
+  }
 }
 
 /// Re-picks the sentence of every card in [queue] from [fromIndex] on that
@@ -599,7 +617,8 @@ class _StudyViewState extends State<StudyView> {
   // only ones its ratings schedule.
   final Set<String> _learnNewCardIds = {};
   // Wrapped up: no unseen cards are brought in any more.
-  bool _wrappedUp = false;
+  WrapUpRecord? _wrapUpRecord;
+  bool get _wrappedUp => _wrapUpRecord != null;
   final Set<String> _sessionRatedCardIds = {};
   final FocusNode _keyboardFocusNode = FocusNode();
   // Held so dispose() can stop audio without a BuildContext lookup.
@@ -771,7 +790,7 @@ class _StudyViewState extends State<StudyView> {
     _undoStack.clear();
     _againCardIds.clear();
     _sessionRatedCardIds.clear();
-    _wrappedUp = false;
+    _wrapUpRecord = null;
     _learnNewCardIds.clear();
     if (_cramMode == CramMode.learnNew) {
       _learnNewCardIds.addAll([
@@ -1052,8 +1071,6 @@ class _StudyViewState extends State<StudyView> {
         _undoSuspend(record);
       case final ResetSkipRecord record:
         _undoResetSkip(record);
-      case final WrapUpRecord record:
-        _undoWrapUp(record);
     }
   }
 
@@ -1242,10 +1259,11 @@ class _StudyViewState extends State<StudyView> {
         },
       );
       final added = _queue.sublist(lengthBefore - removed.length);
-      _undoStack.add(
-        WrapUpRecord(fromIndex: from, removed: removed, added: added),
+      _wrapUpRecord = WrapUpRecord(
+        fromIndex: from,
+        removed: removed,
+        added: added,
       );
-      _wrappedUp = true;
       if (_currentIndex >= _queue.length || _queue[_currentIndex] != onScreen) {
         _isAnswerRevealed = false;
       }
@@ -1262,15 +1280,30 @@ class _StudyViewState extends State<StudyView> {
     }
   }
 
-  void _undoWrapUp(WrapUpRecord record) {
+  /// Wrap up is a toggle: on, it drops unseen cards; off, they come back.
+  void _toggleWrapUp() => _wrappedUp ? _resumeSession() : _wrapUp();
+
+  void _resumeSession() {
+    final record = _wrapUpRecord;
+    if (record == null) return;
+    context.read<AudioService>().stop();
+    final onScreen = _currentIndex < _queue.length
+        ? _queue[_currentIndex]
+        : null;
     setState(() {
-      undoWrapUpQueue(_queue, record);
-      _wrappedUp = false;
-      _currentIndex = min(record.fromIndex, _queue.length);
-      _answeredCount = min(_answeredCount, _currentIndex);
-      _isAnswerRevealed = false;
+      resumeWrappedUpQueue(_queue, record, answeredCount: _answeredCount);
+      _wrapUpRecord = null;
+      if (_currentIndex >= _queue.length || _queue[_currentIndex] != onScreen) {
+        _isAnswerRevealed = false;
+      }
     });
-    _showSnack('Undid wrap up.');
+    _triggerPreload(_currentIndex);
+    final back = distinctCardCount([for (final r in record.removed) r.item]);
+    _showSnack(
+      back == 0
+          ? 'Stopped wrapping up.'
+          : 'Stopped wrapping up: $back ${back == 1 ? 'card' : 'cards'} back.',
+    );
   }
 
   void _navigateBack() {
@@ -1372,7 +1405,7 @@ class _StudyViewState extends State<StudyView> {
     } else if (event.logicalKey == LogicalKeyboardKey.keyP) {
       _confirmSuspendCurrentCard();
     } else if (event.logicalKey == LogicalKeyboardKey.keyW) {
-      _wrapUp();
+      _toggleWrapUp();
     }
 
     // Audio replay shortcuts
@@ -1653,15 +1686,21 @@ class _StudyViewState extends State<StudyView> {
                     FilledButton.tonalIcon(
                       icon: const Icon(Icons.undo),
                       label: Text(
-                        _undoStack.last is WrapUpRecord
-                            ? (_showKeyHints
-                                  ? 'Undo Wrap Up (Z)'
-                                  : 'Undo Wrap Up')
-                            : (_showKeyHints
-                                  ? 'Undo Last Card (Z)'
-                                  : 'Undo Last Card'),
+                        _showKeyHints ? 'Undo Last Card (Z)' : 'Undo Last Card',
                       ),
                       onPressed: _undo,
+                    ),
+                    const SizedBox(width: 16),
+                  ],
+                  if (_wrapUpRecord?.removed.isNotEmpty ?? false) ...[
+                    FilledButton.tonalIcon(
+                      icon: const Icon(Icons.flag),
+                      label: Text(
+                        _showKeyHints
+                            ? 'Stop Wrapping Up (W)'
+                            : 'Stop Wrapping Up',
+                      ),
+                      onPressed: _resumeSession,
                     ),
                     const SizedBox(width: 16),
                   ],
@@ -1893,7 +1932,7 @@ class _StudyViewState extends State<StudyView> {
                   case 'suspend':
                     _confirmSuspendCurrentCard();
                   case 'wrapup':
-                    _wrapUp();
+                    _toggleWrapUp();
                 }
               },
               itemBuilder: (context) => [
@@ -1944,12 +1983,18 @@ class _StudyViewState extends State<StudyView> {
                   'Reset card to New',
                   enabled: _canResetCurrentCard,
                 ),
-                moreItem(
-                  'wrapup',
-                  Icons.flag_outlined,
-                  _showKeyHints ? 'Wrap up session (W)' : 'Wrap up session',
-                  enabled: !_wrappedUp,
-                ),
+                if (_wrappedUp)
+                  moreItem(
+                    'wrapup',
+                    Icons.flag,
+                    _showKeyHints ? 'Stop wrapping up (W)' : 'Stop wrapping up',
+                  )
+                else
+                  moreItem(
+                    'wrapup',
+                    Icons.flag_outlined,
+                    _showKeyHints ? 'Wrap up session (W)' : 'Wrap up session',
+                  ),
                 if (item.lesson.targetLanguage == 'ko') ...[
                   const PopupMenuDivider(),
                   PronunciationToggleMenuEntry(enabled: _isAnswerRevealed),
