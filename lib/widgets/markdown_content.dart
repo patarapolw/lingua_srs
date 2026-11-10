@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'audio_button.dart';
 import 'cached_markdown_image.dart';
+import 'markdown_heading.dart';
 import 'youtube_embed.dart';
 
 class MarkdownContent extends StatelessWidget {
@@ -152,13 +153,14 @@ class MarkdownContent extends StatelessWidget {
       h5Padding: headingPadding(h5, 1.67),
       h6Padding: headingPadding(h6, 2.33),
       blockSpacing: blockSpacing,
-      strong: (style ?? theme.textTheme.bodyMedium)?.copyWith(
+      // Inline styles merge into the block's style. Leave out the font size
+      // and line height so bold or italic text in a heading or table keeps
+      // that block's size.
+      strong: TextStyle(
         fontWeight: FontWeight.bold,
         color: theme.colorScheme.primary,
       ),
-      em: (style ?? theme.textTheme.bodyMedium)?.copyWith(
-        fontStyle: FontStyle.italic,
-      ),
+      em: const TextStyle(fontStyle: FontStyle.italic),
       del: const TextStyle(decoration: TextDecoration.lineThrough),
       code: TextStyle(
         backgroundColor: theme.colorScheme.surfaceContainerHighest,
@@ -170,45 +172,65 @@ class MarkdownContent extends StatelessWidget {
       ),
     );
 
+    Future<void> openLink(String href) async {
+      if (onLink?.call(href) ?? false) return;
+      final uri = Uri.tryParse(href);
+      if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
+        return;
+      }
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+
+    Widget buildImage(Uri uri, String? title, String? alt) {
+      if (uri.scheme == 'lingua-spoiler') {
+        return SpoilerText(text: uri.queryParameters['text'] ?? '');
+      }
+      if (uri.scheme == 'lingua-youtube') {
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: SizedBox(
+            width: (MediaQuery.sizeOf(context).width - 48).clamp(200.0, 640.0),
+            child: YouTubeEmbed(embedUrl: uri.queryParameters['url'] ?? ''),
+          ),
+        );
+      }
+      if (uri.scheme == 'lingua-audio') {
+        final textToSpeak = uri.queryParameters['text'];
+        return AudioButton(
+          audioUrl: uri.queryParameters['src'],
+          fallbackText: textToSpeak,
+          language: 'ko',
+          compact: true,
+        );
+      }
+      return CachedMarkdownImage(url: uri.toString());
+    }
+
+    MarkdownHeadingBuilder headingBuilder(EdgeInsets? padding) =>
+        MarkdownHeadingBuilder(
+          styleSheet: mdStyle,
+          padding: padding ?? EdgeInsets.zero,
+          selectable: selectable,
+          onLink: openLink,
+          imageBuilder: buildImage,
+        );
+
     return MarkdownBody(
       data: normalized,
       selectable: selectable,
       styleSheet: mdStyle,
+      builders: {
+        'h1': headingBuilder(mdStyle.h1Padding),
+        'h2': headingBuilder(mdStyle.h2Padding),
+        'h3': headingBuilder(mdStyle.h3Padding),
+        'h4': headingBuilder(mdStyle.h4Padding),
+        'h5': headingBuilder(mdStyle.h5Padding),
+        'h6': headingBuilder(mdStyle.h6Padding),
+      },
       onTapLink: (text, href, title) async {
-        if (href == null || (onLink?.call(href) ?? false)) return;
-        final uri = Uri.tryParse(href);
-        if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
-          return;
-        }
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        if (href != null) await openLink(href);
       },
-      imageBuilder: (uri, title, alt) {
-        if (uri.scheme == 'lingua-spoiler') {
-          return SpoilerText(text: uri.queryParameters['text'] ?? '');
-        }
-        if (uri.scheme == 'lingua-youtube') {
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: SizedBox(
-              width: (MediaQuery.sizeOf(context).width - 48).clamp(
-                200.0,
-                640.0,
-              ),
-              child: YouTubeEmbed(embedUrl: uri.queryParameters['url'] ?? ''),
-            ),
-          );
-        }
-        if (uri.scheme == 'lingua-audio') {
-          final textToSpeak = uri.queryParameters['text'];
-          return AudioButton(
-            audioUrl: uri.queryParameters['src'],
-            fallbackText: textToSpeak,
-            language: 'ko',
-            compact: true,
-          );
-        }
-        return CachedMarkdownImage(url: uri.toString());
-      },
+      imageBuilder: buildImage,
     );
   }
 }

@@ -83,6 +83,75 @@ void main() {
     expect(styles.blockSpacing, 16);
   });
 
+  testWidgets('keeps bold and code in headings at the heading size', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: MarkdownContent(
+            content: '# Mnemonics for **강** (river)\n\n### `~은/ㄴ 듯이` as if',
+          ),
+        ),
+      ),
+    );
+
+    final styles = tester
+        .widget<MarkdownBody>(find.byType(MarkdownBody))
+        .styleSheet!;
+    for (final (text, heading) in [
+      ('Mnemonics', styles.h1!),
+      ('as if', styles.h3!),
+    ]) {
+      final finder = find.byWidgetPredicate(
+        (widget) =>
+            widget is RichText && widget.text.toPlainText().contains(text),
+      );
+      expect(finder, findsOneWidget);
+      final sizes = <double?>[];
+      void collect(InlineSpan span, TextStyle? inherited) {
+        final style = inherited?.merge(span.style) ?? span.style;
+        if (span is TextSpan) {
+          if (span.text?.isNotEmpty ?? false) sizes.add(style?.fontSize);
+          for (final child in span.children ?? const <InlineSpan>[]) {
+            collect(child, style);
+          }
+        }
+      }
+
+      collect(tester.widget<RichText>(finder).text, null);
+      expect(sizes, isNotEmpty);
+      expect(sizes, everyElement(heading.fontSize), reason: text);
+      // Lines are at least as tall as the heading text, so wrapped lines
+      // don't overlap.
+      expect(
+        tester.getSize(finder).height,
+        greaterThanOrEqualTo(heading.fontSize!),
+        reason: text,
+      );
+    }
+  });
+
+  testWidgets('follows links in headings', (tester) async {
+    final tapped = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MarkdownContent(
+            content: '## See [the lesson](lesson-target) **now**',
+            onLink: (href) {
+              tapped.add(href);
+              return true;
+            },
+          ),
+        ),
+      ),
+    );
+
+    await tester.tapOnText(find.textRange.ofSubstring('the lesson'));
+    expect(tapped, ['lesson-target']);
+  });
+
   testWidgets('renders HTML del tags with strikethrough styling', (
     tester,
   ) async {
