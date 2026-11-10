@@ -34,7 +34,7 @@ const embedUrl = computed(() => {
   if (video === 'videoseries') video = null
   if (!video && !list) return null
   const embed = new URL(
-    `https://www.youtube-nocookie.com/embed/${video || 'videoseries'}`,
+    `https://www.youtube.com/embed/${video || 'videoseries'}`,
   )
   if (list) embed.searchParams.set('list', list)
   return embed.href

@@ -10,7 +10,7 @@ Out of the box, VitePress does not know the tags the app's reader renders. The t
 | `<TTS>안녕하세요</TTS>` | The text, then a button that speaks it. Markdown inside is rendered (`<TTS>**안녕**하세요</TTS>`) and left out of what is spoken. |
 | `<YouTube id="..." />` | A player. Also takes `list` for a playlist, and `src` with a video id or any YouTube link. Quotes can be left out: `<YouTube id=wMRfpE9JdUo />`. |
 | `<span class="spoiler">...</span>` | Blurred until hovered or tapped. Other classes can be there too (`class="md spoiler"`). |
-| `<VocabQuiz />`, `<SentenceQuiz />` | Nothing. The app leaves out every other capitalised tag as well; the theme covers these two, so add a line to `index.js` for any other you use. |
+| `<VocabQuiz />`, `<Nothing />` | Nothing. The app leaves out every other capitalised tag as well. |
 
 ## Setting up
 
@@ -33,7 +33,7 @@ The app imports only Markdown files with `vocabulary:` frontmatter, so `.vitepre
 - **Close every tag.** The app accepts `<AudioButton src="...">` and `<YouTube id="...">` left open; VitePress stops with an error on them. Write `<AudioButton src="..." />`, which both accept.
 - **Audio paths.** A full URL plays in both. In the preview, a path starting with `/` is a file in the `public/` folder of the folder VitePress serves.
 - **Speech** uses the voices the browser has, in Korean unless the tag has `lang="..."`. It sounds different from the app, and is silent in a browser with no voice for the language.
-- **YouTube** is the regular embedded player on `youtube-nocookie.com`. The app shows a thumbnail first, and offers **Open on YouTube**.
+- **YouTube** is the regular embedded player. The app shows a thumbnail first, and offers **Open on YouTube**.
 - **`[[...]]` links and `<!-- chunk -->` comments** are for the app only; see [Editing lessons outside the app](lesson-format.md#editing-lessons-outside-the-app).
 
 Some HTML that VitePress renders is not rendered by the app yet:
@@ -41,3 +41,5 @@ Some HTML that VitePress renders is not rendered by the app yet:
 - **Markdown inside a spoiler** is shown as typed: `<span class="spoiler">my **brother**</span>` reveals `my **brother**`.
 - **`<br>` in a table cell** ends the line, so the table is shown as plain text.
 - **`<ins>`, `<mark>`, `<sup>` and other inline HTML** are shown as typed, tags included. `<del>` is the exception: it is struck through.
+- **`<details>` and `<summary>`**
+- **`<ruby>` and associated tags**. See <https://github.com/patarapolw/lingua_srs/issues/158>.
