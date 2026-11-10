@@ -222,9 +222,9 @@ class LessonContent {
       .trim();
 
   /// Turns the lesson components (`<YouTube>`, `<AudioButton>`, `<TTS>`,
-  /// `<Details>`, spoiler spans) and `[[lesson links]]` into what
-  /// [MarkdownContent] renders, and drops scripts, quizzes, unknown
-  /// components and HTML comments. Chunk markers and `<details>` blocks are
+  /// spoiler spans) and `[[lesson links]]` into what [MarkdownContent]
+  /// renders, and drops scripts, quizzes, unknown components and HTML
+  /// comments. Chunk markers and `<details>` blocks are
   /// kept: the first for [parse], the second for [MarkdownContent].
   static String preprocess(String markdown) {
     final fencedCodeBlocks = <String>[];
@@ -280,16 +280,6 @@ class LessonContent {
           queryParameters: {'text': spoken},
         );
         return '$spoken ![tts](<$uri>)';
-      },
-    );
-    text = text.replaceAllMapped(
-      // Only the capitalised component: `<details>` is an HTML block that
-      // [MarkdownContent] folds.
-      RegExp(r'<Details\b([^>]*)>'),
-      (match) {
-        final summary =
-            attr(match[1] ?? '', 'summary') ?? attr(match[1] ?? '', 'title');
-        return summary == null ? '' : '\n\n**$summary**\n\n';
       },
     );
     text = MarkdownContent.prepareSpoilerSpans(text);

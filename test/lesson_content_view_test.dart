@@ -97,14 +97,12 @@ void main() {
       expect(content.chunks, hasLength(2));
     });
 
-    test('the Details component is not one, and is shown as before', () {
+    test('the Details component is gone: only its content is kept', () {
       final text = LessonContent.preprocess(
         '<Details summary="Examples">\n\ninside\n\n</Details>',
       );
 
-      expect(text, contains('**Examples**'));
-      expect(text, contains('inside'));
-      expect(text, isNot(contains('Details')));
+      expect(text.trim(), 'inside');
     });
 
     test('details and summary tags are kept for the renderer', () {
