@@ -372,6 +372,88 @@ void main() {
       expect(find.textContaining('Easy'), findsNothing);
     });
 
+    /// One lesson with two due nouns, studied KO ➔ EN only.
+    Future<({Lesson lesson, List<VocabItem> vocabs})> seedTwoDue(
+      WidgetTester tester,
+      AppProvider provider,
+    ) async {
+      const yaml =
+          '---\nvocabulary:\n  nouns:\n    - ko: 하나\n      en: one\n'
+          '    - ko: 둘\n      en: two\n---\n# Lesson\n';
+      final lesson = (await tester.runAsync(() => provider.importYaml(yaml)))!;
+      for (final vocab in lesson.vocabularies) {
+        vocab.cardNativeToTarget.isEnabled = false;
+        final card = vocab.cardTargetToNative;
+        SrsService.processReview(card, SrsRating.good);
+        SrsService.processReview(card, SrsRating.good);
+        card.dueDate = DateTime.now().subtract(const Duration(days: 1));
+      }
+      return (lesson: lesson, vocabs: lesson.vocabularies);
+    }
+
+    testWidgets('reset and skip resets the card and moves to the next', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      final seeded = await seedTwoDue(tester, provider);
+      await openStudy(tester, provider, seeded.lesson);
+      final shown = seeded.vocabs.firstWhere(
+        (v) => find.text(v.targetWord).evaluate().isNotEmpty,
+      );
+      final other = seeded.vocabs.firstWhere((v) => v != shown);
+      await reveal(tester);
+
+      await openMenu(tester);
+      await tester.tap(resetMenuItem());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Reset and skip'));
+      await tester.pumpAndSettle();
+
+      final card = shown.cardTargetToNative;
+      expect(card.status, SrsStatus.isNew);
+      expect(card.repetitions, 0);
+      // The next card is up, unrevealed, and the skipped one is gone.
+      expect(find.text(other.targetWord), findsWidgets);
+      expect(find.text(shown.targetWord), findsNothing);
+      expect(find.textContaining('Show Answer'), findsOneWidget);
+      expect(find.text('NEW'), findsNothing);
+      // Like a suspend: the card leaves the session without being rated.
+      expect(find.textContaining('(1/1)'), findsOneWidget);
+      expect(find.text('✓ 0'), findsOneWidget);
+      expect(find.text('✗ 0'), findsOneWidget);
+    });
+
+    testWidgets('undo after reset and skip restores the card and its place', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      final seeded = await seedTwoDue(tester, provider);
+      await openStudy(tester, provider, seeded.lesson);
+      final shown = seeded.vocabs.firstWhere(
+        (v) => find.text(v.targetWord).evaluate().isNotEmpty,
+      );
+      final card = shown.cardTargetToNative;
+      final repetitions = card.repetitions;
+      final interval = card.interval;
+      final status = card.status;
+      await reveal(tester);
+
+      await openMenu(tester);
+      await tester.tap(resetMenuItem());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Reset and skip'));
+      await tester.pumpAndSettle();
+      expect(card.status, SrsStatus.isNew);
+
+      await tester.tap(find.byIcon(Icons.undo));
+      await tester.pumpAndSettle();
+
+      expect(card.repetitions, repetitions);
+      expect(card.interval, interval);
+      expect(card.status, status);
+      expect(find.text(shown.targetWord), findsWidgets);
+    });
+
     testWidgets('cancelling leaves the card unchanged', (tester) async {
       final provider = await loadedProvider(tester);
       final seeded = await seed(tester, provider, due: true);

@@ -26,8 +26,8 @@ import 'ai_discussion_dialog.dart';
 import 'vocab_edit_dialog.dart';
 
 /// A study-session action that Undo takes back, newest last: a rating
-/// ([ReviewHistoryRecord]), [SendToBackRecord], [SuspendRecord] or
-/// [WrapUpRecord].
+/// ([ReviewHistoryRecord]), [SendToBackRecord], [SuspendRecord],
+/// [ResetSkipRecord] or [WrapUpRecord].
 sealed class SessionUndoEntry {}
 
 class ReviewHistoryRecord implements SessionUndoEntry {
@@ -311,6 +311,26 @@ class SuspendRecord implements SessionUndoEntry {
   });
 }
 
+/// A card reset to New and skipped, so it is not studied this session: the
+/// progress it had before the reset, and the queue entries it lost.
+class ResetSkipRecord implements SessionUndoEntry {
+  final StudyCardItem item;
+  final int index;
+  final List<RemovedQueueItem> removed;
+  final bool wasInAgainSet;
+
+  /// The card's state before the reset; [ReviewHistoryRecord.restore] puts
+  /// it back. Its rating is unused.
+  final ReviewHistoryRecord before;
+  ResetSkipRecord({
+    required this.item,
+    required this.index,
+    required this.removed,
+    required this.wasInAgainSet,
+    required this.before,
+  });
+}
+
 /// The session was wrapped up: the unseen cards it dropped, and the copies
 /// of Again cards it added back.
 class WrapUpRecord implements SessionUndoEntry {
@@ -524,6 +544,15 @@ enum CramMode {
   /// daily new-card limit (they still count toward it), mixed with a few of
   /// its seen cards practised without changing their schedules.
   learnNew,
+}
+
+/// What the reset dialog in a review was confirmed with.
+enum _ResetChoice {
+  /// Reset to New and study it now, as a new card.
+  keep,
+
+  /// Reset to New and leave it out of this session.
+  skip,
 }
 
 class StudyView extends StatefulWidget {
@@ -1021,6 +1050,8 @@ class _StudyViewState extends State<StudyView> {
         _undoSendToBack(record);
       case final SuspendRecord record:
         _undoSuspend(record);
+      case final ResetSkipRecord record:
+        _undoResetSkip(record);
       case final WrapUpRecord record:
         _undoWrapUp(record);
     }
@@ -1412,29 +1443,40 @@ class _StudyViewState extends State<StudyView> {
     if (!_canResetCurrentCard) return;
     final item = _queue[_currentIndex];
     final direction = _directionLabel(item);
-    final confirmed = await showDialog<bool>(
+    final choice = await showDialog<_ResetChoice>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('Reset this card for "${item.vocab.targetWord}"?'),
         content: Text(
           'This resets the $direction card\'s repetitions, interval, and '
-          'review dates back to New. The other direction is not affected.',
+          'review dates back to New. The other direction is not affected.\n\n'
+          'Reset and skip also leaves the card out of this session and moves '
+          'on to the next card.',
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
+            onPressed: () => Navigator.pop(ctx),
             child: const Text('Cancel'),
           ),
+          OutlinedButton(
+            onPressed: () => Navigator.pop(ctx, _ResetChoice.skip),
+            child: const Text('Reset and skip'),
+          ),
           FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
+            onPressed: () => Navigator.pop(ctx, _ResetChoice.keep),
             child: const Text('Reset to New'),
           ),
         ],
       ),
     );
-    if (confirmed != true || !mounted) return;
+    if (choice == null || !mounted) return;
     // The card may have moved on while the dialog was open.
     if (_currentIndex >= _queue.length || _queue[_currentIndex] != item) return;
+
+    if (choice == _ResetChoice.skip) {
+      await _resetAndSkipCurrentCard(item, direction);
+      return;
+    }
 
     final provider = context.read<AppProvider>();
     final saved = provider.resetCardSrs(item.card);
@@ -1449,12 +1491,63 @@ class _StudyViewState extends State<StudyView> {
     });
     await saved;
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Reset "${item.vocab.targetWord}" ($direction) to New.'),
-        duration: const Duration(milliseconds: 1400),
-      ),
+    _showSnack('Reset "${item.vocab.targetWord}" ($direction) to New.');
+  }
+
+  /// Resets the card on screen to New and takes it out of the session
+  /// unrated, like a suspend, so the next card comes up. Undo restores both
+  /// its progress and its place in the queue.
+  Future<void> _resetAndSkipCurrentCard(
+    StudyCardItem item,
+    String direction,
+  ) async {
+    context.read<AudioService>().stop();
+    final provider = context.read<AppProvider>();
+    final index = _currentIndex;
+    final before = ReviewHistoryRecord.capture(
+      queueIndex: index,
+      card: item.card,
+      rating: SrsRating.again,
     );
+    final wasInAgainSet = _againCardIds.contains(item.card.id);
+    final saved = provider.resetCardSrs(item.card);
+    setState(() {
+      final removed = removeCardFromSession(
+        card: item.card,
+        queue: _queue,
+        fromIndex: index,
+        againCardIds: _againCardIds,
+      );
+      _undoStack.add(
+        ResetSkipRecord(
+          item: item,
+          index: index,
+          removed: removed,
+          wasInAgainSet: wasInAgainSet,
+          before: before,
+        ),
+      );
+      _isAnswerRevealed = false;
+    });
+    _triggerPreload(_currentIndex);
+    await saved;
+    if (!mounted) return;
+    _showSnack(
+      'Reset "${item.vocab.targetWord}" ($direction) to New and skipped it.',
+    );
+  }
+
+  void _undoResetSkip(ResetSkipRecord record) {
+    record.before.restore();
+    context.read<AppProvider>().saveState();
+    setState(() {
+      restoreRemovedItems(_queue, record.removed);
+      if (record.wasInAgainSet) _againCardIds.add(record.item.card.id);
+      _currentIndex = min(record.index, _queue.length);
+      _answeredCount = min(_answeredCount, _currentIndex);
+      _isAnswerRevealed = false;
+    });
+    _showSnack('Undid reset of "${record.item.vocab.targetWord}".');
   }
 
   void _openAiDiscussion(StudyCardItem item) {
@@ -1764,9 +1857,7 @@ class _StudyViewState extends State<StudyView> {
               IconButton(
                 icon: const Icon(Icons.undo),
                 tooltip: canUndo
-                    ? (_showKeyHints
-                          ? 'Undo Last Rating (Z / Ctrl+Z)'
-                          : 'Undo Last Rating')
+                    ? (_showKeyHints ? 'Undo (Z / Ctrl+Z)' : 'Undo')
                     : 'Nothing to undo',
                 onPressed: canUndo ? _undo : null,
               ),
@@ -1810,9 +1901,7 @@ class _StudyViewState extends State<StudyView> {
                   moreItem(
                     'undo',
                     Icons.undo,
-                    _showKeyHints
-                        ? 'Undo last rating (Z / Ctrl+Z)'
-                        : 'Undo last rating',
+                    _showKeyHints ? 'Undo (Z / Ctrl+Z)' : 'Undo',
                     enabled: canUndo,
                   ),
                   moreItem(
