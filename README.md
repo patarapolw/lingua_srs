@@ -71,8 +71,7 @@ flutter test
 ## Docs
 
 - [Features](docs/features.md)
-- [Lesson format](docs/lesson-format.md)
-- [Previewing lessons with VitePress](docs/vitepress.md) while writing them on a computer
+- [Lesson format](docs/lesson-format.md), and [previewing lessons with VitePress](docs/vitepress.md) while writing them
 - [Keyboard shortcuts](docs/hotkeys.md)
 - [Architecture](docs/architecture.md)
 - [Using sync](docs/sync-guide.md), and its design: [sync and dictionary import](docs/sync.md)
