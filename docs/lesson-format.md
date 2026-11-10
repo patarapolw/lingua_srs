@@ -69,24 +69,12 @@ Lesson notes go here.
 
 Frontmatter-only Markdown imports the same as equivalent plain YAML. The body is kept for reading from the lesson list and can be edited and saved at any time.
 
-The reader renders `<AudioButton src="...">` and `<TTS>...</TTS>` controls, and `<YouTube id="...">` embeds (also `list` or `src` attributes). Spoiler spans (`<span class="spoiler">...</span>`) are blurred until hovered on desktop or tapped on touch devices. Scripts, and capitalised tags the reader does not know (`<VocabQuiz />`), are left out.
-
-A `<details>` block folds part of a lesson away until its `<summary>` is tapped. Markdown works inside it, headings included; `<details open>` starts unfolded, and a block can sit inside another:
-
-```html
-<details>
-<summary>Examples</summary>
-
-- 저는 **학생**이에요
-- 저는 **선생님**이에요
-
-</details>
-```
+The reader renders `<AudioButton src="...">` and `<TTS>...</TTS>` controls, and `<YouTube id="...">` embeds (also `list` or `src` attributes). Spoiler spans (`<span class="spoiler">...</span>`) are blurred until hovered on desktop or tapped on touch devices. `<Details summary="...">` shows its summary in bold and its content under it, always open. Scripts, and capitalised tags the reader does not know (`<VocabQuiz />`), are left out.
 
 Tap a YouTube thumbnail to start its embedded player. If the video cannot play,
 use **Open on YouTube** to open the video or playlist outside the player.
 
-The reader renders the lesson natively, a chunk at a time, so long lessons stay responsive. A chunk starts at every heading, and a long section is also cut at a blank line (never inside a code block, list, table or `<details>` block). If a lesson splits badly, add HTML comments, which render as nothing anywhere:
+The reader renders the lesson natively, a chunk at a time, so long lessons stay responsive. A chunk starts at every heading, and a long section is also cut at a blank line (never inside a code block, list or table). If a lesson splits badly, add HTML comments, which render as nothing anywhere:
 
 ```markdown
 Text before.

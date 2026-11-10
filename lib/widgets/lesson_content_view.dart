@@ -61,9 +61,6 @@ class LessonContent {
   static final _startLine = RegExp(r'^\s*<!--\s*chunk:start\s*-->\s*$');
   static final _endLine = RegExp(r'^\s*<!--\s*chunk:end\s*-->\s*$');
   static final _fenceLine = RegExp(r'^\s{0,3}(```|~~~)');
-  static final _inlineCode = RegExp(r'(`+)[^\n]*?\1');
-  static final _detailsOpen = RegExp(r'<details\b', caseSensitive: false);
-  static final _detailsClose = RegExp(r'</details\s*>', caseSensitive: false);
   static final _headingLine = RegExp(r'^\s{0,3}(#{1,6})\s+(.+?)(?:\s+#+)?\s*$');
   static final _continuationLine = RegExp(r'^(\s|[-*+]\s|\d+[.)]\s|\||>)');
   static final _setextUnderline = RegExp(r'^ {0,3}(=+|-+)[ \t]*$');
@@ -73,8 +70,7 @@ class LessonContent {
   /// A chunk starts at every heading, and a long section is also cut at a
   /// blank line, but never inside a fenced code block, a list or a table.
   /// `<!-- chunk -->` forces a cut, and everything between
-  /// `<!-- chunk:start -->` and `<!-- chunk:end -->` stays in one chunk. So
-  /// does a `<details>` block, which is shown and hidden as a whole.
+  /// `<!-- chunk:start -->` and `<!-- chunk:end -->` stays in one chunk.
   static LessonContent parse(
     String markdown, {
     int maxChars = defaultChunkChars,
@@ -85,7 +81,6 @@ class LessonContent {
     var current = <String>[];
     var size = 0;
     var grouped = false;
-    var detailsDepth = 0;
     String? fence;
     final anchors = <String>{};
 
@@ -111,15 +106,9 @@ class LessonContent {
 
     for (var i = 0; i < lines.length; i++) {
       final line = lines[i];
-      // Whether this line is inside a block that must stay in one chunk.
-      final whole = grouped || detailsDepth > 0;
       if (fence == null) {
-        final text = line.replaceAll(_inlineCode, '');
-        detailsDepth += _detailsOpen.allMatches(text).length;
-        detailsDepth -= _detailsClose.allMatches(text).length;
-        if (detailsDepth < 0) detailsDepth = 0;
         if (_breakLine.hasMatch(line)) {
-          if (!whole) flush();
+          if (!grouped) flush();
           continue;
         }
         if (_startLine.hasMatch(line)) {
@@ -145,7 +134,7 @@ class LessonContent {
         final heading = _headingLine.firstMatch(line);
         final setextLevel = _setextLevel(lines, i);
         if (heading != null || setextLevel != null) {
-          if (!whole) flush();
+          if (!grouped) flush();
           final raw = heading != null ? heading[2]! : line.trim();
           final (title, id) = LessonLink.splitHeadingAttributes(raw);
           final text = _plainText(title);
@@ -164,7 +153,7 @@ class LessonContent {
             size += line.length + 1;
             continue;
           }
-        } else if (!whole &&
+        } else if (!grouped &&
             size >= maxChars &&
             line.trim().isEmpty &&
             _canCutBefore(lines, i + 1)) {
@@ -222,10 +211,9 @@ class LessonContent {
       .trim();
 
   /// Turns the lesson components (`<YouTube>`, `<AudioButton>`, `<TTS>`,
-  /// spoiler spans) and `[[lesson links]]` into what [MarkdownContent]
-  /// renders, and drops scripts, quizzes, unknown components and HTML
-  /// comments. Chunk markers and `<details>` blocks are kept: the first for
-  /// [parse], the second for [MarkdownContent].
+  /// `<Details>`, spoiler spans) and `[[lesson links]]` into what
+  /// [MarkdownContent] renders, and drops scripts, quizzes, unknown
+  /// components and HTML comments. Chunk markers are kept for [parse].
   static String preprocess(String markdown) {
     final fencedCodeBlocks = <String>[];
     var text = markdown.replaceAll('\r\n', '\n').replaceAllMapped(
@@ -280,6 +268,14 @@ class LessonContent {
           queryParameters: {'text': spoken},
         );
         return '$spoken ![tts](<$uri>)';
+      },
+    );
+    text = text.replaceAllMapped(
+      RegExp(r'<Details\b([^>]*)>', caseSensitive: false),
+      (match) {
+        final summary =
+            attr(match[1] ?? '', 'summary') ?? attr(match[1] ?? '', 'title');
+        return summary == null ? '' : '\n\n**$summary**\n\n';
       },
     );
     text = MarkdownContent.prepareSpoilerSpans(text);
