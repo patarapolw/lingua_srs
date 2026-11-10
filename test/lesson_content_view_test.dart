@@ -313,4 +313,120 @@ void main() {
       );
     });
   });
+
+  group('returning to a lesson', () {
+    final markdown = [
+      for (var i = 0; i < 40; i++)
+        '# Section $i\n\n${'word ' * ((i % 5 + 1) * 150)}',
+    ].join('\n\n');
+    final headings = LessonContent.parse(markdown).headings;
+
+    setUp(LessonScrollMemory.clear);
+
+    Future<void> open(
+      WidgetTester tester, {
+      String? key = 'lesson-1',
+      String text = '',
+      String? initialHeading,
+      LessonContentController? controller,
+    }) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: LessonContentView(
+              markdown: text.isEmpty ? markdown : text,
+              scrollKey: key,
+              initialHeading: initialHeading,
+              controller: controller,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    /// Leaves the lesson, as going back to the lesson list does.
+    Future<void> leave(WidgetTester tester) async {
+      await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+      await tester.pumpAndSettle();
+    }
+
+    Finder section(int i) =>
+        find.textContaining('Section $i', findRichText: true).first;
+
+    testWidgets('opens it where it was left', (tester) async {
+      final controller = LessonContentController();
+      await open(tester, controller: controller);
+      controller.scrollToHeading(headings[30]);
+      await tester.pumpAndSettle();
+      // Part of the way into the section, as reading leaves it.
+      await tester.drag(find.byType(ListView), const Offset(0, -120));
+      await tester.pumpAndSettle();
+      final before = tester.getTopLeft(section(30)).dy;
+
+      await leave(tester);
+      await open(tester);
+
+      expect(
+        find.textContaining('Section 0', findRichText: true),
+        findsNothing,
+      );
+      expect(tester.getTopLeft(section(30)).dy, closeTo(before, 2));
+    });
+
+    testWidgets('keeps a place left by scrolling by hand', (tester) async {
+      await open(tester);
+      await tester.fling(find.byType(ListView), const Offset(0, -3000), 3000);
+      await tester.pumpAndSettle();
+      final position = tester
+          .state<ScrollableState>(find.byType(Scrollable))
+          .position
+          .pixels;
+      expect(position, greaterThan(1000));
+
+      await leave(tester);
+      await open(tester);
+
+      final restored = tester
+          .state<ScrollableState>(find.byType(Scrollable))
+          .position
+          .pixels;
+      expect(restored, closeTo(position, 2));
+    });
+
+    testWidgets('starts other lessons, and changed text, at the top', (
+      tester,
+    ) async {
+      final controller = LessonContentController();
+      await open(tester, controller: controller);
+      controller.scrollToHeading(headings[30]);
+      await tester.pumpAndSettle();
+      await leave(tester);
+
+      await open(tester, key: 'lesson-2');
+      expect(section(0), findsOneWidget);
+      await leave(tester);
+
+      await open(tester, text: '$markdown\n\n# Added\n\nmore');
+      expect(section(0), findsOneWidget);
+    });
+
+    testWidgets('goes to a linked heading instead of the saved place', (
+      tester,
+    ) async {
+      final controller = LessonContentController();
+      await open(tester, controller: controller);
+      controller.scrollToHeading(headings[30]);
+      await tester.pumpAndSettle();
+      await leave(tester);
+
+      await open(tester, initialHeading: 'Section 10');
+
+      expect(section(10), findsOneWidget);
+      expect(
+        find.textContaining('Section 30', findRichText: true),
+        findsNothing,
+      );
+    });
+  });
 }

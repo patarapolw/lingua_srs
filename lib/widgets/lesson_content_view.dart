@@ -1,7 +1,8 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollCacheExtent;
+import 'package:flutter/rendering.dart'
+    show RenderAbstractViewport, ScrollCacheExtent;
 import 'package:flutter/scheduler.dart';
 
 import '../models/lesson.dart' show looseNameKey;
@@ -309,6 +310,20 @@ class LessonContentController {
       _scrollToNamed?.call(target) ?? false;
 }
 
+/// Where a lesson was scrolled to: the chunk at the top of the view and how
+/// far into it, and the pixel offset as a fallback above the first chunk.
+typedef _SavedScroll = ({int? chunk, double offset, double pixels, int text});
+
+/// Scroll positions of lessons left this session, by [LessonContentView.
+/// scrollKey], so going back to the lesson list and opening the lesson again
+/// returns to the same place. In memory only.
+abstract final class LessonScrollMemory {
+  static final Map<String, _SavedScroll> _saved = {};
+
+  /// Forgets every saved position, for tests.
+  static void clear() => _saved.clear();
+}
+
 /// Renders a lesson natively: its Markdown is cut into chunks (see
 /// [LessonContent.parse]) shown in a lazy list, with selectable text.
 class LessonContentView extends StatefulWidget {
@@ -326,6 +341,11 @@ class LessonContentView extends StatefulWidget {
   /// Text or anchor of a heading to scroll to once the lesson is shown.
   final String? initialHeading;
 
+  /// Keeps the scroll position under this key ([LessonScrollMemory]), such as
+  /// the lesson's id, and returns to it when the lesson is shown again,
+  /// unless [initialHeading] is given or the text has changed.
+  final String? scrollKey;
+
   const LessonContentView({
     super.key,
     required this.markdown,
@@ -333,6 +353,7 @@ class LessonContentView extends StatefulWidget {
     this.controller,
     this.onLessonLink,
     this.initialHeading,
+    this.scrollKey,
   });
 
   @override
@@ -353,16 +374,91 @@ class _LessonContentViewState extends State<LessonContentView> {
   double? _textScale;
   double? _bodyFontSize;
 
+  /// Hides the list while it jumps back to a saved position, so the lesson
+  /// does not flash at the top first.
+  bool _restoring = false;
+
   @override
   void initState() {
     super.initState();
     _attach(widget.controller);
     _parse();
     final initialHeading = widget.initialHeading;
+    final key = widget.scrollKey;
+    final saved = key == null ? null : LessonScrollMemory._saved[key];
     if (initialHeading != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _scrollToNamed(initialHeading);
       });
+    } else if (saved != null && saved.text == _textHash) {
+      _restoring = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _restore(saved));
+    }
+  }
+
+  int get _textHash => Object.hash(widget.markdown, _content.chunks.length);
+
+  /// The chunk at the top of the view and how far it is scrolled into it.
+  _SavedScroll? _position() {
+    if (!_scroll.hasClients) return null;
+    final pixels = _scroll.position.pixels;
+    int? chunk;
+    var offset = 0.0;
+    for (var index = 0; index < _keys.length; index++) {
+      final top = _chunkTop(index);
+      if (top == null || top > pixels + 0.5) continue;
+      if (chunk == null || index > chunk) {
+        chunk = index;
+        offset = pixels - top;
+      }
+    }
+    return (chunk: chunk, offset: offset, pixels: pixels, text: _textHash);
+  }
+
+  /// The scroll offset at which chunk [index] starts at the top of the view,
+  /// or null while it is not built.
+  double? _chunkTop(int index) {
+    final box = _keys[index].currentContext?.findRenderObject();
+    if (box is! RenderBox || !box.attached || !box.hasSize) return null;
+    return RenderAbstractViewport.of(box).getOffsetToReveal(box, 0).offset;
+  }
+
+  /// Saves where the lesson is scrolled to. With [onlyAnchored], only when a
+  /// chunk can still be measured: while the view is being taken down its
+  /// chunks may already be detached, and the place saved when scrolling
+  /// stopped is better than a bare pixel offset.
+  void _savePosition({bool onlyAnchored = false}) {
+    final key = widget.scrollKey;
+    if (key == null || _restoring) return;
+    final position = _position();
+    if (position == null || (onlyAnchored && position.chunk == null)) return;
+    LessonScrollMemory._saved[key] = position;
+  }
+
+  /// Jumps back to [saved]: to its chunk (by its estimated offset until it
+  /// is built), then into it, until the place settles.
+  Future<void> _restore(_SavedScroll saved) async {
+    try {
+      for (var attempt = 0; attempt < 10; attempt++) {
+        if (!mounted || !_scroll.hasClients) return;
+        final position = _scroll.position;
+        final chunk = saved.chunk;
+        double target;
+        if (chunk == null || chunk >= _keys.length) {
+          target = saved.pixels;
+        } else {
+          final top = _chunkTop(chunk);
+          target = (top ?? _estimatedOffsetForChunk(chunk)) + saved.offset;
+          if (top != null && (position.pixels - target).abs() <= 1) return;
+        }
+        position.jumpTo(
+          target.clamp(position.minScrollExtent, position.maxScrollExtent),
+        );
+        await SchedulerBinding.instance.endOfFrame;
+        if (chunk == null) return;
+      }
+    } finally {
+      if (mounted) setState(() => _restoring = false);
     }
   }
 
@@ -404,6 +500,14 @@ class _LessonContentViewState extends State<LessonContentView> {
         oldWidget.content != widget.content) {
       _parse();
     }
+  }
+
+  @override
+  void deactivate() {
+    // Leaving the lesson, such as going back to the list: keep the place,
+    // in case scrolling had not settled.
+    _savePosition(onlyAnchored: true);
+    super.deactivate();
   }
 
   @override
@@ -525,6 +629,16 @@ class _LessonContentViewState extends State<LessonContentView> {
 
   @override
   Widget build(BuildContext context) {
+    return NotificationListener<ScrollEndNotification>(
+      onNotification: (_) {
+        _savePosition();
+        return false;
+      },
+      child: Opacity(opacity: _restoring ? 0 : 1, child: _list(context)),
+    );
+  }
+
+  Widget _list(BuildContext context) {
     return SelectionArea(
       child: ListView.builder(
         controller: _scroll,

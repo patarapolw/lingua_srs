@@ -122,6 +122,7 @@ class _LessonReaderViewState extends State<LessonReaderView> {
               content: content,
               controller: _contentController,
               initialHeading: widget.initialHeading,
+              scrollKey: selectedLesson.id,
               onLessonLink: (link) =>
                   _openLessonLink(context, provider, selectedLesson, link),
             ),
