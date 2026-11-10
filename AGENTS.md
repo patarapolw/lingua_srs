@@ -16,7 +16,7 @@ Flutter app (Dart, `provider` state management). See [README.md](README.md) for 
 - 2-space indentation, Dart defaults.
 - Lesson/vocabulary parsing lives only in `lib/services/yaml_parser_service.dart`. Do not parse lesson syntax elsewhere.
 - SRS scheduling lives in `lib/services/srs_service.dart`.
-- Make commits using a conventional commit message and a detailed body.
+- Make commits using a conventional commit message with a scope and a detailed body, e.g. `feat(study): …` or `fix(sync): …`. The scope is the area of the app; `git log` shows the ones in use.
 - Name branches `<type>-<issue>-<what-it-does>`: the conventional commit type, the issue number when there is one, and a few lowercase hyphenated words, e.g. `fix-92-undo-review-count` or `docs-agents-branch-naming`. Claude agents prefix the name with `claude/` (`claude/fix-92-undo-review-count`). A session may start on, or be told to push to, a generated name such as `ccr-…`: rename the branch to a meaningful one (`git branch -m <name>`) before the first push to `origin` and before opening a PR. A PR can't change its branch later. Use one branch per PR; after a merge, start a new branch.
 
 ## Rules
@@ -43,8 +43,9 @@ If `flutter` or `dart` isn't available, you can't run tests or `flutter analyze`
 - If the Dart SDK can't be installed either, hand-format to Dart style: 2-space indent, trailing commas on multi-line argument lists and collections, lines ≤ 80 columns, and expect `dart format` to change something.
 - Still add or update tests in `test/`, written carefully since they can't be run.
 - Keep changes small and focused so they are easy to fix locally.
-- State in the PR description that tests, analyze and format were not run.
+- In the PR description, state that tests, analyze and format were not run here. CI runs all three; once CI passes, count them as done, with no checkbox.
+- Give checkboxes only to checks CI doesn't cover: manual checks (below) and checks that must be run locally, such as `flutter test integration_test -d macos` when `desktop.yml` didn't run it. Leave them unticked for the person; never tick one, or write that a check ran locally, unless the person says so. When told a check passed without being told where it ran, ask rather than guess.
 - Open the PR anyway. It's fine for CI to fail on format, analyze or tests; a local agent with Flutter will fix it on the same PR.
 - CI runs on your pushes, `flutter test` before the format check. You may fix a failure from here only when the log names its cause: an analyzer warning at a file and line, or a failing test whose expected/actual or stack trace points into the changed code. Push at most one fix per failure. If CI still fails, or finding the cause needs the app or a debugger, stop and leave it for a local session.
 - Never push for formatting alone. The next local commit formats.
-- In the PR description, list any step that needs a manual check outside CI (for example deploying the Worker, applying a migration, or trying a change in the running app), or say that none does.
+- In the PR description, list any step that needs a manual check outside CI (for example deploying the Worker, applying a migration, or trying a change in the running app) as unticked boxes too, or say that none does.
