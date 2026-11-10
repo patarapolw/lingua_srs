@@ -1995,7 +1995,7 @@ class _StudyViewState extends State<StudyView> {
                     (false, false) => 'Wrap up session',
                   },
                 ),
-                if (item.lesson.targetLanguage == 'ko') ...[
+                if (item.lesson.targetLanguageCode == 'ko') ...[
                   const PopupMenuDivider(),
                   PronunciationToggleMenuEntry(enabled: _isAnswerRevealed),
                 ],
@@ -2343,6 +2343,38 @@ class _StudyViewState extends State<StudyView> {
                                             ),
                                           ],
                                         ),
+                                        if (item.vocab.reading.isNotEmpty)
+                                          Text(
+                                            item.vocab.reading,
+                                            key: const ValueKey(
+                                              'vocab-reading',
+                                            ),
+                                            style: theme.textTheme.titleMedium
+                                                ?.copyWith(
+                                                  color: theme
+                                                      .colorScheme
+                                                      .onSurfaceVariant,
+                                                ),
+                                            textAlign: TextAlign.center,
+                                          ),
+                                        if (item.vocab.otherForms.isNotEmpty)
+                                          Text(
+                                            [
+                                              for (final other
+                                                  in item.vocab.otherForms)
+                                                '${other.label}: ${other.form}',
+                                            ].join(' · '),
+                                            key: const ValueKey(
+                                              'vocab-other-forms',
+                                            ),
+                                            style: theme.textTheme.bodyLarge
+                                                ?.copyWith(
+                                                  color: theme
+                                                      .colorScheme
+                                                      .onSurfaceVariant,
+                                                ),
+                                            textAlign: TextAlign.center,
+                                          ),
                                         PronunciationLine(
                                           text: item.vocab.targetWord,
                                           languageCode:

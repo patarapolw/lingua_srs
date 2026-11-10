@@ -1758,6 +1758,10 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
         ..idIsExplicit = lessonMatch.idIsExplicit || importedVocab.idIsExplicit
         ..targetWord = importedVocab.targetWord
         ..translation = importedVocab.translation
+        ..reading = importedVocab.reading
+        ..simplified = importedVocab.simplified
+        ..traditional = importedVocab.traditional
+        ..hanja = importedVocab.hanja
         ..pos = importedVocab.pos
         ..sectionPath = importedVocab.sectionPath
         ..sentenceIds = importedVocab.sentenceIds

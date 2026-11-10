@@ -10,6 +10,19 @@ class VocabItem {
   bool idIsExplicit;
   String targetWord;
   String translation;
+
+  /// How [targetWord] is read when its writing does not show it: the pinyin
+  /// of a Chinese word, the kana of a Japanese one. Empty when not given.
+  String reading;
+
+  /// The simplified and traditional forms of a Chinese word, whichever of
+  /// them [targetWord] is written in. Empty when not given.
+  String simplified;
+  String traditional;
+
+  /// The Hanja a Korean word is written with (학생 is 學生). Empty when not
+  /// given, as for a native Korean word.
+  String hanja;
   String pos; // Part of speech or category (e.g. nouns, verbs, adjectives)
   List<String> sectionPath;
   List<String> sentenceIds; // Reference to sentences in the pool
@@ -28,6 +41,10 @@ class VocabItem {
     this.idIsExplicit = false,
     required this.targetWord,
     required this.translation,
+    this.reading = '',
+    this.simplified = '',
+    this.traditional = '',
+    this.hanja = '',
     required this.pos,
     List<String>? sectionPath,
     String? audioUrl,
@@ -141,6 +158,19 @@ class VocabItem {
     return lower.contains('verb') || lower.contains('adjective');
   }
 
+  /// The other ways this word is written, labelled, for the back of a card:
+  /// its simplified and traditional forms and its Hanja. A form that is the
+  /// same as [targetWord] is left out, since the card already shows it.
+  List<({String label, String form})> get otherForms => [
+    for (final (label, form) in [
+      ('Simplified', simplified),
+      ('Traditional', traditional),
+      ('Hanja', hanja),
+    ])
+      if (form.trim().isNotEmpty && form.trim() != targetWord.trim())
+        (label: label, form: form.trim()),
+  ];
+
   List<String> get effectiveSectionPath =>
       sectionPath.isEmpty ? (pos.isEmpty ? const [] : [pos]) : sectionPath;
 
@@ -157,6 +187,11 @@ class VocabItem {
     'idIsExplicit': idIsExplicit,
     'targetWord': targetWord,
     'translation': translation,
+    // Left out when empty, so words without them are saved as before.
+    if (reading.isNotEmpty) 'reading': reading,
+    if (simplified.isNotEmpty) 'simplified': simplified,
+    if (traditional.isNotEmpty) 'traditional': traditional,
+    if (hanja.isNotEmpty) 'hanja': hanja,
     'pos': pos,
     'sectionPath': sectionPath,
     'audioUrl': audioUrl,
@@ -178,6 +213,10 @@ class VocabItem {
     idIsExplicit: json['idIsExplicit'] as bool? ?? false,
     targetWord: json['targetWord'] as String? ?? '',
     translation: json['translation'] as String? ?? '',
+    reading: json['reading'] as String? ?? '',
+    simplified: json['simplified'] as String? ?? '',
+    traditional: json['traditional'] as String? ?? '',
+    hanja: json['hanja'] as String? ?? '',
     pos: json['pos'] as String? ?? 'general',
     sectionPath: (json['sectionPath'] as List<dynamic>?)
         ?.map((e) => e.toString())

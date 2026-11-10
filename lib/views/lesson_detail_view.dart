@@ -260,7 +260,7 @@ class _LessonDetailViewState extends State<LessonDetailView> {
           initialYaml:
               'vocabulary:\n'
               '  nouns:\n'
-              '    - ${lesson.targetLanguage}: ""\n'
+              '    - ${lesson.targetLanguageCode}: ""\n'
               '      ${lesson.nativeLanguage}: ""\n',
           vocabularyOnly: true,
         ),

@@ -118,6 +118,13 @@ class LessonExportService {
       'target': vocab.targetWord,
       'meaning': vocab.translation,
     };
+    if (vocab.reading.isNotEmpty) {
+      entry[lesson.targetLanguageCode == 'zh' ? 'pinyin' : 'reading'] =
+          vocab.reading;
+    }
+    if (vocab.simplified.isNotEmpty) entry['simplified'] = vocab.simplified;
+    if (vocab.traditional.isNotEmpty) entry['traditional'] = vocab.traditional;
+    if (vocab.hanja.isNotEmpty) entry['hanja'] = vocab.hanja;
     if (vocab.audioUrl != null) entry['audio'] = vocab.audioUrl;
     if (vocab.ttsText != null) entry['tts'] = vocab.ttsText;
     if (vocab.notes.isNotEmpty) entry['notes'] = vocab.notes;
@@ -134,7 +141,7 @@ class LessonExportService {
         target = Sentence.suggestEmphasis(
           sentence.targetText,
           vocab.targetWord,
-          korean: lesson.targetLanguage.toLowerCase() == 'ko',
+          korean: lesson.targetLanguageCode == 'ko',
         );
         if (!Sentence.hasEmphasis(target) && target.isNotEmpty) {
           target = '**$target**';

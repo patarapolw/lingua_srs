@@ -7,7 +7,7 @@ import '../models/vocab_item.dart';
 ///
 /// What is asked depends on the language being learned, so each language has
 /// its own set of questions, and a language without one gets no word questions
-/// and no AI suggestions. Korean is the only one the app supports. To add a
+/// and no AI suggestions. Korean and Mandarin Chinese have one. To add a
 /// language, extend [_LanguageQuestions] and list it in [_languages].
 ///
 /// After an answer, a few of the fixed questions are swapped for questions the
@@ -36,6 +36,7 @@ class AiQuestionSuggestions {
 
   static const Map<String, _LanguageQuestions> _languages = {
     'ko': _KoreanQuestions(),
+    'zh': _MandarinQuestions(),
   };
 
   /// Whether there are questions for [language], a code like `ko` (a region
@@ -43,12 +44,12 @@ class AiQuestionSuggestions {
   static bool supports(String language) => _forLanguage(language) != null;
 
   /// [language] as a lowercase code without a region: `ko` for `ko-KR` and
-  /// for `Korean`. A language that is not [supports]ed keeps what comes
-  /// before its region.
+  /// for `Korean`, `zh` for `zh-TW` and for `Chinese`. A language that is not
+  /// [supports]ed keeps what comes before its region.
   static String languageCode(String language) {
     final code = language.trim().toLowerCase().split(RegExp(r'[-_]')).first;
     for (final entry in _languages.entries) {
-      if (entry.key == code || entry.value.name.toLowerCase() == code) {
+      if (entry.key == code || entry.value.names.contains(code)) {
         return entry.key;
       }
     }
@@ -325,7 +326,7 @@ class AiQuestionSuggestions {
   static _LanguageQuestions? _forLanguage(String language) {
     final code = language.trim().toLowerCase().split(RegExp(r'[-_]')).first;
     for (final entry in _languages.entries) {
-      if (entry.key == code || entry.value.name.toLowerCase() == code) {
+      if (entry.key == code || entry.value.names.contains(code)) {
         return entry.value;
       }
     }
@@ -357,6 +358,9 @@ abstract class _LanguageQuestions {
 
   /// The English name of the language.
   String get name;
+
+  /// What a lesson can call the language instead of its code, lower case.
+  List<String> get names => [name.toLowerCase()];
 
   /// A line telling the AI what kind of follow-up questions are the most
   /// useful to a learner of this language.
@@ -494,6 +498,106 @@ class _KoreanQuestions extends _LanguageQuestions {
 
   static String _quizInSentences(String word) =>
       'Quiz me on "$word" in sentences, 3 questions.';
+
+  static String _similarWords(String word) =>
+      'How is "$word" different from similar words?';
+
+  static String _anotherExample(String word) =>
+      'Show me more example sentences with "$word".';
+}
+
+class _MandarinQuestions extends _LanguageQuestions {
+  const _MandarinQuestions();
+
+  @override
+  String get name => 'Mandarin Chinese';
+
+  @override
+  List<String> get names => const ['mandarin chinese', 'mandarin', 'chinese'];
+
+  @override
+  String get practicalFocus =>
+      'Favor practical use: common, natural ways to use a word, its pinyin '
+      'and tones, what its characters mean, common collocations, and '
+      'measure words for nouns. Mandarin verbs and adjectives do not '
+      'conjugate: they take aspect particles (了, 过, 着) and complements.';
+
+  /// Nothing in how a Mandarin word is written says it is a verb.
+  @override
+  bool looksLikeVerbOrAdjective(String word) => false;
+
+  /// Han characters, simplified or traditional.
+  static final _han = RegExp(r'[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]');
+
+  @override
+  bool hasTargetText(String text) => _han.hasMatch(text);
+
+  @override
+  List<String> get exampleQuestions => const [
+    'Which measure word goes with it?',
+    'How else can I use this word?',
+    'How else could I say "[short phrase]"?',
+    'What are common mistakes with this word?',
+    'Show me a short dialogue using it.',
+  ];
+
+  // A noun is asked its measure word; a verb or adjective, which has no
+  // forms to learn, how it takes aspect particles and complements.
+
+  @override
+  List<String> wordFirst({
+    required String word,
+    required bool hasSentence,
+    required bool verbOrAdjective,
+  }) => [
+    _characters(word),
+    if (hasSentence) _sentenceGrammar,
+    _pronunciation(word),
+    if (verbOrAdjective) _aspect(word) else _measureWord(word),
+    _anotherExample(word),
+  ];
+
+  @override
+  List<String> wordFollowUps({
+    required String word,
+    required bool hasSentence,
+    required bool verbOrAdjective,
+  }) => [
+    if (hasSentence) _sentenceExpressions,
+    _pronunciation(word),
+    if (verbOrAdjective) _aspect(word) else _measureWord(word),
+    _otherUses(word),
+    _anotherExample(word),
+    _otherForm(word),
+    _quiz(word),
+    _similarWords(word),
+  ];
+
+  static String _characters(String word) =>
+      'What does each character in "$word" mean?';
+
+  static const _sentenceGrammar =
+      "Break down this sentence's word order and grammar.";
+
+  static const _sentenceExpressions =
+      'Which useful phrases from this sentence can I reuse?';
+
+  static String _pronunciation(String word) =>
+      'How is "$word" pronounced? Give the pinyin and any tone changes.';
+
+  static String _measureWord(String word) =>
+      'Which measure word goes with "$word"?';
+
+  static String _aspect(String word) =>
+      'How is "$word" used with 了, 过 and complements?';
+
+  static String _otherUses(String word) => 'What other ways can I use "$word"?';
+
+  static String _otherForm(String word) =>
+      'How is "$word" written in simplified and traditional characters?';
+
+  static String _quiz(String word) =>
+      'Quiz me on "$word" with 3 short questions.';
 
   static String _similarWords(String word) =>
       'How is "$word" different from similar words?';

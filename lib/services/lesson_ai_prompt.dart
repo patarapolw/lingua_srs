@@ -62,8 +62,23 @@ class LessonAiPrompt {
   /// How the AI writes vocabulary to add to [lesson], so that the reply opens
   /// in the import screen as it is (see docs/lesson-format.md).
   static String vocabularyYamlInstructions(Lesson lesson) {
-    final target = lesson.targetLanguage;
+    // Entries are keyed by the language alone: `zh`, not `zh-TW`.
+    final target = lesson.targetLanguageCode;
     final native = lesson.nativeLanguage;
+    final extra = switch (target) {
+      'zh' => (
+        'Give every word its `pinyin` with tone marks, written in the '
+            '${_chineseScript(lesson.targetLanguage)} characters the lesson '
+            'uses. ',
+        '      pinyin: "..."\n',
+      ),
+      'ko' => (
+        'Give a Sino-Korean word its `hanja`, and leave `hanja` out for a '
+            'native Korean word. ',
+        '      hanja: "..."\n',
+      ),
+      _ => ('', ''),
+    };
     return [
       'Whenever you give the learner words to learn (they ask for more '
           'vocabulary, a word list, words on a topic, or words to add to '
@@ -73,7 +88,7 @@ class LessonAiPrompt {
           'part-of-speech keys (such as nouns, verbs, adjectives, adverbs, '
           'expressions) directly under `vocabulary:`. Verbs and adjectives '
           'are in their dictionary form. `notes` and `examples` are '
-          'optional. In every example, the word being learned must be '
+          'optional. ${extra.$1}In every example, the word being learned must be '
           'wrapped in **bold** in the $target sentence. In the $native '
           'translation, also wrap in **bold** the words that translate it; '
           'if no words in the translation match it (it is left out or '
@@ -82,6 +97,7 @@ class LessonAiPrompt {
           'vocabulary:\n'
           '  nouns:\n'
           '    - $target: "..."\n'
+          '${extra.$2}'
           '      $native: "..."\n'
           '      notes: "..."\n'
           '      examples:\n'
@@ -90,6 +106,15 @@ class LessonAiPrompt {
           '```',
       'The learner can edit the list before adding it to the lesson.',
     ].join('\n');
+  }
+
+  /// Which characters a Chinese lesson is written in, from its language tag:
+  /// traditional for Taiwan, Hong Kong, Macau and `Hant`, else simplified.
+  static String _chineseScript(String language) {
+    final parts = language.toLowerCase().split(RegExp(r'[-_]')).skip(1);
+    return parts.any(const {'tw', 'hk', 'mo', 'hant'}.contains)
+        ? 'traditional'
+        : 'simplified';
   }
 
   /// The vocabulary YAML in an AI [answer]: the first fenced code block whose

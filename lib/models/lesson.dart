@@ -24,6 +24,14 @@ class Lesson {
   /// for lessons made in the app.
   String? fileFolder;
 
+  /// [targetLanguage] as a lowercase code without a region or script: `zh`
+  /// for `zh-TW`, `ko` for `ko-KR`.
+  String get targetLanguageCode => languageCodeOf(targetLanguage);
+
+  /// [language] as a lowercase code without a region or script.
+  static String languageCodeOf(String language) =>
+      language.trim().toLowerCase().split(RegExp(r'[-_]')).first;
+
   /// [title], [unitTitle], [fileName] and [fileFolder] are kept with Korean syllables
   /// composed ([composeHangul]), so names from a Mac, which can store them as
   /// separate jamo, match the same names from anywhere else. Every lesson is

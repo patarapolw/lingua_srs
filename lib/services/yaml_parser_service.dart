@@ -184,6 +184,8 @@ class YamlParserService {
     String? unitTitle = defaultUnitTitle;
     String targetLang = 'ko';
     String nativeLang = 'en';
+    // The `target:` of the file, if it has one.
+    String? statedTargetLang;
 
     // 1. Detect lesson title & languages if present at root
     for (final key in doc.keys) {
@@ -197,6 +199,7 @@ class YamlParserService {
           lowerKey == 'target_lang' ||
           lowerKey == 'language') {
         targetLang = doc[key].toString().trim();
+        statedTargetLang = targetLang;
       } else if (lowerKey == 'native' || lowerKey == 'native_lang') {
         nativeLang = doc[key].toString().trim();
       } else if (lowerKey == 'unit' || lowerKey == 'unit_title') {
@@ -228,6 +231,10 @@ class YamlParserService {
         if (item is! Map) continue;
         String targetWord = '';
         String translation = '';
+        String reading = '';
+        String simplified = '';
+        String traditional = '';
+        String hanja = '';
         String? vocabId;
         String? vocabAudio;
         String? ttsText;
@@ -270,6 +277,14 @@ class YamlParserService {
             }
           } else if (_isTtsKey(fKey) && fVal.isNotEmpty) {
             ttsText = fVal; // tts: alternate text for TTS
+          } else if (readingKeys.contains(fKey) && reading.isEmpty) {
+            reading = fVal; // pinyin, or another reading
+          } else if (simplifiedKeys.contains(fKey) && simplified.isEmpty) {
+            simplified = fVal;
+          } else if (traditionalKeys.contains(fKey) && traditional.isEmpty) {
+            traditional = fVal;
+          } else if (hanjaKeys.contains(fKey) && hanja.isEmpty) {
+            hanja = fVal;
           }
         }
 
@@ -337,6 +352,10 @@ class YamlParserService {
             idIsExplicit: vocabId != null,
             targetWord: targetWord,
             translation: translation,
+            reading: reading,
+            simplified: simplified,
+            traditional: traditional,
+            hanja: hanja,
             pos: sectionPath.last,
             sectionPath: sectionPath,
             audioUrl: vocabAudio,
@@ -358,10 +377,22 @@ class YamlParserService {
       }
     }
 
+    // Entries keyed by a language (`zh:`) say the language but not the region
+    // or script. The file's `target: zh-TW` says both, so it is kept when it
+    // is that same language: the region picks the voice and tells which
+    // characters the lesson is written in.
+    final stated = statedTargetLang;
+    final lessonTargetLang =
+        stated != null &&
+            stated.toLowerCase() != targetLang &&
+            Lesson.languageCodeOf(stated) == targetLang
+        ? stated
+        : targetLang;
+
     final lesson = Lesson(
       title: title,
       unitTitle: unitTitle,
-      targetLanguage: targetLang,
+      targetLanguage: lessonTargetLang,
       nativeLanguage: nativeLang,
       vocabularies: vocabList,
       markdownContent: markdownContent,
@@ -396,6 +427,11 @@ class YamlParserService {
   /// Korean word, or the reading of a word written in characters, such as the
   /// pinyin of a Chinese word.
   static const readingKeys = ['hangul', 'reading', 'pinyin'];
+
+  /// Keys that hold the simplified and the traditional form of a Chinese
+  /// word in vocabulary YAML.
+  static const simplifiedKeys = ['simplified'];
+  static const traditionalKeys = ['traditional'];
 
   /// Hanja (CJK ideographs).
   static final _hanja = RegExp(r'[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]');
