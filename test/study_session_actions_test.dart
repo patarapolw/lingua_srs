@@ -586,10 +586,10 @@ void main() {
       await tester.pump(const Duration(seconds: 2));
       await tester.pumpAndSettle();
 
-      await chooseFromMenu(tester, 'Wrap up session');
+      await chooseFromMenu(tester, 'Cancel wrap up');
 
       expect(find.textContaining('(1/2)'), findsOneWidget);
-      expect(find.text('Stopped wrapping up: 1 card back.'), findsOneWidget);
+      expect(find.text('Wrap up cancelled: 1 card back.'), findsOneWidget);
       await tester.pump(const Duration(seconds: 2));
       await tester.pumpAndSettle();
 
@@ -621,7 +621,7 @@ void main() {
       expect(find.textContaining('(1/1)'), findsOneWidget);
 
       // Still wrapped up: the menu offers to stop, which brings 바나나 back.
-      await chooseFromMenu(tester, 'Wrap up session');
+      await chooseFromMenu(tester, 'Cancel wrap up');
       expect(find.textContaining('(1/2)'), findsOneWidget);
     });
 
@@ -635,44 +635,48 @@ void main() {
       await chooseFromMenu(tester, 'Wrap up session');
       expect(find.text('Session Complete!'), findsOneWidget);
 
-      await tester.tap(find.text('Stop Wrapping Up'));
+      await tester.tap(find.text('Cancel Wrap Up'));
       await tester.pumpAndSettle();
 
       expect(find.text('NEW'), findsOneWidget);
       expect(seeded.fresh.status, SrsStatus.isNew);
     });
 
-    testWidgets('the wrap up menu item shows its state like a toggle button', (
+    testWidgets('the wrap up menu item shows its state and its action', (
       tester,
     ) async {
       final provider = await loadedProvider(tester);
       final seeded = await seed(tester, provider);
       await openStudy(tester, provider, seeded.lesson);
 
-      // Whether the item is highlighted, after checking its icon matches.
-      Future<bool> shownOn() async {
+      // The item's icon and title, read with the menu open.
+      Future<(IconData?, String)> menuState() async {
         await tester.tap(find.byTooltip('More'));
         await tester.pumpAndSettle();
-        final tile = find.byKey(const ValueKey('wrapup-toggle'));
-        final on = tester.widget<ListTile>(tile).selected;
-        expect(
-          find.descendant(
-            of: tile,
-            matching: find.byIcon(on ? Icons.flag : Icons.flag_outlined),
-          ),
-          findsOneWidget,
+        final item = find.byWidgetPredicate(
+          (w) => w is PopupMenuItem<String> && w.value == 'wrapup',
         );
+        final icon = tester
+            .widget<Icon>(
+              find.descendant(of: item, matching: find.byType(Icon)),
+            )
+            .icon;
+        final title = tester
+            .widget<Text>(
+              find.descendant(of: item, matching: find.byType(Text)),
+            )
+            .data!;
         // Close the menu without choosing anything.
         await tester.tapAt(Offset.zero);
         await tester.pumpAndSettle();
-        return on;
+        return (icon, title);
       }
 
-      expect(await shownOn(), isFalse);
+      expect(await menuState(), (Icons.sports_score, 'Wrap up session'));
       await chooseFromMenu(tester, 'Wrap up session');
-      expect(await shownOn(), isTrue);
-      await chooseFromMenu(tester, 'Wrap up session');
-      expect(await shownOn(), isFalse);
+      expect(await menuState(), (Icons.redo, 'Cancel wrap up'));
+      await chooseFromMenu(tester, 'Cancel wrap up');
+      expect(await menuState(), (Icons.sports_score, 'Wrap up session'));
     });
   });
 }

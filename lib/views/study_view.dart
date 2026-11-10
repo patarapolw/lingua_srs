@@ -1301,8 +1301,8 @@ class _StudyViewState extends State<StudyView> {
     final back = distinctCardCount([for (final r in record.removed) r.item]);
     _showSnack(
       back == 0
-          ? 'Stopped wrapping up.'
-          : 'Stopped wrapping up: $back ${back == 1 ? 'card' : 'cards'} back.',
+          ? 'Wrap up cancelled.'
+          : 'Wrap up cancelled: $back ${back == 1 ? 'card' : 'cards'} back.',
     );
   }
 
@@ -1694,11 +1694,9 @@ class _StudyViewState extends State<StudyView> {
                   ],
                   if (_wrapUpRecord?.removed.isNotEmpty ?? false) ...[
                     FilledButton.tonalIcon(
-                      icon: const Icon(Icons.flag),
+                      icon: const Icon(Icons.redo),
                       label: Text(
-                        _showKeyHints
-                            ? 'Stop Wrapping Up (W)'
-                            : 'Stop Wrapping Up',
+                        _showKeyHints ? 'Cancel Wrap Up (W)' : 'Cancel Wrap Up',
                       ),
                       onPressed: _resumeSession,
                     ),
@@ -1785,27 +1783,6 @@ class _StudyViewState extends State<StudyView> {
         dense: true,
         contentPadding: EdgeInsets.zero,
         leading: Icon(icon),
-        title: Text(title),
-      ),
-    );
-
-    // A setting that stays on until turned off, styled like a toolbar toggle
-    // button: the item keeps the feature's name, its icon shows the current
-    // state, and it is highlighted while on. Tapping the item flips it.
-    PopupMenuItem<String> toggleItem(
-      String value,
-      IconData offIcon,
-      IconData onIcon,
-      String title, {
-      required bool on,
-    }) => PopupMenuItem<String>(
-      value: value,
-      child: ListTile(
-        key: ValueKey('$value-toggle'),
-        dense: true,
-        contentPadding: EdgeInsets.zero,
-        selected: on,
-        leading: Icon(on ? onIcon : offIcon),
         title: Text(title),
       ),
     );
@@ -1964,12 +1941,14 @@ class _StudyViewState extends State<StudyView> {
                     _showKeyHints ? 'Undo (Z / Ctrl+Z)' : 'Undo',
                     enabled: canUndo,
                   ),
-                  toggleItem(
+                  // The icon shows the current state; the title says what
+                  // tapping does.
+                  moreItem(
                     'autoplay',
-                    Icons.volume_off,
-                    Icons.volume_up,
-                    'Autoplay audio',
-                    on: provider.autoplayAudio,
+                    provider.autoplayAudio ? Icons.volume_up : Icons.volume_off,
+                    provider.autoplayAudio
+                        ? 'Turn autoplay off'
+                        : 'Turn autoplay on',
                   ),
                   moreItem(
                     'edit',
@@ -2004,12 +1983,17 @@ class _StudyViewState extends State<StudyView> {
                   'Reset card to New',
                   enabled: _canResetCurrentCard,
                 ),
-                toggleItem(
+                // Unlike autoplay, the icon shows the action, like the
+                // other items: finish up, or carry on with the full session.
+                moreItem(
                   'wrapup',
-                  Icons.flag_outlined,
-                  Icons.flag,
-                  _showKeyHints ? 'Wrap up session (W)' : 'Wrap up session',
-                  on: _wrappedUp,
+                  _wrappedUp ? Icons.redo : Icons.sports_score,
+                  switch ((_wrappedUp, _showKeyHints)) {
+                    (true, true) => 'Cancel wrap up (W)',
+                    (true, false) => 'Cancel wrap up',
+                    (false, true) => 'Wrap up session (W)',
+                    (false, false) => 'Wrap up session',
+                  },
                 ),
                 if (item.lesson.targetLanguage == 'ko') ...[
                   const PopupMenuDivider(),
