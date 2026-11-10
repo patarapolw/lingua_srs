@@ -417,6 +417,10 @@ void main() {
       expect(find.text(shown.targetWord), findsNothing);
       expect(find.textContaining('Show Answer'), findsOneWidget);
       expect(find.text('NEW'), findsNothing);
+      // Like a suspend: the card leaves the session without being rated.
+      expect(find.textContaining('(1/1)'), findsOneWidget);
+      expect(find.text('✓ 0'), findsOneWidget);
+      expect(find.text('✗ 0'), findsOneWidget);
     });
 
     testWidgets('undo after reset and skip restores the card and its place', (
