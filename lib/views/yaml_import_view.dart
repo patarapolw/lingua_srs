@@ -457,7 +457,7 @@ class _YamlImportViewState extends State<YamlImportView>
     final seenPaths = <String>{};
     for (final directoryPath in directoryPaths) {
       for (final path in await markdownFilesUnder(Directory(directoryPath))) {
-        if (seenPaths.add(_markdownSourceKey(path))) markdownPaths.add(path);
+        if (seenPaths.add(markdownSourceKey(path))) markdownPaths.add(path);
       }
     }
     if (mounted) {
@@ -1365,11 +1365,12 @@ class MarkdownImportFile {
 Future<List<String>> markdownFilesUnder(Directory root) async {
   final paths = <String>[];
   await for (final entity in root.list(followLinks: false)) {
+    // Already decoded: decoding again throws on a name such as `이다.md`.
     final name = entity.uri.pathSegments.lastWhere(
       (segment) => segment.isNotEmpty,
       orElse: () => '',
     );
-    if (MarkdownArchiveService.isIgnoredName(Uri.decodeComponent(name))) {
+    if (MarkdownArchiveService.isIgnoredName(name)) {
       continue;
     }
     if (entity is Directory) {
@@ -1649,7 +1650,7 @@ MarkdownDirectoryResult parsePickedMarkdownSources(
             requireVocabularyFrontmatter: true,
             hierarchyPath: file.path,
             // Saved before ZIP entries were keyed by their path alone.
-            legacySourceKey: _markdownSourceKey(
+            legacySourceKey: markdownSourceKey(
               '${source.sourceKey}!/${file.path}',
             ),
           );
@@ -1659,7 +1660,7 @@ MarkdownDirectoryResult parsePickedMarkdownSources(
         final filename = pathParts.last;
         parseMarkdown(
           filename,
-          _markdownSourceKey(source.sourceKey),
+          markdownSourceKey(source.sourceKey),
           utf8.decode(source.bytes),
           defaultTitle: null,
           requireVocabularyFrontmatter: filename.toLowerCase().endsWith('.md'),
@@ -1721,8 +1722,8 @@ MarkdownDirectoryResult parseMarkdownFiles(
     try {
       final contents = File(path).readAsStringSync();
       final sourceHash = sha256.convert(utf8.encode(contents)).toString();
-      if (!reimport.contains(_markdownSourceKey(path)) &&
-          importedSources[_markdownSourceKey(path)] == sourceHash) {
+      if (!reimport.contains(markdownSourceKey(path)) &&
+          importedSources[markdownSourceKey(path)] == sourceHash) {
         unchanged++;
         final lesson = YamlParserService.lessonFileInfo(
           contents,
@@ -1731,12 +1732,12 @@ MarkdownDirectoryResult parseMarkdownFiles(
         );
         if (lesson != null) {
           unchangedLessons.add(lesson);
-          unchangedKeys.add(_markdownSourceKey(path));
+          unchangedKeys.add(markdownSourceKey(path));
           unchangedFiles.add(
             LessonFileRef(
               filePath: path,
               path: relativePath,
-              sourceKey: _markdownSourceKey(path),
+              sourceKey: markdownSourceKey(path),
               sourceHash: sourceHash,
             ),
           );
@@ -1755,7 +1756,7 @@ MarkdownDirectoryResult parseMarkdownFiles(
       imports.add(
         MarkdownImportFile(
           path: relativePath,
-          sourceKey: _markdownSourceKey(path),
+          sourceKey: markdownSourceKey(path),
           sourceHash: sourceHash,
           preview: preview,
           filePath: path,
@@ -1797,7 +1798,9 @@ MarkdownDirectoryResult _combineMarkdownDirectoryResults(
 /// is the same lesson.
 String zipEntrySourceKey(String path) => 'zip:${path.replaceAll('\\', '/')}';
 
-String _markdownSourceKey(String path) {
+/// The key a folder file's import is remembered by: its path with `/`
+/// between folders, and lowercase on Windows, where names ignore case.
+String markdownSourceKey(String path) {
   final normalizedPath = path.replaceAll('\\', '/');
   return Platform.isWindows ? normalizedPath.toLowerCase() : normalizedPath;
 }

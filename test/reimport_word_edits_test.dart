@@ -400,13 +400,16 @@ void main() {
 
     String hash(String text) => sha256.convert(utf8.encode(text)).toString();
 
+    /// [path] with `/` between folders: a scan on Windows gives `\`.
+    String slashes(String path) => path.replaceAll('\\', '/');
+
     LessonFileRef save(String contents) {
       final file = File('${folder.path}/unit-1/lesson-1.md')
         ..writeAsStringSync(contents);
       return LessonFileRef(
         filePath: file.path,
         path: 'unit-1/lesson-1.md',
-        sourceKey: file.path,
+        sourceKey: markdownSourceKey(file.path),
         sourceHash: hash(contents),
       );
     }
@@ -513,12 +516,33 @@ void main() {
 
       final found = await tester.runAsync(() => markdownFilesUnder(folder));
 
-      expect(found!.toSet(), {lesson.filePath, '${folder.path}/index.md'});
+      expect(found!.map(slashes).toSet(), {
+        slashes(lesson.filePath),
+        slashes('${folder.path}/index.md'),
+      });
       // A folder that was picked is looked into whatever it is called.
       final hidden = await tester.runAsync(
         () => markdownFilesUnder(Directory('${folder.path}/.vitepress')),
       );
-      expect(hidden, ['${folder.path}/.vitepress/cache/notes.md']);
+      expect(hidden!.map(slashes), [
+        slashes('${folder.path}/.vitepress/cache/notes.md'),
+      ]);
+    });
+
+    testWidgets('a folder scan finds files with Hangul or % in their '
+        'names', (tester) async {
+      final names = ['09-conjugate-이다.md', '23-ㅎ-irregulars.md', '100%.md'];
+      for (final name in names) {
+        File('${folder.path}/unit-1/$name')
+          ..createSync(recursive: true)
+          ..writeAsStringSync('# Lesson\n');
+      }
+
+      final found = await tester.runAsync(() => markdownFilesUnder(folder));
+
+      expect({
+        for (final path in found!) path.split(RegExp(r'[/\\]')).last,
+      }, names.toSet());
     });
 
     testWidgets('a file whose lesson was deleted is offered again though '
