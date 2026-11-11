@@ -96,14 +96,14 @@ void main() {
       find.text('${SrsRating.values.length} reviews in the past year'),
       findsOneWidget,
     );
-    // The legend's ends are the scale in numbers: none, and the busiest day.
+    // The legend's ends are the scale in numbers: none, and the review limit.
     expect(
       tester.widget<Text>(find.byKey(const ValueKey('legend-low'))).data,
       '0',
     );
     expect(
       tester.widget<Text>(find.byKey(const ValueKey('legend-high'))).data,
-      '${SrsRating.values.length} reviews a day',
+      '100+ reviews a day',
     );
     const months = [
       'Jan',
@@ -681,7 +681,72 @@ void main() {
     });
   });
 
-  testWidgets('shades days by the busiest day shown', (tester) async {
+  test(
+    'the scale ends at the review limit, or the busiest day without one',
+    () {
+      expect(activityScaleTop(limit: 100, busiest: 69), 100);
+      expect(activityScaleTop(limit: 100, busiest: 150), 100);
+      expect(activityScaleTop(limit: 0, busiest: 69), 69);
+      // Over the top is still the darkest shade.
+      expect(activityLevel(150, 100), 4);
+    },
+  );
+
+  testWidgets('shades days by the review limit', (tester) async {
+    final today = DateTime.now();
+    DateTime daysAgo(int days) =>
+        DateTime(today.year, today.month, today.day - days);
+    late AppProvider fresh;
+    await tester.runAsync(() async {
+      await StorageService.saveDailyReviewCounts({
+        daysAgo(0): 150,
+        daysAgo(1): 100,
+        daysAgo(2): 40,
+      });
+      fresh = AppProvider();
+      for (var attempt = 0; attempt < 100 && fresh.isLoading; attempt++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    });
+    addTearDown(fresh.dispose);
+    expect(fresh.maxReviews24h, 100);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppProvider>.value(
+        value: fresh,
+        child: const MaterialApp(home: ActivityHeatmapView()),
+      ),
+    );
+
+    Color? cellColor(String message) {
+      final box = tester.widget<Container>(
+        find
+            .descendant(
+              of: find.byTooltip(message),
+              matching: find.byType(Container),
+            )
+            .last,
+      );
+      return (box.decoration as BoxDecoration?)?.color;
+    }
+
+    // A day at the limit and a day over it are both the darkest shade; by
+    // the busiest day, 100 was a lighter shade than 150.
+    final over = cellColor('${dayLabel(daysAgo(0))}: 150 reviews');
+    expect(cellColor('${dayLabel(daysAgo(1))}: 100 reviews'), over);
+    expect(cellColor('${dayLabel(daysAgo(2))}: 40 reviews'), isNot(over));
+    expect(cellColor('76 reviews or more'), over);
+    expect(find.byTooltip('1–25 reviews'), findsOneWidget);
+    expect(find.byTooltip('76–100 reviews'), findsNothing);
+    expect(
+      tester.widget<Text>(find.byKey(const ValueKey('legend-high'))).data,
+      '100+ reviews a day',
+    );
+  });
+
+  testWidgets('shades days by the busiest day shown without a limit', (
+    tester,
+  ) async {
     final today = DateTime.now();
     final day = DateTime(today.year, today.month, today.day);
     final earlier = DateTime(today.year, today.month, today.day - 1);
@@ -692,6 +757,8 @@ void main() {
       for (var attempt = 0; attempt < 100 && fresh.isLoading; attempt++) {
         await Future<void>.delayed(const Duration(milliseconds: 10));
       }
+      // No review limit: the scale ends at the busiest day.
+      await fresh.setMaxReviews24h(0);
     });
     addTearDown(fresh.dispose);
 
@@ -734,6 +801,8 @@ void main() {
       for (var attempt = 0; attempt < 100 && fresh.isLoading; attempt++) {
         await Future<void>.delayed(const Duration(milliseconds: 10));
       }
+      // No review limit: the scale ends at the busiest day.
+      await fresh.setMaxReviews24h(0);
     });
     addTearDown(fresh.dispose);
 
@@ -893,14 +962,14 @@ void main() {
     );
 
     expect(find.text('0 reviews in the past year'), findsOneWidget);
-    // No busiest day to name yet.
+    // No reviews yet, but the limit gives the scale its end.
     expect(
       tester.widget<Text>(find.byKey(const ValueKey('legend-low'))).data,
-      'Less',
+      '0',
     );
     expect(
       tester.widget<Text>(find.byKey(const ValueKey('legend-high'))).data,
-      'More',
+      '100+ reviews a day',
     );
     expect(find.text('No study activity yet'), findsNothing);
     expect(find.text('Leeches (1)'), findsOneWidget);

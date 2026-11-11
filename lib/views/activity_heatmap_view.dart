@@ -30,8 +30,10 @@ final _rightColor = Colors.green.shade600;
 final _wrongColor = Colors.red.shade600;
 final _dueColor = Colors.amber.shade800;
 
-/// The shade, 0 to 4, of a day with [count] reviews, when the busiest day
-/// shown had [busiest]. Shades are quarters of the busiest day, so a calendar
+/// The shade, 0 to 4, of a day with [count] reviews, on a scale whose top is
+/// [busiest]: the review limit, or the busiest day shown when there is no
+/// limit (see [activityScaleTop]). A day over the top gets the darkest shade.
+/// Shades are quarters of the top, so a calendar
 /// of 100-review days still shows which days were heavier. 0 is no reviews.
 @visibleForTesting
 int activityLevel(int count, int busiest) {
@@ -48,6 +50,13 @@ int activityLevel(int count, int busiest) {
   final highest = level * busiest ~/ 4;
   return lowest > highest ? null : (lowest, highest);
 }
+
+/// The number of reviews that the calendar's darkest shade ends at: the
+/// 24-hour review [limit], so a shade means the same share of a full day from
+/// one month to the next, or with no limit (0) the [busiest] day shown.
+@visibleForTesting
+int activityScaleTop({required int limit, required int busiest}) =>
+    limit > 0 ? limit : busiest;
 
 /// The Monday of [day]'s week, at midnight. Built from the day number rather
 /// than by subtracting days, so a clock change in between can't land it on
@@ -174,6 +183,11 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
           final busiest = shownCounts.fold(
             0,
             (maximum, count) => count > maximum ? count : maximum,
+          );
+          final hasReviewLimit = provider.maxReviews24h > 0;
+          final scaleTop = activityScaleTop(
+            limit: provider.maxReviews24h,
+            busiest: busiest,
           );
           final ratingCounts = provider.dailyRatingCounts;
           final newCardCounts = provider.dailyNewCardCounts;
@@ -381,7 +395,7 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                                                   counts,
                                                   ratingCounts,
                                                   newCardCounts,
-                                                  busiest,
+                                                  scaleTop,
                                                 ),
                                             ],
                                           ),
@@ -397,16 +411,22 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                               children: [
                                 // The scale's two ends in numbers, since the
                                 // squares' tooltips need a hover or a long
-                                // press to find.
+                                // press to find. A day can go over the limit
+                                // (first reviews and same-day repeats don't
+                                // count towards it), hence the plus.
                                 Text(
-                                  busiest > 0 ? '0' : 'Less',
+                                  scaleTop > 0 ? '0' : 'Less',
                                   key: const ValueKey('legend-low'),
                                   style: theme.textTheme.labelSmall,
                                 ),
                                 const SizedBox(width: 6),
                                 for (var level = 0; level <= 4; level++)
                                   Tooltip(
-                                    message: _legendLabel(level, busiest),
+                                    message: _legendLabel(
+                                      level,
+                                      scaleTop,
+                                      isLimit: hasReviewLimit,
+                                    ),
                                     child: Container(
                                       width: 12,
                                       height: 12,
@@ -421,9 +441,10 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                                     ),
                                   ),
                                 Text(
-                                  busiest > 0
-                                      ? '${formatCount(busiest)} '
-                                            '${busiest == 1 ? 'review' : 'reviews'} '
+                                  scaleTop > 0
+                                      ? '${formatCount(scaleTop)}'
+                                            '${hasReviewLimit ? '+' : ''} '
+                                            '${scaleTop == 1 ? 'review' : 'reviews'} '
                                             'a day'
                                       : 'More',
                                   key: const ValueKey('legend-high'),
@@ -637,17 +658,24 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
     );
   }
 
-  /// What a legend square's shade stands for, with the calendar's busiest
-  /// day at [busiest].
-  String _legendLabel(int level, int busiest) {
+  /// What a legend square's shade stands for, on a scale that ends at [top]:
+  /// the review limit when [isLimit], otherwise the busiest day shown.
+  String _legendLabel(int level, int top, {required bool isLimit}) {
     if (level == 0) return 'No reviews';
-    final range = activityLevelRange(level, busiest);
+    final range = activityLevelRange(level, top);
     if (range == null) {
-      if (busiest <= 0) return 'Not used yet';
-      return 'Not used: the busiest day had '
-          '${formatCount(busiest)} ${busiest == 1 ? 'review' : 'reviews'}';
+      if (top <= 0) return 'Not used yet';
+      final reviews = '${formatCount(top)} ${top == 1 ? 'review' : 'reviews'}';
+      return isLimit
+          ? 'Not used with a limit of $reviews'
+          : 'Not used: the busiest day had $reviews';
     }
     final (lowest, highest) = range;
+    // The darkest shade has no upper end: days over the limit get it too.
+    if (isLimit && level == 4) {
+      return '${formatCount(lowest)} ${lowest == 1 ? 'review' : 'reviews'} '
+          'or more';
+    }
     if (lowest == highest) {
       return '${formatCount(lowest)} ${lowest == 1 ? 'review' : 'reviews'}';
     }
