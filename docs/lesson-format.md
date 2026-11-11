@@ -87,7 +87,7 @@ A `<details>` block folds part of a lesson away until its `<summary>` is tapped.
 </details>
 ```
 
-Tap a YouTube thumbnail to start its embedded player. If the video cannot play,
+A YouTube video shows its thumbnail and title; tap it to start the embedded player. If the video cannot play,
 use **Open on YouTube** to open the video or playlist outside the player.
 
 The reader shows the whole lesson as one page, so long lessons scroll smoothly, and the text can be selected across sections. The comments `<!-- chunk -->`, `<!-- chunk:start -->` and `<!-- chunk:end -->`, which earlier versions used to cut a lesson into pieces, are no longer needed; they render as nothing, like any HTML comment.

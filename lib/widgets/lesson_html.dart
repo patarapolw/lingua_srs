@@ -82,9 +82,18 @@ abstract final class LessonHtml {
         final embedUrl = params['url'] ?? '';
         final thumbnail = YouTubeEmbed.thumbnailUrl(embedUrl);
         final watch = YouTubeEmbed.watchUrl(embedUrl);
+        final oEmbed = YouTubeEmbed.oEmbedUrl(embedUrl);
         final player = md.Element('div', [
+          // The title the native player shows over its thumbnail; the page
+          // script fills it in from `data-oembed`.
+          if (thumbnail != null && oEmbed != null)
+            md.Element('div', [md.Text('Loading video title…')])
+              ..attributes['class'] = 'yt-title',
           md.Element('span', [])..attributes['class'] = 'play',
         ]);
+        if (thumbnail != null && oEmbed != null) {
+          player.attributes['data-oembed'] = oEmbed.toString();
+        }
         player.attributes['class'] = 'yt';
         player.attributes['data-src'] = YouTubeEmbed.playerSrc(embedUrl);
         if (thumbnail != null) player.attributes['data-thumb'] = thumbnail;
@@ -155,6 +164,7 @@ mark { background: ${dark ? '#665c00' : '#fff3a3'}; color: inherit; }
 details { margin: 1em 0; }
 summary { cursor: pointer; font-weight: bold; }
 .yt { position: relative; width: 100%; max-width: 640px; aspect-ratio: 16 / 9; margin: 8px 0; background: #000 center / cover no-repeat; border-radius: 8px; overflow: hidden; cursor: pointer; }
+.yt .yt-title { position: absolute; left: 0; right: 0; top: 0; padding: 10px 12px 24px; color: #fff; font-weight: 600; font-size: 16px; line-height: 1.3; background: linear-gradient(rgba(0,0,0,.87), transparent); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; pointer-events: none; }
 .yt .play { position: absolute; left: 50%; top: 50%; width: 64px; height: 44px; margin: -22px 0 0 -32px; border-radius: 12px; background: rgba(0,0,0,.7); }
 .yt .play::after { content: ""; position: absolute; left: 25px; top: 12px; border: 10px solid transparent; border-left: 17px solid #fff; }
 .yt-wrap { margin: 8px 0; }
@@ -231,10 +241,21 @@ if (!window.__linguaBound) {
 }
 document.querySelectorAll('.yt').forEach(function (el) {
   if (el.dataset.thumb) el.style.backgroundImage = 'url("' + el.dataset.thumb + '")';
+  var title = el.querySelector('.yt-title');
+  if (title && el.dataset.oembed && !el.dataset.titled) {
+    el.dataset.titled = '1';
+    fetch(el.dataset.oembed).then(function (r) {
+      if (!r.ok) throw new Error(r.status);
+      return r.json();
+    }).then(function (j) {
+      title.textContent = j && j.title ? j.title : 'Video title unavailable';
+    }).catch(function () { title.textContent = 'Video title unavailable'; });
+  }
 });
 ''';
 
-  static String _json(Object? value) => jsonEncode(value).replaceAll('<', r'<');
+  static String _json(Object? value) =>
+      jsonEncode(value).replaceAll('<', r'\u003c');
 
   /// The call that starts the page at [scrollY], or at the heading [anchor].
   static String start({double scrollY = 0, String? anchor}) =>

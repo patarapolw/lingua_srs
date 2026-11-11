@@ -34,12 +34,6 @@ The app imports only Markdown files with `vocabulary:` frontmatter, so `.vitepre
 - **Close every tag.** The app accepts `<AudioButton src="...">` and `<YouTube id="...">` left open; VitePress stops with an error on them. Write `<AudioButton src="..." />`, which both accept.
 - **Audio paths.** A full URL plays in both. In the preview, a path starting with `/` is a file in the `public/` folder of the folder VitePress serves.
 - **Speech** uses the voices the browser has, in Korean unless the tag has `lang="..."`. It sounds different from the app, and is silent in a browser with no voice for the language.
-- **YouTube** is the regular embedded player. The app shows a thumbnail first, and offers **Open on YouTube**.
+- **YouTube** is the regular embedded player. The app shows a thumbnail with the video's title first, and offers **Open on YouTube**.
 - **`<details>`** needs a blank line after `<summary>...</summary>` and before `</details>` for VitePress to render the Markdown inside. The app renders it either way.
 - **`[[...]]` links** (and the old `<!-- chunk -->` comments) are for the app only; see [Editing lessons outside the app](lesson-format.md#editing-lessons-outside-the-app).
-
-Some HTML that VitePress renders is not rendered by the app yet:
-
-- **Inline HTML** other than `<ins>`, `<u>`, `<mark>`, `<sup>`, `<sub>`, `<del>`, `<s>`, `<em>`, `<i>`, `<strong>`, `<b>` and `<br>` is shown as typed, tags included: `<kbd>`, `<small>`, `<a href>`, `<img>`, and a `<span>` that is not a spoiler. Use Markdown where it has a form (`[text](link)`, `![alt](image)`).
-- **Block HTML** is not shown at all, its text included: a block that starts with a tag such as `<ul>`, `<div>` or `<center>`. Write lists and tables in Markdown. `<details>` is the exception.
-- **`<ruby>`, `<rt>` and `<rp>`** are shown as typed, so `<ruby>漢字<rt>한자</rt></ruby>` shows its tags, not a reading above the text. See [issue 158](https://github.com/patarapolw/lingua_srs/issues/158).

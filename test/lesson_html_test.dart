@@ -83,7 +83,20 @@ void main() {
         contains('<a class="yt-open" href="https://www.youtube.com/watch?v='),
       );
       expect(html, contains('Open on YouTube'));
+      expect(
+        html,
+        contains('<div class="yt-title">Loading video title…</div>'),
+      );
+      expect(html, contains('data-oembed="https://www.youtube.com/oembed?'));
       expect(html, isNot(contains('<p><div')));
+    });
+
+    test('a playlist-only YouTube tag has no title to load', () {
+      final html = body('<YouTube list="PL123" />');
+
+      expect(html, contains('class="yt"'));
+      expect(html, isNot(contains('yt-title')));
+      expect(html, isNot(contains('data-oembed')));
     });
 
     test('audio and TTS tags become buttons the page script handles', () {
@@ -139,6 +152,7 @@ void main() {
       expect(page, contains('<style>p{}</style>'));
       expect(page, contains('<div id="content"><p>hi</p></div>'));
       expect(page, contains('function linguaPost'));
+      expect(page, contains('.yt-title'));
       expect(page, contains('linguaStart(12.0, "a\\u003c/script>");'));
       expect('</script>'.allMatches(page), hasLength(1));
     });
@@ -147,7 +161,7 @@ void main() {
       final script = LessonHtml.injection('p{}', '<p>hi</p>', start: 'go();');
 
       expect(script, startsWith('document.documentElement.innerHTML = "'));
-      expect(script, contains('<p>hi</p>'));
+      expect(script, contains(r'\u003cp>hi\u003c/p>'));
       expect(script, endsWith('go();'));
     });
   });
