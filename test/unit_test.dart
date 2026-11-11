@@ -905,7 +905,10 @@ vocabulary:
           provider.sentences.any((sentence) => sentence.id == 'old-sentence'),
           isTrue,
         );
-        expect(provider.getSentencesForVocab(refreshedVocab), hasLength(1));
+        // The word was saved before the file's examples were kept, so the
+        // import cannot tell which of its examples the file has dropped: it
+        // keeps them and adds the file's.
+        expect(provider.getSentencesForVocab(refreshedVocab), hasLength(2));
 
         final refreshedAgain = await provider.importYaml(
           frontmatter,

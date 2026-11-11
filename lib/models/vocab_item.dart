@@ -5,6 +5,47 @@ import 'shared_vocab.dart';
 import '../services/tts_text.dart';
 import 'srs_card.dart';
 
+/// What a word's lesson file said about it when the file was last imported,
+/// or when the word was last written to the file. Importing the file again
+/// compares the file with this, to tell an edit made in the file from one
+/// made in the app: only what changed in the file is taken from it.
+class VocabSource {
+  final String targetWord;
+  final String translation;
+  final List<String> sectionPath;
+
+  /// The word's examples in the file, as [VocabItem.exampleKey] names them.
+  final List<String> examples;
+
+  const VocabSource({
+    required this.targetWord,
+    required this.translation,
+    this.sectionPath = const [],
+    this.examples = const [],
+  });
+
+  Map<String, dynamic> toJson() => {
+    'targetWord': targetWord,
+    'translation': translation,
+    'sectionPath': sectionPath,
+    'examples': examples,
+  };
+
+  static VocabSource? fromJson(Object? json) {
+    if (json is! Map) return null;
+    List<String> strings(Object? value) => [
+      if (value is List)
+        for (final item in value) item.toString(),
+    ];
+    return VocabSource(
+      targetWord: json['targetWord'] as String? ?? '',
+      translation: json['translation'] as String? ?? '',
+      sectionPath: strings(json['sectionPath']),
+      examples: strings(json['examples']),
+    );
+  }
+}
+
 class VocabItem {
   String id;
   bool idIsExplicit;
@@ -19,6 +60,10 @@ class VocabItem {
   /// words, each of which stresses a different part of it. A sentence with no
   /// entry here is shown as the pool has it.
   Map<String, SentenceEmphasis> sentenceEmphasis;
+
+  /// What the lesson file said about this word when it was last imported.
+  /// Null for a word added in the app, or imported before this was kept.
+  VocabSource? source;
 
   /// Details and SRS cards shared by every VocabItem with the same [id].
   SharedVocab shared;
@@ -37,6 +82,7 @@ class VocabItem {
     String disambiguation = '',
     List<String>? sentenceIds,
     Map<String, SentenceEmphasis>? sentenceEmphasis,
+    this.source,
     SrsCard? cardTargetToNative,
     SrsCard? cardNativeToTarget,
   }) : id = id ?? const Uuid().v4(),
@@ -127,6 +173,15 @@ class VocabItem {
   String clozeFor(Sentence sentence) =>
       Sentence.clozeOf(targetTextFor(sentence), targetWord: targetWord);
 
+  /// Names [sentence] as this word shows it, `**` marking included, so an
+  /// example can be told from the same sentence marked another way.
+  String exampleKey(Sentence sentence) {
+    String normalize(String text) =>
+        text.trim().replaceAll(RegExp(r'\s+'), ' ');
+    return '${normalize(targetTextFor(sentence))}\u0000'
+        '${normalize(translationTextFor(sentence))}';
+  }
+
   static String _emphasized(String plain, String? marked) =>
       (marked == null ? null : Sentence.carryEmphasis(marked, plain)) ?? plain;
 
@@ -169,6 +224,7 @@ class VocabItem {
       for (final entry in sentenceEmphasis.entries)
         entry.key: entry.value.toJson(),
     },
+    'source': ?source?.toJson(),
     'cardTargetToNative': cardTargetToNative.toJson(),
     'cardNativeToTarget': cardNativeToTarget.toJson(),
   };
@@ -193,6 +249,7 @@ class VocabItem {
             .toList() ??
         [],
     sentenceEmphasis: _emphasisFromJson(json['sentenceEmphasis']),
+    source: VocabSource.fromJson(json['source']),
     cardTargetToNative: json['cardTargetToNative'] != null
         ? SrsCard.fromJson(
             Map<String, dynamic>.from(json['cardTargetToNative'] as Map),

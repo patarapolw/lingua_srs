@@ -28,6 +28,8 @@ VitePress loads `.vitepress/theme/index.js` by itself. If you already have a the
 
 The app imports only Markdown files with `vocabulary:` frontmatter, so `.vitepress/` can stay in the folder you import.
 
+Words edited in the app can be written back into the files' frontmatter when the folder is imported again; VitePress does not show the frontmatter, so the preview does not change. See [Writing the app's words back to the files](lesson-format.md#writing-the-apps-words-back-to-the-files).
+
 ## Differences from the app
 
 - **The `## Vocabulary` section** is shown in the preview and left out by the app; see [Markdown frontmatter](lesson-format.md#markdown-frontmatter). Tags used only there never reach the app.

@@ -82,6 +82,17 @@ class Sentence {
   /// that locale.
   String get speechText => TtsText.speechOf(ttsText, targetText);
 
+  /// What makes two sentences the same one: their text and translation,
+  /// whatever the `**` marking, letter case and spacing.
+  String get signature {
+    String normalize(String text) =>
+        withoutEmphasis(text)
+            .trim()
+            .toLowerCase()
+            .replaceAll(RegExp(r'\s+'), ' ');
+    return '${normalize(targetText)}\u0000${normalize(translationText)}';
+  }
+
   static String withoutEmphasis(String text) => text
       .replaceAllMapped(RegExp(r'\*\*([^*]+)\*\*'), (match) => match[1] ?? '')
       .replaceAllMapped(RegExp(r'__([^_]+)__'), (match) => match[1] ?? '');

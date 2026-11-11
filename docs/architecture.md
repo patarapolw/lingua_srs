@@ -62,6 +62,8 @@ lingua_srs/
 │   │   ├── english_text_search.dart   # English full-text search over vocabulary meanings
 │   │   ├── korean_pronunciation_service.dart # Revised Romanization and IPA from how Korean sounds
 │   │   ├── lesson_export_service.dart # Exports lessons and units as a ZIP of Markdown files
+│   │   ├── lesson_word_match.dart     # Pairs the entries of a lesson file with the words of the lesson saved from it
+│   │   ├── lesson_file_update.dart    # Writes the app's words into a lesson file's frontmatter, leaving the rest of the file
 │   │   ├── markdown_archive_service.dart # Reads Markdown files out of an imported ZIP
 │   │   ├── vocab_ai_service.dart      # AI merge suggestions and similar-meaning hints
 │   │   └── storage_service.dart       # Local persistence and debug seed data

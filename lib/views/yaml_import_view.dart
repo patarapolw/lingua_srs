@@ -12,6 +12,7 @@ import 'package:provider/provider.dart';
 import '../models/lesson.dart';
 import '../providers/app_provider.dart';
 import '../services/lesson_ai_prompt.dart';
+import '../services/lesson_file_update.dart';
 import '../services/markdown_archive_service.dart';
 import '../services/storage_service.dart';
 import '../services/yaml_parser_service.dart';
@@ -68,6 +69,14 @@ class _YamlImportViewState extends State<YamlImportView>
   List<String> _directoryErrors = [];
   int _directorySkipped = 0;
   int _directoryUnchanged = 0;
+
+  /// Unchanged files of the scanned folder, and how many of them no longer
+  /// say what the app does about their words.
+  List<LessonFileRef> _unchangedFiles = [];
+  int _staleFiles = 0;
+
+  /// Whether importing also writes the app's words back to the files.
+  bool _writeBack = false;
   String? _importSourceLabel;
   bool _isParsing = false;
   bool _isDraggingFiles = false;
@@ -111,6 +120,8 @@ class _YamlImportViewState extends State<YamlImportView>
       _directorySkipped = 0;
       _directoryUnchanged = 0;
     }
+    _unchangedFiles = [];
+    _staleFiles = 0;
     if (text.isEmpty) {
       setState(() {
         _errorMessage = null;
@@ -209,6 +220,8 @@ class _YamlImportViewState extends State<YamlImportView>
       _directoryErrors = [];
       _directorySkipped = 0;
       _directoryUnchanged = 0;
+      _unchangedFiles = [];
+      _staleFiles = 0;
       _errorMessage = null;
       _progressMessage = 'Reading selected lesson files...';
       _progressCurrent = 0;
@@ -416,6 +429,8 @@ class _YamlImportViewState extends State<YamlImportView>
       _directoryErrors = [];
       _directorySkipped = 0;
       _directoryUnchanged = 0;
+      _unchangedFiles = [];
+      _staleFiles = 0;
       _errorMessage = null;
       _progressMessage = 'Scanning Markdown files...';
       _progressCurrent = 0;
@@ -472,11 +487,17 @@ class _YamlImportViewState extends State<YamlImportView>
     });
 
     if (!mounted) return;
-    final followed = await context.read<AppProvider>().adoptFilePaths(
-      result.unchangedLessons,
+    final provider = context.read<AppProvider>();
+    final followed = await provider.adoptFilePaths(result.unchangedLessons);
+    final stale = await writeLessonFiles(
+      provider,
+      result.unchangedFiles,
+      dryRun: true,
     );
     if (!mounted) return;
     setState(() {
+      _unchangedFiles = result.unchangedFiles;
+      _staleFiles = stale.files;
       _directoryFiles = result.imports;
       _selectedDirectoryPaths.clear();
       _directoryErrors = result.errors;
@@ -541,8 +562,12 @@ class _YamlImportViewState extends State<YamlImportView>
     };
   }
 
+  /// Whether there is a folder to write the app's words back to.
+  bool get _canWriteBack =>
+      _staleFiles > 0 || _directoryFiles.any((file) => file.filePath != null);
+
   Future<void> _executeImport() async {
-    if (_directoryFiles.isNotEmpty) {
+    if (_directoryFiles.isNotEmpty || (_writeBack && _staleFiles > 0)) {
       await _executeDirectoryImport();
       return;
     }
@@ -559,6 +584,12 @@ class _YamlImportViewState extends State<YamlImportView>
           preview,
           isNew: (sentence) => !provider.hasSentenceLike(sentence),
         );
+      }
+      if (widget.vocabularyOnly) {
+        // Not what the lesson's file says: see [VocabItem.source].
+        for (final vocab in preview.lesson.vocabularies) {
+          vocab.source = null;
+        }
       }
       final importedLesson = (await provider.importParsedLessons(
         [preview],
@@ -622,24 +653,60 @@ class _YamlImportViewState extends State<YamlImportView>
         importedSources[file.sourceKey] = file.sourceHash;
       }
       await StorageService.saveImportedMarkdownSources(importedSources);
+      // The files just imported are in step with their lessons now, as the
+      // unchanged ones are: both can take the app's words.
+      final written = _writeBack
+          ? await writeLessonFiles(provider, [
+              ..._unchangedFiles,
+              for (final file in selectedFiles) ?file.fileRef,
+            ])
+          : null;
       if (!mounted) return;
       setState(() {
         _progressCurrent = importedCount;
         _progressMessage = null;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
+      final messenger = ScaffoldMessenger.of(context);
+      final navigator = Navigator.of(context);
+      if (written != null && written.errors.isNotEmpty) {
+        await showDialog<void>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Some files were not updated'),
+            content: SingleChildScrollView(
+              child: SelectableText(
+                describeImportErrors(
+                  'The app\'s words could not be written to '
+                  '${written.errors.length} files, which were left as '
+                  'they are:',
+                  written.errors,
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+      messenger.showSnackBar(
         SnackBar(
           content: Text(
             'Imported $importedCount lessons; skipped $_directorySkipped '
             'files without vocabulary frontmatter, $_directoryUnchanged '
             'unchanged Markdown files; '
             '${_directoryErrors.length} invalid files excluded. '
-            'Existing SRS progress was preserved.',
+            'Existing SRS progress was preserved.'
+            '${written == null ? '' : ' Wrote ${written.words} words to '
+                      '${written.files} files.'}',
           ),
           backgroundColor: Colors.green.shade700,
         ),
       );
-      Navigator.of(context).pop();
+      navigator.pop();
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -710,6 +777,10 @@ class _YamlImportViewState extends State<YamlImportView>
             label: Text(
               vocabularyOnly
                   ? (compactBar ? 'Add' : 'Add Vocabulary')
+                  : _directoryFiles.isEmpty && _writeBack && _staleFiles > 0
+                  ? (compactBar
+                        ? 'Update $_staleFiles'
+                        : 'Update $_staleFiles Files')
                   : _directoryFiles.isEmpty
                   ? (compactBar ? 'Save' : 'Import Markdown')
                   : (compactBar
@@ -718,7 +789,8 @@ class _YamlImportViewState extends State<YamlImportView>
             ),
             onPressed:
                 (_previewResult != null ||
-                        _selectedDirectoryPaths.isNotEmpty) &&
+                        _selectedDirectoryPaths.isNotEmpty ||
+                        (_writeBack && _staleFiles > 0)) &&
                     !_isParsing
                 ? _executeImport
                 : null,
@@ -914,6 +986,35 @@ class _YamlImportViewState extends State<YamlImportView>
                                 ),
                               ),
                             ),
+                          ),
+                        ),
+
+                      if (_canWriteBack)
+                        CheckboxListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          controlAffinity: ListTileControlAffinity.leading,
+                          value: _writeBack,
+                          onChanged: _isParsing
+                              ? null
+                              : (checked) => setState(
+                                  () => _writeBack = checked ?? false,
+                                ),
+                          title: const Text(
+                            'Write words from the app back to the files',
+                          ),
+                          subtitle: Text(
+                            '${_staleFiles == 0
+                                ? ''
+                                : _staleFiles == 1
+                                ? '1 unchanged file no longer matches the '
+                                      'words in the app. '
+                                : '$_staleFiles unchanged files no longer '
+                                      'match the words in the app. '}'
+                            'Words and examples edited or added in the app '
+                            'are written to the vocabulary in each '
+                            'file\'s frontmatter, for imported files after '
+                            'they are merged. Lesson text is not touched.',
                           ),
                         ),
 
@@ -1220,12 +1321,120 @@ class MarkdownImportFile {
   final String sourceHash;
   final YamlParseResult preview;
 
+  /// Where the file is on disk, for one found in a picked folder. Null for
+  /// a file from a ZIP or one picked or dropped by itself, which cannot be
+  /// written back to.
+  final String? filePath;
+
   const MarkdownImportFile({
     required this.path,
     required this.sourceKey,
     required this.sourceHash,
     required this.preview,
+    this.filePath,
   });
+
+  LessonFileRef? get fileRef => filePath == null
+      ? null
+      : LessonFileRef(
+          filePath: filePath!,
+          path: path,
+          sourceKey: sourceKey,
+          sourceHash: sourceHash,
+        );
+}
+
+/// A lesson file in a picked folder, as it was when the folder was scanned.
+class LessonFileRef {
+  final String filePath;
+
+  /// Its path under the picked folder.
+  final String path;
+  final String sourceKey;
+  final String sourceHash;
+
+  const LessonFileRef({
+    required this.filePath,
+    required this.path,
+    required this.sourceKey,
+    required this.sourceHash,
+  });
+}
+
+/// What [writeLessonFiles] did.
+class LessonFileWriteResult {
+  /// Files written, or with [writeLessonFiles]' `dryRun`, that would be.
+  final int files;
+
+  /// Entries changed in and added to those files.
+  final int words;
+  final List<String> errors;
+
+  const LessonFileWriteResult({
+    required this.files,
+    required this.words,
+    required this.errors,
+  });
+}
+
+/// Writes the words of the app's lessons into the vocabulary of [files],
+/// the lesson files they were imported from: what was edited or added in
+/// the app since. Only a file's frontmatter is rewritten; see
+/// [LessonFileUpdate].
+///
+/// A file has to be in step with its lesson: one that was not changed since
+/// it was last imported, or one that was just imported. A file edited since
+/// the folder was scanned is left alone.
+///
+/// With [dryRun] nothing is written: the result says how many files differ.
+Future<LessonFileWriteResult> writeLessonFiles(
+  AppProvider provider,
+  List<LessonFileRef> files, {
+  bool dryRun = false,
+}) async {
+  final errors = <String>[];
+  final written = <LessonFileUpdate>[];
+  final hashes = <String, String>{};
+  for (final ref in files) {
+    try {
+      final file = File(ref.filePath);
+      final contents = await file.readAsString();
+      if (sha256.convert(utf8.encode(contents)).toString() != ref.sourceHash) {
+        continue;
+      }
+      final info = YamlParserService.lessonFileInfo(
+        contents,
+        sourcePath: ref.path,
+        defaultUnitTitle: _unitTitleForPath(ref.path),
+      );
+      if (info == null) continue;
+      final update = provider.planFileUpdate(contents, info);
+      if (update == null) continue;
+      if (!dryRun) {
+        await file.writeAsString(update.text, flush: true);
+        hashes[ref.sourceKey] = sha256
+            .convert(utf8.encode(update.text))
+            .toString();
+      }
+      written.add(update);
+    } catch (error) {
+      if (!dryRun) errors.add(describeImportError(ref.path, error));
+    }
+  }
+  if (!dryRun && written.isNotEmpty) {
+    await provider.adoptFileUpdates(written);
+    // The files as written are the ones last imported.
+    final sources = await StorageService.loadImportedMarkdownSources();
+    await StorageService.saveImportedMarkdownSources({...sources, ...hashes});
+  }
+  return LessonFileWriteResult(
+    files: written.length,
+    words: written.fold(
+      0,
+      (total, update) => total + update.changed + update.added,
+    ),
+    errors: errors,
+  );
 }
 
 class PickedMarkdownSource {
@@ -1251,12 +1460,16 @@ class MarkdownDirectoryResult {
   /// take their real file paths ([AppProvider.adoptFilePaths]).
   final List<Lesson> unchangedLessons;
 
+  /// The [unchanged] files that are in a picked folder.
+  final List<LessonFileRef> unchangedFiles;
+
   const MarkdownDirectoryResult({
     required this.imports,
     required this.errors,
     required this.skipped,
     required this.unchanged,
     this.unchangedLessons = const [],
+    this.unchangedFiles = const [],
   });
 }
 
@@ -1398,6 +1611,7 @@ MarkdownDirectoryResult parseMarkdownFiles(
   var skipped = 0;
   var unchanged = 0;
   final unchangedLessons = <Lesson>[];
+  final unchangedFiles = <LessonFileRef>[];
   final normalizedDirectories =
       directoryPaths.map((path) => path.replaceAll('\\', '/')).toList()
         ..sort((first, second) => first.length.compareTo(second.length));
@@ -1430,7 +1644,17 @@ MarkdownDirectoryResult parseMarkdownFiles(
           sourcePath: relativePath,
           defaultUnitTitle: _unitTitleForPath(relativePath),
         );
-        if (lesson != null) unchangedLessons.add(lesson);
+        if (lesson != null) {
+          unchangedLessons.add(lesson);
+          unchangedFiles.add(
+            LessonFileRef(
+              filePath: path,
+              path: relativePath,
+              sourceKey: _markdownSourceKey(path),
+              sourceHash: sourceHash,
+            ),
+          );
+        }
         continue;
       }
       if (!YamlParserService.hasVocabularyFrontmatter(contents)) {
@@ -1448,6 +1672,7 @@ MarkdownDirectoryResult parseMarkdownFiles(
           sourceKey: _markdownSourceKey(path),
           sourceHash: sourceHash,
           preview: preview,
+          filePath: path,
         ),
       );
     } catch (error) {
@@ -1460,6 +1685,7 @@ MarkdownDirectoryResult parseMarkdownFiles(
     skipped: skipped,
     unchanged: unchanged,
     unchangedLessons: unchangedLessons,
+    unchangedFiles: unchangedFiles,
   );
 }
 
@@ -1471,6 +1697,7 @@ MarkdownDirectoryResult _combineMarkdownDirectoryResults(
   skipped: results.fold(0, (total, result) => total + result.skipped),
   unchanged: results.fold(0, (total, result) => total + result.unchanged),
   unchangedLessons: [for (final result in results) ...result.unchangedLessons],
+  unchangedFiles: [for (final result in results) ...result.unchangedFiles],
 );
 
 /// The key a ZIP entry's fingerprint is saved under, to skip it when it is
