@@ -263,6 +263,41 @@ void main() {
       expect(word.translation, 'go');
       expect(word.source!.translation, 'to go');
     });
+
+    testWidgets('so does one whose id was linked to the same word in another '
+        'lesson', (tester) async {
+      // Sharing progress with another lesson's word marks the id as
+      // explicit, though it is still the one made from this entry.
+      final imported = YamlParserService.parseLessonYaml(
+        lessonFile(go),
+        defaultUnitTitle: 'Unit 1',
+        sourcePath: 'unit-1/lesson-1.md',
+      );
+      final saved = imported.lesson.vocabularies.single
+        ..source = null
+        ..idIsExplicit = true
+        ..translation = 'go';
+      final provider = await loadedProvider(
+        tester,
+        saved: {
+          'lingua_srs_lessons': jsonEncode([imported.lesson.toJson()]),
+          'lingua_srs_sentences': jsonEncode([
+            for (final sentence in imported.sentences) sentence.toJson(),
+          ]),
+        },
+      );
+
+      final lesson = await import(
+        tester,
+        provider,
+        lessonFile(go, text: 'New text.'),
+      );
+
+      final word = lesson.vocabularies.single;
+      expect(word.id, saved.id);
+      expect(word.translation, 'go');
+      expect(word.source!.translation, 'to go');
+    });
   });
 
   group('an entry edited in the file (#186)', () {

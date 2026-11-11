@@ -1822,11 +1822,11 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       matchedLessonVocabularies.add(lessonMatch);
       _removeVocabFromIndexes(lessonMatch, vocabById, vocabByMeaning);
       // An id made from the word and its translation that is still the
-      // saved word's says the entry reads as it did when it was imported.
+      // saved word's says the entry reads as it did when it was imported,
+      // even if sharing progress with another lesson marked it explicit.
       final unchangedInFile =
           !editedInFile &&
           !importedVocab.idIsExplicit &&
-          !lessonMatch.idIsExplicit &&
           importedVocab.id == lessonMatch.id;
       lessonMatch
         ..id = lessonMatch.idIsExplicit ? lessonMatch.id : importedVocab.id

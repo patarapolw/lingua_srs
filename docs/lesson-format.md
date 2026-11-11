@@ -198,7 +198,7 @@ A lesson file is where the lesson's text is written; its words are expected to b
 - **An entry removed from the file** leaves its word in the lesson, with its progress. Delete the word in the app if you no longer want it.
 - **Which word an entry is:** the one with its `id`; without an `id`, the one with the same word and translation, now or when the file was last imported. So an entry still finds a word you renamed in the app.
 - **Correcting an entry in the file** keeps it the same word, with its progress, when the app can tell what it used to be: the same word with a new translation, or the same translation with a typo fixed in the word (one character in three at most), and no other entry or word that could be meant. Anything else is a new word, and the old one stays: change the word and the translation at once, or replace a word with a synonym, and you get a second word. An entry with an `id` can be changed freely.
-- **A lesson imported before the app kept what its file said** has nothing to compare with the first time. A word still stays as edited when its entry reads as it did, which the app can tell for entries without an `id`. An entry with an `id` follows the file once more. Examples are not removed that time: the file's are added to the word's.
+- **A lesson imported before the app kept what its file said** has nothing to compare with the first time. A word still stays as edited when its entry reads as it did, which the app can tell for entries without an `id`, also when the word shares its progress with the same word in another lesson. An entry with an `id` follows the file once more. Examples are not removed that time: the file's are added to the word's.
 
 ### Writing the app's words back to the files
 
