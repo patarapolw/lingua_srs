@@ -208,7 +208,7 @@ After **Pick Folder**, tick **Write words from the app back to the files** to br
 - **What is not written, so that files do not change back and forth:** a difference in letter case or spacing only in an example sentence (sentences are shared between lessons, and two files may write one differently); `audio`, `notes`, `disambiguation` and `tts` that came from another lesson's file; and a marking removed from an example in the app.
 - **Nothing is removed from a file except examples you removed from a word.** A word deleted in the app stays in the file, and is added again if that file is imported after a change. A word that came from a file and is no longer in it is not put back.
 - **A file edited after the folder was scanned** is skipped. A file that cannot be updated safely is left as it is and listed: the app reads its own result back before it writes.
-- **Only folders.** A ZIP, and a file picked or dropped by itself, cannot be written to. On Android, where folders cannot be picked, export instead.
+- **Only folders, so only on a computer.** A ZIP, and a file picked or dropped by itself, cannot be written to, and Android cannot pick a folder. Words edited on a phone reach the folder through sync: once the computer has synced, import the folder there with the box ticked. An exported ZIP is not a substitute for a folder kept in Git: export writes every file again in its own layout.
 
 ### Adding vocabulary to an existing lesson
 
