@@ -57,22 +57,27 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
     final theme = Theme.of(context);
     final showAi = context.select<AppProvider, bool>((p) => p.showAi);
 
+    // Study activity comes after the pages. It is a tab on the rail only: the
+    // bottom bar has no room for a fifth, so there it is opened from the
+    // Lessons ⋮ menu. Last, so the other tabs keep their index when the
+    // window changes layout.
+    final activityIndex = showAi ? 4 : 3;
     final pages = [
       LessonListView(
         onToggleTheme: widget.onToggleTheme,
         isDarkMode: widget.isDarkMode,
         // The rail has a tab for it.
         showStudyActivity: !isDesktop,
+        // Opened in place rather than pushed, so it is the same screen as
+        // the rail's tab, and becomes that tab when the layout changes.
+        onOpenStudyActivity: () =>
+            setState(() => _selectedIndex = activityIndex),
       ),
       const VocabPoolView(),
       const SentencePoolView(),
       if (showAi) const RecentAiDiscussionsView(),
     ];
-    // Study activity comes after the pages. It is a tab on the rail only: the
-    // bottom bar has no room for a fifth, so there it is opened from the
-    // Lessons ⋮ menu. Last, so the other tabs keep their index when the
-    // window changes layout.
-    final activityIndex = pages.length;
+    assert(activityIndex == pages.length);
     // The Discussions tab goes away when AI features are turned off.
     if (_selectedIndex > activityIndex) _selectedIndex = 0;
     final showingActivity = _selectedIndex == activityIndex;
@@ -181,9 +186,9 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
       );
     }
 
-    // The window was narrowed while on the Study activity tab: stay on it,
-    // as the full screen the Lessons menu opens, with a back arrow (and the
-    // system back button) leading to Lessons.
+    // Study activity in the mobile layout, opened from the Lessons menu or
+    // left open when the window narrowed on the rail's tab: a full screen
+    // with a back arrow (and the system back button) leading to Lessons.
     if (showingActivity) {
       _pagerShown = false;
       void backToLessons() => setState(() => _selectedIndex = 0);

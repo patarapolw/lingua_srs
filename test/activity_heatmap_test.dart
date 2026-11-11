@@ -1182,6 +1182,42 @@ void main() {
       expect(find.byTooltip('More options'), findsOneWidget);
     });
 
+    testWidgets('opened from the menu, it is the tab after widening', (
+      tester,
+    ) async {
+      // A foldable or tablet in portrait, then turned on its side.
+      tester.view.physicalSize = const Size(700, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        ChangeNotifierProvider<AppProvider>.value(
+          value: provider,
+          child: const MaterialApp(home: AdaptiveScaffold()),
+        ),
+      );
+      await tester.tap(find.byTooltip('More options'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Study activity'));
+      await tester.pumpAndSettle();
+      expect(find.byType(ActivityHeatmapView), findsOneWidget);
+      expect(find.byType(BackButton), findsOneWidget);
+
+      tester.view.physicalSize = const Size(900, 700);
+      await tester.pumpAndSettle();
+      // The same as choosing the tab there: the rail with it selected, and
+      // no back arrow. It used to stay a pushed screen covering the rail.
+      expect(find.byType(ActivityHeatmapView), findsOneWidget);
+      expect(find.byType(BackButton), findsNothing);
+      expect(
+        tester
+            .widget<NavigationRail>(find.byType(NavigationRail))
+            .selectedIndex,
+        4,
+      );
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('narrowing the window stays on the open tab', (tester) async {
       await pumpDesktop(tester);
       await tester.tap(
