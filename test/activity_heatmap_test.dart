@@ -1138,6 +1138,61 @@ void main() {
       expect(find.byType(BackButton), findsNothing);
     });
 
+    testWidgets('a short rail keeps its tabs and drops the logo and theme', (
+      tester,
+    ) async {
+      // A phone on its side: wide enough for the rail, but not tall.
+      tester.view.physicalSize = const Size(900, 400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        ChangeNotifierProvider<AppProvider>.value(
+          value: provider,
+          child: const MaterialApp(home: AdaptiveScaffold()),
+        ),
+      );
+
+      Finder inRail(Finder finder) =>
+          find.descendant(of: find.byType(NavigationRail), matching: finder);
+      expect(inRail(find.byIcon(Icons.auto_stories_rounded)), findsNothing);
+      expect(find.byTooltip('Switch to Dark'), findsNothing);
+      // All five tabs, on screen.
+      for (final icon in [
+        Icons.library_books,
+        Icons.translate_outlined,
+        Icons.format_quote_outlined,
+        Icons.forum_outlined,
+        Icons.calendar_month_outlined,
+      ]) {
+        expect(inRail(find.byIcon(icon)), findsOneWidget);
+        expect(
+          tester.getRect(inRail(find.byIcon(icon))).bottom,
+          lessThanOrEqualTo(400),
+        );
+      }
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(inRail(find.byIcon(Icons.calendar_month_outlined)));
+      await tester.pumpAndSettle();
+      expect(find.byType(ActivityHeatmapView), findsOneWidget);
+    });
+
+    testWidgets('a tall rail has the logo and the theme button', (
+      tester,
+    ) async {
+      await pumpDesktop(tester);
+
+      expect(
+        find.descendant(
+          of: find.byType(NavigationRail),
+          matching: find.byIcon(Icons.auto_stories_rounded),
+        ),
+        findsOneWidget,
+      );
+      expect(find.byTooltip('Switch to Dark'), findsOneWidget);
+    });
+
     testWidgets('the Lessons options leave study activity to the tab', (
       tester,
     ) async {

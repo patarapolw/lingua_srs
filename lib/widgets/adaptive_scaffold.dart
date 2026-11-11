@@ -46,6 +46,11 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
   @override
   Widget build(BuildContext context) {
     final isDesktop = MediaQuery.of(context).size.width >= 800;
+    // A phone on its side is wide enough for the rail but not tall enough for
+    // all of it: the logo, five tabs and the theme button need about 390
+    // pixels. Below this the rail keeps only its tabs. The theme can still
+    // be switched in Settings.
+    final isShortRail = MediaQuery.of(context).size.height < 480;
     final theme = Theme.of(context);
     final showAi = context.select<AppProvider, bool>((p) => p.showAi);
 
@@ -76,55 +81,61 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
               selectedIndex: _selectedIndex,
               onDestinationSelected: (idx) => _selectTab(idx, isDesktop: true),
               extended: MediaQuery.of(context).size.width >= 1100,
-              leading: Padding(
-                padding: const EdgeInsets.symmetric(
-                  vertical: 20,
-                  horizontal: 8,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(10),
+              leading: isShortRail
+                  ? null
+                  : Padding(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 20,
+                        horizontal: 8,
                       ),
-                      child: Icon(
-                        Icons.auto_stories_rounded,
-                        color: theme.colorScheme.onPrimaryContainer,
-                        size: 24,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.primaryContainer,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(
+                              Icons.auto_stories_rounded,
+                              color: theme.colorScheme.onPrimaryContainer,
+                              size: 24,
+                            ),
+                          ),
+                          if (MediaQuery.of(context).size.width >= 1100) ...[
+                            const SizedBox(width: 12),
+                            Text(
+                              'LinguaSRS',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
-                    if (MediaQuery.of(context).size.width >= 1100) ...[
-                      const SizedBox(width: 12),
-                      Text(
-                        'LinguaSRS',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
+              trailing: isShortRail
+                  ? null
+                  : Expanded(
+                      child: Align(
+                        alignment: Alignment.bottomCenter,
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 20),
+                          child: IconButton(
+                            icon: Icon(
+                              widget.isDarkMode
+                                  ? Icons.light_mode
+                                  : Icons.dark_mode,
+                            ),
+                            tooltip: widget.isDarkMode
+                                ? 'Switch to Light'
+                                : 'Switch to Dark',
+                            onPressed: widget.onToggleTheme,
+                          ),
                         ),
                       ),
-                    ],
-                  ],
-                ),
-              ),
-              trailing: Expanded(
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 20),
-                    child: IconButton(
-                      icon: Icon(
-                        widget.isDarkMode ? Icons.light_mode : Icons.dark_mode,
-                      ),
-                      tooltip: widget.isDarkMode
-                          ? 'Switch to Light'
-                          : 'Switch to Dark',
-                      onPressed: widget.onToggleTheme,
                     ),
-                  ),
-                ),
-              ),
               destinations: [
                 const NavigationRailDestination(
                   icon: Icon(Icons.library_books_outlined),
