@@ -120,6 +120,50 @@ Text with a rule.
       expect(body(update.text), body(file));
     });
 
+    test('removing examples takes out only their own lines, not the blank '
+        'line before the next entry', () {
+      const spaced = '''---
+vocabulary:
+  verbs:
+    - ko: 가다
+      en: to go
+      examples:
+        - ko: 학교에 **가요**
+          en: I **go** to school
+        - ko: 집에 **가요**
+          en: I **go** home
+        - ko: 같이 **가요**
+          en: Let's **go**
+
+    - ko: 오다
+      en: to come
+---
+# Lesson 1
+''';
+      String without(String text, String example) => text.replaceFirst(
+        RegExp('        - ko: ${RegExp.escape(example)}\\n.*\\n'),
+        '',
+      );
+
+      // The last two examples.
+      var (lesson, sentences) = imported(spaced);
+      var word = lesson.vocabularies[0];
+      word.sentenceIds.removeRange(1, 3);
+      expect(
+        LessonFileUpdate.plan(spaced, lesson, sentences)!.text,
+        without(without(spaced, '집에 **가요**'), '같이 **가요**'),
+      );
+
+      // All of them, and the `examples:` key with them.
+      (lesson, sentences) = imported(spaced);
+      word = lesson.vocabularies[0];
+      word.sentenceIds.clear();
+      expect(
+        LessonFileUpdate.plan(spaced, lesson, sentences)!.text,
+        spaced.replaceFirst(RegExp(r'      examples:\n(        .*\n)+'), ''),
+      );
+    });
+
     test('adds, removes and re-marks examples, keeping the others as '
         'written', () {
       final (lesson, sentences) = imported(file);

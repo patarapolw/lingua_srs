@@ -241,11 +241,13 @@ class LessonFileUpdate {
           // One line taken out or put in per example, so that the rest of
           // the entry reads the same in a diff.
           if (length > 0 && gone.length == length && fresh.isEmpty) {
-            editor.remove(examplesPath);
+            editor = YamlEditor(_removeLines(before, examplesPath));
           } else {
+            var text = before;
             for (final index in gone.toList()..sort((a, b) => b - a)) {
-              editor.remove([...examplesPath, index]);
+              text = _removeLines(text, [...examplesPath, index]);
             }
+            editor = YamlEditor(text);
             if (length - gone.length > 0) {
               appended.addAll([
                 for (final example in fresh) (examplesPath, example),
@@ -353,24 +355,7 @@ class LessonFileUpdate {
     List<Object?> path,
     Map<String, Object> entry,
   ) {
-    YamlNode node = loadYamlNode(yaml);
-    for (final key in path) {
-      final YamlNode? child;
-      if (node is YamlMap) {
-        child = node.nodes.entries
-            .where((item) => (item.key as YamlNode).value == key)
-            .map((item) => item.value)
-            .firstOrNull;
-      } else if (node is YamlList && key is int && key < node.nodes.length) {
-        child = node.nodes[key];
-      } else {
-        child = null;
-      }
-      if (child == null) {
-        throw const FormatException('A vocabulary section was not found.');
-      }
-      node = child;
-    }
+    final node = _nodeAt(loadYamlNode(yaml), path);
     if (node is! YamlList) {
       throw const FormatException('A vocabulary section is not a list.');
     }
@@ -420,6 +405,83 @@ class LessonFileUpdate {
     final before = yaml.substring(0, at).replaceFirst(RegExp(r'\r$'), '');
     final after = yaml.substring(at);
     return '$before$text${lineEnd == -1 ? newline : ''}$after';
+  }
+
+  /// The node at [path] under [root].
+  static YamlNode _nodeAt(YamlNode root, List<Object?> path) {
+    var node = root;
+    for (final key in path) {
+      final YamlNode? child;
+      if (node is YamlMap) {
+        child = node.nodes.entries
+            .where((item) => (item.key as YamlNode).value == key)
+            .map((item) => item.value)
+            .firstOrNull;
+      } else if (node is YamlList && key is int && key < node.nodes.length) {
+        child = node.nodes[key];
+      } else {
+        child = null;
+      }
+      if (child == null) {
+        throw const FormatException('A vocabulary section was not found.');
+      }
+      node = child;
+    }
+    return node;
+  }
+
+  /// [yaml] without the item of a block list, or the key of a block map, at
+  /// [path]: the lines from its `-` or its key to the end of its last value,
+  /// and nothing after. `YamlEditor.remove` also takes the blank line that
+  /// follows, which separates the next entry. Throws when the item is not
+  /// laid out on lines of its own.
+  static String _removeLines(String yaml, List<Object?> path) {
+    final parent = _nodeAt(
+      loadYamlNode(yaml),
+      path.sublist(0, path.length - 1),
+    );
+    final key = path.last;
+    final int start;
+    final YamlNode value;
+    if (parent is YamlList &&
+        parent.style != CollectionStyle.FLOW &&
+        key is int &&
+        key < parent.nodes.length) {
+      value = parent.nodes[key];
+      var dash = value.span.start.offset - 1;
+      while (dash >= 0 && yaml[dash] == ' ') {
+        dash--;
+      }
+      if (dash < 0 || yaml[dash] != '-') {
+        throw const FormatException('An example could not be taken out.');
+      }
+      start = dash;
+    } else if (parent is YamlMap && parent.style != CollectionStyle.FLOW) {
+      final item = parent.nodes.entries
+          .where((item) => (item.key as YamlNode).value == key)
+          .firstOrNull;
+      if (item == null) {
+        throw const FormatException('An example could not be taken out.');
+      }
+      start = (item.key as YamlNode).span.start.offset;
+      value = item.value;
+    } else {
+      throw const FormatException('An example could not be taken out.');
+    }
+    final lineStart = yaml.lastIndexOf('\n', start) + 1;
+    if (yaml.substring(lineStart, start).trim().isNotEmpty) {
+      throw const FormatException('An example could not be taken out.');
+    }
+    var end = _lastValueEnd(value);
+    while (end > lineStart && ' \t\r\n'.contains(yaml[end - 1])) {
+      end--;
+    }
+    final lineEnd = yaml.indexOf('\n', end);
+    return yaml.replaceRange(
+      lineStart,
+      lineEnd == -1 ? yaml.length : lineEnd + 1,
+      '',
+    );
   }
 
   static int _lastValueEnd(YamlNode node) {
