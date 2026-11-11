@@ -14,8 +14,12 @@ const _leechLapseThreshold = 8;
 /// scroll and the charts below don't stretch across the whole screen.
 const _maxContentWidth = 880.0;
 
-/// From this content width, the summary tiles share one row, and Next 7 days
-/// and New cards sit side by side.
+/// From this content width, the three summary tiles share one row. Less than
+/// [_twoColumnWidth], so a tablet in portrait gets the row too, instead of
+/// tiles stretched wide around a few words.
+const _summaryRowWidth = 600.0;
+
+/// From this content width, Next 7 days and New cards sit side by side.
 const _twoColumnWidth = 720.0;
 
 const _pagePadding = 20.0;
@@ -268,7 +272,7 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                   ] else ...[
                     _summary(
                       context,
-                      wide: contentWidth >= _twoColumnWidth,
+                      wide: contentWidth >= _summaryRowWidth,
                       streak: studyStreak(counts, today),
                       todayReviews: counts[todayDate] ?? 0,
                       todayNew: newCardCounts[todayDate] ?? 0,

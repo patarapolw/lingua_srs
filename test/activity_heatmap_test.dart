@@ -488,6 +488,30 @@ void main() {
       expect(answers.height, streak.height);
     });
 
+    testWidgets('a tablet in portrait gets the summary row, charts stacked', (
+      tester,
+    ) async {
+      await pumpAt(tester, 690);
+
+      final streak = tester.getRect(
+        find.byKey(const ValueKey('summary-streak')),
+      );
+      final today = tester.getRect(find.byKey(const ValueKey('summary-today')));
+      final answers = tester.getRect(
+        find.byKey(const ValueKey('summary-answers')),
+      );
+      expect(streak.left, 20);
+      expect(today.top, streak.top);
+      expect(answers.top, streak.top);
+      expect(answers.right, closeTo(670, 0.01));
+      // Too narrow for the two charts side by side.
+      final forecast = tester.getTopLeft(find.text('Next 7 days'));
+      final newCards = tester.getTopLeft(find.text('New cards'));
+      expect(newCards.dx, forecast.dx);
+      expect(newCards.dy, greaterThan(forecast.dy));
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('the legend ends near a short calendar', (tester) async {
       await pumpAt(tester, 1600);
 
