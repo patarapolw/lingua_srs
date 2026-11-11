@@ -6,6 +6,7 @@ import 'package:lingua_srs/models/vocab_item.dart';
 import 'package:lingua_srs/providers/app_provider.dart';
 import 'package:lingua_srs/services/storage_service.dart';
 import 'package:lingua_srs/views/activity_heatmap_view.dart';
+import 'package:lingua_srs/views/sentence_pool_view.dart';
 import 'package:lingua_srs/widgets/adaptive_scaffold.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -1136,6 +1137,70 @@ void main() {
       // A tab, not a pushed screen: the rail stays and there is no way back.
       expect(find.byType(NavigationRail), findsOneWidget);
       expect(find.byType(BackButton), findsNothing);
+    });
+
+    testWidgets('narrowing the window stays on study activity', (tester) async {
+      await pumpDesktop(tester);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(NavigationRail),
+          matching: find.text('Study activity'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Narrowed to the mobile layout, which has no tab for it: it stays
+      // open as a full screen. It used to drop back to Lessons.
+      tester.view.physicalSize = const Size(420, 900);
+      await tester.pumpAndSettle();
+      expect(find.byType(ActivityHeatmapView), findsOneWidget);
+      expect(find.byType(NavigationBar), findsNothing);
+      expect(find.byType(BackButton), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      // Widened again, it is the rail's tab once more.
+      tester.view.physicalSize = const Size(1400, 900);
+      await tester.pumpAndSettle();
+      expect(find.byType(ActivityHeatmapView), findsOneWidget);
+      expect(
+        tester
+            .widget<NavigationRail>(find.byType(NavigationRail))
+            .selectedIndex,
+        4,
+      );
+
+      // Narrow, the back arrow leads to Lessons and the bottom bar.
+      tester.view.physicalSize = const Size(420, 900);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(find.byType(ActivityHeatmapView), findsNothing);
+      expect(
+        tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+        0,
+      );
+      expect(find.byTooltip('More options'), findsOneWidget);
+    });
+
+    testWidgets('narrowing the window stays on the open tab', (tester) async {
+      await pumpDesktop(tester);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(NavigationRail),
+          matching: find.text('Sentence Pool'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      tester.view.physicalSize = const Size(420, 900);
+      await tester.pumpAndSettle();
+      // The pages used to open on the one they last showed.
+      expect(find.byType(SentencePoolView), findsOneWidget);
+      expect(
+        tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+        2,
+      );
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('a short rail keeps its tabs and drops the logo and theme', (

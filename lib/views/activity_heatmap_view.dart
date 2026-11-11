@@ -96,7 +96,12 @@ String newCardsLeftText(int left, int limit) {
 }
 
 class ActivityHeatmapView extends StatefulWidget {
-  const ActivityHeatmapView({super.key});
+  const ActivityHeatmapView({super.key, this.onBack});
+
+  /// Shows a back arrow that calls this, for when the screen is shown in
+  /// place of the tabs rather than pushed over them (a pushed screen gets
+  /// its back arrow by itself).
+  final VoidCallback? onBack;
 
   @override
   State<ActivityHeatmapView> createState() => _ActivityHeatmapViewState();
@@ -131,7 +136,12 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
     final theme = Theme.of(context);
     final today = DateTime.now();
     return Scaffold(
-      appBar: AppBar(title: const Text('Study activity')),
+      appBar: AppBar(
+        leading: widget.onBack == null
+            ? null
+            : BackButton(onPressed: widget.onBack),
+        title: const Text('Study activity'),
+      ),
       body: Consumer<AppProvider>(
         builder: (context, provider, _) {
           final counts = provider.dailyReviewCounts;

@@ -24,7 +24,10 @@ class AdaptiveScaffold extends StatefulWidget {
 
 class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
   int _selectedIndex = 0;
-  final PageController _pageController = PageController();
+  PageController _pageController = PageController();
+
+  /// Whether the last build showed the swipeable pages of the mobile layout.
+  bool _pagerShown = false;
 
   @override
   void dispose() {
@@ -64,16 +67,18 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
       const VocabPoolView(),
       const SentencePoolView(),
       if (showAi) const RecentAiDiscussionsView(),
-      // Study activity is a tab on the desktop rail only: the bottom bar has
-      // no room for a fifth, so there it stays in the Lessons ⋮ menu. Last,
-      // so the other tabs keep their place when the window changes layout.
-      if (isDesktop) const ActivityHeatmapView(),
     ];
-    // The Discussions tab goes away when AI features are turned off, and
-    // Study activity when the window narrows to the mobile layout.
-    if (_selectedIndex >= pages.length) _selectedIndex = 0;
+    // Study activity comes after the pages. It is a tab on the rail only: the
+    // bottom bar has no room for a fifth, so there it is opened from the
+    // Lessons ⋮ menu. Last, so the other tabs keep their index when the
+    // window changes layout.
+    final activityIndex = pages.length;
+    // The Discussions tab goes away when AI features are turned off.
+    if (_selectedIndex > activityIndex) _selectedIndex = 0;
+    final showingActivity = _selectedIndex == activityIndex;
 
     if (isDesktop) {
+      _pagerShown = false;
       return Scaffold(
         body: Row(
           children: [
@@ -166,9 +171,39 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
               ],
             ),
             const VerticalDivider(width: 1),
-            Expanded(child: pages[_selectedIndex]),
+            Expanded(
+              child: showingActivity
+                  ? const ActivityHeatmapView()
+                  : pages[_selectedIndex],
+            ),
           ],
         ),
+      );
+    }
+
+    // The window was narrowed while on the Study activity tab: stay on it,
+    // as the full screen the Lessons menu opens, with a back arrow (and the
+    // system back button) leading to Lessons.
+    if (showingActivity) {
+      _pagerShown = false;
+      void backToLessons() => setState(() => _selectedIndex = 0);
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) backToLessons();
+        },
+        child: ActivityHeatmapView(onBack: backToLessons),
+      );
+    }
+
+    // Coming from the rail, start the pages on the tab that was open there,
+    // not on the one they last showed.
+    if (!_pagerShown) {
+      _pagerShown = true;
+      _pageController.dispose();
+      _pageController = PageController(
+        initialPage: _selectedIndex,
+        keepPage: false,
       );
     }
 
