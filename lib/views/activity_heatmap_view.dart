@@ -395,7 +395,14 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.end,
                               children: [
-                                Text('Less', style: theme.textTheme.labelSmall),
+                                // The scale's two ends in numbers, since the
+                                // squares' tooltips need a hover or a long
+                                // press to find.
+                                Text(
+                                  busiest > 0 ? '0' : 'Less',
+                                  key: const ValueKey('legend-low'),
+                                  style: theme.textTheme.labelSmall,
+                                ),
                                 const SizedBox(width: 6),
                                 for (var level = 0; level <= 4; level++)
                                   Tooltip(
@@ -413,7 +420,15 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                                       ),
                                     ),
                                   ),
-                                Text('More', style: theme.textTheme.labelSmall),
+                                Text(
+                                  busiest > 0
+                                      ? '${formatCount(busiest)} '
+                                            '${busiest == 1 ? 'review' : 'reviews'} '
+                                            'a day'
+                                      : 'More',
+                                  key: const ValueKey('legend-high'),
+                                  style: theme.textTheme.labelSmall,
+                                ),
                               ],
                             ),
                           ],

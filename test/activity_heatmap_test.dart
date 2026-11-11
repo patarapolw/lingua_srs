@@ -62,7 +62,7 @@ void main() {
       find.text('Review vocabulary to see your activity here.'),
       findsOneWidget,
     );
-    expect(find.text('Less'), findsNothing);
+    expect(find.byKey(const ValueKey('legend-low')), findsNothing);
     expect(find.text('Jan'), findsNothing);
     expect(find.byType(Scrollable), findsNothing);
     expect(tester.takeException(), isNull);
@@ -96,8 +96,15 @@ void main() {
       find.text('${SrsRating.values.length} reviews in the past year'),
       findsOneWidget,
     );
-    expect(find.text('Less'), findsOneWidget);
-    expect(find.text('More'), findsOneWidget);
+    // The legend's ends are the scale in numbers: none, and the busiest day.
+    expect(
+      tester.widget<Text>(find.byKey(const ValueKey('legend-low'))).data,
+      '0',
+    );
+    expect(
+      tester.widget<Text>(find.byKey(const ValueKey('legend-high'))).data,
+      '${SrsRating.values.length} reviews a day',
+    );
     const months = [
       'Jan',
       'Feb',
@@ -516,9 +523,12 @@ void main() {
       await pumpAt(tester, 1600);
 
       // One week of calendar: the legend sat at the window's far edge.
-      expect(tester.getTopRight(find.text('More')).dx, lessThan(800));
       expect(
-        tester.getTopLeft(find.text('Less')).dx,
+        tester.getTopRight(find.byKey(const ValueKey('legend-high'))).dx,
+        lessThan(800),
+      );
+      expect(
+        tester.getTopLeft(find.byKey(const ValueKey('legend-low'))).dx,
         greaterThanOrEqualTo(360),
       );
     });
@@ -746,6 +756,10 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.byTooltip('${dayLabel(day)}: 1,234 reviews'), findsOneWidget);
     expect(find.byTooltip('926–1,234 reviews'), findsOneWidget);
+    expect(
+      tester.widget<Text>(find.byKey(const ValueKey('legend-high'))).data,
+      '1,234 reviews a day',
+    );
   });
 
   testWidgets('shows the cards waiting before the first review', (
@@ -772,7 +786,7 @@ void main() {
     expect(find.text('Cards by stage'), findsOneWidget);
     // Nouns study KO ➔ EN only by default: one card each.
     expect(find.byTooltip('New: 2 cards'), findsOneWidget);
-    expect(find.text('Less'), findsNothing);
+    expect(find.byKey(const ValueKey('legend-low')), findsNothing);
     expect(find.textContaining('in the past year'), findsNothing);
     expect(dayCells(), findsNothing);
   });
@@ -879,6 +893,15 @@ void main() {
     );
 
     expect(find.text('0 reviews in the past year'), findsOneWidget);
+    // No busiest day to name yet.
+    expect(
+      tester.widget<Text>(find.byKey(const ValueKey('legend-low'))).data,
+      'Less',
+    );
+    expect(
+      tester.widget<Text>(find.byKey(const ValueKey('legend-high'))).data,
+      'More',
+    );
     expect(find.text('No study activity yet'), findsNothing);
     expect(find.text('Leeches (1)'), findsOneWidget);
     expect(find.text('Cards by stage'), findsOneWidget);
