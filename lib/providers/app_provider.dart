@@ -1465,6 +1465,12 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
         : joinHierarchyPath([...parts.take(parts.length - 1), name]);
   }
 
+  /// Whether a saved lesson is the one [file] would update when imported
+  /// (a lesson file without its vocabulary, from
+  /// [YamlParserService.lessonFileInfo]). A file whose lesson was deleted
+  /// has none, and is to be imported again even if it has not changed.
+  bool hasLessonForFile(Lesson file) => _importTarget(file).$1 != null;
+
   /// What [markdown], the text of a lesson file, needs for its vocabulary
   /// to say what the app does, or null when it needs nothing or no saved
   /// lesson is at the file's virtual path. [file] is the file without its

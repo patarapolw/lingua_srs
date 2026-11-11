@@ -146,6 +146,117 @@ Text with a rule.
       expect(body(update.text), body(file));
     });
 
+    group('keeps a diff of the file small', () {
+      /// The lines only [before] has, and the lines only [after] has.
+      (List<String>, List<String>) diff(String before, String after) {
+        final was = before.split('\n');
+        final now = after.split('\n');
+        return (
+          [
+            for (final line in was)
+              if (!now.contains(line)) line,
+          ],
+          [
+            for (final line in now)
+              if (!was.contains(line)) line,
+          ],
+        );
+      }
+
+      test('an example added in the app adds its lines and changes no '
+          'other', () {
+        final (lesson, sentences) = imported(file);
+        final added = Sentence(
+          targetText: '같이 가요',
+          translationText: "Let's go",
+        );
+        sentences[added.id] = added;
+        lesson.vocabularies[0].sentenceIds.add(added.id);
+
+        final update = LessonFileUpdate.plan(file, lesson, sentences)!;
+
+        final (removed, inserted) = diff(file, update.text);
+        expect(removed, isEmpty);
+        expect(inserted, [
+          '        - ko: "같이 **가요**"',
+          '          en: "Let\'s go"',
+        ]);
+        // After the entry's other examples, before its next key.
+        expect(
+          update.text,
+          contains(
+            '          en: I go home\n'
+            '        - ko: "같이 **가요**"\n'
+            '          en: "Let\'s go"\n'
+            '      audio: https://example.com/go.mp3\n',
+          ),
+        );
+      });
+
+      test('an example removed in the app takes out its lines only', () {
+        final (lesson, sentences) = imported(file);
+        lesson.vocabularies[0].sentenceIds.removeAt(0);
+
+        final update = LessonFileUpdate.plan(file, lesson, sentences)!;
+
+        final (removed, inserted) = diff(file, update.text);
+        expect(removed, [
+          '        - ko: 학교에 **가요**',
+          '          en: I **go** to school',
+          '          audio: https://example.com/school.mp3',
+        ]);
+        expect(inserted, isEmpty);
+      });
+
+      test('a word left with no examples loses the key, not the entry', () {
+        final (lesson, sentences) = imported(file);
+        lesson.vocabularies[0].sentenceIds.clear();
+
+        final update = LessonFileUpdate.plan(file, lesson, sentences)!;
+
+        expect(
+          update.text,
+          contains(
+            '    - ko: 가다\n'
+            '      en: to go\n'
+            '      audio: https://example.com/go.mp3\n',
+          ),
+        );
+        expect(diff(file, update.text).$2, isEmpty);
+      });
+
+      test('a sentence another lesson writes with other case or spacing is '
+          'not rewritten', () {
+        final (lesson, sentences) = imported(file);
+        // As importing another file that has the same sentence leaves it.
+        final school = sentences[lesson.vocabularies[0].sentenceIds.first]!;
+        school
+          ..targetText = '학교에  가요'
+          ..translationText = 'i go to school';
+
+        expect(LessonFileUpdate.plan(file, lesson, sentences), isNull);
+      });
+
+      test('an example the app has no marking for keeps the file\'s', () {
+        final (lesson, sentences) = imported(file);
+        lesson.vocabularies[0].sentenceEmphasis.clear();
+
+        expect(LessonFileUpdate.plan(file, lesson, sentences), isNull);
+      });
+
+      test('quoted values elsewhere in the file keep their quotes', () {
+        final quoted = file
+            .replaceFirst('ko: 오다', 'ko: "오다"')
+            .replaceFirst('en: school', "en: 'school'");
+        final (lesson, sentences) = imported(quoted);
+        lesson.vocabularies[0].translation = 'go';
+
+        final update = LessonFileUpdate.plan(quoted, lesson, sentences)!;
+
+        expect(update.text, quoted.replaceFirst('en: to go', 'en: go'));
+      });
+    });
+
     test('adds a word made in the app to its section, or a new one', () {
       final (lesson, sentences) = imported(file);
       final example = Sentence(targetText: '물을 마셔요', translationText: '');

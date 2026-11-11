@@ -102,7 +102,7 @@ class LessonFileUpdate {
       for (final sentence in parsed.sentences) sentence.id: sentence,
     };
     final matches = LessonWordMatch.match(fileWords, lesson.vocabularies);
-    final YamlEditor editor;
+    YamlEditor editor;
     try {
       editor = YamlEditor(markdown.substring(span.$1, span.$2));
     } catch (error) {
@@ -195,15 +195,18 @@ class LessonFileUpdate {
           continue;
         }
         inFile.add(theirs.signature);
+        // Only the marking is compared. Sentences are shared by lessons,
+        // and one that two files write with other letter case or spacing
+        // would otherwise be rewritten in each file in turn.
         final marked = word.targetTextFor(sentence).trim();
         if (Sentence.hasEmphasis(marked) &&
-            marked != fileWord.targetTextFor(theirs).trim() &&
+            _loose(marked) != _loose(fileWord.targetTextFor(theirs)) &&
             example.targetKey != null) {
           (marks[example.index] ??= {})[example.targetKey] = marked;
         }
         final meaning = word.translationTextFor(sentence).trim();
-        if (meaning.isNotEmpty &&
-            meaning != fileWord.translationTextFor(theirs).trim()) {
+        if (Sentence.hasEmphasis(meaning) &&
+            _loose(meaning) != _loose(fileWord.translationTextFor(theirs))) {
           (marks[example.index] ??= {})[example.translationKey ??
                   keys.exampleTranslation] =
               meaning;
@@ -215,34 +218,55 @@ class LessonFileUpdate {
             _example(lesson, word, entry.value, keys),
       ];
       final examplesPath = [...location.path, 'examples'];
-      if (gone.isEmpty && fresh.isEmpty) {
-        for (final mark in marks.entries) {
-          for (final field in mark.value.entries) {
-            apply(
-              () => editor.update([
-                ...examplesPath,
-                mark.key,
-                field.key,
-              ], field.value),
-            );
-            touched = true;
-          }
+      for (final mark in marks.entries) {
+        if (gone.contains(mark.key)) continue;
+        for (final field in mark.value.entries) {
+          apply(
+            () => editor.update([
+              ...examplesPath,
+              mark.key,
+              field.key,
+            ], field.value),
+          );
+          touched = true;
         }
-      } else {
-        // Examples were added or removed: the list is written again as a
-        // whole, with the ones that stay as the file has them.
-        final kept = <Object?>[];
-        if (location.hasExamples) {
-          final list = editor.parseAt(examplesPath).value as List;
-          for (var at = 0; at < list.length; at++) {
-            if (gone.contains(at)) continue;
-            final example = _plain(list[at]);
-            if (example is Map) example.addAll(marks[at] ?? const {});
-            kept.add(example);
-          }
-        }
-        apply(() => editor.update(examplesPath, [...kept, ...fresh]));
+      }
+      if (gone.isNotEmpty || fresh.isNotEmpty) {
         touched = true;
+        final length = location.hasExamples
+            ? (editor.parseAt(examplesPath).value as List).length
+            : 0;
+        final before = editor.toString();
+        try {
+          // One line taken out or put in per example, so that the rest of
+          // the entry reads the same in a diff.
+          if (length > 0 && gone.length == length && fresh.isEmpty) {
+            editor.remove(examplesPath);
+          } else {
+            for (final index in gone.toList()..sort((a, b) => b - a)) {
+              editor.remove([...examplesPath, index]);
+            }
+            if (length - gone.length > 0) {
+              appended.addAll([
+                for (final example in fresh) (examplesPath, example),
+              ]);
+            } else if (fresh.isNotEmpty) {
+              editor.update(examplesPath, fresh);
+            }
+          }
+        } catch (_) {
+          // The list is written again as a whole, with the examples that
+          // stay as the file has them.
+          editor = YamlEditor(before);
+          final kept = <Object?>[];
+          if (location.hasExamples) {
+            final list = editor.parseAt(examplesPath).value as List;
+            for (var at = 0; at < list.length; at++) {
+              if (!gone.contains(at)) kept.add(_plain(list[at]));
+            }
+          }
+          apply(() => editor.update(examplesPath, [...kept, ...fresh]));
+        }
       }
       if (touched) changed++;
     }
@@ -434,6 +458,9 @@ class LessonFileUpdate {
     }
     return lines;
   }
+
+  static String _loose(String text) =>
+      text.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
 
   /// A copy of a YAML value that can be changed and written again.
   static Object? _plain(Object? value) {

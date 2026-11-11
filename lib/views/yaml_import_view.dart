@@ -235,10 +235,22 @@ class _YamlImportViewState extends State<YamlImportView>
     try {
       final importedSources =
           await StorageService.loadImportedMarkdownSources();
-      final parseResult = await _parsePickedMarkdownSourcesInBackground(
+      var parseResult = await _parsePickedMarkdownSourcesInBackground(
         sources,
         importedSources,
       );
+      if (!mounted) return;
+      final lessonless = _lessonlessFiles(
+        context.read<AppProvider>(),
+        parseResult,
+      );
+      if (lessonless.isNotEmpty) {
+        parseResult = await _parsePickedMarkdownSourcesInBackground(
+          sources,
+          importedSources,
+          reimport: lessonless,
+        );
+      }
       parseResult.imports.sort((first, second) {
         return first.path.toLowerCase().compareTo(second.path.toLowerCase());
       });
@@ -471,17 +483,27 @@ class _YamlImportViewState extends State<YamlImportView>
         _progressTotal = markdownPaths.length + files.length;
       });
     }
-    final results = <MarkdownDirectoryResult>[
+    Future<MarkdownDirectoryResult> read([
+      Set<String> reimport = const {},
+    ]) async => _combineMarkdownDirectoryResults([
       if (markdownPaths.isNotEmpty)
         await _parseMarkdownDirectoryInBackground(
           markdownPaths,
           directoryPaths,
           importedSources,
+          reimport: reimport,
         ),
       if (files.isNotEmpty)
-        await _parsePickedMarkdownSourcesInBackground(files, importedSources),
-    ];
-    final result = _combineMarkdownDirectoryResults(results);
+        await _parsePickedMarkdownSourcesInBackground(
+          files,
+          importedSources,
+          reimport: reimport,
+        ),
+    ]);
+    var result = await read();
+    if (!mounted) return;
+    final lessonless = _lessonlessFiles(context.read<AppProvider>(), result);
+    if (lessonless.isNotEmpty) result = await read(lessonless);
     result.imports.sort((first, second) {
       return first.path.toLowerCase().compareTo(second.path.toLowerCase());
     });
@@ -1460,6 +1482,10 @@ class MarkdownDirectoryResult {
   /// take their real file paths ([AppProvider.adoptFilePaths]).
   final List<Lesson> unchangedLessons;
 
+  /// The source keys of [unchangedLessons], in the same order, to name the
+  /// ones to read again (`reimport`) when their lesson is no longer saved.
+  final List<String> unchangedKeys;
+
   /// The [unchanged] files that are in a picked folder.
   final List<LessonFileRef> unchangedFiles;
 
@@ -1469,6 +1495,7 @@ class MarkdownDirectoryResult {
     required this.skipped,
     required this.unchanged,
     this.unchangedLessons = const [],
+    this.unchangedKeys = const [],
     this.unchangedFiles = const [],
   });
 }
@@ -1490,25 +1517,53 @@ Future<YamlParseResult> _parseLessonInBackground(
 Future<MarkdownDirectoryResult> _parseMarkdownDirectoryInBackground(
   List<String> paths,
   List<String> directoryPaths,
-  Map<String, String> importedSources,
-) => Isolate.run(
-  () => parseMarkdownFiles(paths, directoryPaths, importedSources),
+  Map<String, String> importedSources, {
+  Set<String> reimport = const {},
+}) => Isolate.run(
+  () => parseMarkdownFiles(
+    paths,
+    directoryPaths,
+    importedSources,
+    reimport: reimport,
+  ),
 );
 
 Future<MarkdownDirectoryResult> _parsePickedMarkdownSourcesInBackground(
   List<PickedMarkdownSource> sources,
-  Map<String, String> importedSources,
-) => Isolate.run(() => parsePickedMarkdownSources(sources, importedSources));
+  Map<String, String> importedSources, {
+  Set<String> reimport = const {},
+}) => Isolate.run(
+  () =>
+      parsePickedMarkdownSources(sources, importedSources, reimport: reimport),
+);
 
+/// The source keys of the unchanged files of [result] that have no saved
+/// lesson any more: their lesson was deleted, here or on another device.
+/// Reading the files again with these as `reimport` offers them for import
+/// (#185).
+Set<String> _lessonlessFiles(
+  AppProvider provider,
+  MarkdownDirectoryResult result,
+) => {
+  for (var index = 0; index < result.unchangedKeys.length; index++)
+    if (!provider.hasLessonForFile(result.unchangedLessons[index]))
+      result.unchangedKeys[index],
+};
+
+/// Reads Markdown files and ZIP archives that were picked or dropped. A file
+/// that has not changed since it was imported is counted, not offered,
+/// unless its source key is in [reimport].
 MarkdownDirectoryResult parsePickedMarkdownSources(
   List<PickedMarkdownSource> sources,
-  Map<String, String> importedSources,
-) {
+  Map<String, String> importedSources, {
+  Set<String> reimport = const {},
+}) {
   final imports = <MarkdownImportFile>[];
   final errors = <String>[];
   var skipped = 0;
   var unchanged = 0;
   final unchangedLessons = <Lesson>[];
+  final unchangedKeys = <String>[];
 
   void parseMarkdown(
     String path,
@@ -1521,16 +1576,20 @@ MarkdownDirectoryResult parsePickedMarkdownSources(
   }) {
     try {
       final sourceHash = sha256.convert(utf8.encode(contents)).toString();
-      if (importedSources[sourceKey] == sourceHash ||
-          (legacySourceKey != null &&
-              importedSources[legacySourceKey] == sourceHash)) {
+      if (!reimport.contains(sourceKey) &&
+          (importedSources[sourceKey] == sourceHash ||
+              (legacySourceKey != null &&
+                  importedSources[legacySourceKey] == sourceHash))) {
         unchanged++;
         final lesson = YamlParserService.lessonFileInfo(
           contents,
           sourcePath: hierarchyPath ?? path,
           defaultUnitTitle: _unitTitleForPath(hierarchyPath ?? path),
         );
-        if (lesson != null) unchangedLessons.add(lesson);
+        if (lesson != null) {
+          unchangedLessons.add(lesson);
+          unchangedKeys.add(sourceKey);
+        }
         return;
       }
       if (requireVocabularyFrontmatter &&
@@ -1598,20 +1657,26 @@ MarkdownDirectoryResult parsePickedMarkdownSources(
     skipped: skipped,
     unchanged: unchanged,
     unchangedLessons: unchangedLessons,
+    unchangedKeys: unchangedKeys,
   );
 }
 
+/// Reads the Markdown files at [paths], found under [directoryPaths]. A file
+/// that has not changed since it was imported is counted, not offered,
+/// unless its source key is in [reimport].
 MarkdownDirectoryResult parseMarkdownFiles(
   List<String> paths,
   List<String> directoryPaths,
-  Map<String, String> importedSources,
-) {
+  Map<String, String> importedSources, {
+  Set<String> reimport = const {},
+}) {
   final imports = <MarkdownImportFile>[];
   final errors = <String>[];
   var skipped = 0;
   var unchanged = 0;
   final unchangedLessons = <Lesson>[];
   final unchangedFiles = <LessonFileRef>[];
+  final unchangedKeys = <String>[];
   final normalizedDirectories =
       directoryPaths.map((path) => path.replaceAll('\\', '/')).toList()
         ..sort((first, second) => first.length.compareTo(second.length));
@@ -1637,7 +1702,8 @@ MarkdownDirectoryResult parseMarkdownFiles(
     try {
       final contents = File(path).readAsStringSync();
       final sourceHash = sha256.convert(utf8.encode(contents)).toString();
-      if (importedSources[_markdownSourceKey(path)] == sourceHash) {
+      if (!reimport.contains(_markdownSourceKey(path)) &&
+          importedSources[_markdownSourceKey(path)] == sourceHash) {
         unchanged++;
         final lesson = YamlParserService.lessonFileInfo(
           contents,
@@ -1646,6 +1712,7 @@ MarkdownDirectoryResult parseMarkdownFiles(
         );
         if (lesson != null) {
           unchangedLessons.add(lesson);
+          unchangedKeys.add(_markdownSourceKey(path));
           unchangedFiles.add(
             LessonFileRef(
               filePath: path,
@@ -1685,6 +1752,7 @@ MarkdownDirectoryResult parseMarkdownFiles(
     skipped: skipped,
     unchanged: unchanged,
     unchangedLessons: unchangedLessons,
+    unchangedKeys: unchangedKeys,
     unchangedFiles: unchangedFiles,
   );
 }
@@ -1697,6 +1765,7 @@ MarkdownDirectoryResult _combineMarkdownDirectoryResults(
   skipped: results.fold(0, (total, result) => total + result.skipped),
   unchanged: results.fold(0, (total, result) => total + result.unchanged),
   unchangedLessons: [for (final result in results) ...result.unchangedLessons],
+  unchangedKeys: [for (final result in results) ...result.unchangedKeys],
   unchangedFiles: [for (final result in results) ...result.unchangedFiles],
 );
 

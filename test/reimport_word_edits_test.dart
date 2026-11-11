@@ -495,6 +495,30 @@ void main() {
       expect(scan.imports.single.fileRef!.path, 'unit-1/lesson-2.md');
     });
 
+    testWidgets('a file whose lesson was deleted is offered again though '
+        'it has not changed (#185)', (tester) async {
+      final provider = await loadedProvider(tester);
+      final contents = lessonFile(go);
+      final ref = save(contents);
+      final lesson = await import(tester, provider, contents);
+      MarkdownDirectoryResult scan([Set<String> reimport = const {}]) =>
+          parseMarkdownFiles([ref.filePath], [folder.path], {
+            ref.sourceKey: ref.sourceHash,
+          }, reimport: reimport);
+
+      final first = scan();
+      expect(first.unchanged, 1);
+      expect(first.unchangedKeys, [ref.sourceKey]);
+      expect(provider.hasLessonForFile(first.unchangedLessons.single), isTrue);
+
+      await tester.runAsync(() => provider.deleteLesson(lesson.id));
+      expect(provider.hasLessonForFile(first.unchangedLessons.single), isFalse);
+
+      final again = scan({ref.sourceKey});
+      expect(again.unchanged, 0);
+      expect(again.imports.single.preview.lesson.displayTitle, 'Lesson 1');
+    });
+
     testWidgets('leaves a file with no saved lesson alone', (tester) async {
       final provider = await loadedProvider(tester);
       final contents = lessonFile(go);
