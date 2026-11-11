@@ -440,18 +440,22 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                                       ),
                                     ),
                                   ),
-                                Text(
-                                  scaleTop > 0
-                                      ? '${formatCount(scaleTop)}'
-                                            '${hasReviewLimit ? '+' : ''} '
-                                            '${scaleTop == 1 ? 'review' : 'reviews'} '
-                                            // Says where the number comes
-                                            // from, so 100 isn't taken for
-                                            // a day's count.
-                                            '${hasReviewLimit ? '(daily limit)' : '(busiest day)'}'
-                                      : 'More',
-                                  key: const ValueKey('legend-high'),
-                                  style: theme.textTheme.labelSmall,
+                                // Flexible, so the label wraps under a large
+                                // text size instead of overflowing a phone.
+                                Flexible(
+                                  child: Text(
+                                    scaleTop > 0
+                                        ? '${formatCount(scaleTop)}'
+                                              '${hasReviewLimit ? '+' : ''} '
+                                              '${scaleTop == 1 ? 'review' : 'reviews'} '
+                                              // Says where the number comes
+                                              // from, so 100 isn't taken for
+                                              // a day's count.
+                                              '${hasReviewLimit ? '(daily limit)' : '(busiest day)'}'
+                                        : 'More',
+                                    key: const ValueKey('legend-high'),
+                                    style: theme.textTheme.labelSmall,
+                                  ),
                                 ),
                               ],
                             ),
