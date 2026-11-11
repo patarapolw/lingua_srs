@@ -400,6 +400,87 @@ void main() {
     );
   });
 
+  group('on a wide window', () {
+    Future<void> pumpAt(WidgetTester tester, double width) async {
+      tester.view.physicalSize = Size(width, 2000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      provider.lessons.add(
+        Lesson(
+          title: 'L',
+          vocabularies: [
+            VocabItem(
+              targetWord: 'a',
+              translation: 'a',
+              pos: 'nouns',
+              cardTargetToNative: SrsCard(
+                direction: CardDirection.targetToNative,
+                status: SrsStatus.review,
+                interval: 3,
+                lastReviewed: DateTime.now().subtract(const Duration(days: 5)),
+                dueDate: DateTime.now().subtract(const Duration(days: 2)),
+              ),
+            ),
+            VocabItem(targetWord: 'c', translation: 'c', pos: 'nouns'),
+          ],
+        ),
+      );
+      await provider.recordCardReview(
+        SrsCard(direction: CardDirection.targetToNative),
+        SrsRating.good,
+      );
+      await tester.pumpWidget(
+        ChangeNotifierProvider<AppProvider>.value(
+          value: provider,
+          child: const MaterialApp(home: ActivityHeatmapView()),
+        ),
+      );
+    }
+
+    testWidgets('the content is centred at a fixed width', (tester) async {
+      await pumpAt(tester, 1600);
+
+      // 880 wide, so 360 is left over on each side. The sections used to
+      // stretch from one edge of the window to the other.
+      expect(tester.getTopLeft(find.text('Cards by stage')).dx, 360);
+      expect(
+        tester.getTopRight(find.text('Today').last).dx,
+        lessThanOrEqualTo(1600 - 360),
+      );
+      // Next 7 days and New cards share a row.
+      final forecast = tester.getTopLeft(find.text('Next 7 days'));
+      final newCards = tester.getTopLeft(find.text('New cards'));
+      expect(newCards.dy, forecast.dy);
+      expect(newCards.dx, greaterThan(forecast.dx));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the legend ends near a short calendar', (tester) async {
+      await pumpAt(tester, 1600);
+
+      // One week of calendar: the legend sat at the window's far edge.
+      expect(tester.getTopRight(find.text('More')).dx, lessThan(800));
+      expect(
+        tester.getTopLeft(find.text('Less')).dx,
+        greaterThanOrEqualTo(360),
+      );
+    });
+
+    testWidgets('a narrow window keeps one column, edge to edge', (
+      tester,
+    ) async {
+      await pumpAt(tester, 400);
+
+      expect(tester.getTopLeft(find.text('Cards by stage')).dx, 20);
+      final forecast = tester.getTopLeft(find.text('Next 7 days'));
+      final newCards = tester.getTopLeft(find.text('New cards'));
+      expect(newCards.dx, forecast.dx);
+      expect(newCards.dy, greaterThan(forecast.dy));
+      expect(tester.takeException(), isNull);
+    });
+  });
+
   testWidgets('a leech can be suspended, and the suspension undone', (
     tester,
   ) async {

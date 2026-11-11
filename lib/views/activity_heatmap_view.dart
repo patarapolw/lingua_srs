@@ -9,6 +9,16 @@ import '../services/study_stats.dart';
 
 const _leechLapseThreshold = 8;
 
+/// The widest the content gets: room for a year of the calendar (53 weeks of
+/// 16 pixels after 32 of weekday labels), so on a desktop window it doesn't
+/// scroll and the charts below don't stretch across the whole screen.
+const _maxContentWidth = 880.0;
+
+/// From this content width, Next 7 days and New cards sit side by side.
+const _twoColumnWidth = 720.0;
+
+const _pagePadding = 20.0;
+
 /// Colours shared with other screens: right and wrong as in the study
 /// session's progress bar, and due as in the lesson list's Due badge.
 final _rightColor = Colors.green.shade600;
@@ -195,261 +205,346 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
           }
 
           if (hasActivity) _scrollToEnd();
-          return ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
-              // Before the first review, the cards waiting are still worth
-              // showing, under a note in place of the calendar.
-              if (!hasActivity) ...[
-                Row(
-                  children: [
-                    const Icon(Icons.calendar_month_outlined),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'No study activity yet',
-                            style: theme.textTheme.titleMedium,
-                          ),
-                          const Text(
-                            'Review vocabulary to see your activity here.',
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final available = constraints.maxWidth - 2 * _pagePadding;
+              final contentWidth = available < _maxContentWidth
+                  ? available
+                  : _maxContentWidth;
+              // Centred by padding rather than a narrower list, so the whole
+              // window still scrolls and the scrollbar stays at its edge.
+              final sidePadding = (constraints.maxWidth - contentWidth) / 2;
+              final forecastSection = maxDue > 0
+                  ? _forecastSection(
+                      context,
+                      forecast: forecast,
+                      today: today,
+                      maxDue: maxDue,
+                      maxReviews24h: provider.maxReviews24h,
+                    )
+                  : null;
+              final newCardsSection =
+                  newPerDay.any((count) => count > 0) || newLeft > 0
+                  ? _newCardsSection(
+                      context,
+                      perDay: newPerDay,
+                      today: today,
+                      startedLast24h: provider.newCardsIntroducedLast24h,
+                      limit: provider.maxNewCards24h,
+                      left: newLeft,
+                    )
+                  : null;
+              return ListView(
+                padding: EdgeInsets.symmetric(
+                  horizontal: sidePadding,
+                  vertical: _pagePadding,
                 ),
-                const SizedBox(height: 24),
-              ] else ...[
-                _summary(
-                  context,
-                  streak: studyStreak(counts, today),
-                  todayReviews: counts[todayDate] ?? 0,
-                  todayNew: newCardCounts[todayDate] ?? 0,
-                  recent: recentRatings(ratingCounts, today),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  '${formatCount(total)} ${total == 1 ? 'review' : 'reviews'} '
-                  'in the past year',
-                  style: theme.textTheme.titleSmall,
-                ),
-                const SizedBox(height: 16),
-                SingleChildScrollView(
-                  controller: _scrollController,
-                  scrollDirection: Axis.horizontal,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const SizedBox(width: 32),
-                          for (var index = 0; index < weeks.length; index++)
-                            SizedBox(
-                              width: 16,
-                              height: 56,
-                              child: Center(
-                                child: RotatedBox(
-                                  quarterTurns: 3,
-                                  child: Text(
-                                    _monthLabel(weeks, index),
-                                    maxLines: 1,
-                                    style: theme.textTheme.labelSmall,
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          SizedBox(
-                            width: 28,
-                            child: Column(
-                              children: [
-                                // One row per day, Monday first, as in
-                                // calendarWeekStart.
-                                for (final label in const [
-                                  'Mon',
-                                  '',
-                                  'Wed',
-                                  '',
-                                  'Fri',
-                                  '',
-                                  '',
-                                ])
-                                  SizedBox(
-                                    height: 16,
-                                    child: Text(
-                                      label,
-                                      style: theme.textTheme.labelSmall,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                          for (final week in weeks)
-                            Padding(
-                              padding: const EdgeInsets.only(right: 4),
-                              child: Column(
-                                children: [
-                                  for (
-                                    var dayIndex = 0;
-                                    dayIndex < 7;
-                                    dayIndex++
-                                  )
-                                    _dayCell(
-                                      context,
-                                      DateTime(
-                                        week.year,
-                                        week.month,
-                                        week.day + dayIndex,
-                                      ),
-                                      firstDay,
-                                      today,
-                                      counts,
-                                      ratingCounts,
-                                      newCardCounts,
-                                      busiest,
-                                    ),
-                                ],
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Text('Less', style: theme.textTheme.labelSmall),
-                    const SizedBox(width: 6),
-                    for (var level = 0; level <= 4; level++)
-                      Tooltip(
-                        message: _legendLabel(level, busiest),
-                        child: Container(
-                          width: 12,
-                          height: 12,
-                          margin: const EdgeInsets.only(right: 4),
-                          decoration: BoxDecoration(
-                            color: _activityColor(theme.colorScheme, level),
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                      ),
-                    Text('More', style: theme.textTheme.labelSmall),
-                  ],
-                ),
-                const SizedBox(height: 24),
-              ],
-              Text('Cards by stage', style: theme.textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Wrap(
                 children: [
-                  for (final (index, entry) in stageCounts.entries.indexed) ...[
-                    if (index > 0) const Text(' · '),
-                    _stageCount(entry.key, entry.value),
-                  ],
-                ],
-              ),
-              const SizedBox(height: 24),
-              if (maxDue > 0) ...[
-                Text('Next 7 days', style: theme.textTheme.titleMedium),
-                // The Study button counts fewer when the 24-hour limit
-                // holds some back, so say these are all the cards due.
-                if (provider.maxReviews24h > 0)
-                  Text(
-                    'All cards coming due, before your limit of '
-                    '${formatCount(provider.maxReviews24h)} reviews '
-                    'per 24 hours',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  height: 110,
-                  child: Row(
-                    children: [
-                      for (var index = 0; index < forecast.length; index++)
-                        Expanded(
-                          child: _bar(
-                            context,
-                            label: _forecastLabel(today, index),
-                            count: forecast[index],
-                            maximum: maxDue,
-                            // Today's bar is the lesson list's Due count.
-                            color: index == 0 ? _dueColor : null,
-                            tooltip:
-                                '${_forecastLabel(today, index)}: '
-                                '${formatCount(forecast[index])} due',
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-              ],
-              if (newPerDay.any((count) => count > 0) || newLeft > 0) ...[
-                _newCardsSection(
-                  context,
-                  perDay: newPerDay,
-                  today: today,
-                  startedLast24h: provider.newCardsIntroducedLast24h,
-                  limit: provider.maxNewCards24h,
-                  left: newLeft,
-                ),
-                const SizedBox(height: 24),
-              ],
-              // Each section above ends with its own gap.
-              if (leeches.isNotEmpty) ...[
-                Text(
-                  'Leeches (${leeches.length})',
-                  style: theme.textTheme.titleMedium,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Cards with at least $_leechLapseThreshold lapses may need a new approach.',
-                  style: theme.textTheme.bodyMedium,
-                ),
-                const SizedBox(height: 8),
-                for (final leech in leeches)
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.warning_amber_rounded),
-                    title: Text(
-                      leech.card.direction == CardDirection.targetToNative
-                          ? leech.vocab.targetWord
-                          : leech.vocab.translation,
-                    ),
-                    subtitle: Text(
-                      leech.card.direction == CardDirection.targetToNative
-                          ? leech.vocab.translation
-                          : leech.vocab.targetWord,
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
+                  // Before the first review, the cards waiting are still worth
+                  // showing, under a note in place of the calendar.
+                  if (!hasActivity) ...[
+                    Row(
                       children: [
-                        Text('${leech.card.lapses} lapses'),
-                        IconButton(
-                          tooltip: 'Suspend',
-                          icon: const Icon(Icons.pause_circle_outline),
-                          onPressed: () => _suspendLeech(provider, leech),
+                        const Icon(Icons.calendar_month_outlined),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'No study activity yet',
+                                style: theme.textTheme.titleMedium,
+                              ),
+                              const Text(
+                                'Review vocabulary to see your activity here.',
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
+                    const SizedBox(height: 24),
+                  ] else ...[
+                    _summary(
+                      context,
+                      streak: studyStreak(counts, today),
+                      todayReviews: counts[todayDate] ?? 0,
+                      todayNew: newCardCounts[todayDate] ?? 0,
+                      recent: recentRatings(ratingCounts, today),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      '${formatCount(total)} ${total == 1 ? 'review' : 'reviews'} '
+                      'in the past year',
+                      style: theme.textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 16),
+                    // As wide as the calendar, up to the screen, so the legend
+                    // ends under the newest week instead of at the far edge of
+                    // a wide window.
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: IntrinsicWidth(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            SingleChildScrollView(
+                              controller: _scrollController,
+                              scrollDirection: Axis.horizontal,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const SizedBox(width: 32),
+                                      for (
+                                        var index = 0;
+                                        index < weeks.length;
+                                        index++
+                                      )
+                                        SizedBox(
+                                          width: 16,
+                                          height: 56,
+                                          child: Center(
+                                            child: RotatedBox(
+                                              quarterTurns: 3,
+                                              child: Text(
+                                                _monthLabel(weeks, index),
+                                                maxLines: 1,
+                                                style:
+                                                    theme.textTheme.labelSmall,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      SizedBox(
+                                        width: 28,
+                                        child: Column(
+                                          children: [
+                                            // One row per day, Monday first, as in
+                                            // calendarWeekStart.
+                                            for (final label in const [
+                                              'Mon',
+                                              '',
+                                              'Wed',
+                                              '',
+                                              'Fri',
+                                              '',
+                                              '',
+                                            ])
+                                              SizedBox(
+                                                height: 16,
+                                                child: Text(
+                                                  label,
+                                                  style: theme
+                                                      .textTheme
+                                                      .labelSmall,
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                      for (final week in weeks)
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            right: 4,
+                                          ),
+                                          child: Column(
+                                            children: [
+                                              for (
+                                                var dayIndex = 0;
+                                                dayIndex < 7;
+                                                dayIndex++
+                                              )
+                                                _dayCell(
+                                                  context,
+                                                  DateTime(
+                                                    week.year,
+                                                    week.month,
+                                                    week.day + dayIndex,
+                                                  ),
+                                                  firstDay,
+                                                  today,
+                                                  counts,
+                                                  ratingCounts,
+                                                  newCardCounts,
+                                                  busiest,
+                                                ),
+                                            ],
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                Text('Less', style: theme.textTheme.labelSmall),
+                                const SizedBox(width: 6),
+                                for (var level = 0; level <= 4; level++)
+                                  Tooltip(
+                                    message: _legendLabel(level, busiest),
+                                    child: Container(
+                                      width: 12,
+                                      height: 12,
+                                      margin: const EdgeInsets.only(right: 4),
+                                      decoration: BoxDecoration(
+                                        color: _activityColor(
+                                          theme.colorScheme,
+                                          level,
+                                        ),
+                                        borderRadius: BorderRadius.circular(2),
+                                      ),
+                                    ),
+                                  ),
+                                Text('More', style: theme.textTheme.labelSmall),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                  Text('Cards by stage', style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    children: [
+                      for (final (index, entry)
+                          in stageCounts.entries.indexed) ...[
+                        if (index > 0) const Text(' · '),
+                        _stageCount(entry.key, entry.value),
+                      ],
+                    ],
                   ),
-              ],
-            ],
+                  const SizedBox(height: 24),
+                  if (forecastSection != null &&
+                      newCardsSection != null &&
+                      contentWidth >= _twoColumnWidth) ...[
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: forecastSection),
+                        const SizedBox(width: 40),
+                        Expanded(child: newCardsSection),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                  ] else ...[
+                    if (forecastSection != null) ...[
+                      forecastSection,
+                      const SizedBox(height: 24),
+                    ],
+                    if (newCardsSection != null) ...[
+                      newCardsSection,
+                      const SizedBox(height: 24),
+                    ],
+                  ],
+                  // Each section above ends with its own gap.
+                  if (leeches.isNotEmpty) ...[
+                    Text(
+                      'Leeches (${leeches.length})',
+                      style: theme.textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Cards with at least $_leechLapseThreshold lapses may need a new approach.',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    for (final leech in leeches)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.warning_amber_rounded),
+                        title: Text(
+                          leech.card.direction == CardDirection.targetToNative
+                              ? leech.vocab.targetWord
+                              : leech.vocab.translation,
+                        ),
+                        subtitle: Text(
+                          leech.card.direction == CardDirection.targetToNative
+                              ? leech.vocab.translation
+                              : leech.vocab.targetWord,
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('${leech.card.lapses} lapses'),
+                            IconButton(
+                              tooltip: 'Suspend',
+                              icon: const Icon(Icons.pause_circle_outline),
+                              onPressed: () => _suspendLeech(provider, leech),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ],
+              );
+            },
           );
         },
       ),
+    );
+  }
+
+  /// A bar per day for the cards coming due over the next week.
+  Widget _forecastSection(
+    BuildContext context, {
+    required List<int> forecast,
+    required DateTime today,
+    required int maxDue,
+    required int maxReviews24h,
+  }) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Next 7 days', style: theme.textTheme.titleMedium),
+        // The Study button counts fewer when the 24-hour limit holds some
+        // back, so say these are all the cards due.
+        if (maxReviews24h > 0)
+          Text(
+            'All cards coming due, before your limit of '
+            '${formatCount(maxReviews24h)} reviews '
+            'per 24 hours',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 110,
+          child: Row(
+            children: [
+              for (var index = 0; index < forecast.length; index++)
+                Expanded(
+                  child: _bar(
+                    context,
+                    label: _forecastLabel(today, index),
+                    count: forecast[index],
+                    maximum: maxDue,
+                    // Today's bar is the lesson list's Due count.
+                    color: index == 0 ? _dueColor : null,
+                    tooltip:
+                        '${_forecastLabel(today, index)}: '
+                        '${formatCount(forecast[index])} due',
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
