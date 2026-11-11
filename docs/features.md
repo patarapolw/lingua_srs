@@ -21,7 +21,7 @@ Full feature reference. For a short overview see the [README](../README.md).
    - **Native ➔ Target (EN ➔ KO)**: Enabled by default for verbs and adjectives; hidden by default for other cards.
    - **Individual Overrides**: Both directions can be freely toggled on or off per vocabulary item.
    - **Reset Progress**: Reset SRS progress for an entire lesson or an individual vocabulary item without changing card visibility.
-   - Delete a part-of-speech group and its vocabulary, or delete an individual vocabulary entry. Deleting an entry resets SRS progress for any other entries sharing its ID.
+   - Delete a part-of-speech group and its vocabulary, or delete an individual vocabulary entry. Deleting an entry leaves the SRS progress of any other entry sharing its ID, in the same lesson or another, as it is.
    - Detects enabled cards with the same front prompt (without comparing their example sentences) and lets you add a disambiguation cue displayed on the card front.
    - A **front hint** can cover both directions or be set per direction; a direction-specific hint wins. On EN ➔ KO, *Find similar English meanings* searches your vocabulary for words with similar meanings (the same type by default) to help you write a hint that tells them apart. With a DeepSeek API key, the sparkle button suggests a hint, sending the vocabulary of the same type (EN ➔ KO) or the words with the same spelling (KO ➔ EN) to DeepSeek.
    - Each card direction has editable Markdown notes displayed on its back. Notes fields everywhere work alike: an *Add … note* button while empty, the rendered notes with *Edit* once filled, *Preview* while editing.

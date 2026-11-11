@@ -1075,20 +1075,19 @@ vocabulary:
       },
     );
 
-    test(
-      'Deleting a section removes descendants and resets shared progress',
-      () async {
-        SharedPreferences.setMockInitialValues({
-          'lingua_srs_windows_legacy_migration_complete': true,
-          'lingua_srs_lessons': '[]',
-          'lingua_srs_sentences': '[]',
-        });
-        final provider = AppProvider();
-        while (provider.isLoading) {
-          await Future<void>.delayed(Duration.zero);
-        }
+    test('Deleting a section removes descendants and keeps the progress of a '
+        'word that stays', () async {
+      SharedPreferences.setMockInitialValues({
+        'lingua_srs_windows_legacy_migration_complete': true,
+        'lingua_srs_lessons': '[]',
+        'lingua_srs_sentences': '[]',
+      });
+      final provider = AppProvider();
+      while (provider.isLoading) {
+        await Future<void>.delayed(Duration.zero);
+      }
 
-        const frontmatter = '''
+      const frontmatter = '''
 ---
 vocabulary:
   fruit:
@@ -1105,21 +1104,56 @@ vocabulary:
 ---
 # Lesson 3: Deletion
 ''';
-        final lesson = await provider.importYaml(frontmatter);
-        final sharedVocab = lesson.vocabularies;
-        expect(sharedVocab, hasLength(3));
-        final sibling = sharedVocab.last;
-        sibling.cardTargetToNative.repetitions = 4;
-        sibling.cardTargetToNative.status = SrsStatus.review;
+      final lesson = await provider.importYaml(frontmatter);
+      final sharedVocab = lesson.vocabularies;
+      expect(sharedVocab, hasLength(3));
+      final sibling = sharedVocab.last;
+      sibling.cardTargetToNative.repetitions = 4;
+      sibling.cardTargetToNative.status = SrsStatus.review;
 
-        await provider.deleteSection(lesson.id, ['FRUIT']);
-        expect(lesson.vocabularies, hasLength(1));
-        expect(lesson.vocabularies.single, same(sibling));
-        expect(sibling.cardTargetToNative.repetitions, 0);
-        expect(sibling.cardTargetToNative.status, SrsStatus.isNew);
-        provider.dispose();
-      },
-    );
+      await provider.deleteSection(lesson.id, ['FRUIT']);
+      expect(lesson.vocabularies, hasLength(1));
+      expect(lesson.vocabularies.single, same(sibling));
+      expect(sibling.cardTargetToNative.repetitions, 4);
+      expect(sibling.cardTargetToNative.status, SrsStatus.review);
+      provider.dispose();
+    });
+
+    test('Deleting one copy of a word saved twice keeps the other\'s '
+        'progress', () async {
+      SharedPreferences.setMockInitialValues({
+        'lingua_srs_windows_legacy_migration_complete': true,
+        'lingua_srs_lessons': '[]',
+        'lingua_srs_sentences': '[]',
+      });
+      final provider = AppProvider();
+      while (provider.isLoading) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      final lesson = await provider.importYaml('''
+---
+vocabulary:
+  nouns:
+    - ko: 가게
+      en: store
+---
+# Shopping
+''');
+      final kept = lesson.vocabularies.single;
+      kept.cardTargetToNative
+        ..repetitions = 4
+        ..status = SrsStatus.review;
+      // As an earlier re-import could leave it: the same word twice.
+      final copy = VocabItem.fromJson(kept.toJson());
+      lesson.vocabularies = [...lesson.vocabularies, copy];
+
+      await provider.deleteVocab(lesson.id, copy);
+
+      expect(lesson.vocabularies.single, same(kept));
+      expect(kept.cardTargetToNative.repetitions, 4);
+      expect(kept.cardTargetToNative.status, SrsStatus.review);
+      provider.dispose();
+    });
 
     test('Deleting a lesson group removes all lessons in that group', () async {
       SharedPreferences.setMockInitialValues({

@@ -2605,7 +2605,8 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   Future<void> deleteVocab(String lessonId, VocabItem vocab) async {
     final lesson = _lessons.firstWhere((l) => l.id == lessonId);
     if (!lesson.vocabularies.contains(vocab)) return;
-    _resetSharedProgress([vocab]);
+    // Another copy of the word, in this lesson or another, keeps the
+    // progress they share.
     lesson.vocabularies.remove(vocab);
     await saveState();
   }
@@ -2636,8 +2637,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       return true;
     }
 
-    final deleted = lesson.vocabularies.where(isInSection).toList();
-    _resetSharedProgress(deleted);
+    // As in [deleteVocab], words that stay keep their progress.
     lesson.vocabularies.removeWhere(isInSection);
     await saveState();
   }
