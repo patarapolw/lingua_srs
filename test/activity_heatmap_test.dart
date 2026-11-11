@@ -520,6 +520,27 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('the narrowest phone puts the ratings under their counts', (
+      tester,
+    ) async {
+      await pumpAt(tester, 320);
+
+      // One Good answer, from pumpAt.
+      final count = tester.getRect(find.text('1 right'));
+      final ratings = tester.getRect(find.text('Good 1 · Easy 0'));
+      expect(ratings.top, greaterThanOrEqualTo(count.bottom));
+      expect(ratings.right, lessThanOrEqualTo(300));
+      expect(tester.takeException(), isNull);
+
+      // At 360 they are beside the count, as on wider screens.
+      tester.view.physicalSize = const Size(360, 2000);
+      await tester.pumpAndSettle();
+      expect(
+        tester.getRect(find.text('Good 1 · Easy 0')).left,
+        greaterThan(tester.getRect(find.text('1 right')).right),
+      );
+    });
+
     testWidgets('the legend ends near a short calendar', (tester) async {
       await pumpAt(tester, 1600);
 

@@ -19,6 +19,11 @@ const _maxContentWidth = 880.0;
 /// tiles stretched wide around a few words.
 const _summaryRowWidth = 600.0;
 
+/// Under this content width (a 320-pixel phone, the narrowest in use, or a
+/// desktop window dragged that small) the Last 30 days tile puts each count's
+/// ratings under it: beside it they have room for a word or two a line.
+const _narrowWidth = 320.0;
+
 /// From this content width, Next 7 days and New cards sit side by side.
 const _twoColumnWidth = 720.0;
 
@@ -297,6 +302,7 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                     _summary(
                       context,
                       wide: contentWidth >= _summaryRowWidth,
+                      narrow: contentWidth < _narrowWidth,
                       streak: studyStreak(counts, today),
                       todayReviews: counts[todayDate] ?? 0,
                       todayNew: newCardCounts[todayDate] ?? 0,
@@ -723,6 +729,7 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
   Widget _summary(
     BuildContext context, {
     required bool wide,
+    required bool narrow,
     required int streak,
     required int todayReviews,
     required int todayNew,
@@ -748,7 +755,7 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
           : null,
     );
     final answersTile = right + wrong > 0
-        ? _answersTile(context, recent)
+        ? _answersTile(context, recent, stacked: narrow)
         : null;
     const gap = SizedBox(width: 12);
     if (wide) {
@@ -876,7 +883,11 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
   /// the percentage right in the middle, then a line each for right and
   /// wrong, with the counts of its two ratings at the far end, so it shows
   /// whether Good or Easy, and Again or Hard, made up more.
-  Widget _answersTile(BuildContext context, Map<SrsRating, int> recent) {
+  Widget _answersTile(
+    BuildContext context,
+    Map<SrsRating, int> recent, {
+    required bool stacked,
+  }) {
     final theme = Theme.of(context);
     final (:right, :wrong) = rightWrongOf(recent);
     final answered = right + wrong;
@@ -911,6 +922,38 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
         ),
       ],
     );
+    // For a narrow tile: the ratings under their count, not beside it.
+    Widget stackedLegend(Color color, String text, String ratings) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.circle, size: 10, color: color),
+              const SizedBox(width: 6),
+              Flexible(child: Text(text)),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 16),
+            child: Text(ratings, style: quiet),
+          ),
+        ],
+      ),
+    );
+    final rightRatings = ratings(
+      SrsRating.good,
+      'Good',
+      SrsRating.easy,
+      'Easy',
+    );
+    final wrongRatings = ratings(
+      SrsRating.again,
+      'Again',
+      SrsRating.hard,
+      'Hard',
+    );
     return Semantics(
       label:
           '$percent% right in the last 30 days: ${formatCount(right)} right, '
@@ -942,27 +985,44 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
             ),
             const SizedBox(width: 16),
             Expanded(
-              // A table, so the ratings start in line after the longer
-              // count, close to both.
-              child: Table(
-                columnWidths: const {
-                  0: IntrinsicColumnWidth(),
-                  1: FlexColumnWidth(),
-                },
-                defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-                children: [
-                  legend(
-                    _rightColor,
-                    '${formatCount(right)} right',
-                    ratings(SrsRating.good, 'Good', SrsRating.easy, 'Easy'),
-                  ),
-                  legend(
-                    _wrongColor,
-                    '${formatCount(wrong)} wrong',
-                    ratings(SrsRating.again, 'Again', SrsRating.hard, 'Hard'),
-                  ),
-                ],
-              ),
+              child: stacked
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        stackedLegend(
+                          _rightColor,
+                          '${formatCount(right)} right',
+                          rightRatings,
+                        ),
+                        stackedLegend(
+                          _wrongColor,
+                          '${formatCount(wrong)} wrong',
+                          wrongRatings,
+                        ),
+                      ],
+                    )
+                  // A table, so the ratings start in line after the longer
+                  // count, close to both.
+                  : Table(
+                      columnWidths: const {
+                        0: IntrinsicColumnWidth(),
+                        1: FlexColumnWidth(),
+                      },
+                      defaultVerticalAlignment:
+                          TableCellVerticalAlignment.middle,
+                      children: [
+                        legend(
+                          _rightColor,
+                          '${formatCount(right)} right',
+                          rightRatings,
+                        ),
+                        legend(
+                          _wrongColor,
+                          '${formatCount(wrong)} wrong',
+                          wrongRatings,
+                        ),
+                      ],
+                    ),
             ),
           ],
         ),
