@@ -1117,37 +1117,77 @@ void main() {
       );
     }
 
-    testWidgets('study activity is a tab in the navigation rail', (
-      tester,
-    ) async {
-      await pumpDesktop(tester);
-      expect(find.byType(ActivityHeatmapView), findsNothing);
+    // Tests run as Android unless told otherwise.
+    final onDesktop = TargetPlatformVariant.only(TargetPlatform.linux);
 
-      await tester.tap(
-        find.descendant(
-          of: find.byType(NavigationRail),
-          matching: find.text('Study activity'),
-        ),
-      );
-      await tester.pumpAndSettle();
+    testWidgets(
+      'study activity is a tab in the navigation rail',
+      variant: onDesktop,
+      (tester) async {
+        await pumpDesktop(tester);
+        expect(find.byType(ActivityHeatmapView), findsNothing);
 
-      expect(find.byType(ActivityHeatmapView), findsOneWidget);
-      expect(find.text('No study activity yet'), findsOneWidget);
-      // A tab, not a pushed screen: the rail stays and there is no way back.
-      expect(find.byType(NavigationRail), findsOneWidget);
-      expect(find.byType(BackButton), findsNothing);
-    });
+        await tester.tap(
+          find.descendant(
+            of: find.byType(NavigationRail),
+            matching: find.text('Study activity'),
+          ),
+        );
+        await tester.pumpAndSettle();
 
-    testWidgets('the Lessons options leave study activity to the tab', (
-      tester,
-    ) async {
-      await pumpDesktop(tester);
+        expect(find.byType(ActivityHeatmapView), findsOneWidget);
+        expect(find.text('No study activity yet'), findsOneWidget);
+        // A tab, not a pushed screen: the rail stays and there is no way back.
+        expect(find.byType(NavigationRail), findsOneWidget);
+        expect(find.byType(BackButton), findsNothing);
+      },
+    );
 
-      await tester.tap(find.byTooltip('More options'));
-      await tester.pumpAndSettle();
-      expect(find.text('Merge history / undo'), findsOneWidget);
-      // Only the rail's label.
-      expect(find.text('Study activity'), findsOneWidget);
-    });
+    testWidgets(
+      'the Lessons options leave study activity to the tab',
+      variant: onDesktop,
+      (tester) async {
+        await pumpDesktop(tester);
+
+        await tester.tap(find.byTooltip('More options'));
+        await tester.pumpAndSettle();
+        expect(find.text('Merge history / undo'), findsOneWidget);
+        // Only the rail's label.
+        expect(find.text('Study activity'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'a phone or tablet on its side has the rail without the tab',
+      variant: TargetPlatformVariant.only(TargetPlatform.android),
+      (tester) async {
+        // As wide as a desktop window, so it gets the rail.
+        await pumpDesktop(tester);
+
+        expect(find.byType(NavigationRail), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byType(NavigationRail),
+            matching: find.text('Study activity'),
+          ),
+          findsNothing,
+        );
+        expect(
+          find.descendant(
+            of: find.byType(NavigationRail),
+            matching: find.byIcon(Icons.calendar_month_outlined),
+          ),
+          findsNothing,
+        );
+
+        // It opens from the Lessons options, as in portrait.
+        await tester.tap(find.byTooltip('More options'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Study activity'));
+        await tester.pumpAndSettle();
+        expect(find.byType(ActivityHeatmapView), findsOneWidget);
+        expect(find.byType(BackButton), findsOneWidget);
+      },
+    );
   });
 }
