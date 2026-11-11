@@ -456,16 +456,8 @@ class _YamlImportViewState extends State<YamlImportView>
     final markdownPaths = <String>[];
     final seenPaths = <String>{};
     for (final directoryPath in directoryPaths) {
-      final root = Directory(directoryPath);
-      await for (final entity in root.list(
-        recursive: true,
-        followLinks: false,
-      )) {
-        if (entity is File &&
-            entity.path.toLowerCase().endsWith('.md') &&
-            seenPaths.add(_markdownSourceKey(entity.path))) {
-          markdownPaths.add(entity.path);
-        }
+      for (final path in await markdownFilesUnder(Directory(directoryPath))) {
+        if (seenPaths.add(_markdownSourceKey(path))) markdownPaths.add(path);
       }
     }
     if (mounted) {
@@ -1366,6 +1358,29 @@ class MarkdownImportFile {
         );
 }
 
+/// The `.md` files under [root], at any depth. Hidden folders and files and
+/// the folders of [MarkdownArchiveService.ignoredFolders] are not looked
+/// into: a `node_modules` next to the lessons holds thousands of files, none
+/// of them a lesson. [root] itself is looked into whatever its name.
+Future<List<String>> markdownFilesUnder(Directory root) async {
+  final paths = <String>[];
+  await for (final entity in root.list(followLinks: false)) {
+    final name = entity.uri.pathSegments.lastWhere(
+      (segment) => segment.isNotEmpty,
+      orElse: () => '',
+    );
+    if (MarkdownArchiveService.isIgnoredName(Uri.decodeComponent(name))) {
+      continue;
+    }
+    if (entity is Directory) {
+      paths.addAll(await markdownFilesUnder(entity));
+    } else if (entity is File && entity.path.toLowerCase().endsWith('.md')) {
+      paths.add(entity.path);
+    }
+  }
+  return paths;
+}
+
 /// A lesson file in a picked folder, as it was when the folder was scanned.
 class LessonFileRef {
   final String filePath;
@@ -1622,6 +1637,10 @@ MarkdownDirectoryResult parsePickedMarkdownSources(
         for (final file in MarkdownArchiveService.readMarkdownFiles(
           source.bytes,
         )) {
+          if (file.error != null) {
+            errors.add('${source.name}/${file.path}: ${file.error}');
+            continue;
+          }
           parseMarkdown(
             '${source.name}/${file.path}',
             zipEntrySourceKey(file.path),

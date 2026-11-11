@@ -495,6 +495,32 @@ void main() {
       expect(scan.imports.single.fileRef!.path, 'unit-1/lesson-2.md');
     });
 
+    testWidgets('a folder scan does not look into node_modules or hidden '
+        'folders', (tester) async {
+      final lesson = save(lessonFile(go));
+      for (final path in [
+        'node_modules/vitepress/README.md',
+        'unit-1/node_modules/dep/CHANGELOG.md',
+        '.vitepress/cache/notes.md',
+        '.git/description.md',
+        'unit-1/.draft.md',
+      ]) {
+        File('${folder.path}/$path')
+          ..createSync(recursive: true)
+          ..writeAsStringSync('# Not a lesson\n');
+      }
+      File('${folder.path}/index.md').writeAsStringSync('# Home\n');
+
+      final found = await tester.runAsync(() => markdownFilesUnder(folder));
+
+      expect(found!.toSet(), {lesson.filePath, '${folder.path}/index.md'});
+      // A folder that was picked is looked into whatever it is called.
+      final hidden = await tester.runAsync(
+        () => markdownFilesUnder(Directory('${folder.path}/.vitepress')),
+      );
+      expect(hidden, ['${folder.path}/.vitepress/cache/notes.md']);
+    });
+
     testWidgets('a file whose lesson was deleted is offered again though '
         'it has not changed (#185)', (tester) async {
       final provider = await loadedProvider(tester);

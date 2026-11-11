@@ -172,6 +172,8 @@ The import button stays disabled until the input can be previewed. Fix any displ
 - **Pick Folder** scans Markdown files recursively. Multiple folders can be selected together on macOS; other platforms select one at a time. Nested folder and archive paths preserve lesson hierarchy.
 - Folder and ZIP results start unchecked; select lessons individually or use **Check all** / **Uncheck all**.
 - Only files with a `vocabulary:` key in their frontmatter are imported; other Markdown is ignored.
+- A folder or ZIP is not looked into under `node_modules`, `__MACOSX`, or any folder whose name starts with a dot (`.vitepress`, `.git`); files whose names start with a dot are left out too. So the folder a VitePress or Git project lives in can be picked as it is. The folder you pick is always looked into, whatever its name.
+- A file in a ZIP that is not UTF-8 text is listed as an error, and the rest of the ZIP is still read.
 - Re-importing updates matching lessons and vocabulary in place, keeping SRS progress and any entries not present in the import. A lesson matches when it is at the same virtual path (see [Links to `.md` files](#links-to-md-files)): the same file in the same folder, or, for a lesson with no file, the same title. [Importing a file again](#importing-a-file-again) says what is taken from the file.
 - **One name per folder.** No two lessons in a folder share a name (ignoring case). When an import brings a lesson whose name is taken in its folder by a lesson at another path, you are asked which one is primary; the other is overwritten by it:
   - **Saved lesson**: the imported file is skipped.
