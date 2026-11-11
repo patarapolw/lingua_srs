@@ -14,7 +14,8 @@ const _leechLapseThreshold = 8;
 /// scroll and the charts below don't stretch across the whole screen.
 const _maxContentWidth = 880.0;
 
-/// From this content width, Next 7 days and New cards sit side by side.
+/// From this content width, the summary tiles share one row, and Next 7 days
+/// and New cards sit side by side.
 const _twoColumnWidth = 720.0;
 
 const _pagePadding = 20.0;
@@ -267,6 +268,7 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                   ] else ...[
                     _summary(
                       context,
+                      wide: contentWidth >= _twoColumnWidth,
                       streak: studyStreak(counts, today),
                       todayReviews: counts[todayDate] ?? 0,
                       todayNew: newCardCounts[todayDate] ?? 0,
@@ -651,40 +653,159 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
     SrsStatus.review => 'Review',
   };
 
-  /// Streak and today's reviews on one line, then right and wrong over the
-  /// last 30 days as a ring.
+  /// A tile each for the streak, today's reviews and the answers right over
+  /// the last 30 days. On a [wide] screen they share a row; otherwise the two
+  /// counts share one and the answers go underneath.
   Widget _summary(
     BuildContext context, {
+    required bool wide,
     required int streak,
     required int todayReviews,
     required int todayNew,
     required Map<SrsRating, int> recent,
   }) {
-    final theme = Theme.of(context);
     final (:right, :wrong) = rightWrongOf(recent);
-    final parts = [
-      if (streak > 0) '$streak-day streak',
-      'Today ${formatCount(todayReviews)} '
-          '${todayReviews == 1 ? 'review' : 'reviews'}'
-          '${todayNew > 0 ? ', ${formatCount(todayNew)} new' : ''}',
-    ];
+    final streakTile = _statTile(
+      context,
+      key: const ValueKey('summary-streak'),
+      label: 'Streak',
+      value: formatCount(streak),
+      unit: streak == 1 ? 'day' : 'days',
+    );
+    final todayTile = _statTile(
+      context,
+      key: const ValueKey('summary-today'),
+      label: 'Today',
+      value: formatCount(todayReviews),
+      unit: todayReviews == 1 ? 'review' : 'reviews',
+      // "cards", to tell it from Cards by stage's "3 new".
+      note: todayNew > 0
+          ? '${formatCount(todayNew)} new ${todayNew == 1 ? 'card' : 'cards'}'
+          : null,
+    );
+    final answersTile = right + wrong > 0
+        ? _answersTile(context, recent)
+        : null;
+    const gap = SizedBox(width: 12);
+    if (wide) {
+      // IntrinsicHeight, so the three tiles are as tall as the tallest.
+      return IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(flex: 2, child: streakTile),
+            gap,
+            Expanded(flex: 2, child: todayTile),
+            gap,
+            Expanded(flex: 5, child: answersTile ?? const SizedBox()),
+          ],
+        ),
+      );
+    }
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(parts.join(' · '), style: theme.textTheme.titleMedium),
-        if (right + wrong > 0) ...[
-          const SizedBox(height: 16),
-          _rightWrongRing(context, recent),
-        ],
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: streakTile),
+              gap,
+              Expanded(child: todayTile),
+            ],
+          ),
+        ),
+        if (answersTile != null) ...[const SizedBox(height: 12), answersTile],
       ],
     );
   }
 
-  /// A ring of right (green) and wrong (red) answers with the percentage
-  /// right in the middle, then a line each for right and wrong, with the
-  /// counts of its two ratings at the far end, so it shows whether Good or
-  /// Easy, and Again or Hard, made up more.
-  Widget _rightWrongRing(BuildContext context, Map<SrsRating, int> recent) {
+  /// The filled, rounded box of a summary tile, with its [label] on top.
+  Widget _tile(
+    BuildContext context, {
+    Key? key,
+    required String label,
+    required Widget child,
+  }) {
+    final theme = Theme.of(context);
+    return Container(
+      key: key,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainer,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: theme.textTheme.labelLarge?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 8),
+          child,
+        ],
+      ),
+    );
+  }
+
+  /// A summary tile for one count: the [value] large with its [unit] after
+  /// it, such as "9 days", and a [note] underneath.
+  Widget _statTile(
+    BuildContext context, {
+    required Key key,
+    required String label,
+    required String value,
+    required String unit,
+    String? note,
+  }) {
+    final theme = Theme.of(context);
+    final quiet = theme.colorScheme.onSurfaceVariant;
+    return MergeSemantics(
+      child: _tile(
+        context,
+        key: key,
+        label: label,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(
+                  value,
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    unit,
+                    style: theme.textTheme.bodyMedium?.copyWith(color: quiet),
+                  ),
+                ),
+              ],
+            ),
+            if (note != null)
+              Text(
+                note,
+                style: theme.textTheme.bodySmall?.copyWith(color: quiet),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// A summary tile with a ring of right (green) and wrong (red) answers,
+  /// the percentage right in the middle, then a line each for right and
+  /// wrong, with the counts of its two ratings at the far end, so it shows
+  /// whether Good or Easy, and Again or Hard, made up more.
+  Widget _answersTile(BuildContext context, Map<SrsRating, int> recent) {
     final theme = Theme.of(context);
     final (:right, :wrong) = rightWrongOf(recent);
     final answered = right + wrong;
@@ -703,7 +824,7 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
     TableRow legend(Color color, String text, String ratings) => TableRow(
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2),
+          padding: const EdgeInsets.symmetric(vertical: 3),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -724,58 +845,56 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
           '$percent% right in the last 30 days: ${formatCount(right)} right, '
           '${formatCount(wrong)} wrong',
       excludeSemantics: true,
-      child: Row(
-        children: [
-          SizedBox.square(
-            dimension: 56,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                // The same colours as the study session's progress bar.
-                SizedBox.expand(
-                  child: CircularProgressIndicator(
-                    value: right / answered,
-                    strokeWidth: 6,
-                    color: _rightColor,
-                    backgroundColor: _wrongColor,
+      child: _tile(
+        context,
+        key: const ValueKey('summary-answers'),
+        label: 'Last 30 days',
+        child: Row(
+          children: [
+            SizedBox.square(
+              dimension: 56,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  // The same colours as the study session's progress bar.
+                  SizedBox.expand(
+                    child: CircularProgressIndicator(
+                      value: right / answered,
+                      strokeWidth: 6,
+                      color: _rightColor,
+                      backgroundColor: _wrongColor,
+                    ),
                   ),
-                ),
-                Text('$percent%', style: theme.textTheme.labelLarge),
-              ],
+                  Text('$percent%', style: theme.textTheme.labelLarge),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // A table, so the ratings start in line after the longer
-                // count, close to both.
-                Table(
-                  columnWidths: const {
-                    0: IntrinsicColumnWidth(),
-                    1: FlexColumnWidth(),
-                  },
-                  defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-                  children: [
-                    legend(
-                      _rightColor,
-                      '${formatCount(right)} right',
-                      ratings(SrsRating.good, 'Good', SrsRating.easy, 'Easy'),
-                    ),
-                    legend(
-                      _wrongColor,
-                      '${formatCount(wrong)} wrong',
-                      ratings(SrsRating.again, 'Again', SrsRating.hard, 'Hard'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text('Last 30 days', style: quiet),
-              ],
+            const SizedBox(width: 16),
+            Expanded(
+              // A table, so the ratings start in line after the longer
+              // count, close to both.
+              child: Table(
+                columnWidths: const {
+                  0: IntrinsicColumnWidth(),
+                  1: FlexColumnWidth(),
+                },
+                defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                children: [
+                  legend(
+                    _rightColor,
+                    '${formatCount(right)} right',
+                    ratings(SrsRating.good, 'Good', SrsRating.easy, 'Easy'),
+                  ),
+                  legend(
+                    _wrongColor,
+                    '${formatCount(wrong)} wrong',
+                    ratings(SrsRating.again, 'Again', SrsRating.hard, 'Hard'),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

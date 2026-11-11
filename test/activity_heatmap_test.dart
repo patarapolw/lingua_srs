@@ -300,7 +300,18 @@ void main() {
       ),
     );
 
-    expect(find.text('2-day streak · Today 3 reviews, 3 new'), findsOneWidget);
+    Finder inTile(String key, String text) => find.descendant(
+      of: find.byKey(ValueKey(key)),
+      matching: find.text(text),
+    );
+    expect(inTile('summary-streak', 'Streak'), findsOneWidget);
+    expect(inTile('summary-streak', '2'), findsOneWidget);
+    expect(inTile('summary-streak', 'days'), findsOneWidget);
+    expect(inTile('summary-today', 'Today'), findsOneWidget);
+    expect(inTile('summary-today', '3'), findsOneWidget);
+    expect(inTile('summary-today', 'reviews'), findsOneWidget);
+    expect(inTile('summary-today', '3 new cards'), findsOneWidget);
+    expect(inTile('summary-answers', 'Last 30 days'), findsOneWidget);
     // Good and Easy are right; Again and Hard are wrong: 2 of 4.
     expect(find.text('50%'), findsOneWidget);
     expect(find.text('2 right'), findsOneWidget);
@@ -456,6 +467,27 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('the summary tiles share a row', (tester) async {
+      await pumpAt(tester, 1600);
+
+      final streak = tester.getRect(
+        find.byKey(const ValueKey('summary-streak')),
+      );
+      final today = tester.getRect(find.byKey(const ValueKey('summary-today')));
+      final answers = tester.getRect(
+        find.byKey(const ValueKey('summary-answers')),
+      );
+      expect(streak.left, 360);
+      expect(today.left, greaterThan(streak.right));
+      expect(answers.left, greaterThan(today.right));
+      expect(answers.right, closeTo(1600 - 360, 0.01));
+      // One row, all as tall as the tallest.
+      expect(today.top, streak.top);
+      expect(answers.top, streak.top);
+      expect(today.height, streak.height);
+      expect(answers.height, streak.height);
+    });
+
     testWidgets('the legend ends near a short calendar', (tester) async {
       await pumpAt(tester, 1600);
 
@@ -477,6 +509,20 @@ void main() {
       final newCards = tester.getTopLeft(find.text('New cards'));
       expect(newCards.dx, forecast.dx);
       expect(newCards.dy, greaterThan(forecast.dy));
+      // Streak and Today share a row, with the answers underneath.
+      final streak = tester.getRect(
+        find.byKey(const ValueKey('summary-streak')),
+      );
+      final today = tester.getRect(find.byKey(const ValueKey('summary-today')));
+      final answers = tester.getRect(
+        find.byKey(const ValueKey('summary-answers')),
+      );
+      expect(streak.left, 20);
+      expect(today.top, streak.top);
+      expect(today.right, closeTo(380, 0.01));
+      expect(answers.top, greaterThan(streak.bottom));
+      expect(answers.left, 20);
+      expect(answers.right, 380);
       expect(tester.takeException(), isNull);
     });
   });
@@ -930,5 +976,53 @@ void main() {
     expect(find.text('Study activity'), findsOneWidget);
     expect(find.text('No study activity yet'), findsOneWidget);
     expect(find.byType(Scrollable), findsNothing);
+  });
+
+  group('on desktop', () {
+    Future<void> pumpDesktop(WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        ChangeNotifierProvider<AppProvider>.value(
+          value: provider,
+          child: const MaterialApp(home: AdaptiveScaffold()),
+        ),
+      );
+    }
+
+    testWidgets('study activity is a tab in the navigation rail', (
+      tester,
+    ) async {
+      await pumpDesktop(tester);
+      expect(find.byType(ActivityHeatmapView), findsNothing);
+
+      await tester.tap(
+        find.descendant(
+          of: find.byType(NavigationRail),
+          matching: find.text('Study activity'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ActivityHeatmapView), findsOneWidget);
+      expect(find.text('No study activity yet'), findsOneWidget);
+      // A tab, not a pushed screen: the rail stays and there is no way back.
+      expect(find.byType(NavigationRail), findsOneWidget);
+      expect(find.byType(BackButton), findsNothing);
+    });
+
+    testWidgets('the Lessons options leave study activity to the tab', (
+      tester,
+    ) async {
+      await pumpDesktop(tester);
+
+      await tester.tap(find.byTooltip('More options'));
+      await tester.pumpAndSettle();
+      expect(find.text('Merge history / undo'), findsOneWidget);
+      // Only the rail's label.
+      expect(find.text('Study activity'), findsOneWidget);
+    });
   });
 }

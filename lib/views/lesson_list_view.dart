@@ -26,10 +26,15 @@ class LessonListView extends StatelessWidget {
   final VoidCallback? onToggleTheme;
   final bool isDarkMode;
 
+  /// Whether the ⋮ menu offers Study activity. Off where the navigation has
+  /// a tab for it (see AdaptiveScaffold).
+  final bool showStudyActivity;
+
   const LessonListView({
     super.key,
     this.onToggleTheme,
     this.isDarkMode = false,
+    this.showStudyActivity = true,
   });
 
   void _confirmResetLesson(BuildContext context, Lesson lesson) {
@@ -703,14 +708,15 @@ class LessonListView extends StatelessWidget {
                       contentPadding: EdgeInsets.zero,
                     ),
                   ),
-                  const PopupMenuItem(
-                    value: 'activity',
-                    child: ListTile(
-                      leading: Icon(Icons.calendar_month_outlined),
-                      title: Text('Study activity'),
-                      contentPadding: EdgeInsets.zero,
+                  if (showStudyActivity)
+                    const PopupMenuItem(
+                      value: 'activity',
+                      child: ListTile(
+                        leading: Icon(Icons.calendar_month_outlined),
+                        title: Text('Study activity'),
+                        contentPadding: EdgeInsets.zero,
+                      ),
                     ),
-                  ),
                 ],
               );
             },

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/app_provider.dart';
+import '../views/activity_heatmap_view.dart';
 import '../views/recent_ai_discussions_view.dart';
 import '../views/lesson_list_view.dart';
 import '../views/sentence_pool_view.dart';
@@ -52,12 +53,19 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
       LessonListView(
         onToggleTheme: widget.onToggleTheme,
         isDarkMode: widget.isDarkMode,
+        // The rail has a tab for it.
+        showStudyActivity: !isDesktop,
       ),
       const VocabPoolView(),
       const SentencePoolView(),
       if (showAi) const RecentAiDiscussionsView(),
+      // Study activity is a tab on the desktop rail only: the bottom bar has
+      // no room for a fifth, so there it stays in the Lessons ⋮ menu. Last,
+      // so the other tabs keep their place when the window changes layout.
+      if (isDesktop) const ActivityHeatmapView(),
     ];
-    // The Discussions tab goes away when AI features are turned off.
+    // The Discussions tab goes away when AI features are turned off, and
+    // Study activity when the window narrows to the mobile layout.
     if (_selectedIndex >= pages.length) _selectedIndex = 0;
 
     if (isDesktop) {
@@ -139,6 +147,11 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
                     selectedIcon: Icon(Icons.forum),
                     label: Text('Recent Discussions'),
                   ),
+                const NavigationRailDestination(
+                  icon: Icon(Icons.calendar_month_outlined),
+                  selectedIcon: Icon(Icons.calendar_month),
+                  label: Text('Study activity'),
+                ),
               ],
             ),
             const VerticalDivider(width: 1),
