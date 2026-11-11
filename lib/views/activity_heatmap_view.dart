@@ -445,7 +445,10 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                                       ? '${formatCount(scaleTop)}'
                                             '${hasReviewLimit ? '+' : ''} '
                                             '${scaleTop == 1 ? 'review' : 'reviews'} '
-                                            'a day'
+                                            // Says where the number comes
+                                            // from, so 100 isn't taken for
+                                            // a day's count.
+                                            '${hasReviewLimit ? '(daily limit)' : '(busiest day)'}'
                                       : 'More',
                                   key: const ValueKey('legend-high'),
                                   style: theme.textTheme.labelSmall,

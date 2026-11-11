@@ -103,7 +103,7 @@ void main() {
     );
     expect(
       tester.widget<Text>(find.byKey(const ValueKey('legend-high'))).data,
-      '100+ reviews a day',
+      '100+ reviews (daily limit)',
     );
     const months = [
       'Jan',
@@ -740,7 +740,7 @@ void main() {
     expect(find.byTooltip('76–100 reviews'), findsNothing);
     expect(
       tester.widget<Text>(find.byKey(const ValueKey('legend-high'))).data,
-      '100+ reviews a day',
+      '100+ reviews (daily limit)',
     );
   });
 
@@ -827,7 +827,7 @@ void main() {
     expect(find.byTooltip('926–1,234 reviews'), findsOneWidget);
     expect(
       tester.widget<Text>(find.byKey(const ValueKey('legend-high'))).data,
-      '1,234 reviews a day',
+      '1,234 reviews (busiest day)',
     );
   });
 
@@ -969,7 +969,7 @@ void main() {
     );
     expect(
       tester.widget<Text>(find.byKey(const ValueKey('legend-high'))).data,
-      '100+ reviews a day',
+      '100+ reviews (daily limit)',
     );
     expect(find.text('No study activity yet'), findsNothing);
     expect(find.text('Leeches (1)'), findsOneWidget);
