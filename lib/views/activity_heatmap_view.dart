@@ -775,18 +775,25 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
               crossAxisAlignment: CrossAxisAlignment.baseline,
               textBaseline: TextBaseline.alphabetic,
               children: [
-                Text(
-                  value,
-                  style: theme.textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
+                // Shrinks rather than overflows when a long count, such as
+                // "1,234", meets a narrow tile or a large text size.
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.bottomLeft,
+                    child: Text(
+                      value,
+                      maxLines: 1,
+                      style: theme.textTheme.headlineMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    unit,
-                    style: theme.textTheme.bodyMedium?.copyWith(color: quiet),
-                  ),
+                Text(
+                  unit,
+                  style: theme.textTheme.bodyMedium?.copyWith(color: quiet),
                 ),
               ],
             ),

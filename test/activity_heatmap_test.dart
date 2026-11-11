@@ -711,6 +711,15 @@ void main() {
     );
 
     expect(find.text('1,234 reviews in the past year'), findsOneWidget);
+    // Today's tile shrinks the count to fit rather than overflowing.
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('summary-today')),
+        matching: find.text('1,234'),
+      ),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
     expect(find.byTooltip('${dayLabel(day)}: 1,234 reviews'), findsOneWidget);
     expect(find.byTooltip('926–1,234 reviews'), findsOneWidget);
   });
