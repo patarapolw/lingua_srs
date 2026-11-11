@@ -275,9 +275,17 @@ class LessonFileUpdate {
     // came from a file and is not in this one was taken out of the file.
     final inFile = Set<VocabItem>.identity()
       ..addAll(matches.values.map((match) => match.word));
+    // A lesson can hold a word twice. The copy left over when the other was
+    // paired with the file's entry is not a new word: the file has it.
+    final fileIds = {for (final word in fileWords) word.id};
+    final fileMeanings = {
+      for (final word in fileWords) LessonWordMatch.meaningKey(word),
+    };
     final sections = {...parsed.sections};
     for (final word in lesson.vocabularies) {
       if (inFile.contains(word) ||
+          fileIds.contains(word.id) ||
+          fileMeanings.contains(LessonWordMatch.meaningKey(word)) ||
           word.source != null ||
           (!word.idIsExplicit && word.id.startsWith('auto-')) ||
           (word.targetWord.trim().isEmpty && word.translation.trim().isEmpty)) {

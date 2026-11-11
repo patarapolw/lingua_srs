@@ -54,6 +54,25 @@ Text with a rule.
       expect(LessonFileUpdate.plan(file, lesson, sentences), isNull);
     });
 
+    test('does not add a second copy of a word the lesson holds twice', () {
+      final (lesson, sentences) = imported(file);
+      for (final explicit in [true, false]) {
+        final copy = VocabItem.fromJson(lesson.vocabularies[0].toJson())
+          ..idIsExplicit = explicit
+          // Saved before the file's values were kept with a word.
+          ..source = null;
+        lesson.vocabularies = [...lesson.vocabularies.take(3), copy];
+        expect(LessonFileUpdate.plan(file, lesson, sentences), isNull);
+      }
+      // Nor one with the same word and translation under another id.
+      final renamed = VocabItem.fromJson(lesson.vocabularies[0].toJson())
+        ..id = 'other'
+        ..idIsExplicit = true
+        ..source = null;
+      lesson.vocabularies = [...lesson.vocabularies.take(3), renamed];
+      expect(LessonFileUpdate.plan(file, lesson, sentences), isNull);
+    });
+
     test('is nothing for text without frontmatter', () {
       final (lesson, sentences) = imported(file);
       expect(LessonFileUpdate.plan('# Lesson 1\n', lesson, sentences), isNull);

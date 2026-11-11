@@ -163,6 +163,11 @@ class LessonWordMatch {
     return true;
   }
 
+  /// [word]'s word and translation, loosely: two words with the same key
+  /// read the same.
+  static String meaningKey(VocabItem word) =>
+      _meaning(word.targetWord, word.translation);
+
   static String _meaning(String word, String translation) =>
       '${_normalize(word)}\u0000${_normalize(translation)}';
 
