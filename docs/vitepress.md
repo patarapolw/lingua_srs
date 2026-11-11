@@ -36,7 +36,7 @@ The app imports only Markdown files with `vocabulary:` frontmatter, so `.vitepre
 - **Speech** uses the voices the browser has, in Korean unless the tag has `lang="..."`. It sounds different from the app, and is silent in a browser with no voice for the language.
 - **YouTube** is the regular embedded player. The app shows a thumbnail first, and offers **Open on YouTube**.
 - **`<details>`** needs a blank line after `<summary>...</summary>` and before `</details>` for VitePress to render the Markdown inside. The app renders it either way.
-- **`[[...]]` links and `<!-- chunk -->` comments** are for the app only; see [Editing lessons outside the app](lesson-format.md#editing-lessons-outside-the-app).
+- **`[[...]]` links** (and the old `<!-- chunk -->` comments) are for the app only; see [Editing lessons outside the app](lesson-format.md#editing-lessons-outside-the-app).
 
 Some HTML that VitePress renders is not rendered by the app yet:
 

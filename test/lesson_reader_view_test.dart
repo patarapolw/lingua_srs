@@ -6,12 +6,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lingua_srs/models/lesson.dart';
 import 'package:lingua_srs/providers/app_provider.dart';
 import 'package:lingua_srs/services/audio_service.dart';
+import 'package:lingua_srs/services/lesson_links.dart';
 import 'package:lingua_srs/services/tts_voice.dart';
 import 'package:lingua_srs/views/lesson_detail_view.dart';
 import 'package:lingua_srs/views/lesson_reader_view.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:webview_platform_interface/webview_platform_interface.dart';
 
+import 'fake_webview_platform.dart';
 import 'secret_storage_mock.dart';
 
 /// Touches no audio plugin.
@@ -38,6 +41,12 @@ class _SilentAudioService extends ChangeNotifier implements AudioService {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(setUpSecretStorage);
+
+  late FakeWebViewPlatform webview;
+  setUp(() {
+    webview = FakeWebViewPlatform();
+    WebViewPlatform.instance = webview;
+  });
 
   const pathProviderChannel = MethodChannel('plugins.flutter.io/path_provider');
   late Directory storageDirectory;
@@ -201,9 +210,13 @@ void main() {
     testWidgets('opens the linked lesson at its heading', (tester) async {
       final (_, target) = await openLinked(tester);
 
-      await tester.tap(
-        find.text('Unit 2 › Lesson 26 › Past tense', findRichText: true),
-      );
+      webview.controller.send({
+        'type': 'link',
+        'href': const LessonLink(
+          lesson: 'Unit 2::Lesson 26',
+          heading: 'Past tense',
+        ).href,
+      });
       await tester.pumpAndSettle();
 
       final reader = tester.widget<LessonReaderView>(
@@ -211,16 +224,16 @@ void main() {
       );
       expect(reader.lessonId, target.id);
       expect(reader.initialHeading, 'Past tense');
-      expect(
-        find.textContaining('Past text.', findRichText: true),
-        findsWidgets,
-      );
+      expect(webview.controller.html, contains('Past text.'));
     });
 
     testWidgets('opens the lesson a .md link points to', (tester) async {
       final (_, target) = await openLinked(tester);
 
-      await tester.tap(find.text('as a file', findRichText: true));
+      webview.controller.send({
+        'type': 'link',
+        'href': 'unit-2/lesson-26.md#past-tense',
+      });
       await tester.pumpAndSettle();
 
       final reader = tester.widget<LessonReaderView>(
@@ -233,7 +246,10 @@ void main() {
     testWidgets('says when the linked lesson does not exist', (tester) async {
       await openLinked(tester);
 
-      await tester.tap(find.text('Missing lesson', findRichText: true));
+      webview.controller.send({
+        'type': 'link',
+        'href': const LessonLink(lesson: 'Missing lesson').href,
+      });
       await tester.pump();
 
       expect(find.text('No lesson named “Missing lesson”.'), findsOneWidget);

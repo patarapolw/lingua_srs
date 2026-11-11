@@ -95,7 +95,8 @@ lingua_srs/
 │       ├── folder_picker_dialog.dart  # Pick an existing or new folder to move a lesson/folder into
 │       ├── lesson_hierarchy_view.dart # Lesson folder tree with reordering
 │       ├── lesson_clash_dialog.dart   # Asks which of two same-named lessons in a folder is primary
-│       ├── lesson_content_view.dart   # Lesson Markdown reader (native, chunked lazy list)
+│       ├── lesson_content_view.dart   # Lesson reader: the lesson as one page in a WebView, headings and scroll memory
+│       ├── lesson_html.dart           # Lesson Markdown to the HTML page, CSS and script the reader's WebView shows
 │       ├── cached_markdown_image.dart # Online Markdown image shown from the disk cache
 │       ├── markdown_content.dart      # Markdown renderer for notes and chat
 │       ├── markdown_details.dart      # `<details>` blocks in Markdown: a summary that shows and hides text

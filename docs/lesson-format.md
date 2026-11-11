@@ -71,9 +71,9 @@ Frontmatter-only Markdown imports the same as equivalent plain YAML. The body is
 
 A `## Vocabulary` section in the body is left out when the lesson is imported, from that heading up to the next `## ` heading: the words are in the frontmatter, and the app lists them under **View Vocabulary**. The section is not stored, so the reader does not show it and an export does not write it back. It is kept when it is the last `## ` section of the file, or when its heading is written any other way (`## Vocabulary list`, `### Vocabulary`).
 
-The reader renders `<AudioButton src="...">` and `<TTS>...</TTS>` controls, and `<YouTube id="...">` embeds (also `list` or `src` attributes). Spoiler spans (`<span class="spoiler">...</span>`) are blurred until hovered on desktop or tapped on touch devices. Markdown inside a spoiler is rendered: `<span class="spoiler">my **brother**</span>`. Scripts, and capitalised tags the reader does not know (`<VocabQuiz />`), are left out.
+The reader renders `<AudioButton src="...">` and `<TTS>...</TTS>` controls, and `<YouTube id="...">` embeds (also `list` or `src` attributes). Spoiler spans (`<span class="spoiler">...</span>`) are blurred until hovered on desktop or tapped on touch devices. Markdown inside a spoiler is rendered: `<span class="spoiler">my **brother**</span>`. Scripts and event attributes (`onclick="..."`), and capitalised tags the reader does not know (`<VocabQuiz />`), are left out.
 
-A few inline HTML tags are rendered too: `<ins>` and `<u>` underline, `<mark>` highlights, `<sup>` and `<sub>` raise and lower, `<del>` and `<s>` strike through, and `<em>`, `<i>`, `<strong>` and `<b>` work like their Markdown forms. Markdown inside them is rendered. `<br>` breaks the line, also inside a table cell. Other inline HTML is shown as typed, and a block that starts with another HTML tag (`<ul>`, `<div>`) is not shown.
+The reader shows the lesson as a web page, so HTML in the Markdown is rendered by the browser engine of the device, not by the app: `<ins>`, `<u>`, `<mark>`, `<sup>`, `<sub>`, `<del>`, `<s>`, `<em>`, `<strong>`, `<br>` (also inside a table cell), `<div>`, `<ul>`, `<table>`, `<img>` and the rest work as they do on the web. Markdown works inside a block once a blank line separates it from the HTML tag, as on GitHub. Styles are the reader's own, and `<style>`, `<script>` and `<iframe>` are removed.
 
 A `<details>` block folds part of a lesson away until its `<summary>` is tapped. Markdown works inside it, headings included; `<details open>` starts unfolded, and a block can sit inside another:
 
@@ -90,21 +90,7 @@ A `<details>` block folds part of a lesson away until its `<summary>` is tapped.
 Tap a YouTube thumbnail to start its embedded player. If the video cannot play,
 use **Open on YouTube** to open the video or playlist outside the player.
 
-The reader renders the lesson natively, a chunk at a time, so long lessons stay responsive. A chunk starts at every heading, and a long section is also cut at a blank line (never inside a code block, list, table or `<details>` block). If a lesson splits badly, add HTML comments, which render as nothing anywhere:
-
-```markdown
-Text before.
-
-<!-- chunk -->
-
-Text that always starts a new chunk.
-
-<!-- chunk:start -->
-
-Everything up to the end marker stays in one chunk, however long.
-
-<!-- chunk:end -->
-```
+The reader shows the whole lesson as one page, so long lessons scroll smoothly, and the text can be selected across sections. The comments `<!-- chunk -->`, `<!-- chunk:start -->` and `<!-- chunk:end -->`, which earlier versions used to cut a lesson into pieces, are no longer needed; they render as nothing, like any HTML comment.
 
 ### Links between lessons and to sections
 
@@ -172,7 +158,7 @@ npx vitepress dev lessons   # preview the folder `lessons` in a browser
 - **Headings** take `{#id}` in both (see [Heading ids and repeated headings](#heading-ids-and-repeated-headings)).
 - **Frontmatter** (`vocabulary:` and the rest) is read by the app only; VitePress does not show it.
 - **A `## Vocabulary` section** is shown by VitePress and left out by the app (see [Markdown frontmatter](#markdown-frontmatter)), so it can hold a word list for the preview alone.
-- **App-only syntax:** `[[...]]` links and the `<!-- chunk -->` comments mean nothing to VitePress. `<AudioButton>`, `<TTS>` and `<YouTube>` are rendered by the app's reader; VitePress shows them once its theme has components with those names. [vitepress.md](vitepress.md) has a theme that adds them.
+- **App-only syntax:** `[[...]]` links and the `<!-- chunk -->` comments (no longer needed) mean nothing to VitePress. `<AudioButton>`, `<TTS>` and `<YouTube>` are rendered by the app's reader; VitePress shows them once its theme has components with those names. [vitepress.md](vitepress.md) has a theme that adds them.
 - **Edits made in the app** (**Edit Markdown**) stay in the app until you export. Export writes each lesson back to its virtual path, so an exported ZIP unpacks over the original folder.
 
 Obsidian, VS Code's Markdown preview and GitHub work for the same files, without VitePress's `{#id}` headings.
