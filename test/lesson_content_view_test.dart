@@ -411,6 +411,30 @@ void main() {
       );
     });
 
+    testWidgets('a link out of the player opens the playing video', (
+      tester,
+    ) async {
+      await show(tester);
+      platform.controller.finish();
+      final delegate = platform.controller.delegate!;
+
+      platform.controller.send({
+        'type': 'youtube',
+        'watch': 'https://www.youtube.com/watch?v=abc',
+      });
+      await tester.pump();
+
+      expect(
+        delegate.onNavigationRequest!(
+          const NavigationRequest(
+            url: 'intent://watch?v=abc#Intent;scheme=vnd.youtube;end',
+            isMainFrame: false,
+          ),
+        ),
+        NavigationDecision.prevent,
+      );
+    });
+
     group('returning to a lesson', () {
       testWidgets('opens it where it was left', (tester) async {
         await show(tester, scrollKey: 'a');

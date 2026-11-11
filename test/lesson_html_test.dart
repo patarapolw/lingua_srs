@@ -78,6 +78,11 @@ void main() {
       expect(html, contains('youtube-nocookie.com/embed/dQw4w9WgXcQ'));
       expect(html, contains('data-thumb="https://img.youtube.com/vi/'));
       expect(html, contains('data-watch="https://www.youtube.com/watch?v='));
+      expect(
+        html,
+        contains('<a class="yt-open" href="https://www.youtube.com/watch?v='),
+      );
+      expect(html, contains('Open on YouTube'));
       expect(html, isNot(contains('<p><div')));
     });
 

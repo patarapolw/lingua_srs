@@ -82,16 +82,23 @@ abstract final class LessonHtml {
         final embedUrl = params['url'] ?? '';
         final thumbnail = YouTubeEmbed.thumbnailUrl(embedUrl);
         final watch = YouTubeEmbed.watchUrl(embedUrl);
-        final embed = md.Element('div', [
+        final player = md.Element('div', [
           md.Element('span', [])..attributes['class'] = 'play',
         ]);
-        embed.attributes['class'] = 'yt';
-        embed.attributes['data-src'] = YouTubeEmbed.playerSrc(embedUrl);
-        if (thumbnail != null) embed.attributes['data-thumb'] = thumbnail;
-        if (watch != null) embed.attributes['data-watch'] = watch;
-        embed.attributes['role'] = 'button';
-        embed.attributes['aria-label'] = 'Play video';
-        return embed;
+        player.attributes['class'] = 'yt';
+        player.attributes['data-src'] = YouTubeEmbed.playerSrc(embedUrl);
+        if (thumbnail != null) player.attributes['data-thumb'] = thumbnail;
+        if (watch != null) player.attributes['data-watch'] = watch;
+        player.attributes['role'] = 'button';
+        player.attributes['aria-label'] = 'Play video';
+        if (watch == null) return player;
+        // The regular YouTube link, for when the embed cannot play (YouTube
+        // forbids the iframe, or the WebView cannot show it).
+        final open = md.Element('a', [md.Text('Open on YouTube')]);
+        open.attributes['class'] = 'yt-open';
+        open.attributes['href'] = watch;
+        return md.Element('div', [player, open])
+          ..attributes['class'] = 'yt-wrap';
       case 'lingua-spoiler':
         final text = params['text'] ?? '';
         final inline = md.markdownToHtml(
@@ -150,6 +157,9 @@ summary { cursor: pointer; font-weight: bold; }
 .yt { position: relative; width: 100%; max-width: 640px; aspect-ratio: 16 / 9; margin: 8px 0; background: #000 center / cover no-repeat; border-radius: 8px; overflow: hidden; cursor: pointer; }
 .yt .play { position: absolute; left: 50%; top: 50%; width: 64px; height: 44px; margin: -22px 0 0 -32px; border-radius: 12px; background: rgba(0,0,0,.7); }
 .yt .play::after { content: ""; position: absolute; left: 25px; top: 12px; border: 10px solid transparent; border-left: 17px solid #fff; }
+.yt-wrap { margin: 8px 0; }
+.yt-wrap .yt { margin: 0 0 4px; }
+.yt-open { font-size: 0.85em; }
 .yt iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 .spoiler { filter: blur(5px); cursor: pointer; transition: filter .15s; }
 .spoiler:hover, .spoiler.show { filter: none; }
@@ -198,6 +208,7 @@ if (!window.__linguaBound) {
     var yt = t.closest('.yt');
     if (yt && !yt.querySelector('iframe')) {
       var frame = document.createElement('iframe');
+      linguaPost({type: 'youtube', watch: yt.dataset.watch || ''});
       frame.src = yt.dataset.src;
       frame.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen';
       frame.referrerPolicy = 'strict-origin-when-cross-origin';

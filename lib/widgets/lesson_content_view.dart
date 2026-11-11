@@ -396,6 +396,10 @@ class _LessonContentViewState extends State<LessonContentView> {
   String? _injection;
   String? _pendingAnchor;
 
+  /// The regular YouTube link of the video last started, for a link out of
+  /// its player that the WebView cannot follow (`intent:` on Android).
+  String? _playingWatch;
+
   /// The first page opens at this heading or, after it was left, at the
   /// saved place. Later reloads (a new theme) keep the current place.
   String? _startAnchor;
@@ -552,6 +556,9 @@ class _LessonContentViewState extends State<LessonContentView> {
       case 'scroll':
         final y = data['y'];
         if (y is num) _rememberScroll(y.toDouble());
+      case 'youtube':
+        final watch = data['watch'];
+        _playingWatch = watch is String && watch.isNotEmpty ? watch : null;
       case 'link':
         final href = data['href'];
         if (href is String) _onLink(href);
@@ -627,9 +634,11 @@ class _LessonContentViewState extends State<LessonContentView> {
 
   Future<void> _launch(Uri uri) async {
     if (uri.scheme != 'http' && uri.scheme != 'https') {
-      // `intent:` and `vnd.youtube:` links from the player: use the
-      // regular YouTube link instead, when there is one.
-      return;
+      // `intent:` and `vnd.youtube:` links from the player: open the regular
+      // YouTube link of the video instead, when there is one.
+      final watch = _playingWatch;
+      if (watch == null) return;
+      uri = Uri.parse(watch);
     }
     final opened = await YouTubeEmbed.openExternally(
       uri,
