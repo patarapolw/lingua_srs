@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -34,16 +32,6 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
     super.dispose();
   }
 
-  /// Whether the app runs on a desktop computer, whatever the window's
-  /// width. A phone or tablet turned on its side is wide enough for the rail
-  /// too, but its rail is short: a fifth tab can run it out of height.
-  bool get _isDesktopPlatform => switch (defaultTargetPlatform) {
-    TargetPlatform.windows ||
-    TargetPlatform.macOS ||
-    TargetPlatform.linux => true,
-    _ => false,
-  };
-
   void _selectTab(int index, {required bool isDesktop}) {
     setState(() => _selectedIndex = index);
     if (!isDesktop && _pageController.hasClients) {
@@ -60,23 +48,21 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
     final isDesktop = MediaQuery.of(context).size.width >= 800;
     final theme = Theme.of(context);
     final showAi = context.select<AppProvider, bool>((p) => p.showAi);
-    // Study activity is a tab on a desktop computer's rail only. Phones and
-    // tablets keep it in the Lessons ⋮ menu, in portrait (the bottom bar has
-    // no room for a fifth tab) and in landscape (see _isDesktopPlatform).
-    final hasActivityTab = isDesktop && _isDesktopPlatform;
 
     final pages = [
       LessonListView(
         onToggleTheme: widget.onToggleTheme,
         isDarkMode: widget.isDarkMode,
-        showStudyActivity: !hasActivityTab,
+        // The rail has a tab for it.
+        showStudyActivity: !isDesktop,
       ),
       const VocabPoolView(),
       const SentencePoolView(),
       if (showAi) const RecentAiDiscussionsView(),
-      // Last, so the other tabs keep their place when the window changes
-      // layout.
-      if (hasActivityTab) const ActivityHeatmapView(),
+      // Study activity is a tab on the desktop rail only: the bottom bar has
+      // no room for a fifth, so there it stays in the Lessons ⋮ menu. Last,
+      // so the other tabs keep their place when the window changes layout.
+      if (isDesktop) const ActivityHeatmapView(),
     ];
     // The Discussions tab goes away when AI features are turned off, and
     // Study activity when the window narrows to the mobile layout.
@@ -161,12 +147,11 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
                     selectedIcon: Icon(Icons.forum),
                     label: Text('Recent Discussions'),
                   ),
-                if (hasActivityTab)
-                  const NavigationRailDestination(
-                    icon: Icon(Icons.calendar_month_outlined),
-                    selectedIcon: Icon(Icons.calendar_month),
-                    label: Text('Study activity'),
-                  ),
+                const NavigationRailDestination(
+                  icon: Icon(Icons.calendar_month_outlined),
+                  selectedIcon: Icon(Icons.calendar_month),
+                  label: Text('Study activity'),
+                ),
               ],
             ),
             const VerticalDivider(width: 1),
