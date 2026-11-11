@@ -9,14 +9,36 @@ import '../services/study_stats.dart';
 
 const _leechLapseThreshold = 8;
 
+/// The widest the content gets: room for a year of the calendar (53 weeks of
+/// 16 pixels after 32 of weekday labels), so on a desktop window it doesn't
+/// scroll and the charts below don't stretch across the whole screen.
+const _maxContentWidth = 880.0;
+
+/// From this content width, the three summary tiles share one row. Less than
+/// [_twoColumnWidth], so a tablet in portrait gets the row too, instead of
+/// tiles stretched wide around a few words.
+const _summaryRowWidth = 600.0;
+
+/// Under this content width (a 320-pixel phone, the narrowest in use, or a
+/// desktop window dragged that small) the Last 30 days tile puts each count's
+/// ratings under it: beside it they have room for a word or two a line.
+const _narrowWidth = 320.0;
+
+/// From this content width, Next 7 days and New cards sit side by side.
+const _twoColumnWidth = 720.0;
+
+const _pagePadding = 20.0;
+
 /// Colours shared with other screens: right and wrong as in the study
 /// session's progress bar, and due as in the lesson list's Due badge.
 final _rightColor = Colors.green.shade600;
 final _wrongColor = Colors.red.shade600;
 final _dueColor = Colors.amber.shade800;
 
-/// The shade, 0 to 4, of a day with [count] reviews, when the busiest day
-/// shown had [busiest]. Shades are quarters of the busiest day, so a calendar
+/// The shade, 0 to 4, of a day with [count] reviews, on a scale whose top is
+/// [busiest]: the review limit, or the busiest day shown when there is no
+/// limit (see [activityScaleTop]). A day over the top gets the darkest shade.
+/// Shades are quarters of the top, so a calendar
 /// of 100-review days still shows which days were heavier. 0 is no reviews.
 @visibleForTesting
 int activityLevel(int count, int busiest) {
@@ -33,6 +55,13 @@ int activityLevel(int count, int busiest) {
   final highest = level * busiest ~/ 4;
   return lowest > highest ? null : (lowest, highest);
 }
+
+/// The number of reviews that the calendar's darkest shade ends at: the
+/// 24-hour review [limit], so a shade means the same share of a full day from
+/// one month to the next, or with no limit (0) the [busiest] day shown.
+@visibleForTesting
+int activityScaleTop({required int limit, required int busiest}) =>
+    limit > 0 ? limit : busiest;
 
 /// The Monday of [day]'s week, at midnight. Built from the day number rather
 /// than by subtracting days, so a clock change in between can't land it on
@@ -72,7 +101,12 @@ String newCardsLeftText(int left, int limit) {
 }
 
 class ActivityHeatmapView extends StatefulWidget {
-  const ActivityHeatmapView({super.key});
+  const ActivityHeatmapView({super.key, this.onBack});
+
+  /// Shows a back arrow that calls this, for when the screen is shown in
+  /// place of the tabs rather than pushed over them (a pushed screen gets
+  /// its back arrow by itself).
+  final VoidCallback? onBack;
 
   @override
   State<ActivityHeatmapView> createState() => _ActivityHeatmapViewState();
@@ -107,7 +141,12 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
     final theme = Theme.of(context);
     final today = DateTime.now();
     return Scaffold(
-      appBar: AppBar(title: const Text('Study activity')),
+      appBar: AppBar(
+        leading: widget.onBack == null
+            ? null
+            : BackButton(onPressed: widget.onBack),
+        title: const Text('Study activity'),
+      ),
       body: Consumer<AppProvider>(
         builder: (context, provider, _) {
           final counts = provider.dailyReviewCounts;
@@ -160,6 +199,11 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
             0,
             (maximum, count) => count > maximum ? count : maximum,
           );
+          final hasReviewLimit = provider.maxReviews24h > 0;
+          final scaleTop = activityScaleTop(
+            limit: provider.maxReviews24h,
+            busiest: busiest,
+          );
           final ratingCounts = provider.dailyRatingCounts;
           final newCardCounts = provider.dailyNewCardCounts;
           final forecast = dueForecast(provider.lessons, today);
@@ -195,261 +239,377 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
           }
 
           if (hasActivity) _scrollToEnd();
-          return ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
-              // Before the first review, the cards waiting are still worth
-              // showing, under a note in place of the calendar.
-              if (!hasActivity) ...[
-                Row(
-                  children: [
-                    const Icon(Icons.calendar_month_outlined),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'No study activity yet',
-                            style: theme.textTheme.titleMedium,
-                          ),
-                          const Text(
-                            'Review vocabulary to see your activity here.',
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final available = constraints.maxWidth - 2 * _pagePadding;
+              final contentWidth = available < _maxContentWidth
+                  ? available
+                  : _maxContentWidth;
+              // Centred by padding rather than a narrower list, so the whole
+              // window still scrolls and the scrollbar stays at its edge.
+              final sidePadding = (constraints.maxWidth - contentWidth) / 2;
+              final forecastSection = maxDue > 0
+                  ? _forecastSection(
+                      context,
+                      forecast: forecast,
+                      today: today,
+                      maxDue: maxDue,
+                      maxReviews24h: provider.maxReviews24h,
+                    )
+                  : null;
+              final newCardsSection =
+                  newPerDay.any((count) => count > 0) || newLeft > 0
+                  ? _newCardsSection(
+                      context,
+                      perDay: newPerDay,
+                      today: today,
+                      startedLast24h: provider.newCardsIntroducedLast24h,
+                      limit: provider.maxNewCards24h,
+                      left: newLeft,
+                    )
+                  : null;
+              return ListView(
+                padding: EdgeInsets.symmetric(
+                  horizontal: sidePadding,
+                  vertical: _pagePadding,
                 ),
-                const SizedBox(height: 24),
-              ] else ...[
-                _summary(
-                  context,
-                  streak: studyStreak(counts, today),
-                  todayReviews: counts[todayDate] ?? 0,
-                  todayNew: newCardCounts[todayDate] ?? 0,
-                  recent: recentRatings(ratingCounts, today),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  '${formatCount(total)} ${total == 1 ? 'review' : 'reviews'} '
-                  'in the past year',
-                  style: theme.textTheme.titleSmall,
-                ),
-                const SizedBox(height: 16),
-                SingleChildScrollView(
-                  controller: _scrollController,
-                  scrollDirection: Axis.horizontal,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const SizedBox(width: 32),
-                          for (var index = 0; index < weeks.length; index++)
-                            SizedBox(
-                              width: 16,
-                              height: 56,
-                              child: Center(
-                                child: RotatedBox(
-                                  quarterTurns: 3,
-                                  child: Text(
-                                    _monthLabel(weeks, index),
-                                    maxLines: 1,
-                                    style: theme.textTheme.labelSmall,
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          SizedBox(
-                            width: 28,
-                            child: Column(
-                              children: [
-                                // One row per day, Monday first, as in
-                                // calendarWeekStart.
-                                for (final label in const [
-                                  'Mon',
-                                  '',
-                                  'Wed',
-                                  '',
-                                  'Fri',
-                                  '',
-                                  '',
-                                ])
-                                  SizedBox(
-                                    height: 16,
-                                    child: Text(
-                                      label,
-                                      style: theme.textTheme.labelSmall,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                          for (final week in weeks)
-                            Padding(
-                              padding: const EdgeInsets.only(right: 4),
-                              child: Column(
-                                children: [
-                                  for (
-                                    var dayIndex = 0;
-                                    dayIndex < 7;
-                                    dayIndex++
-                                  )
-                                    _dayCell(
-                                      context,
-                                      DateTime(
-                                        week.year,
-                                        week.month,
-                                        week.day + dayIndex,
-                                      ),
-                                      firstDay,
-                                      today,
-                                      counts,
-                                      ratingCounts,
-                                      newCardCounts,
-                                      busiest,
-                                    ),
-                                ],
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Text('Less', style: theme.textTheme.labelSmall),
-                    const SizedBox(width: 6),
-                    for (var level = 0; level <= 4; level++)
-                      Tooltip(
-                        message: _legendLabel(level, busiest),
-                        child: Container(
-                          width: 12,
-                          height: 12,
-                          margin: const EdgeInsets.only(right: 4),
-                          decoration: BoxDecoration(
-                            color: _activityColor(theme.colorScheme, level),
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                      ),
-                    Text('More', style: theme.textTheme.labelSmall),
-                  ],
-                ),
-                const SizedBox(height: 24),
-              ],
-              Text('Cards by stage', style: theme.textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Wrap(
                 children: [
-                  for (final (index, entry) in stageCounts.entries.indexed) ...[
-                    if (index > 0) const Text(' · '),
-                    _stageCount(entry.key, entry.value),
-                  ],
-                ],
-              ),
-              const SizedBox(height: 24),
-              if (maxDue > 0) ...[
-                Text('Next 7 days', style: theme.textTheme.titleMedium),
-                // The Study button counts fewer when the 24-hour limit
-                // holds some back, so say these are all the cards due.
-                if (provider.maxReviews24h > 0)
-                  Text(
-                    'All cards coming due, before your limit of '
-                    '${formatCount(provider.maxReviews24h)} reviews '
-                    'per 24 hours',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  height: 110,
-                  child: Row(
-                    children: [
-                      for (var index = 0; index < forecast.length; index++)
-                        Expanded(
-                          child: _bar(
-                            context,
-                            label: _forecastLabel(today, index),
-                            count: forecast[index],
-                            maximum: maxDue,
-                            // Today's bar is the lesson list's Due count.
-                            color: index == 0 ? _dueColor : null,
-                            tooltip:
-                                '${_forecastLabel(today, index)}: '
-                                '${formatCount(forecast[index])} due',
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-              ],
-              if (newPerDay.any((count) => count > 0) || newLeft > 0) ...[
-                _newCardsSection(
-                  context,
-                  perDay: newPerDay,
-                  today: today,
-                  startedLast24h: provider.newCardsIntroducedLast24h,
-                  limit: provider.maxNewCards24h,
-                  left: newLeft,
-                ),
-                const SizedBox(height: 24),
-              ],
-              // Each section above ends with its own gap.
-              if (leeches.isNotEmpty) ...[
-                Text(
-                  'Leeches (${leeches.length})',
-                  style: theme.textTheme.titleMedium,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Cards with at least $_leechLapseThreshold lapses may need a new approach.',
-                  style: theme.textTheme.bodyMedium,
-                ),
-                const SizedBox(height: 8),
-                for (final leech in leeches)
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.warning_amber_rounded),
-                    title: Text(
-                      leech.card.direction == CardDirection.targetToNative
-                          ? leech.vocab.targetWord
-                          : leech.vocab.translation,
-                    ),
-                    subtitle: Text(
-                      leech.card.direction == CardDirection.targetToNative
-                          ? leech.vocab.translation
-                          : leech.vocab.targetWord,
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
+                  // Before the first review, the cards waiting are still worth
+                  // showing, under a note in place of the calendar.
+                  if (!hasActivity) ...[
+                    Row(
                       children: [
-                        Text('${leech.card.lapses} lapses'),
-                        IconButton(
-                          tooltip: 'Suspend',
-                          icon: const Icon(Icons.pause_circle_outline),
-                          onPressed: () => _suspendLeech(provider, leech),
+                        const Icon(Icons.calendar_month_outlined),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'No study activity yet',
+                                style: theme.textTheme.titleMedium,
+                              ),
+                              const Text(
+                                'Review vocabulary to see your activity here.',
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
+                    const SizedBox(height: 24),
+                  ] else ...[
+                    _summary(
+                      context,
+                      wide: contentWidth >= _summaryRowWidth,
+                      narrow: contentWidth < _narrowWidth,
+                      streak: studyStreak(counts, today),
+                      todayReviews: counts[todayDate] ?? 0,
+                      todayNew: newCardCounts[todayDate] ?? 0,
+                      recent: recentRatings(ratingCounts, today),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      '${formatCount(total)} ${total == 1 ? 'review' : 'reviews'} '
+                      'in the past year',
+                      style: theme.textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 16),
+                    // As wide as the calendar, up to the screen, so the legend
+                    // ends under the newest week instead of at the far edge of
+                    // a wide window.
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: IntrinsicWidth(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            SingleChildScrollView(
+                              controller: _scrollController,
+                              scrollDirection: Axis.horizontal,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const SizedBox(width: 32),
+                                      for (
+                                        var index = 0;
+                                        index < weeks.length;
+                                        index++
+                                      )
+                                        SizedBox(
+                                          width: 16,
+                                          height: 56,
+                                          child: Center(
+                                            child: RotatedBox(
+                                              quarterTurns: 3,
+                                              child: Text(
+                                                _monthLabel(weeks, index),
+                                                maxLines: 1,
+                                                style:
+                                                    theme.textTheme.labelSmall,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      SizedBox(
+                                        width: 28,
+                                        child: Column(
+                                          children: [
+                                            // One row per day, Monday first, as in
+                                            // calendarWeekStart.
+                                            for (final label in const [
+                                              'Mon',
+                                              '',
+                                              'Wed',
+                                              '',
+                                              'Fri',
+                                              '',
+                                              '',
+                                            ])
+                                              SizedBox(
+                                                height: 16,
+                                                child: Text(
+                                                  label,
+                                                  style: theme
+                                                      .textTheme
+                                                      .labelSmall,
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                      for (final week in weeks)
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            right: 4,
+                                          ),
+                                          child: Column(
+                                            children: [
+                                              for (
+                                                var dayIndex = 0;
+                                                dayIndex < 7;
+                                                dayIndex++
+                                              )
+                                                _dayCell(
+                                                  context,
+                                                  DateTime(
+                                                    week.year,
+                                                    week.month,
+                                                    week.day + dayIndex,
+                                                  ),
+                                                  firstDay,
+                                                  today,
+                                                  counts,
+                                                  ratingCounts,
+                                                  newCardCounts,
+                                                  scaleTop,
+                                                ),
+                                            ],
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                // The scale's two ends in numbers, since the
+                                // squares' tooltips need a hover or a long
+                                // press to find. A day can go over the limit
+                                // (first reviews and same-day repeats don't
+                                // count towards it), hence the plus.
+                                Text(
+                                  scaleTop > 0 ? '0' : 'Less',
+                                  key: const ValueKey('legend-low'),
+                                  style: theme.textTheme.labelSmall,
+                                ),
+                                const SizedBox(width: 6),
+                                for (var level = 0; level <= 4; level++)
+                                  Tooltip(
+                                    message: _legendLabel(
+                                      level,
+                                      scaleTop,
+                                      isLimit: hasReviewLimit,
+                                    ),
+                                    child: Container(
+                                      width: 12,
+                                      height: 12,
+                                      margin: const EdgeInsets.only(right: 4),
+                                      decoration: BoxDecoration(
+                                        color: _activityColor(
+                                          theme.colorScheme,
+                                          level,
+                                        ),
+                                        borderRadius: BorderRadius.circular(2),
+                                      ),
+                                    ),
+                                  ),
+                                // Flexible, so the label wraps under a large
+                                // text size instead of overflowing a phone.
+                                Flexible(
+                                  child: Text(
+                                    scaleTop > 0
+                                        ? '${formatCount(scaleTop)}'
+                                              '${hasReviewLimit ? '+' : ''} '
+                                              '${scaleTop == 1 ? 'review' : 'reviews'} '
+                                              // Says where the number comes
+                                              // from, so 100 isn't taken for
+                                              // a day's count.
+                                              '${hasReviewLimit ? '(daily limit)' : '(busiest day)'}'
+                                        : 'More',
+                                    key: const ValueKey('legend-high'),
+                                    style: theme.textTheme.labelSmall,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                  Text('Cards by stage', style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    children: [
+                      for (final (index, entry)
+                          in stageCounts.entries.indexed) ...[
+                        if (index > 0) const Text(' · '),
+                        _stageCount(entry.key, entry.value),
+                      ],
+                    ],
                   ),
-              ],
-            ],
+                  const SizedBox(height: 24),
+                  if (forecastSection != null &&
+                      newCardsSection != null &&
+                      contentWidth >= _twoColumnWidth) ...[
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: forecastSection),
+                        const SizedBox(width: 40),
+                        Expanded(child: newCardsSection),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                  ] else ...[
+                    if (forecastSection != null) ...[
+                      forecastSection,
+                      const SizedBox(height: 24),
+                    ],
+                    if (newCardsSection != null) ...[
+                      newCardsSection,
+                      const SizedBox(height: 24),
+                    ],
+                  ],
+                  // Each section above ends with its own gap.
+                  if (leeches.isNotEmpty) ...[
+                    Text(
+                      'Leeches (${leeches.length})',
+                      style: theme.textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Cards with at least $_leechLapseThreshold lapses may need a new approach.',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    for (final leech in leeches)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.warning_amber_rounded),
+                        title: Text(
+                          leech.card.direction == CardDirection.targetToNative
+                              ? leech.vocab.targetWord
+                              : leech.vocab.translation,
+                        ),
+                        subtitle: Text(
+                          leech.card.direction == CardDirection.targetToNative
+                              ? leech.vocab.translation
+                              : leech.vocab.targetWord,
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('${leech.card.lapses} lapses'),
+                            IconButton(
+                              tooltip: 'Suspend',
+                              icon: const Icon(Icons.pause_circle_outline),
+                              onPressed: () => _suspendLeech(provider, leech),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ],
+              );
+            },
           );
         },
       ),
+    );
+  }
+
+  /// A bar per day for the cards coming due over the next week.
+  Widget _forecastSection(
+    BuildContext context, {
+    required List<int> forecast,
+    required DateTime today,
+    required int maxDue,
+    required int maxReviews24h,
+  }) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Next 7 days', style: theme.textTheme.titleMedium),
+        // The Study button counts fewer when the 24-hour limit holds some
+        // back, so say these are all the cards due.
+        if (maxReviews24h > 0)
+          Text(
+            'All cards coming due, before your limit of '
+            '${formatCount(maxReviews24h)} reviews '
+            'per 24 hours',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 110,
+          child: Row(
+            children: [
+              for (var index = 0; index < forecast.length; index++)
+                Expanded(
+                  child: _bar(
+                    context,
+                    label: _forecastLabel(today, index),
+                    count: forecast[index],
+                    maximum: maxDue,
+                    // Today's bar is the lesson list's Due count.
+                    color: index == 0 ? _dueColor : null,
+                    tooltip:
+                        '${_forecastLabel(today, index)}: '
+                        '${formatCount(forecast[index])} due',
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -521,17 +681,24 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
     );
   }
 
-  /// What a legend square's shade stands for, with the calendar's busiest
-  /// day at [busiest].
-  String _legendLabel(int level, int busiest) {
+  /// What a legend square's shade stands for, on a scale that ends at [top]:
+  /// the review limit when [isLimit], otherwise the busiest day shown.
+  String _legendLabel(int level, int top, {required bool isLimit}) {
     if (level == 0) return 'No reviews';
-    final range = activityLevelRange(level, busiest);
+    final range = activityLevelRange(level, top);
     if (range == null) {
-      if (busiest <= 0) return 'Not used yet';
-      return 'Not used: the busiest day had '
-          '${formatCount(busiest)} ${busiest == 1 ? 'review' : 'reviews'}';
+      if (top <= 0) return 'Not used yet';
+      final reviews = '${formatCount(top)} ${top == 1 ? 'review' : 'reviews'}';
+      return isLimit
+          ? 'Not used with a limit of $reviews'
+          : 'Not used: the busiest day had $reviews';
     }
     final (lowest, highest) = range;
+    // The darkest shade has no upper end: days over the limit get it too.
+    if (isLimit && level == 4) {
+      return '${formatCount(lowest)} ${lowest == 1 ? 'review' : 'reviews'} '
+          'or more';
+    }
     if (lowest == highest) {
       return '${formatCount(lowest)} ${lowest == 1 ? 'review' : 'reviews'}';
     }
@@ -556,40 +723,171 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
     SrsStatus.review => 'Review',
   };
 
-  /// Streak and today's reviews on one line, then right and wrong over the
-  /// last 30 days as a ring.
+  /// A tile each for the streak, today's reviews and the answers right over
+  /// the last 30 days. On a [wide] screen they share a row; otherwise the two
+  /// counts share one and the answers go underneath.
   Widget _summary(
     BuildContext context, {
+    required bool wide,
+    required bool narrow,
     required int streak,
     required int todayReviews,
     required int todayNew,
     required Map<SrsRating, int> recent,
   }) {
-    final theme = Theme.of(context);
     final (:right, :wrong) = rightWrongOf(recent);
-    final parts = [
-      if (streak > 0) '$streak-day streak',
-      'Today ${formatCount(todayReviews)} '
-          '${todayReviews == 1 ? 'review' : 'reviews'}'
-          '${todayNew > 0 ? ', ${formatCount(todayNew)} new' : ''}',
-    ];
+    final streakTile = _statTile(
+      context,
+      key: const ValueKey('summary-streak'),
+      label: 'Streak',
+      value: formatCount(streak),
+      unit: streak == 1 ? 'day' : 'days',
+    );
+    final todayTile = _statTile(
+      context,
+      key: const ValueKey('summary-today'),
+      label: 'Today',
+      value: formatCount(todayReviews),
+      unit: todayReviews == 1 ? 'review' : 'reviews',
+      // "cards", to tell it from Cards by stage's "3 new".
+      note: todayNew > 0
+          ? '${formatCount(todayNew)} new ${todayNew == 1 ? 'card' : 'cards'}'
+          : null,
+    );
+    final answersTile = right + wrong > 0
+        ? _answersTile(context, recent, stacked: narrow)
+        : null;
+    const gap = SizedBox(width: 12);
+    if (wide) {
+      // IntrinsicHeight, so the three tiles are as tall as the tallest.
+      return IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(flex: 2, child: streakTile),
+            gap,
+            Expanded(flex: 2, child: todayTile),
+            gap,
+            Expanded(flex: 5, child: answersTile ?? const SizedBox()),
+          ],
+        ),
+      );
+    }
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(parts.join(' · '), style: theme.textTheme.titleMedium),
-        if (right + wrong > 0) ...[
-          const SizedBox(height: 16),
-          _rightWrongRing(context, recent),
-        ],
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: streakTile),
+              gap,
+              Expanded(child: todayTile),
+            ],
+          ),
+        ),
+        if (answersTile != null) ...[const SizedBox(height: 12), answersTile],
       ],
     );
   }
 
-  /// A ring of right (green) and wrong (red) answers with the percentage
-  /// right in the middle, then a line each for right and wrong, with the
-  /// counts of its two ratings at the far end, so it shows whether Good or
-  /// Easy, and Again or Hard, made up more.
-  Widget _rightWrongRing(BuildContext context, Map<SrsRating, int> recent) {
+  /// The filled, rounded box of a summary tile, with its [label] on top.
+  Widget _tile(
+    BuildContext context, {
+    Key? key,
+    required String label,
+    required Widget child,
+  }) {
+    final theme = Theme.of(context);
+    return Container(
+      key: key,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainer,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: theme.textTheme.labelLarge?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 8),
+          child,
+        ],
+      ),
+    );
+  }
+
+  /// A summary tile for one count: the [value] large with its [unit] after
+  /// it, such as "9 days", and a [note] underneath.
+  Widget _statTile(
+    BuildContext context, {
+    required Key key,
+    required String label,
+    required String value,
+    required String unit,
+    String? note,
+  }) {
+    final theme = Theme.of(context);
+    final quiet = theme.colorScheme.onSurfaceVariant;
+    return MergeSemantics(
+      child: _tile(
+        context,
+        key: key,
+        label: label,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                // Shrinks rather than overflows when a long count, such as
+                // "1,234", meets a narrow tile or a large text size.
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.bottomLeft,
+                    child: Text(
+                      value,
+                      maxLines: 1,
+                      style: theme.textTheme.headlineMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  unit,
+                  style: theme.textTheme.bodyMedium?.copyWith(color: quiet),
+                ),
+              ],
+            ),
+            if (note != null)
+              Text(
+                note,
+                style: theme.textTheme.bodySmall?.copyWith(color: quiet),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// A summary tile with a ring of right (green) and wrong (red) answers,
+  /// the percentage right in the middle, then a line each for right and
+  /// wrong, with the counts of its two ratings at the far end, so it shows
+  /// whether Good or Easy, and Again or Hard, made up more.
+  Widget _answersTile(
+    BuildContext context,
+    Map<SrsRating, int> recent, {
+    required bool stacked,
+  }) {
     final theme = Theme.of(context);
     final (:right, :wrong) = rightWrongOf(recent);
     final answered = right + wrong;
@@ -608,7 +906,7 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
     TableRow legend(Color color, String text, String ratings) => TableRow(
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2),
+          padding: const EdgeInsets.symmetric(vertical: 3),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -624,63 +922,110 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
         ),
       ],
     );
+    // For a narrow tile: the ratings under their count, not beside it.
+    Widget stackedLegend(Color color, String text, String ratings) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.circle, size: 10, color: color),
+              const SizedBox(width: 6),
+              Flexible(child: Text(text)),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 16),
+            child: Text(ratings, style: quiet),
+          ),
+        ],
+      ),
+    );
+    final rightRatings = ratings(
+      SrsRating.good,
+      'Good',
+      SrsRating.easy,
+      'Easy',
+    );
+    final wrongRatings = ratings(
+      SrsRating.again,
+      'Again',
+      SrsRating.hard,
+      'Hard',
+    );
     return Semantics(
       label:
           '$percent% right in the last 30 days: ${formatCount(right)} right, '
           '${formatCount(wrong)} wrong',
       excludeSemantics: true,
-      child: Row(
-        children: [
-          SizedBox.square(
-            dimension: 56,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                // The same colours as the study session's progress bar.
-                SizedBox.expand(
-                  child: CircularProgressIndicator(
-                    value: right / answered,
-                    strokeWidth: 6,
-                    color: _rightColor,
-                    backgroundColor: _wrongColor,
+      child: _tile(
+        context,
+        key: const ValueKey('summary-answers'),
+        label: 'Last 30 days',
+        child: Row(
+          children: [
+            SizedBox.square(
+              dimension: 56,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  // The same colours as the study session's progress bar.
+                  SizedBox.expand(
+                    child: CircularProgressIndicator(
+                      value: right / answered,
+                      strokeWidth: 6,
+                      color: _rightColor,
+                      backgroundColor: _wrongColor,
+                    ),
                   ),
-                ),
-                Text('$percent%', style: theme.textTheme.labelLarge),
-              ],
+                  Text('$percent%', style: theme.textTheme.labelLarge),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // A table, so the ratings start in line after the longer
-                // count, close to both.
-                Table(
-                  columnWidths: const {
-                    0: IntrinsicColumnWidth(),
-                    1: FlexColumnWidth(),
-                  },
-                  defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-                  children: [
-                    legend(
-                      _rightColor,
-                      '${formatCount(right)} right',
-                      ratings(SrsRating.good, 'Good', SrsRating.easy, 'Easy'),
+            const SizedBox(width: 16),
+            Expanded(
+              child: stacked
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        stackedLegend(
+                          _rightColor,
+                          '${formatCount(right)} right',
+                          rightRatings,
+                        ),
+                        stackedLegend(
+                          _wrongColor,
+                          '${formatCount(wrong)} wrong',
+                          wrongRatings,
+                        ),
+                      ],
+                    )
+                  // A table, so the ratings start in line after the longer
+                  // count, close to both.
+                  : Table(
+                      columnWidths: const {
+                        0: IntrinsicColumnWidth(),
+                        1: FlexColumnWidth(),
+                      },
+                      defaultVerticalAlignment:
+                          TableCellVerticalAlignment.middle,
+                      children: [
+                        legend(
+                          _rightColor,
+                          '${formatCount(right)} right',
+                          rightRatings,
+                        ),
+                        legend(
+                          _wrongColor,
+                          '${formatCount(wrong)} wrong',
+                          wrongRatings,
+                        ),
+                      ],
                     ),
-                    legend(
-                      _wrongColor,
-                      '${formatCount(wrong)} wrong',
-                      ratings(SrsRating.again, 'Again', SrsRating.hard, 'Hard'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text('Last 30 days', style: quiet),
-              ],
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

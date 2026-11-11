@@ -6,6 +6,7 @@ import 'package:lingua_srs/models/vocab_item.dart';
 import 'package:lingua_srs/providers/app_provider.dart';
 import 'package:lingua_srs/services/storage_service.dart';
 import 'package:lingua_srs/views/activity_heatmap_view.dart';
+import 'package:lingua_srs/views/sentence_pool_view.dart';
 import 'package:lingua_srs/widgets/adaptive_scaffold.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -62,7 +63,7 @@ void main() {
       find.text('Review vocabulary to see your activity here.'),
       findsOneWidget,
     );
-    expect(find.text('Less'), findsNothing);
+    expect(find.byKey(const ValueKey('legend-low')), findsNothing);
     expect(find.text('Jan'), findsNothing);
     expect(find.byType(Scrollable), findsNothing);
     expect(tester.takeException(), isNull);
@@ -96,8 +97,15 @@ void main() {
       find.text('${SrsRating.values.length} reviews in the past year'),
       findsOneWidget,
     );
-    expect(find.text('Less'), findsOneWidget);
-    expect(find.text('More'), findsOneWidget);
+    // The legend's ends are the scale in numbers: none, and the review limit.
+    expect(
+      tester.widget<Text>(find.byKey(const ValueKey('legend-low'))).data,
+      '0',
+    );
+    expect(
+      tester.widget<Text>(find.byKey(const ValueKey('legend-high'))).data,
+      '100+ reviews (daily limit)',
+    );
     const months = [
       'Jan',
       'Feb',
@@ -300,7 +308,18 @@ void main() {
       ),
     );
 
-    expect(find.text('2-day streak · Today 3 reviews, 3 new'), findsOneWidget);
+    Finder inTile(String key, String text) => find.descendant(
+      of: find.byKey(ValueKey(key)),
+      matching: find.text(text),
+    );
+    expect(inTile('summary-streak', 'Streak'), findsOneWidget);
+    expect(inTile('summary-streak', '2'), findsOneWidget);
+    expect(inTile('summary-streak', 'days'), findsOneWidget);
+    expect(inTile('summary-today', 'Today'), findsOneWidget);
+    expect(inTile('summary-today', '3'), findsOneWidget);
+    expect(inTile('summary-today', 'reviews'), findsOneWidget);
+    expect(inTile('summary-today', '3 new cards'), findsOneWidget);
+    expect(inTile('summary-answers', 'Last 30 days'), findsOneWidget);
     // Good and Easy are right; Again and Hard are wrong: 2 of 4.
     expect(find.text('50%'), findsOneWidget);
     expect(find.text('2 right'), findsOneWidget);
@@ -398,6 +417,170 @@ void main() {
       (todayBar.decoration as BoxDecoration?)?.color,
       Colors.amber.shade800,
     );
+  });
+
+  group('on a wide window', () {
+    Future<void> pumpAt(WidgetTester tester, double width) async {
+      tester.view.physicalSize = Size(width, 2000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      provider.lessons.add(
+        Lesson(
+          title: 'L',
+          vocabularies: [
+            VocabItem(
+              targetWord: 'a',
+              translation: 'a',
+              pos: 'nouns',
+              cardTargetToNative: SrsCard(
+                direction: CardDirection.targetToNative,
+                status: SrsStatus.review,
+                interval: 3,
+                lastReviewed: DateTime.now().subtract(const Duration(days: 5)),
+                dueDate: DateTime.now().subtract(const Duration(days: 2)),
+              ),
+            ),
+            VocabItem(targetWord: 'c', translation: 'c', pos: 'nouns'),
+          ],
+        ),
+      );
+      await provider.recordCardReview(
+        SrsCard(direction: CardDirection.targetToNative),
+        SrsRating.good,
+      );
+      await tester.pumpWidget(
+        ChangeNotifierProvider<AppProvider>.value(
+          value: provider,
+          child: const MaterialApp(home: ActivityHeatmapView()),
+        ),
+      );
+    }
+
+    testWidgets('the content is centred at a fixed width', (tester) async {
+      await pumpAt(tester, 1600);
+
+      // 880 wide, so 360 is left over on each side. The sections used to
+      // stretch from one edge of the window to the other.
+      expect(tester.getTopLeft(find.text('Cards by stage')).dx, 360);
+      expect(
+        tester.getTopRight(find.text('Today').last).dx,
+        lessThanOrEqualTo(1600 - 360),
+      );
+      // Next 7 days and New cards share a row.
+      final forecast = tester.getTopLeft(find.text('Next 7 days'));
+      final newCards = tester.getTopLeft(find.text('New cards'));
+      expect(newCards.dy, forecast.dy);
+      expect(newCards.dx, greaterThan(forecast.dx));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the summary tiles share a row', (tester) async {
+      await pumpAt(tester, 1600);
+
+      final streak = tester.getRect(
+        find.byKey(const ValueKey('summary-streak')),
+      );
+      final today = tester.getRect(find.byKey(const ValueKey('summary-today')));
+      final answers = tester.getRect(
+        find.byKey(const ValueKey('summary-answers')),
+      );
+      expect(streak.left, 360);
+      expect(today.left, greaterThan(streak.right));
+      expect(answers.left, greaterThan(today.right));
+      expect(answers.right, closeTo(1600 - 360, 0.01));
+      // One row, all as tall as the tallest.
+      expect(today.top, streak.top);
+      expect(answers.top, streak.top);
+      expect(today.height, streak.height);
+      expect(answers.height, streak.height);
+    });
+
+    testWidgets('a tablet in portrait gets the summary row, charts stacked', (
+      tester,
+    ) async {
+      await pumpAt(tester, 690);
+
+      final streak = tester.getRect(
+        find.byKey(const ValueKey('summary-streak')),
+      );
+      final today = tester.getRect(find.byKey(const ValueKey('summary-today')));
+      final answers = tester.getRect(
+        find.byKey(const ValueKey('summary-answers')),
+      );
+      expect(streak.left, 20);
+      expect(today.top, streak.top);
+      expect(answers.top, streak.top);
+      expect(answers.right, closeTo(670, 0.01));
+      // Too narrow for the two charts side by side.
+      final forecast = tester.getTopLeft(find.text('Next 7 days'));
+      final newCards = tester.getTopLeft(find.text('New cards'));
+      expect(newCards.dx, forecast.dx);
+      expect(newCards.dy, greaterThan(forecast.dy));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the narrowest phone puts the ratings under their counts', (
+      tester,
+    ) async {
+      await pumpAt(tester, 320);
+
+      // One Good answer, from pumpAt.
+      final count = tester.getRect(find.text('1 right'));
+      final ratings = tester.getRect(find.text('Good 1 · Easy 0'));
+      expect(ratings.top, greaterThanOrEqualTo(count.bottom));
+      expect(ratings.right, lessThanOrEqualTo(300));
+      expect(tester.takeException(), isNull);
+
+      // At 360 they are beside the count, as on wider screens.
+      tester.view.physicalSize = const Size(360, 2000);
+      await tester.pumpAndSettle();
+      expect(
+        tester.getRect(find.text('Good 1 · Easy 0')).left,
+        greaterThan(tester.getRect(find.text('1 right')).right),
+      );
+    });
+
+    testWidgets('the legend ends near a short calendar', (tester) async {
+      await pumpAt(tester, 1600);
+
+      // One week of calendar: the legend sat at the window's far edge.
+      expect(
+        tester.getTopRight(find.byKey(const ValueKey('legend-high'))).dx,
+        lessThan(800),
+      );
+      expect(
+        tester.getTopLeft(find.byKey(const ValueKey('legend-low'))).dx,
+        greaterThanOrEqualTo(360),
+      );
+    });
+
+    testWidgets('a narrow window keeps one column, edge to edge', (
+      tester,
+    ) async {
+      await pumpAt(tester, 400);
+
+      expect(tester.getTopLeft(find.text('Cards by stage')).dx, 20);
+      final forecast = tester.getTopLeft(find.text('Next 7 days'));
+      final newCards = tester.getTopLeft(find.text('New cards'));
+      expect(newCards.dx, forecast.dx);
+      expect(newCards.dy, greaterThan(forecast.dy));
+      // Streak and Today share a row, with the answers underneath.
+      final streak = tester.getRect(
+        find.byKey(const ValueKey('summary-streak')),
+      );
+      final today = tester.getRect(find.byKey(const ValueKey('summary-today')));
+      final answers = tester.getRect(
+        find.byKey(const ValueKey('summary-answers')),
+      );
+      expect(streak.left, 20);
+      expect(today.top, streak.top);
+      expect(today.right, closeTo(380, 0.01));
+      expect(answers.top, greaterThan(streak.bottom));
+      expect(answers.left, 20);
+      expect(answers.right, 380);
+      expect(tester.takeException(), isNull);
+    });
   });
 
   testWidgets('a leech can be suspended, and the suspension undone', (
@@ -520,7 +703,72 @@ void main() {
     });
   });
 
-  testWidgets('shades days by the busiest day shown', (tester) async {
+  test(
+    'the scale ends at the review limit, or the busiest day without one',
+    () {
+      expect(activityScaleTop(limit: 100, busiest: 69), 100);
+      expect(activityScaleTop(limit: 100, busiest: 150), 100);
+      expect(activityScaleTop(limit: 0, busiest: 69), 69);
+      // Over the top is still the darkest shade.
+      expect(activityLevel(150, 100), 4);
+    },
+  );
+
+  testWidgets('shades days by the review limit', (tester) async {
+    final today = DateTime.now();
+    DateTime daysAgo(int days) =>
+        DateTime(today.year, today.month, today.day - days);
+    late AppProvider fresh;
+    await tester.runAsync(() async {
+      await StorageService.saveDailyReviewCounts({
+        daysAgo(0): 150,
+        daysAgo(1): 100,
+        daysAgo(2): 40,
+      });
+      fresh = AppProvider();
+      for (var attempt = 0; attempt < 100 && fresh.isLoading; attempt++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    });
+    addTearDown(fresh.dispose);
+    expect(fresh.maxReviews24h, 100);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppProvider>.value(
+        value: fresh,
+        child: const MaterialApp(home: ActivityHeatmapView()),
+      ),
+    );
+
+    Color? cellColor(String message) {
+      final box = tester.widget<Container>(
+        find
+            .descendant(
+              of: find.byTooltip(message),
+              matching: find.byType(Container),
+            )
+            .last,
+      );
+      return (box.decoration as BoxDecoration?)?.color;
+    }
+
+    // A day at the limit and a day over it are both the darkest shade; by
+    // the busiest day, 100 was a lighter shade than 150.
+    final over = cellColor('${dayLabel(daysAgo(0))}: 150 reviews');
+    expect(cellColor('${dayLabel(daysAgo(1))}: 100 reviews'), over);
+    expect(cellColor('${dayLabel(daysAgo(2))}: 40 reviews'), isNot(over));
+    expect(cellColor('76 reviews or more'), over);
+    expect(find.byTooltip('1–25 reviews'), findsOneWidget);
+    expect(find.byTooltip('76–100 reviews'), findsNothing);
+    expect(
+      tester.widget<Text>(find.byKey(const ValueKey('legend-high'))).data,
+      '100+ reviews (daily limit)',
+    );
+  });
+
+  testWidgets('shades days by the busiest day shown without a limit', (
+    tester,
+  ) async {
     final today = DateTime.now();
     final day = DateTime(today.year, today.month, today.day);
     final earlier = DateTime(today.year, today.month, today.day - 1);
@@ -531,6 +779,8 @@ void main() {
       for (var attempt = 0; attempt < 100 && fresh.isLoading; attempt++) {
         await Future<void>.delayed(const Duration(milliseconds: 10));
       }
+      // No review limit: the scale ends at the busiest day.
+      await fresh.setMaxReviews24h(0);
     });
     addTearDown(fresh.dispose);
 
@@ -573,6 +823,8 @@ void main() {
       for (var attempt = 0; attempt < 100 && fresh.isLoading; attempt++) {
         await Future<void>.delayed(const Duration(milliseconds: 10));
       }
+      // No review limit: the scale ends at the busiest day.
+      await fresh.setMaxReviews24h(0);
     });
     addTearDown(fresh.dispose);
 
@@ -584,8 +836,21 @@ void main() {
     );
 
     expect(find.text('1,234 reviews in the past year'), findsOneWidget);
+    // Today's tile shrinks the count to fit rather than overflowing.
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('summary-today')),
+        matching: find.text('1,234'),
+      ),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
     expect(find.byTooltip('${dayLabel(day)}: 1,234 reviews'), findsOneWidget);
     expect(find.byTooltip('926–1,234 reviews'), findsOneWidget);
+    expect(
+      tester.widget<Text>(find.byKey(const ValueKey('legend-high'))).data,
+      '1,234 reviews (busiest day)',
+    );
   });
 
   testWidgets('shows the cards waiting before the first review', (
@@ -612,7 +877,7 @@ void main() {
     expect(find.text('Cards by stage'), findsOneWidget);
     // Nouns study KO ➔ EN only by default: one card each.
     expect(find.byTooltip('New: 2 cards'), findsOneWidget);
-    expect(find.text('Less'), findsNothing);
+    expect(find.byKey(const ValueKey('legend-low')), findsNothing);
     expect(find.textContaining('in the past year'), findsNothing);
     expect(dayCells(), findsNothing);
   });
@@ -719,6 +984,15 @@ void main() {
     );
 
     expect(find.text('0 reviews in the past year'), findsOneWidget);
+    // No reviews yet, but the limit gives the scale its end.
+    expect(
+      tester.widget<Text>(find.byKey(const ValueKey('legend-low'))).data,
+      '0',
+    );
+    expect(
+      tester.widget<Text>(find.byKey(const ValueKey('legend-high'))).data,
+      '100+ reviews (daily limit)',
+    );
     expect(find.text('No study activity yet'), findsNothing);
     expect(find.text('Leeches (1)'), findsOneWidget);
     expect(find.text('Cards by stage'), findsOneWidget);
@@ -849,5 +1123,208 @@ void main() {
     expect(find.text('Study activity'), findsOneWidget);
     expect(find.text('No study activity yet'), findsOneWidget);
     expect(find.byType(Scrollable), findsNothing);
+  });
+
+  group('on desktop', () {
+    Future<void> pumpDesktop(WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        ChangeNotifierProvider<AppProvider>.value(
+          value: provider,
+          child: const MaterialApp(home: AdaptiveScaffold()),
+        ),
+      );
+    }
+
+    testWidgets('study activity is a tab in the navigation rail', (
+      tester,
+    ) async {
+      await pumpDesktop(tester);
+      expect(find.byType(ActivityHeatmapView), findsNothing);
+
+      await tester.tap(
+        find.descendant(
+          of: find.byType(NavigationRail),
+          matching: find.text('Study activity'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ActivityHeatmapView), findsOneWidget);
+      expect(find.text('No study activity yet'), findsOneWidget);
+      // A tab, not a pushed screen: the rail stays and there is no way back.
+      expect(find.byType(NavigationRail), findsOneWidget);
+      expect(find.byType(BackButton), findsNothing);
+    });
+
+    testWidgets('narrowing the window stays on study activity', (tester) async {
+      await pumpDesktop(tester);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(NavigationRail),
+          matching: find.text('Study activity'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Narrowed to the mobile layout, which has no tab for it: it stays
+      // open as a full screen. It used to drop back to Lessons.
+      tester.view.physicalSize = const Size(420, 900);
+      await tester.pumpAndSettle();
+      expect(find.byType(ActivityHeatmapView), findsOneWidget);
+      expect(find.byType(NavigationBar), findsNothing);
+      expect(find.byType(BackButton), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      // Widened again, it is the rail's tab once more.
+      tester.view.physicalSize = const Size(1400, 900);
+      await tester.pumpAndSettle();
+      expect(find.byType(ActivityHeatmapView), findsOneWidget);
+      expect(
+        tester
+            .widget<NavigationRail>(find.byType(NavigationRail))
+            .selectedIndex,
+        4,
+      );
+
+      // Narrow, the back arrow leads to Lessons and the bottom bar.
+      tester.view.physicalSize = const Size(420, 900);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(find.byType(ActivityHeatmapView), findsNothing);
+      expect(
+        tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+        0,
+      );
+      expect(find.byTooltip('More options'), findsOneWidget);
+    });
+
+    testWidgets('opened from the menu, it is the tab after widening', (
+      tester,
+    ) async {
+      // A foldable or tablet in portrait, then turned on its side.
+      tester.view.physicalSize = const Size(700, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        ChangeNotifierProvider<AppProvider>.value(
+          value: provider,
+          child: const MaterialApp(home: AdaptiveScaffold()),
+        ),
+      );
+      await tester.tap(find.byTooltip('More options'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Study activity'));
+      await tester.pumpAndSettle();
+      expect(find.byType(ActivityHeatmapView), findsOneWidget);
+      expect(find.byType(BackButton), findsOneWidget);
+
+      tester.view.physicalSize = const Size(900, 700);
+      await tester.pumpAndSettle();
+      // The same as choosing the tab there: the rail with it selected, and
+      // no back arrow. It used to stay a pushed screen covering the rail.
+      expect(find.byType(ActivityHeatmapView), findsOneWidget);
+      expect(find.byType(BackButton), findsNothing);
+      expect(
+        tester
+            .widget<NavigationRail>(find.byType(NavigationRail))
+            .selectedIndex,
+        4,
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('narrowing the window stays on the open tab', (tester) async {
+      await pumpDesktop(tester);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(NavigationRail),
+          matching: find.text('Sentence Pool'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      tester.view.physicalSize = const Size(420, 900);
+      await tester.pumpAndSettle();
+      // The pages used to open on the one they last showed.
+      expect(find.byType(SentencePoolView), findsOneWidget);
+      expect(
+        tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+        2,
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a short rail keeps its tabs and drops the logo and theme', (
+      tester,
+    ) async {
+      // A phone on its side: wide enough for the rail, but not tall.
+      tester.view.physicalSize = const Size(900, 400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        ChangeNotifierProvider<AppProvider>.value(
+          value: provider,
+          child: const MaterialApp(home: AdaptiveScaffold()),
+        ),
+      );
+
+      Finder inRail(Finder finder) =>
+          find.descendant(of: find.byType(NavigationRail), matching: finder);
+      expect(inRail(find.byIcon(Icons.auto_stories_rounded)), findsNothing);
+      expect(find.byTooltip('Switch to Dark'), findsNothing);
+      // All five tabs, on screen.
+      for (final icon in [
+        Icons.library_books,
+        Icons.translate_outlined,
+        Icons.format_quote_outlined,
+        Icons.forum_outlined,
+        Icons.calendar_month_outlined,
+      ]) {
+        expect(inRail(find.byIcon(icon)), findsOneWidget);
+        expect(
+          tester.getRect(inRail(find.byIcon(icon))).bottom,
+          lessThanOrEqualTo(400),
+        );
+      }
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(inRail(find.byIcon(Icons.calendar_month_outlined)));
+      await tester.pumpAndSettle();
+      expect(find.byType(ActivityHeatmapView), findsOneWidget);
+    });
+
+    testWidgets('a tall rail has the logo and the theme button', (
+      tester,
+    ) async {
+      await pumpDesktop(tester);
+
+      expect(
+        find.descendant(
+          of: find.byType(NavigationRail),
+          matching: find.byIcon(Icons.auto_stories_rounded),
+        ),
+        findsOneWidget,
+      );
+      expect(find.byTooltip('Switch to Dark'), findsOneWidget);
+    });
+
+    testWidgets('the Lessons options leave study activity to the tab', (
+      tester,
+    ) async {
+      await pumpDesktop(tester);
+
+      await tester.tap(find.byTooltip('More options'));
+      await tester.pumpAndSettle();
+      expect(find.text('Merge history / undo'), findsOneWidget);
+      // Only the rail's label.
+      expect(find.text('Study activity'), findsOneWidget);
+    });
   });
 }
