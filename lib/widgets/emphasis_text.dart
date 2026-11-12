@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Shows a sentence or its translation, with each `**emphasis**` segment in
 /// bold. Nothing else is interpreted, so sentences and cloze text (`(___)`) are

@@ -29,6 +29,7 @@ environment:
 # versions available, run `flutter pub outdated`.
 dependencies:
   app_links: ^7.2.2
+  material_ui: ^1.11.0
   flutter:
     sdk: flutter
 

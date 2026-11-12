@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// A switch flanked by icons for its two sides, e.g. moon (o ) sun.
 /// Off is the leading side, on is the trailing side.

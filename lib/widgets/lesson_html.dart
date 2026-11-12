@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:flutter/material.dart' show Brightness, Color, ThemeData;
+import 'package:material_ui/material_ui.dart' show Brightness, Color, ThemeData;
 import 'package:markdown/markdown.dart' as md;
 
 import '../models/lesson.dart' show looseNameKey;
