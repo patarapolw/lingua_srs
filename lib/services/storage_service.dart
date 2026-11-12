@@ -38,6 +38,7 @@ class StorageService {
   static const String _keyTypedQuestions = 'lingua_srs_typed_questions';
   static const String _keyAutoplay = 'lingua_srs_autoplay';
   static const String _keyShowAi = 'lingua_srs_show_ai';
+  static const String _keyActiveLanguage = 'lingua_srs_active_language';
   static const String _keyPronunciation = 'lingua_srs_pronunciation';
   static const String _keyLessonHierarchyOrder =
       'lingua_srs_lesson_hierarchy_order';
@@ -375,6 +376,18 @@ class StorageService {
   static Future<void> saveShowAi(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyShowAi, value);
+  }
+
+  /// The language whose lessons are shown on this device, as a
+  /// `Lesson.languageKey`, or null when none was picked.
+  static Future<String?> loadActiveLanguage() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyActiveLanguage);
+  }
+
+  static Future<void> saveActiveLanguage(String language) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyActiveLanguage, language);
   }
 
   static Future<Set<String>> loadPronunciationOptions() async {

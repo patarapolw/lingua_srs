@@ -1,0 +1,340 @@
+import 'dart:io';
+
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:lingua_srs/models/lesson.dart';
+import 'package:lingua_srs/providers/app_provider.dart';
+import 'package:lingua_srs/services/audio_service.dart';
+import 'package:lingua_srs/services/tts_voice.dart';
+import 'package:lingua_srs/views/vocab_pool_view.dart';
+import 'package:lingua_srs/widgets/language_selector.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'secret_storage_mock.dart';
+
+/// The tabs must not touch real audio plugins.
+class _FakeAudioService extends ChangeNotifier implements AudioService {
+  @override
+  TtsVoiceUsed? get lastVoice => null;
+  @override
+  bool get isPlaying => false;
+  @override
+  String? get currentlyPlayingKey => null;
+  @override
+  bool get usesOfflineTts => true;
+  @override
+  Future<void> stop() async {}
+  @override
+  dynamic noSuchMethod(Invocation invocation) => Future<void>.value();
+}
+
+const _korean = '''
+---
+vocabulary:
+  nouns:
+    - ko: 학생
+      en: student
+      examples:
+        - ko: 저는 **학생**이에요.
+          en: I am a **student**.
+---
+# Korean 1
+''';
+
+const _taiwan = '''
+---
+target: zh-TW
+vocabulary:
+  nouns:
+    - zh: 學生
+      en: student
+      examples:
+        - zh: 我是**學生**。
+          en: I am a **student**.
+    - zh: 老師
+      en: teacher
+---
+# Taiwan 1
+''';
+
+const _mainland = '''
+---
+target: zh-CN
+vocabulary:
+  nouns:
+    - zh: 学生
+      en: student
+---
+# Mainland 1
+''';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(setUpSecretStorage);
+
+  const pathProviderChannel = MethodChannel('plugins.flutter.io/path_provider');
+  late Directory storageDirectory;
+
+  setUp(() {
+    storageDirectory = Directory.systemTemp.createTempSync(
+      'lingua_srs_active_language_test_',
+    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(pathProviderChannel, (call) async {
+          if (call.method == 'getApplicationSupportDirectory') {
+            return storageDirectory.path;
+          }
+          throw MissingPluginException('Unexpected method: ${call.method}');
+        });
+  });
+
+  tearDown(() async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(pathProviderChannel, null);
+    if (storageDirectory.existsSync()) {
+      await storageDirectory.delete(recursive: true);
+    }
+  });
+
+  Future<AppProvider> loadedProvider(
+    WidgetTester tester, [
+    Map<String, Object> prefs = const {},
+  ]) async {
+    SharedPreferences.setMockInitialValues({
+      'lingua_srs_windows_legacy_migration_complete': true,
+      ...prefs,
+    });
+    final provider = AppProvider();
+    addTearDown(provider.dispose);
+    for (var i = 0; i < 100 && provider.isLoading; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump(const Duration(milliseconds: 20));
+    }
+    expect(provider.isLoading, isFalse, reason: 'provider never loaded');
+    return provider;
+  }
+
+  Future<void> import(
+    WidgetTester tester,
+    AppProvider provider,
+    String yaml,
+  ) async {
+    await tester.runAsync(() => provider.importYaml(yaml));
+  }
+
+  List<String> titles(Iterable<Lesson> lessons) => [
+    for (final lesson in lessons) lesson.displayTitle,
+  ];
+
+  test('languageKey tells regions apart and drops one that adds nothing', () {
+    expect(Lesson(title: 'L').languageKey, 'ko');
+    expect(Lesson(title: 'L', targetLanguage: 'ko-KR').languageKey, 'ko');
+    expect(Lesson(title: 'L', targetLanguage: 'zh_TW').languageKey, 'zh-tw');
+    expect(Lesson(title: 'L', targetLanguage: 'zh-CN').languageKey, 'zh-cn');
+    expect(Lesson(title: 'L', targetLanguage: 'ZH').languageKey, 'zh');
+  });
+
+  group('one language', () {
+    testWidgets('shows every lesson, with nothing to pick', (tester) async {
+      final provider = await loadedProvider(tester);
+      expect(provider.languages, isEmpty);
+      expect(provider.activeLanguage, isNull);
+      expect(provider.activeLessons, isEmpty);
+
+      await import(tester, provider, _korean);
+
+      expect(provider.languages, ['ko']);
+      expect(provider.activeLanguage, 'ko');
+      expect(identical(provider.activeLessons, provider.lessons), isTrue);
+      expect(provider.activeSentences, hasLength(1));
+    });
+  });
+
+  group('several languages', () {
+    testWidgets('a lesson in a new language is shown when it is imported', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      await import(tester, provider, _korean);
+      await import(tester, provider, _taiwan);
+
+      expect(provider.languages, ['ko', 'zh-tw']);
+      expect(provider.activeLanguage, 'zh-tw');
+      expect(titles(provider.activeLessons), ['Taiwan 1']);
+
+      // Mainland and Taiwan lessons are apart too.
+      await import(tester, provider, _mainland);
+      expect(provider.languages, ['ko', 'zh-tw', 'zh-cn']);
+      expect(titles(provider.activeLessons), ['Mainland 1']);
+    });
+
+    testWidgets('importing a lesson again does not change the language', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      await import(tester, provider, _korean);
+      await import(tester, provider, _taiwan);
+      await tester.runAsync(() => provider.setActiveLanguage('ko'));
+
+      await import(tester, provider, _taiwan);
+
+      expect(provider.activeLanguage, 'ko');
+      expect(provider.lessons, hasLength(2));
+    });
+
+    testWidgets('lessons, words, sentences and the study queue are of the '
+        'language picked', (tester) async {
+      final provider = await loadedProvider(tester);
+      await import(tester, provider, _korean);
+      await import(tester, provider, _taiwan);
+
+      var notified = 0;
+      provider.addListener(() => notified++);
+      await tester.runAsync(() => provider.setActiveLanguage('ko'));
+      expect(notified, 1);
+
+      expect(provider.activeLanguage, 'ko');
+      expect(titles(provider.activeLessons), ['Korean 1']);
+      expect(
+        [for (final group in provider.vocabGroups) group.entry.targetWord],
+        ['학생'],
+      );
+      expect(
+        [for (final sentence in provider.activeSentences) sentence.targetText],
+        ['저는 학생이에요.'],
+      );
+      expect(
+        {
+          for (final item in provider.getStudyQueue(dueOnly: false))
+            item.vocab.targetWord,
+        },
+        {'학생'},
+      );
+
+      await tester.runAsync(() => provider.setActiveLanguage('zh-tw'));
+
+      expect(titles(provider.activeLessons), ['Taiwan 1']);
+      expect(
+        {for (final group in provider.vocabGroups) group.entry.targetWord},
+        {'學生', '老師'},
+      );
+      expect(
+        [for (final sentence in provider.activeSentences) sentence.targetText],
+        ['我是學生。'],
+      );
+      expect(
+        {
+          for (final item in provider.getStudyQueue(dueOnly: false))
+            item.vocab.targetWord,
+        },
+        {'學生', '老師'},
+      );
+      // A lesson's own queue does not depend on the language shown.
+      final korean = provider.lessons.first;
+      expect(
+        provider.getStudyQueue(lessonId: korean.id, dueOnly: false),
+        isNotEmpty,
+      );
+    });
+
+    testWidgets('the language picked is remembered', (tester) async {
+      final provider = await loadedProvider(tester);
+      await import(tester, provider, _korean);
+      await import(tester, provider, _taiwan);
+      await tester.runAsync(() => provider.setActiveLanguage('ko'));
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('lingua_srs_active_language'), 'ko');
+    });
+
+    testWidgets('a language with no lessons left falls back to the first', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      await import(tester, provider, _korean);
+      await import(tester, provider, _taiwan);
+      expect(provider.activeLanguage, 'zh-tw');
+
+      final taiwan = provider.lessons.last;
+      await tester.runAsync(() => provider.deleteLesson(taiwan.id));
+
+      expect(provider.languages, ['ko']);
+      expect(provider.activeLanguage, 'ko');
+      expect(titles(provider.activeLessons), ['Korean 1']);
+    });
+
+    testWidgets('deleting or resetting a folder leaves the other language '
+        'in it alone', (tester) async {
+      final provider = await loadedProvider(tester);
+      await import(tester, provider, _korean);
+      await import(tester, provider, _taiwan);
+      for (final lesson in provider.lessons) {
+        await tester.runAsync(
+          () => provider.moveLessonToFolder(lesson.id, ['Shared']),
+        );
+      }
+      await tester.runAsync(() => provider.setActiveLanguage('ko'));
+
+      await tester.runAsync(() => provider.deleteLessonGroup(['Shared']));
+
+      expect(titles(provider.lessons), ['Taiwan 1']);
+    });
+  });
+
+  group('LanguageSelector', () {
+    Future<void> pump(WidgetTester tester, AppProvider provider) async {
+      tester.view.physicalSize = const Size(1200, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AppProvider>.value(value: provider),
+            ChangeNotifierProvider<AudioService>(
+              create: (_) => _FakeAudioService(),
+            ),
+          ],
+          child: const MaterialApp(home: VocabPoolView()),
+        ),
+      );
+      await tester.pump();
+    }
+
+    testWidgets('is not shown while there is one language', (tester) async {
+      final provider = await loadedProvider(tester);
+      await import(tester, provider, _korean);
+      await pump(tester, provider);
+
+      expect(find.byType(LanguageSelector), findsOneWidget);
+      expect(find.byKey(const ValueKey('language-selector')), findsNothing);
+      expect(find.text('학생'), findsOneWidget);
+    });
+
+    testWidgets('names the language shown and switches to the one picked', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      await import(tester, provider, _korean);
+      await import(tester, provider, _taiwan);
+      await pump(tester, provider);
+
+      expect(find.text('Chinese (Taiwan)'), findsOneWidget);
+      expect(find.text('學生'), findsOneWidget);
+      expect(find.text('학생'), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('language-selector')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Korean').last);
+      await tester.pumpAndSettle();
+
+      expect(provider.activeLanguage, 'ko');
+      expect(find.text('학생'), findsOneWidget);
+      expect(find.text('學生'), findsNothing);
+    });
+  });
+}
