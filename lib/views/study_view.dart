@@ -583,6 +583,14 @@ String pastCardStatus({SrsRating? rating, SkipRecord? skip}) => switch (skip) {
   null => rating == null ? '' : 'Currently ${rating.name.toUpperCase()}',
 };
 
+/// The queue position the card [entry] acted on: a rated card, or one
+/// suspended or skipped. Null for send to back, which leaves no card behind.
+int? undoEntryIndex(SessionUndoEntry entry) => switch (entry) {
+  ReviewHistoryRecord() => entry.queueIndex,
+  SkipRecord() => entry.index,
+  SendToBackRecord() => null,
+};
+
 /// The chip on every card of a preview.
 const previewCardChip = (
   label: 'PREVIEW',
@@ -696,6 +704,13 @@ class _StudyViewState extends State<StudyView> {
     }
     return null;
   }
+
+  /// Whether Undo would take back what was done to the card on screen, gone
+  /// back to: its rating, suspend or skip is the newest undoable action.
+  bool get _canUndoCardOnScreen =>
+      _isReviewingPast &&
+      _undoStack.isNotEmpty &&
+      undoEntryIndex(_undoStack.last) == _currentIndex;
 
   /// Whether the card on screen was suspended or skipped, not rated: going
   /// back shows it, but it has no rating to change.
@@ -2613,13 +2628,32 @@ class _StudyViewState extends State<StudyView> {
                 ),
               ),
 
+              // What was done to a card gone back to, and an Undo button
+              // when that is the newest action, so Undo takes back this card.
               if (_isReviewingPast)
-                Text(
-                  pastCardStatus(
-                    rating: _recordAt(_currentIndex)?.ratingGiven,
-                    skip: _skipAt(_currentIndex),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Wrap(
+                    alignment: WrapAlignment.center,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 12,
+                    runSpacing: 4,
+                    children: [
+                      Text(
+                        pastCardStatus(
+                          rating: _recordAt(_currentIndex)?.ratingGiven,
+                          skip: _skipAt(_currentIndex),
+                        ),
+                        style: theme.textTheme.labelLarge,
+                      ),
+                      if (_canUndoCardOnScreen)
+                        FilledButton.tonalIcon(
+                          onPressed: _undo,
+                          icon: const Icon(Icons.undo),
+                          label: Text(_showKeyHints ? 'Undo (Z)' : 'Undo'),
+                        ),
+                    ],
                   ),
-                  style: Theme.of(context).textTheme.labelSmall,
                 ),
 
               // Bottom SRS Rating Bar (Accessible when answer revealed). A

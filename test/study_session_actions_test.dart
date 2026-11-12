@@ -95,6 +95,27 @@ void main() {
     });
   });
 
+  group('undoEntryIndex', () {
+    test('is the position of the card the action left behind', () {
+      final a = itemFor('a');
+      final queue = [itemFor('x'), a, itemFor('b')];
+      final rated = ReviewHistoryRecord.capture(
+        queueIndex: 3,
+        card: a.card,
+        rating: SrsRating.good,
+      );
+      final suspended = SuspendRecord(
+        item: a,
+        index: 1,
+        removed: const [],
+        wasInAgainSet: false,
+      );
+      expect(undoEntryIndex(rated), 3);
+      expect(undoEntryIndex(suspended), 1);
+      expect(undoEntryIndex(sendCardToBack(queue, 0)!), isNull);
+    });
+  });
+
   group('removeCardFromSession', () {
     test('drops the card and its re-queued copies, keeps the rest', () {
       final a = itemFor('a');
@@ -512,6 +533,7 @@ void main() {
       expect(find.text('NEW'), findsNothing);
       expect(find.textContaining('(1/2)'), findsOneWidget);
       expect(find.text('Suspended'), findsOneWidget);
+      expect(find.text('Undo'), findsOneWidget);
       expect(find.textContaining('Good'), findsNothing);
       expect(find.textContaining('Again'), findsNothing);
 
@@ -536,6 +558,53 @@ void main() {
 
       expect(seeded.due.isSuspended, isFalse);
       expect(find.text('NEW'), findsNothing);
+      expect(find.textContaining('(1/2)'), findsOneWidget);
+    });
+
+    testWidgets('the Undo button on a suspended card gone back to', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      final seeded = await seed(tester, provider);
+      await openStudy(tester, provider, seeded.lesson);
+
+      await chooseFromMenu(tester, 'Suspend card');
+      await tester.tap(find.widgetWithText(FilledButton, 'Suspend'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.chevron_left));
+      // Let the snackbar close; it covers the button.
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+
+      expect(seeded.due.isSuspended, isFalse);
+      expect(find.text('Suspended'), findsNothing);
+      expect(find.text('NEW'), findsNothing);
+      expect(find.textContaining('(1/2)'), findsOneWidget);
+      expect(find.textContaining('Show Answer'), findsOneWidget);
+    });
+
+    testWidgets('the Undo button on a rated card gone back to', (tester) async {
+      final provider = await loadedProvider(tester);
+      final seeded = await seed(tester, provider);
+      final repetitions = seeded.due.repetitions;
+      await openStudy(tester, provider, seeded.lesson);
+
+      await reveal(tester);
+      await rate(tester, 'Good');
+      expect(seeded.due.repetitions, greaterThan(repetitions));
+      await tester.tap(find.byIcon(Icons.chevron_left));
+      await tester.pumpAndSettle();
+      expect(find.text('Currently GOOD'), findsOneWidget);
+
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+
+      expect(seeded.due.repetitions, repetitions);
+      expect(find.text('Currently GOOD'), findsNothing);
+      expect(find.text('Undo'), findsNothing);
       expect(find.textContaining('(1/2)'), findsOneWidget);
     });
 
