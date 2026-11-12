@@ -109,6 +109,29 @@ void main() {
     });
   });
 
+  group('pastCardStatus', () {
+    test('names the rating, or how the card was left out', () {
+      final item = StudyCardItem(
+        vocab: VocabItem(targetWord: 'a', translation: 'a', pos: 'nouns'),
+        card: SrsCard(direction: CardDirection.targetToNative),
+        lesson: Lesson(title: 'L'),
+      );
+      expect(pastCardStatus(rating: SrsRating.hard), 'Currently HARD');
+      expect(pastCardStatus(), '');
+      expect(
+        pastCardStatus(
+          skip: SuspendRecord(
+            item: item,
+            index: 0,
+            removed: const [],
+            wasInAgainSet: false,
+          ),
+        ),
+        'Suspended',
+      );
+    });
+  });
+
   group('unscheduledCardChip', () {
     test('practice and repeat labels', () {
       expect(unscheduledCardChip(practice: true).label, 'PRACTICE');

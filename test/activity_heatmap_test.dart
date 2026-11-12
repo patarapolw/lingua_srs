@@ -419,6 +419,224 @@ void main() {
     );
   });
 
+  group('hourlyForecastSummary', () {
+    test('counts cards due now, then more over the next hours', () {
+      expect(
+        hourlyForecastSummary(dueNow: 12, within6h: 30, later24h: 65),
+        '12 due now · 30 more in the next 6 hours · '
+        '65 more by this time tomorrow',
+      );
+    });
+
+    test('leaves out empty spans', () {
+      expect(
+        hourlyForecastSummary(dueNow: 3, within6h: 0, later24h: 5),
+        '3 due now · 5 more by this time tomorrow',
+      );
+      expect(
+        hourlyForecastSummary(dueNow: 3, within6h: 0, later24h: 0),
+        '3 due now',
+      );
+    });
+
+    test('says when the next card is due while none is', () {
+      expect(
+        hourlyForecastSummary(
+          dueNow: 0,
+          within6h: 4,
+          later24h: 2,
+          nextDue: 'at 6:20 PM',
+        ),
+        'Next card due at 6:20 PM · 4 in the next 6 hours · '
+        '2 more by this time tomorrow',
+      );
+      expect(
+        hourlyForecastSummary(
+          dueNow: 0,
+          within6h: 0,
+          later24h: 1,
+          nextDue: 'tomorrow at 8:00 AM',
+        ),
+        'Next card due tomorrow at 8:00 AM · 1 by this time tomorrow',
+      );
+      expect(
+        hourlyForecastSummary(dueNow: 0, within6h: 0, later24h: 0),
+        'Nothing due',
+      );
+    });
+  });
+
+  testWidgets('shows the cards coming due over the next 48 hours', (
+    tester,
+  ) async {
+    useTallView(tester);
+    final now = DateTime.now();
+    SrsCard due(DateTime date) => SrsCard(
+      direction: CardDirection.targetToNative,
+      status: SrsStatus.review,
+      interval: 3,
+      lastReviewed: date.subtract(const Duration(days: 3)),
+      dueDate: date,
+    );
+    provider.lessons.add(
+      Lesson(
+        title: 'L',
+        vocabularies: [
+          VocabItem(
+            targetWord: 'a',
+            translation: 'a',
+            pos: 'nouns',
+            cardTargetToNative: due(now.subtract(const Duration(days: 2))),
+          ),
+          VocabItem(
+            targetWord: 'b',
+            translation: 'b',
+            pos: 'nouns',
+            cardTargetToNative: due(now.add(const Duration(hours: 3))),
+          ),
+          VocabItem(
+            targetWord: 'c',
+            translation: 'c',
+            pos: 'nouns',
+            cardTargetToNative: due(now.add(const Duration(hours: 10))),
+          ),
+        ],
+      ),
+    );
+    await provider.recordCardReview(
+      SrsCard(direction: CardDirection.targetToNative),
+      SrsRating.good,
+    );
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppProvider>.value(
+        value: provider,
+        child: const MaterialApp(home: ActivityHeatmapView()),
+      ),
+    );
+
+    expect(find.text('Next 48 hours'), findsOneWidget);
+    expect(
+      find.text(
+        '1 due now · 1 more in the next 6 hours · '
+        '1 more by this time tomorrow',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Now'), findsOneWidget);
+    // On an 800-wide view it keeps to the left column, under Next 7 days,
+    // so two hours a bar; the overdue card is in the first.
+    final tooltips = tester
+        .widgetList<Tooltip>(
+          find.descendant(
+            of: find
+                .ancestor(
+                  of: find.text('Next 48 hours'),
+                  matching: find.byType(Column),
+                )
+                .first,
+            matching: find.byType(Tooltip),
+          ),
+        )
+        .map((tooltip) => tooltip.message!)
+        .toList();
+    expect(tooltips, hasLength(24));
+    // 20 of page padding and a 360-wide column: no wider than Next 7 days.
+    expect(tester.getTopRight(find.byTooltip(tooltips.last)).dx, 380);
+    expect(
+      tester.getTopLeft(find.text('Next 48 hours')).dx,
+      tester.getTopLeft(find.text('Next 7 days')).dx,
+    );
+    expect(tooltips.first, startsWith('Now to '));
+    expect(tooltips.first, endsWith(': 1 due'));
+    expect(
+      tooltips.where((message) => message.endsWith(': 1 due')),
+      hasLength(3),
+    );
+    // It comes after the 7-day forecast, which stays the focus.
+    expect(
+      tester.getTopLeft(find.text('Next 48 hours')).dy,
+      greaterThan(tester.getTopLeft(find.text('Next 7 days')).dy),
+    );
+    // In grey, not the primary colour or the Due amber of Next 7 days.
+    final firstBar = tester.widget<Container>(
+      find
+          .descendant(
+            of: find.byTooltip(tooltips.first),
+            matching: find.byType(Container),
+          )
+          .last,
+    );
+    final context = tester.element(find.text('Next 48 hours'));
+    expect(
+      (firstBar.decoration as BoxDecoration?)?.color,
+      Theme.of(context).colorScheme.outline,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'a bar of the next 48 hours is an hour on a mid-sized window, two on a '
+    'phone',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      provider.lessons.add(
+        Lesson(
+          title: 'L',
+          vocabularies: [
+            VocabItem(
+              targetWord: 'a',
+              translation: 'a',
+              pos: 'nouns',
+              cardTargetToNative: SrsCard(
+                direction: CardDirection.targetToNative,
+                status: SrsStatus.review,
+                interval: 3,
+                lastReviewed: DateTime.now().subtract(const Duration(days: 3)),
+                dueDate: DateTime.now().add(const Duration(hours: 5)),
+              ),
+            ),
+            // A new card, so New cards shows too.
+            VocabItem(targetWord: 'c', translation: 'c', pos: 'nouns'),
+          ],
+        ),
+      );
+
+      Future<int> barsAt(double width) async {
+        tester.view.physicalSize = Size(width, 2000);
+        await tester.pumpWidget(
+          ChangeNotifierProvider<AppProvider>.value(
+            value: provider,
+            child: const MaterialApp(home: ActivityHeatmapView()),
+          ),
+        );
+        await tester.pump();
+        final section = find
+            .ancestor(
+              of: find.text('Next 48 hours'),
+              matching: find.byType(Column),
+            )
+            .first;
+        return find
+            .descendant(of: section, matching: find.byType(Tooltip))
+            .evaluate()
+            .length;
+      }
+
+      expect(await barsAt(360), 24);
+      // In one column it comes right under Next 7 days, before New cards.
+      final daily = tester.getTopLeft(find.text('Next 7 days')).dy;
+      final hourly = tester.getTopLeft(find.text('Next 48 hours')).dy;
+      expect(hourly, greaterThan(daily));
+      expect(hourly, lessThan(tester.getTopLeft(find.text('New cards')).dy));
+      // One column, 560 wide: room for an hour a bar.
+      expect(await barsAt(600), 48);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   group('on a wide window', () {
     Future<void> pumpAt(WidgetTester tester, double width) async {
       tester.view.physicalSize = Size(width, 2000);
