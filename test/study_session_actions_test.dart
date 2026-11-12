@@ -502,7 +502,7 @@ void main() {
       final seeded = await seed(tester, provider);
       await openStudy(tester, provider, seeded.lesson);
 
-      await chooseFromMenu(tester, 'Suspend card');
+      await chooseFromMenu(tester, 'Suspend');
       expect(find.textContaining('Suspend this card'), findsOneWidget);
       await tester.tap(find.widgetWithText(FilledButton, 'Suspend'));
       await tester.pumpAndSettle();
@@ -524,7 +524,7 @@ void main() {
       final repetitions = seeded.due.repetitions;
       await openStudy(tester, provider, seeded.lesson);
 
-      await chooseFromMenu(tester, 'Suspend card');
+      await chooseFromMenu(tester, 'Suspend');
       await tester.tap(find.widgetWithText(FilledButton, 'Suspend'));
       await tester.pumpAndSettle();
 
@@ -552,7 +552,7 @@ void main() {
       final seeded = await seed(tester, provider);
       await openStudy(tester, provider, seeded.lesson);
 
-      await chooseFromMenu(tester, 'Suspend card');
+      await chooseFromMenu(tester, 'Suspend');
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
 
@@ -568,7 +568,7 @@ void main() {
       final seeded = await seed(tester, provider);
       await openStudy(tester, provider, seeded.lesson);
 
-      await chooseFromMenu(tester, 'Suspend card');
+      await chooseFromMenu(tester, 'Suspend');
       await tester.tap(find.widgetWithText(FilledButton, 'Suspend'));
       await tester.pumpAndSettle();
       await tester.tap(find.byIcon(Icons.chevron_left));
@@ -613,7 +613,7 @@ void main() {
       final seeded = await seed(tester, provider);
       await openStudy(tester, provider, seeded.lesson);
 
-      await chooseFromMenu(tester, 'Suspend card');
+      await chooseFromMenu(tester, 'Suspend');
       await tester.tap(find.widgetWithText(FilledButton, 'Suspend'));
       await tester.pumpAndSettle();
       await undo(tester);

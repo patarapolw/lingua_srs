@@ -1994,13 +1994,13 @@ class _StudyViewState extends State<StudyView> {
                 moreItem(
                   'suspend',
                   Icons.pause_circle_outline,
-                  _showKeyHints ? 'Suspend card (P)' : 'Suspend card',
+                  _showKeyHints ? 'Suspend (P)' : 'Suspend',
                   enabled: _isOnUnansweredCard,
                 ),
                 moreItem(
                   'reset',
                   Icons.restart_alt,
-                  'Reset card to New',
+                  'Reset to New',
                   enabled: _canResetCurrentCard,
                 ),
                 // Unlike autoplay, the icon shows the action, like the

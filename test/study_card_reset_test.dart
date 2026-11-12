@@ -164,7 +164,7 @@ void main() {
     }
 
     Finder resetMenuItem() =>
-        find.widgetWithText(PopupMenuItem<String>, 'Reset card to New');
+        find.widgetWithText(PopupMenuItem<String>, 'Reset to New');
 
     bool resetEnabled(WidgetTester tester) =>
         tester.widget<PopupMenuItem<String>>(resetMenuItem()).enabled;
