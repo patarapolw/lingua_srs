@@ -112,6 +112,7 @@ lingua_srs/
 │       ├── review_notes_editor.dart   # Review note editable from a card's back; text-focus check for shortcuts
 │       ├── swipe_actions.dart         # Swipe-to-reveal action panel for list tiles
 │       ├── sync_scheduler.dart        # Runs syncs at start, on resume and after edits
+│       ├── vocab_forms.dart           # A word's reading and its other forms (Traditional, Hanja) under the word
 │       └── youtube_embed.dart         # YouTube embed for lesson Markdown
 ├── linux/runner/my_application.cc    # Linux entry point; a second start brings the open window forward instead of opening another copy on the same data
 ├── windows/runner/main.cpp           # Windows entry point; a second start brings the open window forward instead of opening another copy on the same data

@@ -22,6 +22,7 @@ import '../widgets/markdown_content.dart';
 import '../widgets/pronunciation_line.dart';
 import '../widgets/pronunciation_toggle.dart';
 import '../widgets/review_notes_editor.dart';
+import '../widgets/vocab_forms.dart';
 import 'ai_discussion_dialog.dart';
 import 'vocab_edit_dialog.dart';
 
@@ -2343,38 +2344,7 @@ class _StudyViewState extends State<StudyView> {
                                             ),
                                           ],
                                         ),
-                                        if (item.vocab.reading.isNotEmpty)
-                                          Text(
-                                            item.vocab.reading,
-                                            key: const ValueKey(
-                                              'vocab-reading',
-                                            ),
-                                            style: theme.textTheme.titleMedium
-                                                ?.copyWith(
-                                                  color: theme
-                                                      .colorScheme
-                                                      .onSurfaceVariant,
-                                                ),
-                                            textAlign: TextAlign.center,
-                                          ),
-                                        if (item.vocab.otherForms.isNotEmpty)
-                                          Text(
-                                            [
-                                              for (final other
-                                                  in item.vocab.otherForms)
-                                                '${other.label}: ${other.form}',
-                                            ].join(' · '),
-                                            key: const ValueKey(
-                                              'vocab-other-forms',
-                                            ),
-                                            style: theme.textTheme.bodyLarge
-                                                ?.copyWith(
-                                                  color: theme
-                                                      .colorScheme
-                                                      .onSurfaceVariant,
-                                                ),
-                                            textAlign: TextAlign.center,
-                                          ),
+                                        VocabForms(vocab: item.vocab),
                                         PronunciationLine(
                                           text: item.vocab.targetWord,
                                           languageCode:

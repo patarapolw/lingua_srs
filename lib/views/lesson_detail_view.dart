@@ -11,6 +11,7 @@ import '../services/srs_service.dart';
 import '../widgets/audio_button.dart';
 import '../widgets/emphasis_text.dart';
 import '../widgets/markdown_content.dart';
+import '../widgets/vocab_forms.dart';
 import 'vocab_edit_dialog.dart';
 import 'study_view.dart';
 import 'yaml_import_view.dart';
@@ -933,6 +934,12 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                                                 compact: true,
                                               ),
                                             ],
+                                          ),
+                                          VocabForms(
+                                            vocab: vocab,
+                                            alignment: WrapAlignment.start,
+                                            readingStyle:
+                                                theme.textTheme.bodyLarge,
                                           ),
                                           const SizedBox(height: 4),
                                           Text(

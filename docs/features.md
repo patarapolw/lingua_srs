@@ -14,7 +14,7 @@ Full feature reference. For a short overview see the [README](../README.md).
 
 2. **Language Support**:
    - Korean to English is the best supported: use `ko:` for the target text and `en:` for the translation in vocabulary entries and examples. Mandarin Chinese (`zh:`, with `target: zh-CN` or `zh-TW`) has readings, character forms, voices and AI questions; the editors, cloze blanks and search are still written for Korean.
-   - **Readings and character forms**: a word can have a `pinyin` (or `reading`), its `simplified` and `traditional` forms, and for Korean its `hanja` (see [lesson-format.md](lesson-format.md)). They are shown under the word on the answer side of its cards, the reading first, then the forms that differ from the word itself (*Traditional: 學生*, *Hanja: 學生*). The vocabulary editor has a *Hanja* field for a Korean word, *Pinyin*, *Simplified* and *Traditional* for a Chinese one, and *Reading* for other languages. They are exported, backed up and synced with the word.
+   - **Readings and character forms**: a word can have a `pinyin` (or `reading`), its `simplified` and `traditional` forms, and for Korean its `hanja` (see [lesson-format.md](lesson-format.md)). They are shown under the word on the answer side of its cards and in the lesson's vocabulary list: the reading first, then a small tag for each form that differs from the word itself (*Traditional: 學生*, *Hanja: 學生*). The vocabulary editor has a *Hanja* field for a Korean word, *Pinyin*, *Simplified* and *Traditional* for a Chinese one, and *Reading* for other languages. They are exported, backed up and synced with the word.
    - Other language pairs are not supported yet.
 
 3. **Intelligent Flashcard Visibility Rules**:
