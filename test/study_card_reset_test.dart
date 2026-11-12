@@ -36,23 +36,6 @@ class _FakeAudioService extends ChangeNotifier implements AudioService {
   dynamic noSuchMethod(Invocation invocation) => Future<void>.value();
 }
 
-StudyCardItem itemFor(String word, {SrsCard? card}) => StudyCardItem(
-  vocab: VocabItem(targetWord: word, translation: word, pos: 'nouns'),
-  card: card ?? SrsCard(direction: CardDirection.targetToNative),
-  lesson: Lesson(title: 'L'),
-);
-
-StudyCardItem dupOf(StudyCardItem s) =>
-    StudyCardItem(vocab: s.vocab, card: s.card, lesson: s.lesson);
-
-/// A card that has been learned and is due.
-SrsCard learnedCard() {
-  final card = SrsCard(direction: CardDirection.targetToNative);
-  SrsService.processReview(card, SrsRating.good);
-  SrsService.processReview(card, SrsRating.good);
-  return card;
-}
-
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(setUpSecretStorage);
@@ -78,119 +61,6 @@ void main() {
       expect(vocab.cardNativeToTarget.status, isNot(SrsStatus.isNew));
       expect(vocab.cardNativeToTarget.interval, otherInterval);
       expect(vocab.cardNativeToTarget.repetitions, otherRepetitions);
-    });
-  });
-
-  group('forgetCardInSession', () {
-    test('treats the card as never rated or failed this session', () {
-      final card = learnedCard();
-      final queue = [itemFor('a', card: card), itemFor('b')];
-      final againIds = <String>{card.id};
-      final ratedIds = <String>{card.id, 'other'};
-
-      forgetCardInSession(
-        card: card,
-        queue: queue,
-        currentIndex: 0,
-        againCardIds: againIds,
-        sessionRatedCardIds: ratedIds,
-      );
-
-      expect(againIds, isEmpty);
-      expect(ratedIds, {'other'});
-    });
-
-    test('drops later copies of the card but keeps everything else', () {
-      final card = learnedCard();
-      final a = itemFor('a', card: card);
-      final b = itemFor('b');
-      final c = itemFor('c');
-      // a is current (index 2); an older copy sits behind it and a stale
-      // re-queued copy sits ahead.
-      final queue = [dupOf(a), b, a, c, dupOf(a)];
-
-      forgetCardInSession(
-        card: card,
-        queue: queue,
-        currentIndex: 2,
-        againCardIds: {card.id},
-        sessionRatedCardIds: {card.id},
-      );
-
-      expect(queue.length, 4);
-      expect(queue[2], same(a));
-      expect(queue.last, same(c));
-      expect(queue.where((i) => i.card.id == card.id).length, 2);
-    });
-
-    test('leaves the queue alone when no copy is ahead', () {
-      final card = learnedCard();
-      final queue = [itemFor('a', card: card), itemFor('b')];
-      final before = List.of(queue);
-
-      forgetCardInSession(
-        card: card,
-        queue: queue,
-        currentIndex: 0,
-        againCardIds: {},
-        sessionRatedCardIds: {},
-      );
-
-      expect(queue, before);
-    });
-
-    test('a rating after the reset is a first-session rating again', () {
-      final card = learnedCard();
-      final ratedIds = <String>{card.id};
-      final againIds = <String>{card.id};
-
-      card.resetProgress();
-      forgetCardInSession(
-        card: card,
-        queue: [itemFor('a', card: card)],
-        currentIndex: 0,
-        againCardIds: againIds,
-        sessionRatedCardIds: ratedIds,
-      );
-
-      // Mirrors _rateCard: first-session means it was not already rated.
-      expect(!ratedIds.contains(card.id), isTrue);
-      expect(againIds.contains(card.id), isFalse);
-      expect(card.isNewCard, isTrue);
-    });
-
-    test('undo after a reset walks back through the reset to the original', () {
-      final card = learnedCard();
-      final original = (
-        interval: card.interval,
-        repetitions: card.repetitions,
-        status: card.status,
-      );
-
-      // Rate it (Again), then reset it, then rate the now-new card.
-      final first = ReviewHistoryRecord.capture(
-        queueIndex: 0,
-        card: card,
-        rating: SrsRating.again,
-      );
-      SrsService.processReview(card, SrsRating.again);
-
-      card.resetProgress();
-      final second = ReviewHistoryRecord.capture(
-        queueIndex: 1,
-        card: card,
-        rating: SrsRating.good,
-      );
-      SrsService.processReview(card, SrsRating.good);
-
-      second.restore();
-      expect(card.status, SrsStatus.isNew);
-      expect(card.repetitions, 0);
-
-      first.restore();
-      expect(card.interval, original.interval);
-      expect(card.repetitions, original.repetitions);
-      expect(card.status, original.status);
     });
   });
 
@@ -343,35 +213,6 @@ void main() {
       expect(resetEnabled(tester), isFalse);
     });
 
-    testWidgets('confirming resets the card and shows it as New', (
-      tester,
-    ) async {
-      final provider = await loadedProvider(tester);
-      final seeded = await seed(tester, provider, due: true);
-      await openStudy(tester, provider, seeded.lesson);
-      await reveal(tester);
-      expect(find.text('NEW'), findsNothing);
-      expect(find.textContaining('Hard'), findsWidgets);
-
-      await openMenu(tester);
-      expect(resetEnabled(tester), isTrue);
-      await tester.tap(resetMenuItem());
-      await tester.pumpAndSettle();
-
-      expect(find.textContaining('Reset this card'), findsOneWidget);
-      await tester.tap(find.text('Reset to New'));
-      await tester.pumpAndSettle();
-
-      final card = seeded.vocab.cardTargetToNative;
-      expect(card.status, SrsStatus.isNew);
-      expect(card.repetitions, 0);
-      expect(card.lastReviewed, isNull);
-      expect(find.text('NEW'), findsOneWidget);
-      // A New card only offers Again and Good.
-      expect(find.textContaining('Hard'), findsNothing);
-      expect(find.textContaining('Easy'), findsNothing);
-    });
-
     /// One lesson with two due nouns, studied KO ➔ EN only.
     Future<({Lesson lesson, List<VocabItem> vocabs})> seedTwoDue(
       WidgetTester tester,
@@ -391,7 +232,7 @@ void main() {
       return (lesson: lesson, vocabs: lesson.vocabularies);
     }
 
-    testWidgets('reset and skip resets the card and moves to the next', (
+    testWidgets('reset resets the card and moves to the next, like suspend', (
       tester,
     ) async {
       final provider = await loadedProvider(tester);
@@ -406,7 +247,7 @@ void main() {
       await openMenu(tester);
       await tester.tap(resetMenuItem());
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Reset and skip'));
+      await tester.tap(find.text('Reset to New'));
       await tester.pumpAndSettle();
 
       final card = shown.cardTargetToNative;
@@ -417,7 +258,8 @@ void main() {
       expect(find.text(shown.targetWord), findsNothing);
       expect(find.textContaining('Show Answer'), findsOneWidget);
       expect(find.text('NEW'), findsNothing);
-      // Like a suspend: the card is left behind in place, unrated.
+      // Like a suspend: the card is left behind in place, unrated, and does
+      // not come back as a new card this session.
       expect(find.textContaining('(2/2)'), findsOneWidget);
       expect(find.text('✓ 0'), findsOneWidget);
       expect(find.text('✗ 0'), findsOneWidget);
@@ -426,12 +268,12 @@ void main() {
       await tester.tap(find.byIcon(Icons.chevron_left));
       await tester.pumpAndSettle();
       expect(find.text(shown.targetWord), findsWidgets);
-      expect(find.text('Reset to New and skipped'), findsOneWidget);
+      expect(find.text('Reset to New'), findsOneWidget);
       expect(find.textContaining('Good'), findsNothing);
       expect(card.status, SrsStatus.isNew);
     });
 
-    testWidgets('undo after reset and skip restores the card and its place', (
+    testWidgets('undo after reset restores the card and its place', (
       tester,
     ) async {
       final provider = await loadedProvider(tester);
@@ -449,7 +291,7 @@ void main() {
       await openMenu(tester);
       await tester.tap(resetMenuItem());
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Reset and skip'));
+      await tester.tap(find.text('Reset to New'));
       await tester.pumpAndSettle();
       expect(card.status, SrsStatus.isNew);
 

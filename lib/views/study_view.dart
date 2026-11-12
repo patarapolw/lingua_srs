@@ -27,7 +27,7 @@ import 'vocab_edit_dialog.dart';
 
 /// A study-session action that Undo takes back, newest last: a rating
 /// ([ReviewHistoryRecord]), [SendToBackRecord], [SuspendRecord] or
-/// [ResetSkipRecord]. Wrap up is not one: it is turned on and off on its
+/// [ResetRecord]. Wrap up is not one: it is turned on and off on its
 /// own ([WrapUpRecord]).
 sealed class SessionUndoEntry {}
 
@@ -270,24 +270,6 @@ void reRateRecord({
   record.ratingGiven = rating;
 }
 
-/// Makes the session treat [card] as never seen, after it was reset to New.
-/// Its next rating then counts as a first review. Also drops any copy of the
-/// card still queued after [currentIndex]. Mutates [queue], [againCardIds]
-/// and [sessionRatedCardIds].
-void forgetCardInSession({
-  required SrsCard card,
-  required List<StudyCardItem> queue,
-  required int currentIndex,
-  required Set<String> againCardIds,
-  required Set<String> sessionRatedCardIds,
-}) {
-  againCardIds.remove(card.id);
-  sessionRatedCardIds.remove(card.id);
-  for (var i = queue.length - 1; i > currentIndex; i--) {
-    if (queue[i].card.id == card.id) queue.removeAt(i);
-  }
-}
-
 /// A queue entry taken out of a study session, with the position it had.
 typedef RemovedQueueItem = ({int index, StudyCardItem item});
 
@@ -299,7 +281,7 @@ class SendToBackRecord implements SessionUndoEntry {
 }
 
 /// A card left out of the rest of the session unrated: [SuspendRecord] or
-/// [ResetSkipRecord]. Like a rated card, it keeps its place at [index], so
+/// [ResetRecord]. Like a rated card, it keeps its place at [index], so
 /// going back shows it; only its later copies ([removed]) leave the queue.
 sealed class SkipRecord implements SessionUndoEntry {
   StudyCardItem get item;
@@ -326,9 +308,10 @@ class SuspendRecord implements SkipRecord {
   });
 }
 
-/// A card reset to New and skipped, so it is not studied this session: the
-/// progress it had before the reset, and the later copies it lost.
-class ResetSkipRecord implements SkipRecord {
+/// A card reset to New during a review, which also leaves it out of the rest
+/// of the session, like a suspend: the progress it had before the reset, and
+/// the later copies it lost.
+class ResetRecord implements SkipRecord {
   @override
   final StudyCardItem item;
   @override
@@ -341,7 +324,7 @@ class ResetSkipRecord implements SkipRecord {
   /// The card's state before the reset; [ReviewHistoryRecord.restore] puts
   /// it back. Its rating is unused.
   final ReviewHistoryRecord before;
-  ResetSkipRecord({
+  ResetRecord({
     required this.item,
     required this.index,
     required this.removed,
@@ -579,7 +562,7 @@ List<StudyCardItem> previewQueue(List<StudyCardItem> cards, Random rand) =>
 /// the session ([skip]).
 String pastCardStatus({SrsRating? rating, SkipRecord? skip}) => switch (skip) {
   SuspendRecord() => 'Suspended',
-  ResetSkipRecord() => 'Reset to New and skipped',
+  ResetRecord() => 'Reset to New',
   null => rating == null ? '' : 'Currently ${rating.name.toUpperCase()}',
 };
 
@@ -610,15 +593,6 @@ enum CramMode {
   /// daily new-card limit (they still count toward it), mixed with a few of
   /// its seen cards practised without changing their schedules.
   learnNew,
-}
-
-/// What the reset dialog in a review was confirmed with.
-enum _ResetChoice {
-  /// Reset to New and study it now, as a new card.
-  keep,
-
-  /// Reset to New and leave it out of this session.
-  skip,
 }
 
 class StudyView extends StatefulWidget {
@@ -697,7 +671,7 @@ class _StudyViewState extends State<StudyView> {
     return i == -1 ? null : _history[i];
   }
 
-  /// The suspend or reset and skip that left the card at [index] behind.
+  /// The suspend or reset to New that left the card at [index] behind.
   SkipRecord? _skipAt(int index) {
     for (final entry in _undoStack.reversed) {
       if (entry is SkipRecord && entry.index == index) return entry;
@@ -1142,8 +1116,8 @@ class _StudyViewState extends State<StudyView> {
         _undoSendToBack(record);
       case final SuspendRecord record:
         _undoSuspend(record);
-      case final ResetSkipRecord record:
-        _undoResetSkip(record);
+      case final ResetRecord record:
+        _undoReset(record);
     }
   }
 
@@ -1563,65 +1537,38 @@ class _StudyViewState extends State<StudyView> {
     if (!_canResetCurrentCard) return;
     final item = _queue[_currentIndex];
     final direction = _directionLabel(item);
-    final choice = await showDialog<_ResetChoice>(
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('Reset this card for "${item.vocab.targetWord}"?'),
         content: Text(
           'This resets the $direction card\'s repetitions, interval, and '
-          'review dates back to New. The other direction is not affected.\n\n'
-          'Reset and skip also leaves the card out of this session and moves '
-          'on to the next card.',
+          'review dates back to New, and leaves it out of the rest of this '
+          'session, like a suspend. The other direction is not affected.',
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx),
+            onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Cancel'),
           ),
-          OutlinedButton(
-            onPressed: () => Navigator.pop(ctx, _ResetChoice.skip),
-            child: const Text('Reset and skip'),
-          ),
           FilledButton(
-            onPressed: () => Navigator.pop(ctx, _ResetChoice.keep),
+            onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Reset to New'),
           ),
         ],
       ),
     );
-    if (choice == null || !mounted) return;
+    if (confirmed != true || !mounted) return;
     // The card may have moved on while the dialog was open.
     if (_currentIndex >= _queue.length || _queue[_currentIndex] != item) return;
-
-    if (choice == _ResetChoice.skip) {
-      await _resetAndSkipCurrentCard(item, direction);
-      return;
-    }
-
-    final provider = context.read<AppProvider>();
-    final saved = provider.resetCardSrs(item.card);
-    setState(() {
-      forgetCardInSession(
-        card: item.card,
-        queue: _queue,
-        currentIndex: _currentIndex,
-        againCardIds: _againCardIds,
-        sessionRatedCardIds: _sessionRatedCardIds,
-      );
-    });
-    await saved;
-    if (!mounted) return;
-    _showSnack('Reset "${item.vocab.targetWord}" ($direction) to New.');
+    await _resetCurrentCard(item, direction);
   }
 
   /// Resets the card on screen to New and leaves it out of the rest of the
   /// session unrated, like a suspend: it keeps its place, as a rated card
   /// does, and the next card comes up. Undo restores its progress and puts
   /// it back on screen.
-  Future<void> _resetAndSkipCurrentCard(
-    StudyCardItem item,
-    String direction,
-  ) async {
+  Future<void> _resetCurrentCard(StudyCardItem item, String direction) async {
     context.read<AudioService>().stop();
     final provider = context.read<AppProvider>();
     final index = _currentIndex;
@@ -1634,7 +1581,7 @@ class _StudyViewState extends State<StudyView> {
     setState(() {
       final skipped = _skipCurrentCard();
       _undoStack.add(
-        ResetSkipRecord(
+        ResetRecord(
           item: item,
           index: skipped.index,
           removed: skipped.removed,
@@ -1646,12 +1593,10 @@ class _StudyViewState extends State<StudyView> {
     _triggerPreload(_currentIndex);
     await saved;
     if (!mounted) return;
-    _showSnack(
-      'Reset "${item.vocab.targetWord}" ($direction) to New and skipped it.',
-    );
+    _showSnack('Reset "${item.vocab.targetWord}" ($direction) to New.');
   }
 
-  void _undoResetSkip(ResetSkipRecord record) {
+  void _undoReset(ResetRecord record) {
     record.before.restore();
     context.read<AppProvider>().saveState();
     setState(() => _unskip(record));
