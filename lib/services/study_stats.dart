@@ -49,30 +49,69 @@ Map<SrsRating, int> recentRatings(
   return totals;
 }
 
-/// Cards coming due on each of the next [days] days, today first. Cards
-/// already overdue count today. New cards are left out, since they are not
-/// due (they have their own daily limit), and so are hidden and suspended
-/// cards. A card shared by several lessons is counted once.
-List<int> dueForecast(Iterable<Lesson> lessons, DateTime now, {int days = 7}) {
-  final today = _day(now);
-  final counts = List.filled(days, 0);
+/// When each card comes due, earliest first. New cards are left out, since
+/// they are not due (they have their own daily limit), and so are hidden and
+/// suspended cards. A card shared by several lessons is counted once.
+List<DateTime> dueTimes(Iterable<Lesson> lessons) {
+  final times = <DateTime>[];
   final seenCardIds = <String>{};
   for (final vocab in lessons.expand((lesson) => lesson.vocabularies)) {
     for (final card in [vocab.cardTargetToNative, vocab.cardNativeToTarget]) {
       if (!card.isActive || card.status == SrsStatus.isNew) continue;
       if (!seenCardIds.add(card.id)) continue;
-      final due = _day(card.dueDate);
-      // Counted in whole days, so a clock change can't shift a card a day.
-      final index = due.isBefore(today)
-          ? 0
-          : DateTime.utc(due.year, due.month, due.day)
-                .difference(DateTime.utc(today.year, today.month, today.day))
-                .inDays;
-      if (index < days) counts[index]++;
+      times.add(card.dueDate);
     }
+  }
+  return times..sort();
+}
+
+/// Cards coming due on each of the next [days] days, today first. Cards
+/// already overdue count today. Which cards count is as in [dueTimes].
+List<int> dueForecast(Iterable<Lesson> lessons, DateTime now, {int days = 7}) {
+  final today = _day(now);
+  final counts = List.filled(days, 0);
+  for (final dueDate in dueTimes(lessons)) {
+    final due = _day(dueDate);
+    // Counted in whole days, so a clock change can't shift a card a day.
+    final index = due.isBefore(today)
+        ? 0
+        : DateTime.utc(
+            due.year,
+            due.month,
+            due.day,
+          ).difference(DateTime.utc(today.year, today.month, today.day)).inDays;
+    if (index < days) counts[index]++;
   }
   return counts;
 }
+
+/// The start of the clock hour [now] is in: the first hour of
+/// [dueForecastHourly].
+DateTime forecastHourStart(DateTime now) =>
+    DateTime(now.year, now.month, now.day, now.hour);
+
+/// Cards coming due in each of the next [hours] hours, by clock hour: the
+/// first is the hour [now] is in ([forecastHourStart]), and it also counts
+/// the cards already overdue. The rest are an hour apart in real time, so
+/// on the night the clocks change one clock hour shows twice or not at all,
+/// but no card is counted twice or left out. [times] are from [dueTimes].
+List<int> dueForecastHourly(
+  Iterable<DateTime> times,
+  DateTime now, {
+  int hours = 48,
+}) {
+  final start = forecastHourStart(now);
+  final counts = List.filled(hours, 0);
+  for (final due in times) {
+    final index = due.isBefore(start) ? 0 : due.difference(start).inHours;
+    if (index < hours) counts[index]++;
+  }
+  return counts;
+}
+
+/// The [times] after [from], up to and including [until].
+int countDueBetween(Iterable<DateTime> times, DateTime from, DateTime until) =>
+    times.where((time) => time.isAfter(from) && !time.isAfter(until)).length;
 
 /// [count] with commas between thousands, such as "1,234".
 String formatCount(int count) {
