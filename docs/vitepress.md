@@ -26,7 +26,9 @@ npx vitepress dev lessons
 
 VitePress loads `.vitepress/theme/index.js` by itself. If you already have a theme, copy the `components/` folder and `lesson.css` next to it, and add the `app.component(...)` lines and the CSS import from [`index.js`](vitepress-theme/index.js) to your own.
 
-The app imports only Markdown files with `vocabulary:` frontmatter, so `.vitepress/` can stay in the folder you import.
+The app does not look into `.vitepress/`, `node_modules/` or `.git/`, and imports only Markdown files with `vocabulary:` frontmatter, so the folder can be imported as it is, also when `package.json` and `node_modules/` are inside it.
+
+Words edited in the app can be written back into the files' frontmatter when the folder is imported again; VitePress does not show the frontmatter, so the preview does not change. See [Writing the app's words back to the files](lesson-format.md#writing-the-apps-words-back-to-the-files).
 
 ## Differences from the app
 

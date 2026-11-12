@@ -51,7 +51,7 @@ Each entry needs a target-language field (such as `ko`) and a translation field 
 - **Emphasis** is required in the target-language sentence of every example: wrap the word being studied in `**bold**`, or the import fails. The error lists every file (a path inside a zip, or under the chosen folder) with every such sentence in it, so they can be fixed in one pass; other files still import. The app uses it for cloze cards. A sentence can have several emphasized segments, and every one becomes a blank. The translation may be emphasized too, but need not be. Sentences and their translations are shown as plain text apart from `**bold**`, so other Markdown (such as `*italic*`) appears as typed; only notes are rendered as Markdown.
 - **Shared sentences.** The Sentence Pool holds each sentence once, as plain text, even when several words list it as an example. The `**` emphasis belongs to the word: two words can mark different parts of the same sentence. Edit the text from the Sentence Pool or from a word's example editor (which warns that the text changes for every word that uses the sentence, and requires `**` in the sentence); edit the emphasis from the word. When the text of a shared sentence changes, each word keeps its emphasis wherever the surrounding text is unchanged, and otherwise it is suggested again from the word.
 - **`disambiguation`** shows an extra cue on the card front. Cards with the same front prompt are flagged even when their example sentences differ.
-- **`id`** makes entries explicitly share SRS progress (including across part-of-speech groups) or forces separate identities. Without an `id`, entries with the same target form and meaning share progress; different meanings get separate generated IDs.
+- **`id`** makes entries explicitly share SRS progress (including across part-of-speech groups) or forces separate identities. Without an `id`, entries with the same target form and meaning share progress; different meanings get separate generated IDs. So an entry is identified by its `id`, or without one by its word and translation together; see [Importing a file again](#importing-a-file-again) for what happens when either is edited.
 
 ## Markdown frontmatter
 
@@ -154,12 +154,13 @@ npx vitepress dev lessons   # preview the folder `lessons` in a browser
 ```
 
 - **Write** in the folder VitePress serves, then bring the lessons into the app with **Pick Folder**, or a ZIP of the folder on Android (see [Importing](#importing)). Importing again after more edits updates the lessons in place and skips unchanged files.
+- **The file is the source for the lesson text; words are edited in the app.** Importing a file again replaces the lesson's text with the file's, and leaves alone the words, translations and examples you edited in the app. The app can write those edits into the file's frontmatter, so the folder stays a full copy; see [Importing a file again](#importing-a-file-again).
 - **Links** written as [links to `.md` files](#links-to-md-files) open the same lesson and heading in the preview and in the app. A link starting with `/` does too when the folder you import is the one VitePress serves.
 - **Headings** take `{#id}` in both (see [Heading ids and repeated headings](#heading-ids-and-repeated-headings)).
 - **Frontmatter** (`vocabulary:` and the rest) is read by the app only; VitePress does not show it.
 - **A `## Vocabulary` section** is shown by VitePress and left out by the app (see [Markdown frontmatter](#markdown-frontmatter)), so it can hold a word list for the preview alone.
 - **App-only syntax:** `[[...]]` links and the `<!-- chunk -->` comments (no longer needed) mean nothing to VitePress. `<AudioButton>`, `<TTS>` and `<YouTube>` are rendered by the app's reader; VitePress shows them once its theme has components with those names. [vitepress.md](vitepress.md) has a theme that adds them.
-- **Edits made in the app** (**Edit Markdown**) stay in the app until you export. Export writes each lesson back to its virtual path, so an exported ZIP unpacks over the original folder.
+- **Edits made to the lesson text in the app** (**Edit Markdown**) stay in the app until you export, and are replaced the next time the file is imported with changes. Export writes each lesson back to its virtual path, so an exported ZIP unpacks over the original folder.
 
 Obsidian, VS Code's Markdown preview and GitHub work for the same files, without VitePress's `{#id}` headings.
 
@@ -171,7 +172,9 @@ The import button stays disabled until the input can be previewed. Fix any displ
 - **Pick Folder** scans Markdown files recursively. Multiple folders can be selected together on macOS; other platforms select one at a time. Nested folder and archive paths preserve lesson hierarchy.
 - Folder and ZIP results start unchecked; select lessons individually or use **Check all** / **Uncheck all**.
 - Only files with a `vocabulary:` key in their frontmatter are imported; other Markdown is ignored.
-- Re-importing updates matching lessons and vocabulary in place, keeping SRS progress and any entries not present in the import. A lesson matches when it is at the same virtual path (see [Links to `.md` files](#links-to-md-files)): the same file in the same folder, or, for a lesson with no file, the same title.
+- A folder or ZIP is not looked into under `node_modules`, `__MACOSX`, or any folder whose name starts with a dot (`.vitepress`, `.git`); files whose names start with a dot are left out too. So the folder a VitePress or Git project lives in can be picked as it is. The folder you pick is always looked into, whatever its name.
+- A file in a ZIP that is not UTF-8 text is listed as an error, and the rest of the ZIP is still read.
+- Re-importing updates matching lessons and vocabulary in place, keeping SRS progress and any entries not present in the import. A lesson matches when it is at the same virtual path (see [Links to `.md` files](#links-to-md-files)): the same file in the same folder, or, for a lesson with no file, the same title. [Importing a file again](#importing-a-file-again) says what is taken from the file.
 - **One name per folder.** No two lessons in a folder share a name (ignoring case). When an import brings a lesson whose name is taken in its folder by a lesson at another path, you are asked which one is primary; the other is overwritten by it:
   - **Saved lesson**: the imported file is skipped.
   - **Imported file**: the saved lesson takes the file's name, text and words; its words keep their study progress, and words not in the file stay.
@@ -181,7 +184,33 @@ The import button stays disabled until the input can be previewed. Fix any displ
 - Lessons that share a name or a file in a folder can still arrive by sync or from a backup, such as one file imported on two devices before they synced.
   - **Same file, nothing lost by merging:** lessons in the same folder from the same file are merged into one when the app starts or syncs, if their text is the same or one of them has none. Words only one has are kept, with their study progress, and AI chats are joined, oldest message first.
   - **Anything else:** the lesson list shows a banner: same file with different text, or the same name. **Sort out** asks which lesson of each pair is primary, and says what would be lost. Overwriting removes the other lesson, after moving any words only it has to the primary one (with their study progress) and joining its AI chat into the primary one's. **Keep both** renames the second lesson if the names match; if the two share a file, the second one lets go of it, so the next import of the file updates the first.
-- Folder and ZIP import skip Markdown files that have not changed since you last imported them, and report how many they skipped. A ZIP's files are recognised by their path inside the ZIP, so this works however the ZIP is named or wherever it is picked from (Android copies a picked file somewhere new every time).
+- Folder and ZIP import skip Markdown files that have not changed since you last imported them, and report how many they skipped. A file whose lesson is no longer saved (it was deleted, here or on another device, or moved to another folder in the app) is offered again even when it has not changed. A ZIP's files are recognised by their path inside the ZIP, so this works however the ZIP is named or wherever it is picked from (Android copies a picked file somewhere new every time).
+
+### Importing a file again
+
+A lesson file is where the lesson's text is written; its words are expected to be edited in the app. So importing a file again takes the text from the file, and for each word only what was changed in the file since the last import. The app remembers what the file said about each word, and compares.
+
+- **Text:** the file's text replaces the lesson's.
+- **A word edited in the app** (its word, translation, part of speech, or which examples it has) stays as edited, when its entry in the file is as it was.
+- **An entry edited in the file** updates its word, when the word was not edited in the app. If both were edited, the app's edit stays.
+- **Examples** are compared one by one: an example added to the entry is added to the word, one removed from the entry is removed from the word, and one marked another way (`**...**`) is marked that way. Examples you added or edited in the app stay.
+- **`audio`, `notes`, `disambiguation` and `tts`** typed in the app stay; the file's value is kept as an alternate.
+- **An entry removed from the file** leaves its word in the lesson, with its progress. Delete the word in the app if you no longer want it.
+- **Which word an entry is:** the one with its `id`; without an `id`, the one with the same word and translation, now or when the file was last imported. So an entry still finds a word you renamed in the app.
+- **Correcting an entry in the file** keeps it the same word, with its progress, when the app can tell what it used to be: the same word with a new translation, or the same translation with a typo fixed in the word (one character in three at most), and no other entry or word that could be meant. Anything else is a new word, and the old one stays: change the word and the translation at once, or replace a word with a synonym, and you get a second word. An entry with an `id` can be changed freely.
+- **A lesson imported before the app kept what its file said** has nothing to compare with the first time. A word still stays as edited when its entry reads as it did, which the app can tell for entries without an `id`, also when the word shares its progress with the same word in another lesson. An entry with an `id` follows the file once more. Examples are not removed that time: the file's are added to the word's.
+
+### Writing the app's words back to the files
+
+After **Pick Folder**, tick **Write words from the app back to the files** to bring the folder up to date with the app. It says how many unchanged files no longer match. The files you import are written too, after they are merged, and with nothing to import the button reads **Update N Files**.
+
+- **What is written:** words and translations edited in the app; `audio`, `notes`, `disambiguation` and `tts` typed in the app; examples added, removed or marked another way; and words added in the app, at the end of their section (a new section is made if there is none). A word the file already has an entry for, with its `id` or with its word and translation, is not added again, even when the lesson in the app holds it twice.
+- **What is not touched:** the lesson text, other frontmatter keys (`title`, `outline`, …), comments, and entries that did not change.
+- **Small diffs, for a folder kept in Git.** Nothing is written unless the box is ticked, and then only to files whose words differ from the app's. A changed value changes its line; an example added or removed adds or removes its own lines; a new word is added after the last entry of its section. Quotes, comments, key order and line endings elsewhere stay as they are. New entries and examples are written with their values in double quotes. Writing twice changes nothing the second time, and importing a file the app wrote changes nothing in the app.
+- **What is not written, so that files do not change back and forth:** a difference in letter case or spacing only in an example sentence (sentences are shared between lessons, and two files may write one differently); `audio`, `notes`, `disambiguation` and `tts` that came from another lesson's file; and a marking removed from an example in the app.
+- **Nothing is removed from a file except examples you removed from a word.** A word deleted in the app stays in the file, and is added again if that file is imported after a change. A word that came from a file and is no longer in it is not put back.
+- **A file edited after the folder was scanned** is skipped. A file that cannot be updated safely is left as it is and listed: the app reads its own result back before it writes.
+- **Only folders, so only on a computer.** A ZIP, and a file picked or dropped by itself, cannot be written to, and Android cannot pick a folder. Words edited on a phone reach the folder through sync: once the computer has synced, import the folder there with the box ticked. An exported ZIP is not a substitute for a folder kept in Git: export writes every file again in its own layout.
 
 ### Adding vocabulary to an existing lesson
 

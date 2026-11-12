@@ -108,6 +108,27 @@ class LessonExportService {
     return root;
   }
 
+  /// [sentence] as an example of [vocab] in a lesson file: with the word's
+  /// `**` marking, which import requires, suggested when the word has none.
+  static String exampleTarget(
+    Lesson lesson,
+    VocabItem vocab,
+    Sentence sentence,
+  ) {
+    var target = vocab.targetTextFor(sentence);
+    if (!Sentence.hasEmphasis(target)) {
+      target = Sentence.suggestEmphasis(
+        sentence.targetText,
+        vocab.targetWord,
+        korean: lesson.targetLanguage.toLowerCase() == 'ko',
+      );
+      if (!Sentence.hasEmphasis(target) && target.isNotEmpty) {
+        target = '**$target**';
+      }
+    }
+    return target;
+  }
+
   static Map<String, dynamic> _vocabEntry(
     Lesson lesson,
     VocabItem vocab,
@@ -129,17 +150,7 @@ class LessonExportService {
     for (final id in vocab.sentenceIds) {
       final sentence = sentenceById[id];
       if (sentence == null) continue;
-      var target = vocab.targetTextFor(sentence);
-      if (!Sentence.hasEmphasis(target)) {
-        target = Sentence.suggestEmphasis(
-          sentence.targetText,
-          vocab.targetWord,
-          korean: lesson.targetLanguage.toLowerCase() == 'ko',
-        );
-        if (!Sentence.hasEmphasis(target) && target.isNotEmpty) {
-          target = '**$target**';
-        }
-      }
+      final target = exampleTarget(lesson, vocab, sentence);
 
       final example = <String, String>{'target': target};
       final translation = vocab.translationTextFor(sentence);
