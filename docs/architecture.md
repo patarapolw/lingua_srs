@@ -62,6 +62,8 @@ lingua_srs/
 │   │   ├── english_text_search.dart   # English full-text search over vocabulary meanings
 │   │   ├── korean_pronunciation_service.dart # Revised Romanization and IPA from how Korean sounds
 │   │   ├── lesson_export_service.dart # Exports lessons and units as a ZIP of Markdown files
+│   │   ├── lesson_word_match.dart     # Pairs the entries of a lesson file with the words of the lesson saved from it
+│   │   ├── lesson_file_update.dart    # Writes the app's words into a lesson file's frontmatter, leaving the rest of the file
 │   │   ├── markdown_archive_service.dart # Reads Markdown files out of an imported ZIP
 │   │   ├── vocab_ai_service.dart      # AI merge suggestions and similar-meaning hints
 │   │   └── storage_service.dart       # Local persistence and debug seed data
@@ -95,10 +97,13 @@ lingua_srs/
 │       ├── folder_picker_dialog.dart  # Pick an existing or new folder to move a lesson/folder into
 │       ├── lesson_hierarchy_view.dart # Lesson folder tree with reordering
 │       ├── lesson_clash_dialog.dart   # Asks which of two same-named lessons in a folder is primary
-│       ├── lesson_content_view.dart   # Lesson Markdown reader (native, chunked lazy list)
+│       ├── lesson_content_view.dart   # Lesson reader: the lesson as one page in a WebView, headings and scroll memory
+│       ├── lesson_html.dart           # Lesson Markdown to the HTML page, CSS and script the reader's WebView shows
 │       ├── cached_markdown_image.dart # Online Markdown image shown from the disk cache
 │       ├── markdown_content.dart      # Markdown renderer for notes and chat
+│       ├── markdown_details.dart      # `<details>` blocks in Markdown: a summary that shows and hides text
 │       ├── markdown_heading.dart      # Markdown headings: bold or code keeps the heading size
+│       ├── markdown_inline_html.dart  # Inline HTML in Markdown: `<br>`, `<ins>`, `<mark>`, `<sup>`
 │       ├── markdown_notes_field.dart  # Notes form field: Add button, rendered notes, Edit/Preview
 │       ├── icon_switch.dart           # Switch flanked by icons, e.g. light and dark
 │       ├── markdown_text_field.dart   # Markdown text field that converts pasted HTML

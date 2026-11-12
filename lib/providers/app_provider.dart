@@ -17,6 +17,8 @@ import '../services/ai_discussion_search.dart';
 import '../services/deepseek_service.dart';
 import '../services/hangul_text.dart';
 import '../services/lesson_ai_prompt.dart';
+import '../services/lesson_file_update.dart';
+import '../services/lesson_word_match.dart';
 import '../services/new_card_quota.dart';
 import '../services/srs_service.dart';
 import '../services/storage_service.dart';
@@ -1339,6 +1341,9 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   }) {
     final existingLesson = existing;
     if (existingLesson != null) {
+      // Only the file a lesson came from can have had its entries edited:
+      // another file that takes the lesson's name brings other words.
+      final sameFile = _sameVirtualPath(existingLesson, parsed.lesson);
       // Keep a name given to tell it from another lesson in its folder.
       final nameTaken = _lessons.any(
         (other) =>
@@ -1358,7 +1363,12 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
         existingLesson.fileName = parsed.lesson.fileName;
         existingLesson.fileFolder = parsed.lesson.fileFolder;
       }
-      _mergeImportedLesson(existingLesson, parsed, sentenceIndex);
+      _mergeImportedLesson(
+        existingLesson,
+        parsed,
+        sentenceIndex,
+        edits: sameFile,
+      );
     } else {
       if (vocabIndex == null) {
         _reuseExistingVocabProgress(
@@ -1453,6 +1463,39 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     lesson.title = parts.length <= 1
         ? name
         : joinHierarchyPath([...parts.take(parts.length - 1), name]);
+  }
+
+  /// Whether a saved lesson is the one [file] would update when imported
+  /// (a lesson file without its vocabulary, from
+  /// [YamlParserService.lessonFileInfo]). A file whose lesson was deleted
+  /// has none, and is to be imported again even if it has not changed.
+  bool hasLessonForFile(Lesson file) => _importTarget(file).$1 != null;
+
+  /// What [markdown], the text of a lesson file, needs for its vocabulary
+  /// to say what the app does, or null when it needs nothing or no saved
+  /// lesson is at the file's virtual path. [file] is the file without its
+  /// vocabulary ([YamlParserService.lessonFileInfo]).
+  ///
+  /// Throws a [FormatException] when the file cannot be updated safely.
+  LessonFileUpdate? planFileUpdate(String markdown, Lesson file) {
+    final (lesson, ask) = _importTarget(file);
+    if (lesson == null || ask) return null;
+    return LessonFileUpdate.plan(markdown, lesson, {
+      for (final sentence in _sentences) sentence.id: sentence,
+    });
+  }
+
+  /// Records that the files of [written] now say what the app does, so the
+  /// next import of them takes only what is edited in them from then on.
+  Future<void> adoptFileUpdates(Iterable<LessonFileUpdate> written) async {
+    var changed = false;
+    for (final update in written) {
+      for (final entry in update.sources.entries) {
+        entry.key.source = entry.value;
+        changed = true;
+      }
+    }
+    if (changed) await StorageService.saveLessons(_lessons);
   }
 
   /// Gives saved lessons the real file paths of [files] (lessons without
@@ -1655,8 +1698,9 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   void _mergeImportedLesson(
     Lesson lesson,
     YamlParseResult parsed,
-    Map<String, List<Sentence>>? sentenceIndex,
-  ) {
+    Map<String, List<Sentence>>? sentenceIndex, {
+    required bool edits,
+  }) {
     final lessonSentenceIds = lesson.vocabularies
         .expand((vocab) => vocab.sentenceIds)
         .toSet();
@@ -1676,6 +1720,9 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
 
     final importedSentenceIds = <String, String>{};
     final importedSentenceBySignature = <String, String>{};
+    // Sentences this import put in the pool, to take out again if no word
+    // ends up listing them (see [_mergeFileWord]).
+    final addedSentences = <Sentence>[];
     for (final sentence in parsed.sentences) {
       final signature = _sentenceSignature(sentence);
       final previousImport = importedSentenceBySignature[signature];
@@ -1692,6 +1739,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
         sentence.lessonId = lesson.id;
         final canonical = _upsertSentence(sentence, bySignature: sentenceIndex);
         importedSentenceIds[sentence.id] = canonical.id;
+        if (identical(canonical, sentence)) addedSentences.add(sentence);
       } else {
         existingSentence
           ..targetText = sentence.targetText
@@ -1727,21 +1775,41 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
             .expand((candidate) => candidate.vocabularies)) {
       _addVocabToIndexes(vocab, vocabById, vocabByMeaning);
     }
+    // The saved word each entry is when its id and its meaning no longer
+    // say so: a word edited in the app, or an entry corrected in the file.
+    final fileMatches = LessonWordMatch.match(
+      parsed.lesson.vocabularies,
+      lesson.vocabularies,
+      edits: edits,
+    );
+    final sentenceById = {
+      for (final sentence in _sentences) sentence.id: sentence,
+    };
     final matchedLessonVocabularies = <VocabItem>{};
     final newVocabularies = <VocabItem>[];
     for (final importedVocab in parsed.lesson.vocabularies) {
       _redirectSentences(importedVocab, importedSentenceIds);
 
-      final previousVocab = _findExistingVocabInIndexes(
+      var previousVocab = _findExistingVocabInIndexes(
         importedVocab,
         vocabById,
         vocabByMeaning,
         matchedLessonVocabularies,
       );
-      final lessonMatch =
+      var lessonMatch =
           previousVocab != null && lesson.vocabularies.contains(previousVocab)
           ? previousVocab
           : null;
+      var editedInFile = false;
+      final fileMatch = fileMatches[importedVocab];
+      if (lessonMatch == null &&
+          fileMatch != null &&
+          (fileMatch.kind == WordMatchKind.source ||
+              fileMatch.kind == WordMatchKind.edited) &&
+          !matchedLessonVocabularies.contains(fileMatch.word)) {
+        lessonMatch = previousVocab = fileMatch.word;
+        editedInFile = fileMatch.kind == WordMatchKind.edited;
+      }
       if (lessonMatch == null) {
         if (previousVocab != null) {
           _reuseProgress(importedVocab, previousVocab, lessonId: lesson.id);
@@ -1753,19 +1821,22 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
 
       matchedLessonVocabularies.add(lessonMatch);
       _removeVocabFromIndexes(lessonMatch, vocabById, vocabByMeaning);
+      // An id made from the word and its translation that is still the
+      // saved word's says the entry reads as it did when it was imported,
+      // even if sharing progress with another lesson marked it explicit.
+      final unchangedInFile =
+          !editedInFile &&
+          !importedVocab.idIsExplicit &&
+          importedVocab.id == lessonMatch.id;
       lessonMatch
         ..id = lessonMatch.idIsExplicit ? lessonMatch.id : importedVocab.id
-        ..idIsExplicit = lessonMatch.idIsExplicit || importedVocab.idIsExplicit
-        ..targetWord = importedVocab.targetWord
-        ..translation = importedVocab.translation
-        ..reading = importedVocab.reading
-        ..simplified = importedVocab.simplified
-        ..traditional = importedVocab.traditional
-        ..hanja = importedVocab.hanja
-        ..pos = importedVocab.pos
-        ..sectionPath = importedVocab.sectionPath
-        ..sentenceIds = importedVocab.sentenceIds
-        ..sentenceEmphasis = importedVocab.sentenceEmphasis;
+        ..idIsExplicit = lessonMatch.idIsExplicit || importedVocab.idIsExplicit;
+      _mergeFileWord(
+        lessonMatch,
+        importedVocab,
+        sentenceById,
+        unchangedInFile: unchangedInFile,
+      );
       lessonMatch.shared
         ..mergeImport(
           SharedVocab.audioField,
@@ -1793,6 +1864,148 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       }
     }
     lesson.vocabularies = [...lesson.vocabularies, ...newVocabularies];
+    _dropUnusedSentences(addedSentences, lesson, sentenceIndex);
+  }
+
+  /// Brings [word], a saved word, up to date with [file], the entry of its
+  /// lesson file, taking from the file only what changed there since the
+  /// file was last imported ([VocabItem.source]). What was edited in the
+  /// app stays, and so does the app's edit when both changed.
+  ///
+  /// A word saved before the file's values were kept has nothing to compare
+  /// with. Its word and translation stay when [unchangedInFile] says the
+  /// entry still reads as it did; otherwise they follow the file, as they
+  /// used to. Its examples are kept, and the file's are added to them.
+  void _mergeFileWord(
+    VocabItem word,
+    VocabItem file,
+    Map<String, Sentence> sentenceById, {
+    required bool unchangedInFile,
+  }) {
+    final base = word.source;
+    String merged(String? was, String theirs, String ours) {
+      if (was == null) return unchangedInFile ? ours : theirs;
+      if (theirs == was) return ours;
+      return ours == was ? theirs : ours;
+    }
+
+    word
+      ..targetWord = merged(base?.targetWord, file.targetWord, word.targetWord)
+      ..translation = merged(
+        base?.translation,
+        file.translation,
+        word.translation,
+      );
+    // A reading or form has no "as edited" to fall back on: a word saved
+    // before these were kept had none, so what the file says now is new.
+    String form(String was, String theirs, String ours) =>
+        theirs == was || ours != was ? ours : theirs;
+    word
+      ..reading = form(base?.reading ?? '', file.reading, word.reading)
+      ..simplified = form(
+        base?.simplified ?? '',
+        file.simplified,
+        word.simplified,
+      )
+      ..traditional = form(
+        base?.traditional ?? '',
+        file.traditional,
+        word.traditional,
+      )
+      ..hanja = form(base?.hanja ?? '', file.hanja, word.hanja);
+    if (base == null || !_sameNames(base.sectionPath, file.sectionPath)) {
+      word
+        ..pos = file.pos
+        ..sectionPath = file.sectionPath;
+    }
+
+    String? keyOf(VocabItem owner, String id) {
+      final sentence = sentenceById[id];
+      return sentence == null ? null : owner.exampleKey(sentence);
+    }
+
+    final fileKeys = {for (final id in file.sentenceIds) id: keyOf(file, id)};
+    final was = base?.examples.toSet();
+    final now = fileKeys.values.whereType<String>().toSet();
+    if (was == null || !(was.length == now.length && was.containsAll(now))) {
+      final ids = [...word.sentenceIds];
+      final emphasis = {...word.sentenceEmphasis};
+      if (was != null) {
+        // Gone from the file, and still as the file had it here.
+        ids.removeWhere((id) {
+          final key = keyOf(word, id);
+          final gone =
+              key != null &&
+              was.contains(key) &&
+              !now.contains(key) &&
+              !file.sentenceIds.contains(id);
+          if (gone) emphasis.remove(id);
+          return gone;
+        });
+      }
+      for (final id in file.sentenceIds) {
+        final key = fileKeys[id];
+        final isNew = was == null || key == null || !was.contains(key);
+        if (!isNew) continue;
+        final mark = file.sentenceEmphasis[id];
+        if (!ids.contains(id)) {
+          ids.add(id);
+          if (mark != null) emphasis[id] = mark;
+        } else if (was != null &&
+            mark != null &&
+            was.contains(keyOf(word, id))) {
+          // The same sentence, marked another way in the file.
+          emphasis[id] = mark;
+        }
+      }
+      word
+        ..sentenceIds = ids
+        ..sentenceEmphasis = emphasis;
+    }
+    // Vocabulary added to a lesson by hand is not what its file says.
+    if (file.source != null) word.source = file.source;
+  }
+
+  static bool _sameNames(List<String> first, List<String> second) {
+    if (first.length != second.length) return false;
+    for (var index = 0; index < first.length; index++) {
+      if (first[index] != second[index]) return false;
+    }
+    return true;
+  }
+
+  /// Takes [added] sentences out of the pool again when no word lists them:
+  /// examples the file still has of a word whose examples were edited in the
+  /// app, which would otherwise pile up in the pool at every import.
+  void _dropUnusedSentences(
+    List<Sentence> added,
+    Lesson lesson,
+    Map<String, List<Sentence>>? sentenceIndex,
+  ) {
+    if (added.isEmpty) return;
+    final listed = {
+      for (final vocab in lesson.vocabularies) ...vocab.sentenceIds,
+    };
+    final unused = added
+        .where((sentence) => !listed.contains(_followMerges(sentence.id)))
+        .toList();
+    if (unused.isEmpty) return;
+    final listedAnywhere = {
+      for (final vocab in _lessons.expand((lesson) => lesson.vocabularies))
+        ...vocab.sentenceIds,
+    };
+    for (final sentence in unused) {
+      if (listedAnywhere.contains(sentence.id)) continue;
+      // Merged into another sentence since: that one is not this import's.
+      if (!_sentences.any((other) => identical(other, sentence))) continue;
+      _sentences.removeWhere((other) => identical(other, sentence));
+      _importSentenceSet?.remove(sentence);
+      final sameText = sentenceIndex?[_sentenceSignature(sentence)];
+      sameText?.removeWhere((other) => identical(other, sentence));
+      if (sameText != null && sameText.isEmpty) {
+        sentenceIndex!.remove(_sentenceSignature(sentence));
+      }
+    }
   }
 
   static VocabItem? _findExistingVocabInIndexes(
@@ -1971,15 +2184,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     return _sentences.any((s) => _sentenceSignature(s) == signature);
   }
 
-  static String _sentenceSignature(Sentence sentence) {
-    String normalize(String text) =>
-        Sentence.withoutEmphasis(text)
-            .trim()
-            .toLowerCase()
-            .replaceAll(RegExp(r'\s+'), ' ');
-    return '${normalize(sentence.targetText)}\u0000'
-        '${normalize(sentence.translationText)}';
-  }
+  static String _sentenceSignature(Sentence sentence) => sentence.signature;
 
   List<VocabItem> getDuplicateFrontVocabularies(
     VocabItem vocab,
@@ -2417,7 +2622,8 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   Future<void> deleteVocab(String lessonId, VocabItem vocab) async {
     final lesson = _lessons.firstWhere((l) => l.id == lessonId);
     if (!lesson.vocabularies.contains(vocab)) return;
-    _resetSharedProgress([vocab]);
+    // Another copy of the word, in this lesson or another, keeps the
+    // progress they share.
     lesson.vocabularies.remove(vocab);
     await saveState();
   }
@@ -2448,8 +2654,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       return true;
     }
 
-    final deleted = lesson.vocabularies.where(isInSection).toList();
-    _resetSharedProgress(deleted);
+    // As in [deleteVocab], words that stay keep their progress.
     lesson.vocabularies.removeWhere(isInSection);
     await saveState();
   }

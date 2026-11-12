@@ -12,7 +12,88 @@ class YamlParseResult {
   final Lesson lesson;
   final List<Sentence> sentences;
 
-  YamlParseResult({required this.lesson, required this.sentences});
+  /// Where each word of [lesson] is in the YAML, in the same order as
+  /// [Lesson.vocabularies].
+  final List<VocabEntryLocation> locations;
+
+  /// Every vocabulary section of the YAML, by its names joined with
+  /// [sectionSeparator].
+  final Map<String, VocabSectionLocation> sections;
+
+  /// The path of the map that holds the sections: `vocabulary`, or the root
+  /// of plain YAML that has no such key.
+  final List<Object?> vocabularyPath;
+
+  YamlParseResult({
+    required this.lesson,
+    required this.sentences,
+    this.locations = const [],
+    this.sections = const {},
+    this.vocabularyPath = const [],
+  });
+
+  static const sectionSeparator = '\u0000';
+
+  static String sectionKey(Iterable<String> names) =>
+      names.map((name) => name.trim()).join(sectionSeparator);
+}
+
+/// Where a vocabulary section is in a lesson's YAML: the keys from the root
+/// of the document as they are written, and whether it holds entries (a
+/// list) or more sections (a map).
+class VocabSectionLocation {
+  final List<Object?> path;
+  final bool isList;
+
+  const VocabSectionLocation(this.path, {required this.isList});
+}
+
+/// Where a vocabulary entry is in a lesson's YAML, and the keys it is
+/// written with, so that the entry can be changed in place
+/// (`LessonFileUpdate`) without reading the lesson syntax again.
+class VocabEntryLocation {
+  /// From the root of the document to the entry's map.
+  final List<Object?> path;
+  final Object? targetKey;
+  final Object? translationKey;
+  final Object? ttsKey;
+
+  /// The keys the entry's reading and other forms are written with, by
+  /// [VocabSource.formFields] name. A field the entry does not have has none.
+  final Map<String, Object?> formKeys;
+
+  /// The entry's examples that became sentences, in the order of
+  /// [VocabItem.sentenceIds] as parsed.
+  final List<ExampleLocation> examples;
+
+  /// Whether `examples` is a list in the entry.
+  final bool hasExamples;
+
+  const VocabEntryLocation({
+    required this.path,
+    this.targetKey,
+    this.translationKey,
+    this.ttsKey,
+    this.formKeys = const {},
+    this.examples = const [],
+    this.hasExamples = false,
+  });
+}
+
+/// An example of a vocabulary entry: its place in the entry's `examples`
+/// list and the keys it is written with.
+class ExampleLocation {
+  final int index;
+  final String sentenceId;
+  final Object? targetKey;
+  final Object? translationKey;
+
+  const ExampleLocation({
+    required this.index,
+    required this.sentenceId,
+    this.targetKey,
+    this.translationKey,
+  });
 }
 
 /// An example sentence in the target language that has no `**emphasis**`.
@@ -216,19 +297,47 @@ class YamlParserService {
     final List<VocabItem> vocabList = [];
     final List<Sentence> allSentences = [];
     final List<MissingEmphasis> missingEmphasis = [];
+    final locations = <VocabEntryLocation>[];
+    final sentenceById = <String, Sentence>{};
+    final sections = <String, VocabSectionLocation>{};
+    final vocabularyPath = <Object?>[
+      if (isMarkdown || vocabulary is Map) 'vocabulary',
+    ];
 
-    void parseSection(String sectionName, dynamic value, List<String> parent) {
+    void parseSection(
+      String sectionName,
+      dynamic value,
+      List<String> parent,
+      List<Object?> yamlPath,
+    ) {
       final sectionPath = [...parent, sectionName];
       if (value is Map) {
+        sections.putIfAbsent(
+          YamlParseResult.sectionKey(sectionPath),
+          () => VocabSectionLocation(yamlPath, isList: false),
+        );
         for (final child in value.entries) {
-          parseSection(child.key.toString().trim(), child.value, sectionPath);
+          parseSection(child.key.toString().trim(), child.value, sectionPath, [
+            ...yamlPath,
+            child.key,
+          ]);
         }
         return;
       }
       if (value is! List) return;
+      sections.putIfAbsent(
+        YamlParseResult.sectionKey(sectionPath),
+        () => VocabSectionLocation(yamlPath, isList: true),
+      );
 
-      for (final item in value) {
+      for (var itemIndex = 0; itemIndex < value.length; itemIndex++) {
+        final item = value[itemIndex];
         if (item is! Map) continue;
+        Object? targetKey;
+        Object? translationKey;
+        Object? ttsKey;
+        final formKeys = <String, Object?>{};
+        final exampleLocations = <ExampleLocation>[];
         String targetWord = '';
         String translation = '';
         String reading = '';
@@ -267,34 +376,48 @@ class YamlParserService {
 
           if (knownLangKeys.contains(fKey) && targetWord.isEmpty) {
             targetWord = fVal;
+            if (fVal.isNotEmpty) targetKey = field.key;
             if (fKey != 'target' && fKey != 'term' && fKey != 'word') {
               targetLang = fKey; // Infer target lang from key
             }
           } else if (knownNativeKeys.contains(fKey) && translation.isEmpty) {
             translation = fVal;
+            if (fVal.isNotEmpty) translationKey = field.key;
             if (fKey == 'en' || fKey == 'eng') {
               nativeLang = 'en';
             }
           } else if (_isTtsKey(fKey) && fVal.isNotEmpty) {
             ttsText = fVal; // tts: alternate text for TTS
+            ttsKey = field.key;
           } else if (readingKeys.contains(fKey) && reading.isEmpty) {
             reading = fVal; // pinyin, or another reading
+            if (fVal.isNotEmpty) formKeys[VocabSource.readingField] = field.key;
           } else if (simplifiedKeys.contains(fKey) && simplified.isEmpty) {
             simplified = fVal;
+            if (fVal.isNotEmpty) {
+              formKeys[VocabSource.simplifiedField] = field.key;
+            }
           } else if (traditionalKeys.contains(fKey) && traditional.isEmpty) {
             traditional = fVal;
+            if (fVal.isNotEmpty) {
+              formKeys[VocabSource.traditionalField] = field.key;
+            }
           } else if (hanjaKeys.contains(fKey) && hanja.isEmpty) {
             hanja = fVal;
+            if (fVal.isNotEmpty) formKeys[VocabSource.hanjaField] = field.key;
           }
         }
 
         if (item['examples'] is List) {
           final examples = item['examples'] as List;
-          for (final ex in examples) {
+          for (var exIndex = 0; exIndex < examples.length; exIndex++) {
+            final ex = examples[exIndex];
             if (ex is! Map) continue;
 
             String exTarget = '';
             String exTrans = '';
+            Object? exTargetKey;
+            Object? exTransKey;
             String? exAudio;
             String? exTts;
             String exNotes = '';
@@ -312,8 +435,10 @@ class YamlParserService {
 
               if (knownLangKeys.contains(exKey) && exTarget.isEmpty) {
                 exTarget = exVal;
+                if (exVal.isNotEmpty) exTargetKey = exField.key;
               } else if (knownNativeKeys.contains(exKey) && exTrans.isEmpty) {
                 exTrans = exVal;
+                if (exVal.isNotEmpty) exTransKey = exField.key;
               } else if (_isTtsKey(exKey) && exVal.isNotEmpty) {
                 exTts = exVal;
               }
@@ -335,7 +460,16 @@ class YamlParserService {
                 notes: exNotes,
               );
               allSentences.add(sentence);
+              sentenceById[sentence.id] = sentence;
               itemSentenceIds.add(sentence.id);
+              exampleLocations.add(
+                ExampleLocation(
+                  index: exIndex,
+                  sentenceId: sentence.id,
+                  targetKey: exTargetKey,
+                  translationKey: exTransKey,
+                ),
+              );
               itemEmphasis[sentence.id] = SentenceEmphasis(
                 target: exTarget,
                 translation: exTrans,
@@ -365,7 +499,31 @@ class YamlParserService {
             sentenceIds: itemSentenceIds,
             sentenceEmphasis: itemEmphasis,
           );
+          vocab.source = VocabSource(
+            targetWord: targetWord,
+            translation: translation,
+            reading: reading,
+            simplified: simplified,
+            traditional: traditional,
+            hanja: hanja,
+            sectionPath: sectionPath,
+            examples: [
+              for (final id in itemSentenceIds)
+                vocab.exampleKey(sentenceById[id]!),
+            ],
+          );
           vocabList.add(vocab);
+          locations.add(
+            VocabEntryLocation(
+              path: [...yamlPath, itemIndex],
+              targetKey: targetKey,
+              translationKey: translationKey,
+              ttsKey: ttsKey,
+              formKeys: formKeys,
+              examples: exampleLocations,
+              hasExamples: item['examples'] is List,
+            ),
+          );
         }
       }
     }
@@ -373,7 +531,10 @@ class YamlParserService {
     for (final entry in vocabularyDoc.entries) {
       final sectionName = entry.key.toString().trim();
       if (sectionName.isNotEmpty) {
-        parseSection(sectionName, entry.value, const []);
+        parseSection(sectionName, entry.value, const [], [
+          ...vocabularyPath,
+          entry.key,
+        ]);
       }
     }
 
@@ -411,7 +572,33 @@ class YamlParserService {
       s.lessonId = lesson.id;
     }
 
-    return YamlParseResult(lesson: lesson, sentences: allSentences);
+    return YamlParseResult(
+      lesson: lesson,
+      sentences: allSentences,
+      locations: locations,
+      sections: sections,
+      vocabularyPath: vocabularyPath,
+    );
+  }
+
+  /// Where the YAML of [markdown]'s frontmatter starts and ends in it: the
+  /// text between the `---` lines, without them. Null when there is no
+  /// frontmatter. Everything outside the span is the rest of the file, which
+  /// stays as it is when only the frontmatter is rewritten.
+  static (int, int)? frontmatterSpan(String markdown) {
+    final lead = markdown.length - markdown.trimLeft().length;
+    if (!markdown.startsWith('---', lead)) return null;
+    final lineEnd = markdown.indexOf('\n', lead);
+    if (lineEnd == -1 || markdown.substring(lead + 3, lineEnd).trim() != '') {
+      return null;
+    }
+    final closing = RegExp(r'\r?\n---\s*(?:\r?\n|$)')
+        .firstMatch(markdown.substring(lead + 3));
+    if (closing == null) return null;
+    final start = lineEnd + 1;
+    // Keep the line break that ends the last line of YAML.
+    final end = lead + 3 + closing.start + closing[0]!.indexOf('---');
+    return end < start ? null : (start, end);
   }
 
   /// Two target words with the same key are the same word: they differ only

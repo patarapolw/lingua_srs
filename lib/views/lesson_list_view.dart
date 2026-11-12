@@ -2,7 +2,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../models/lesson.dart';
@@ -26,10 +26,21 @@ class LessonListView extends StatelessWidget {
   final VoidCallback? onToggleTheme;
   final bool isDarkMode;
 
+  /// Whether the ⋮ menu offers Study activity. Off where the navigation has
+  /// a tab for it (see AdaptiveScaffold).
+  final bool showStudyActivity;
+
+  /// Opens Study activity from the ⋮ menu. Without it, the screen is pushed
+  /// over this one. AdaptiveScaffold opens it in place instead, so it turns
+  /// into the rail's tab when the window widens or the device is rotated.
+  final VoidCallback? onOpenStudyActivity;
+
   const LessonListView({
     super.key,
     this.onToggleTheme,
     this.isDarkMode = false,
+    this.showStudyActivity = true,
+    this.onOpenStudyActivity,
   });
 
   void _confirmResetLesson(BuildContext context, Lesson lesson) {
@@ -675,7 +686,9 @@ class LessonListView extends StatelessWidget {
                 onSelected: (action) {
                   if (action == 'ai') showAiMergeSuggestions(context);
                   if (action == 'history') showMergeHistory(context);
-                  if (action == 'activity') {
+                  if (action == 'activity' && onOpenStudyActivity != null) {
+                    onOpenStudyActivity!();
+                  } else if (action == 'activity') {
                     Navigator.push(
                       context,
                       MaterialPageRoute<void>(
@@ -703,14 +716,15 @@ class LessonListView extends StatelessWidget {
                       contentPadding: EdgeInsets.zero,
                     ),
                   ),
-                  const PopupMenuItem(
-                    value: 'activity',
-                    child: ListTile(
-                      leading: Icon(Icons.calendar_month_outlined),
-                      title: Text('Study activity'),
-                      contentPadding: EdgeInsets.zero,
+                  if (showStudyActivity)
+                    const PopupMenuItem(
+                      value: 'activity',
+                      child: ListTile(
+                        leading: Icon(Icons.calendar_month_outlined),
+                        title: Text('Study activity'),
+                        contentPadding: EdgeInsets.zero,
+                      ),
                     ),
-                  ),
                 ],
               );
             },

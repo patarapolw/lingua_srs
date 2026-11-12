@@ -30,7 +30,7 @@ void main() {
         Lesson(id: 'lesson-id', title: 'Saved').toJson(),
       ]),
       'lingua_srs_sentences': '[]',
-      'lingua_srs_lesson_markdown_ids': ['lesson-id'],
+      'lingua_srs_lesson_markdown_ids': <dynamic>['lesson-id'],
       'lingua_srs_max_reviews_24h': 50,
     });
     storageDirectory = Directory.systemTemp.createTempSync(

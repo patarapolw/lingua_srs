@@ -5,13 +5,14 @@ import 'dart:isolate';
 
 import 'package:crypto/crypto.dart';
 import 'package:desktop_drop/desktop_drop.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../models/lesson.dart';
 import '../providers/app_provider.dart';
 import '../services/lesson_ai_prompt.dart';
+import '../services/lesson_file_update.dart';
 import '../services/markdown_archive_service.dart';
 import '../services/storage_service.dart';
 import '../services/yaml_parser_service.dart';
@@ -68,6 +69,14 @@ class _YamlImportViewState extends State<YamlImportView>
   List<String> _directoryErrors = [];
   int _directorySkipped = 0;
   int _directoryUnchanged = 0;
+
+  /// Unchanged files of the scanned folder, and how many of them no longer
+  /// say what the app does about their words.
+  List<LessonFileRef> _unchangedFiles = [];
+  int _staleFiles = 0;
+
+  /// Whether importing also writes the app's words back to the files.
+  bool _writeBack = false;
   String? _importSourceLabel;
   bool _isParsing = false;
   bool _isDraggingFiles = false;
@@ -111,6 +120,8 @@ class _YamlImportViewState extends State<YamlImportView>
       _directorySkipped = 0;
       _directoryUnchanged = 0;
     }
+    _unchangedFiles = [];
+    _staleFiles = 0;
     if (text.isEmpty) {
       setState(() {
         _errorMessage = null;
@@ -209,6 +220,8 @@ class _YamlImportViewState extends State<YamlImportView>
       _directoryErrors = [];
       _directorySkipped = 0;
       _directoryUnchanged = 0;
+      _unchangedFiles = [];
+      _staleFiles = 0;
       _errorMessage = null;
       _progressMessage = 'Reading selected lesson files...';
       _progressCurrent = 0;
@@ -222,10 +235,22 @@ class _YamlImportViewState extends State<YamlImportView>
     try {
       final importedSources =
           await StorageService.loadImportedMarkdownSources();
-      final parseResult = await _parsePickedMarkdownSourcesInBackground(
+      var parseResult = await _parsePickedMarkdownSourcesInBackground(
         sources,
         importedSources,
       );
+      if (!mounted) return;
+      final lessonless = _lessonlessFiles(
+        context.read<AppProvider>(),
+        parseResult,
+      );
+      if (lessonless.isNotEmpty) {
+        parseResult = await _parsePickedMarkdownSourcesInBackground(
+          sources,
+          importedSources,
+          reimport: lessonless,
+        );
+      }
       parseResult.imports.sort((first, second) {
         return first.path.toLowerCase().compareTo(second.path.toLowerCase());
       });
@@ -416,6 +441,8 @@ class _YamlImportViewState extends State<YamlImportView>
       _directoryErrors = [];
       _directorySkipped = 0;
       _directoryUnchanged = 0;
+      _unchangedFiles = [];
+      _staleFiles = 0;
       _errorMessage = null;
       _progressMessage = 'Scanning Markdown files...';
       _progressCurrent = 0;
@@ -429,16 +456,8 @@ class _YamlImportViewState extends State<YamlImportView>
     final markdownPaths = <String>[];
     final seenPaths = <String>{};
     for (final directoryPath in directoryPaths) {
-      final root = Directory(directoryPath);
-      await for (final entity in root.list(
-        recursive: true,
-        followLinks: false,
-      )) {
-        if (entity is File &&
-            entity.path.toLowerCase().endsWith('.md') &&
-            seenPaths.add(_markdownSourceKey(entity.path))) {
-          markdownPaths.add(entity.path);
-        }
+      for (final path in await markdownFilesUnder(Directory(directoryPath))) {
+        if (seenPaths.add(markdownSourceKey(path))) markdownPaths.add(path);
       }
     }
     if (mounted) {
@@ -456,27 +475,43 @@ class _YamlImportViewState extends State<YamlImportView>
         _progressTotal = markdownPaths.length + files.length;
       });
     }
-    final results = <MarkdownDirectoryResult>[
+    Future<MarkdownDirectoryResult> read([
+      Set<String> reimport = const {},
+    ]) async => _combineMarkdownDirectoryResults([
       if (markdownPaths.isNotEmpty)
         await _parseMarkdownDirectoryInBackground(
           markdownPaths,
           directoryPaths,
           importedSources,
+          reimport: reimport,
         ),
       if (files.isNotEmpty)
-        await _parsePickedMarkdownSourcesInBackground(files, importedSources),
-    ];
-    final result = _combineMarkdownDirectoryResults(results);
+        await _parsePickedMarkdownSourcesInBackground(
+          files,
+          importedSources,
+          reimport: reimport,
+        ),
+    ]);
+    var result = await read();
+    if (!mounted) return;
+    final lessonless = _lessonlessFiles(context.read<AppProvider>(), result);
+    if (lessonless.isNotEmpty) result = await read(lessonless);
     result.imports.sort((first, second) {
       return first.path.toLowerCase().compareTo(second.path.toLowerCase());
     });
 
     if (!mounted) return;
-    final followed = await context.read<AppProvider>().adoptFilePaths(
-      result.unchangedLessons,
+    final provider = context.read<AppProvider>();
+    final followed = await provider.adoptFilePaths(result.unchangedLessons);
+    final stale = await writeLessonFiles(
+      provider,
+      result.unchangedFiles,
+      dryRun: true,
     );
     if (!mounted) return;
     setState(() {
+      _unchangedFiles = result.unchangedFiles;
+      _staleFiles = stale.files;
       _directoryFiles = result.imports;
       _selectedDirectoryPaths.clear();
       _directoryErrors = result.errors;
@@ -541,8 +576,12 @@ class _YamlImportViewState extends State<YamlImportView>
     };
   }
 
+  /// Whether there is a folder to write the app's words back to.
+  bool get _canWriteBack =>
+      _staleFiles > 0 || _directoryFiles.any((file) => file.filePath != null);
+
   Future<void> _executeImport() async {
-    if (_directoryFiles.isNotEmpty) {
+    if (_directoryFiles.isNotEmpty || (_writeBack && _staleFiles > 0)) {
       await _executeDirectoryImport();
       return;
     }
@@ -559,6 +598,12 @@ class _YamlImportViewState extends State<YamlImportView>
           preview,
           isNew: (sentence) => !provider.hasSentenceLike(sentence),
         );
+      }
+      if (widget.vocabularyOnly) {
+        // Not what the lesson's file says: see [VocabItem.source].
+        for (final vocab in preview.lesson.vocabularies) {
+          vocab.source = null;
+        }
       }
       final importedLesson = (await provider.importParsedLessons(
         [preview],
@@ -622,24 +667,60 @@ class _YamlImportViewState extends State<YamlImportView>
         importedSources[file.sourceKey] = file.sourceHash;
       }
       await StorageService.saveImportedMarkdownSources(importedSources);
+      // The files just imported are in step with their lessons now, as the
+      // unchanged ones are: both can take the app's words.
+      final written = _writeBack
+          ? await writeLessonFiles(provider, [
+              ..._unchangedFiles,
+              for (final file in selectedFiles) ?file.fileRef,
+            ])
+          : null;
       if (!mounted) return;
       setState(() {
         _progressCurrent = importedCount;
         _progressMessage = null;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
+      final messenger = ScaffoldMessenger.of(context);
+      final navigator = Navigator.of(context);
+      if (written != null && written.errors.isNotEmpty) {
+        await showDialog<void>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Some files were not updated'),
+            content: SingleChildScrollView(
+              child: SelectableText(
+                describeImportErrors(
+                  'The app\'s words could not be written to '
+                  '${written.errors.length} files, which were left as '
+                  'they are:',
+                  written.errors,
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+      messenger.showSnackBar(
         SnackBar(
           content: Text(
             'Imported $importedCount lessons; skipped $_directorySkipped '
             'files without vocabulary frontmatter, $_directoryUnchanged '
             'unchanged Markdown files; '
             '${_directoryErrors.length} invalid files excluded. '
-            'Existing SRS progress was preserved.',
+            'Existing SRS progress was preserved.'
+            '${written == null ? '' : ' Wrote ${written.words} words to '
+                      '${written.files} files.'}',
           ),
           backgroundColor: Colors.green.shade700,
         ),
       );
-      Navigator.of(context).pop();
+      navigator.pop();
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -710,6 +791,10 @@ class _YamlImportViewState extends State<YamlImportView>
             label: Text(
               vocabularyOnly
                   ? (compactBar ? 'Add' : 'Add Vocabulary')
+                  : _directoryFiles.isEmpty && _writeBack && _staleFiles > 0
+                  ? (compactBar
+                        ? 'Update $_staleFiles'
+                        : 'Update $_staleFiles Files')
                   : _directoryFiles.isEmpty
                   ? (compactBar ? 'Save' : 'Import Markdown')
                   : (compactBar
@@ -718,7 +803,8 @@ class _YamlImportViewState extends State<YamlImportView>
             ),
             onPressed:
                 (_previewResult != null ||
-                        _selectedDirectoryPaths.isNotEmpty) &&
+                        _selectedDirectoryPaths.isNotEmpty ||
+                        (_writeBack && _staleFiles > 0)) &&
                     !_isParsing
                 ? _executeImport
                 : null,
@@ -914,6 +1000,35 @@ class _YamlImportViewState extends State<YamlImportView>
                                 ),
                               ),
                             ),
+                          ),
+                        ),
+
+                      if (_canWriteBack)
+                        CheckboxListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          controlAffinity: ListTileControlAffinity.leading,
+                          value: _writeBack,
+                          onChanged: _isParsing
+                              ? null
+                              : (checked) => setState(
+                                  () => _writeBack = checked ?? false,
+                                ),
+                          title: const Text(
+                            'Write words from the app back to the files',
+                          ),
+                          subtitle: Text(
+                            '${_staleFiles == 0
+                                ? ''
+                                : _staleFiles == 1
+                                ? '1 unchanged file no longer matches the '
+                                      'words in the app. '
+                                : '$_staleFiles unchanged files no longer '
+                                      'match the words in the app. '}'
+                            'Words and examples edited or added in the app '
+                            'are written to the vocabulary in each '
+                            'file\'s frontmatter, for imported files after '
+                            'they are merged. Lesson text is not touched.',
                           ),
                         ),
 
@@ -1220,12 +1335,144 @@ class MarkdownImportFile {
   final String sourceHash;
   final YamlParseResult preview;
 
+  /// Where the file is on disk, for one found in a picked folder. Null for
+  /// a file from a ZIP or one picked or dropped by itself, which cannot be
+  /// written back to.
+  final String? filePath;
+
   const MarkdownImportFile({
     required this.path,
     required this.sourceKey,
     required this.sourceHash,
     required this.preview,
+    this.filePath,
   });
+
+  LessonFileRef? get fileRef => filePath == null
+      ? null
+      : LessonFileRef(
+          filePath: filePath!,
+          path: path,
+          sourceKey: sourceKey,
+          sourceHash: sourceHash,
+        );
+}
+
+/// The `.md` files under [root], at any depth. Hidden folders and files and
+/// the folders of [MarkdownArchiveService.ignoredFolders] are not looked
+/// into: a `node_modules` next to the lessons holds thousands of files, none
+/// of them a lesson. [root] itself is looked into whatever its name.
+Future<List<String>> markdownFilesUnder(Directory root) async {
+  final paths = <String>[];
+  await for (final entity in root.list(followLinks: false)) {
+    // Already decoded: decoding again throws on a name such as `이다.md`.
+    final name = entity.uri.pathSegments.lastWhere(
+      (segment) => segment.isNotEmpty,
+      orElse: () => '',
+    );
+    if (MarkdownArchiveService.isIgnoredName(name)) {
+      continue;
+    }
+    if (entity is Directory) {
+      paths.addAll(await markdownFilesUnder(entity));
+    } else if (entity is File && entity.path.toLowerCase().endsWith('.md')) {
+      paths.add(entity.path);
+    }
+  }
+  return paths;
+}
+
+/// A lesson file in a picked folder, as it was when the folder was scanned.
+class LessonFileRef {
+  final String filePath;
+
+  /// Its path under the picked folder.
+  final String path;
+  final String sourceKey;
+  final String sourceHash;
+
+  const LessonFileRef({
+    required this.filePath,
+    required this.path,
+    required this.sourceKey,
+    required this.sourceHash,
+  });
+}
+
+/// What [writeLessonFiles] did.
+class LessonFileWriteResult {
+  /// Files written, or with [writeLessonFiles]' `dryRun`, that would be.
+  final int files;
+
+  /// Entries changed in and added to those files.
+  final int words;
+  final List<String> errors;
+
+  const LessonFileWriteResult({
+    required this.files,
+    required this.words,
+    required this.errors,
+  });
+}
+
+/// Writes the words of the app's lessons into the vocabulary of [files],
+/// the lesson files they were imported from: what was edited or added in
+/// the app since. Only a file's frontmatter is rewritten; see
+/// [LessonFileUpdate].
+///
+/// A file has to be in step with its lesson: one that was not changed since
+/// it was last imported, or one that was just imported. A file edited since
+/// the folder was scanned is left alone.
+///
+/// With [dryRun] nothing is written: the result says how many files differ.
+Future<LessonFileWriteResult> writeLessonFiles(
+  AppProvider provider,
+  List<LessonFileRef> files, {
+  bool dryRun = false,
+}) async {
+  final errors = <String>[];
+  final written = <LessonFileUpdate>[];
+  final hashes = <String, String>{};
+  for (final ref in files) {
+    try {
+      final file = File(ref.filePath);
+      final contents = await file.readAsString();
+      if (sha256.convert(utf8.encode(contents)).toString() != ref.sourceHash) {
+        continue;
+      }
+      final info = YamlParserService.lessonFileInfo(
+        contents,
+        sourcePath: ref.path,
+        defaultUnitTitle: _unitTitleForPath(ref.path),
+      );
+      if (info == null) continue;
+      final update = provider.planFileUpdate(contents, info);
+      if (update == null) continue;
+      if (!dryRun) {
+        await file.writeAsString(update.text, flush: true);
+        hashes[ref.sourceKey] = sha256
+            .convert(utf8.encode(update.text))
+            .toString();
+      }
+      written.add(update);
+    } catch (error) {
+      if (!dryRun) errors.add(describeImportError(ref.path, error));
+    }
+  }
+  if (!dryRun && written.isNotEmpty) {
+    await provider.adoptFileUpdates(written);
+    // The files as written are the ones last imported.
+    final sources = await StorageService.loadImportedMarkdownSources();
+    await StorageService.saveImportedMarkdownSources({...sources, ...hashes});
+  }
+  return LessonFileWriteResult(
+    files: written.length,
+    words: written.fold(
+      0,
+      (total, update) => total + update.changed + update.added,
+    ),
+    errors: errors,
+  );
 }
 
 class PickedMarkdownSource {
@@ -1251,12 +1498,21 @@ class MarkdownDirectoryResult {
   /// take their real file paths ([AppProvider.adoptFilePaths]).
   final List<Lesson> unchangedLessons;
 
+  /// The source keys of [unchangedLessons], in the same order, to name the
+  /// ones to read again (`reimport`) when their lesson is no longer saved.
+  final List<String> unchangedKeys;
+
+  /// The [unchanged] files that are in a picked folder.
+  final List<LessonFileRef> unchangedFiles;
+
   const MarkdownDirectoryResult({
     required this.imports,
     required this.errors,
     required this.skipped,
     required this.unchanged,
     this.unchangedLessons = const [],
+    this.unchangedKeys = const [],
+    this.unchangedFiles = const [],
   });
 }
 
@@ -1277,25 +1533,53 @@ Future<YamlParseResult> _parseLessonInBackground(
 Future<MarkdownDirectoryResult> _parseMarkdownDirectoryInBackground(
   List<String> paths,
   List<String> directoryPaths,
-  Map<String, String> importedSources,
-) => Isolate.run(
-  () => parseMarkdownFiles(paths, directoryPaths, importedSources),
+  Map<String, String> importedSources, {
+  Set<String> reimport = const {},
+}) => Isolate.run(
+  () => parseMarkdownFiles(
+    paths,
+    directoryPaths,
+    importedSources,
+    reimport: reimport,
+  ),
 );
 
 Future<MarkdownDirectoryResult> _parsePickedMarkdownSourcesInBackground(
   List<PickedMarkdownSource> sources,
-  Map<String, String> importedSources,
-) => Isolate.run(() => parsePickedMarkdownSources(sources, importedSources));
+  Map<String, String> importedSources, {
+  Set<String> reimport = const {},
+}) => Isolate.run(
+  () =>
+      parsePickedMarkdownSources(sources, importedSources, reimport: reimport),
+);
 
+/// The source keys of the unchanged files of [result] that have no saved
+/// lesson any more: their lesson was deleted, here or on another device.
+/// Reading the files again with these as `reimport` offers them for import
+/// (#185).
+Set<String> _lessonlessFiles(
+  AppProvider provider,
+  MarkdownDirectoryResult result,
+) => {
+  for (var index = 0; index < result.unchangedKeys.length; index++)
+    if (!provider.hasLessonForFile(result.unchangedLessons[index]))
+      result.unchangedKeys[index],
+};
+
+/// Reads Markdown files and ZIP archives that were picked or dropped. A file
+/// that has not changed since it was imported is counted, not offered,
+/// unless its source key is in [reimport].
 MarkdownDirectoryResult parsePickedMarkdownSources(
   List<PickedMarkdownSource> sources,
-  Map<String, String> importedSources,
-) {
+  Map<String, String> importedSources, {
+  Set<String> reimport = const {},
+}) {
   final imports = <MarkdownImportFile>[];
   final errors = <String>[];
   var skipped = 0;
   var unchanged = 0;
   final unchangedLessons = <Lesson>[];
+  final unchangedKeys = <String>[];
 
   void parseMarkdown(
     String path,
@@ -1308,16 +1592,20 @@ MarkdownDirectoryResult parsePickedMarkdownSources(
   }) {
     try {
       final sourceHash = sha256.convert(utf8.encode(contents)).toString();
-      if (importedSources[sourceKey] == sourceHash ||
-          (legacySourceKey != null &&
-              importedSources[legacySourceKey] == sourceHash)) {
+      if (!reimport.contains(sourceKey) &&
+          (importedSources[sourceKey] == sourceHash ||
+              (legacySourceKey != null &&
+                  importedSources[legacySourceKey] == sourceHash))) {
         unchanged++;
         final lesson = YamlParserService.lessonFileInfo(
           contents,
           sourcePath: hierarchyPath ?? path,
           defaultUnitTitle: _unitTitleForPath(hierarchyPath ?? path),
         );
-        if (lesson != null) unchangedLessons.add(lesson);
+        if (lesson != null) {
+          unchangedLessons.add(lesson);
+          unchangedKeys.add(sourceKey);
+        }
         return;
       }
       if (requireVocabularyFrontmatter &&
@@ -1350,6 +1638,10 @@ MarkdownDirectoryResult parsePickedMarkdownSources(
         for (final file in MarkdownArchiveService.readMarkdownFiles(
           source.bytes,
         )) {
+          if (file.error != null) {
+            errors.add('${source.name}/${file.path}: ${file.error}');
+            continue;
+          }
           parseMarkdown(
             '${source.name}/${file.path}',
             zipEntrySourceKey(file.path),
@@ -1358,7 +1650,7 @@ MarkdownDirectoryResult parsePickedMarkdownSources(
             requireVocabularyFrontmatter: true,
             hierarchyPath: file.path,
             // Saved before ZIP entries were keyed by their path alone.
-            legacySourceKey: _markdownSourceKey(
+            legacySourceKey: markdownSourceKey(
               '${source.sourceKey}!/${file.path}',
             ),
           );
@@ -1368,7 +1660,7 @@ MarkdownDirectoryResult parsePickedMarkdownSources(
         final filename = pathParts.last;
         parseMarkdown(
           filename,
-          _markdownSourceKey(source.sourceKey),
+          markdownSourceKey(source.sourceKey),
           utf8.decode(source.bytes),
           defaultTitle: null,
           requireVocabularyFrontmatter: filename.toLowerCase().endsWith('.md'),
@@ -1385,19 +1677,26 @@ MarkdownDirectoryResult parsePickedMarkdownSources(
     skipped: skipped,
     unchanged: unchanged,
     unchangedLessons: unchangedLessons,
+    unchangedKeys: unchangedKeys,
   );
 }
 
+/// Reads the Markdown files at [paths], found under [directoryPaths]. A file
+/// that has not changed since it was imported is counted, not offered,
+/// unless its source key is in [reimport].
 MarkdownDirectoryResult parseMarkdownFiles(
   List<String> paths,
   List<String> directoryPaths,
-  Map<String, String> importedSources,
-) {
+  Map<String, String> importedSources, {
+  Set<String> reimport = const {},
+}) {
   final imports = <MarkdownImportFile>[];
   final errors = <String>[];
   var skipped = 0;
   var unchanged = 0;
   final unchangedLessons = <Lesson>[];
+  final unchangedFiles = <LessonFileRef>[];
+  final unchangedKeys = <String>[];
   final normalizedDirectories =
       directoryPaths.map((path) => path.replaceAll('\\', '/')).toList()
         ..sort((first, second) => first.length.compareTo(second.length));
@@ -1423,14 +1722,26 @@ MarkdownDirectoryResult parseMarkdownFiles(
     try {
       final contents = File(path).readAsStringSync();
       final sourceHash = sha256.convert(utf8.encode(contents)).toString();
-      if (importedSources[_markdownSourceKey(path)] == sourceHash) {
+      if (!reimport.contains(markdownSourceKey(path)) &&
+          importedSources[markdownSourceKey(path)] == sourceHash) {
         unchanged++;
         final lesson = YamlParserService.lessonFileInfo(
           contents,
           sourcePath: relativePath,
           defaultUnitTitle: _unitTitleForPath(relativePath),
         );
-        if (lesson != null) unchangedLessons.add(lesson);
+        if (lesson != null) {
+          unchangedLessons.add(lesson);
+          unchangedKeys.add(markdownSourceKey(path));
+          unchangedFiles.add(
+            LessonFileRef(
+              filePath: path,
+              path: relativePath,
+              sourceKey: markdownSourceKey(path),
+              sourceHash: sourceHash,
+            ),
+          );
+        }
         continue;
       }
       if (!YamlParserService.hasVocabularyFrontmatter(contents)) {
@@ -1445,9 +1756,10 @@ MarkdownDirectoryResult parseMarkdownFiles(
       imports.add(
         MarkdownImportFile(
           path: relativePath,
-          sourceKey: _markdownSourceKey(path),
+          sourceKey: markdownSourceKey(path),
           sourceHash: sourceHash,
           preview: preview,
+          filePath: path,
         ),
       );
     } catch (error) {
@@ -1460,6 +1772,8 @@ MarkdownDirectoryResult parseMarkdownFiles(
     skipped: skipped,
     unchanged: unchanged,
     unchangedLessons: unchangedLessons,
+    unchangedKeys: unchangedKeys,
+    unchangedFiles: unchangedFiles,
   );
 }
 
@@ -1471,6 +1785,8 @@ MarkdownDirectoryResult _combineMarkdownDirectoryResults(
   skipped: results.fold(0, (total, result) => total + result.skipped),
   unchanged: results.fold(0, (total, result) => total + result.unchanged),
   unchangedLessons: [for (final result in results) ...result.unchangedLessons],
+  unchangedKeys: [for (final result in results) ...result.unchangedKeys],
+  unchangedFiles: [for (final result in results) ...result.unchangedFiles],
 );
 
 /// The key a ZIP entry's fingerprint is saved under, to skip it when it is
@@ -1482,7 +1798,9 @@ MarkdownDirectoryResult _combineMarkdownDirectoryResults(
 /// is the same lesson.
 String zipEntrySourceKey(String path) => 'zip:${path.replaceAll('\\', '/')}';
 
-String _markdownSourceKey(String path) {
+/// The key a folder file's import is remembered by: its path with `/`
+/// between folders, and lowercase on Windows, where names ignore case.
+String markdownSourceKey(String path) {
   final normalizedPath = path.replaceAll('\\', '/');
   return Platform.isWindows ? normalizedPath.toLowerCase() : normalizedPath;
 }

@@ -1,13 +1,18 @@
-import 'dart:math' as math;
+import 'dart:convert';
 
-import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart'
-    show RenderAbstractViewport, ScrollCacheExtent;
-import 'package:flutter/scheduler.dart';
+import 'package:flutter/foundation.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:webview_all/webview_all.dart';
+import 'package:webview_all_android/webview_all_android.dart';
 
 import '../models/lesson.dart' show looseNameKey;
+import '../services/audio_service.dart';
 import '../services/lesson_links.dart';
+import 'lesson_html.dart';
 import 'markdown_content.dart';
+import 'youtube_embed.dart';
 
 /// A heading found in a lesson, used for the table of contents.
 class LessonHeading {
@@ -24,7 +29,10 @@ class LessonHeading {
   const LessonHeading(this.level, this.text, this.chunk, {this.anchor = ''});
 }
 
-/// A lesson's Markdown cut into chunks that are rendered lazily, one by one.
+/// A lesson's Markdown cut into chunks, with the headings found in it.
+///
+/// The reader shows the lesson as one page ([LessonHtml]); the chunks are
+/// what [LessonContent.preprocess] and the chunk markers produce from it.
 class LessonContent {
   final List<String> chunks;
   final List<LessonHeading> headings;
@@ -61,6 +69,9 @@ class LessonContent {
   static final _startLine = RegExp(r'^\s*<!--\s*chunk:start\s*-->\s*$');
   static final _endLine = RegExp(r'^\s*<!--\s*chunk:end\s*-->\s*$');
   static final _fenceLine = RegExp(r'^\s{0,3}(```|~~~)');
+  static final _inlineCode = RegExp(r'(`+)[^\n]*?\1');
+  static final _detailsOpen = RegExp(r'<details\b', caseSensitive: false);
+  static final _detailsClose = RegExp(r'</details\s*>', caseSensitive: false);
   static final _headingLine = RegExp(r'^\s{0,3}(#{1,6})\s+(.+?)(?:\s+#+)?\s*$');
   static final _continuationLine = RegExp(r'^(\s|[-*+]\s|\d+[.)]\s|\||>)');
   static final _setextUnderline = RegExp(r'^ {0,3}(=+|-+)[ \t]*$');
@@ -70,7 +81,8 @@ class LessonContent {
   /// A chunk starts at every heading, and a long section is also cut at a
   /// blank line, but never inside a fenced code block, a list or a table.
   /// `<!-- chunk -->` forces a cut, and everything between
-  /// `<!-- chunk:start -->` and `<!-- chunk:end -->` stays in one chunk.
+  /// `<!-- chunk:start -->` and `<!-- chunk:end -->` stays in one chunk. So
+  /// does a `<details>` block, which is shown and hidden as a whole.
   static LessonContent parse(
     String markdown, {
     int maxChars = defaultChunkChars,
@@ -81,6 +93,7 @@ class LessonContent {
     var current = <String>[];
     var size = 0;
     var grouped = false;
+    var detailsDepth = 0;
     String? fence;
     final anchors = <String>{};
 
@@ -106,9 +119,15 @@ class LessonContent {
 
     for (var i = 0; i < lines.length; i++) {
       final line = lines[i];
+      // Whether this line is inside a block that must stay in one chunk.
+      final whole = grouped || detailsDepth > 0;
       if (fence == null) {
+        final text = line.replaceAll(_inlineCode, '');
+        detailsDepth += _detailsOpen.allMatches(text).length;
+        detailsDepth -= _detailsClose.allMatches(text).length;
+        if (detailsDepth < 0) detailsDepth = 0;
         if (_breakLine.hasMatch(line)) {
-          if (!grouped) flush();
+          if (!whole) flush();
           continue;
         }
         if (_startLine.hasMatch(line)) {
@@ -134,7 +153,7 @@ class LessonContent {
         final heading = _headingLine.firstMatch(line);
         final setextLevel = _setextLevel(lines, i);
         if (heading != null || setextLevel != null) {
-          if (!grouped) flush();
+          if (!whole) flush();
           final raw = heading != null ? heading[2]! : line.trim();
           final (title, id) = LessonLink.splitHeadingAttributes(raw);
           final text = _plainText(title);
@@ -153,7 +172,7 @@ class LessonContent {
             size += line.length + 1;
             continue;
           }
-        } else if (!grouped &&
+        } else if (!whole &&
             size >= maxChars &&
             line.trim().isEmpty &&
             _canCutBefore(lines, i + 1)) {
@@ -211,9 +230,10 @@ class LessonContent {
       .trim();
 
   /// Turns the lesson components (`<YouTube>`, `<AudioButton>`, `<TTS>`,
-  /// `<Details>`, spoiler spans) and `[[lesson links]]` into what
-  /// [MarkdownContent] renders, and drops scripts, quizzes, unknown
-  /// components and HTML comments. Chunk markers are kept for [parse].
+  /// spoiler spans) and `[[lesson links]]` into what [MarkdownContent]
+  /// renders, and drops scripts, quizzes, unknown components and HTML
+  /// comments. Chunk markers and `<details>` blocks are
+  /// kept: the first for [parse], the second for [MarkdownContent].
   static String preprocess(String markdown) {
     final fencedCodeBlocks = <String>[];
     var text = markdown.replaceAll('\r\n', '\n').replaceAllMapped(
@@ -270,14 +290,6 @@ class LessonContent {
         return '$spoken ![tts](<$uri>)';
       },
     );
-    text = text.replaceAllMapped(
-      RegExp(r'<Details\b([^>]*)>', caseSensitive: false),
-      (match) {
-        final summary =
-            attr(match[1] ?? '', 'summary') ?? attr(match[1] ?? '', 'title');
-        return summary == null ? '' : '\n\n**$summary**\n\n';
-      },
-    );
     text = MarkdownContent.prepareSpoilerSpans(text);
     // Remaining capitalised tags are lesson components with no meaning here.
     text = text.replaceAll(
@@ -310,9 +322,8 @@ class LessonContentController {
       _scrollToNamed?.call(target) ?? false;
 }
 
-/// Where a lesson was scrolled to: the chunk at the top of the view and how
-/// far into it, and the pixel offset as a fallback above the first chunk.
-typedef _SavedScroll = ({int? chunk, double offset, double pixels, int text});
+/// Where a lesson was scrolled to, in pixels, and a hash of its text.
+typedef _SavedScroll = ({double pixels, int text});
 
 /// Scroll positions of lessons left this session, by [LessonContentView.
 /// scrollKey], so going back to the lesson list and opening the lesson again
@@ -324,8 +335,8 @@ abstract final class LessonScrollMemory {
   static void clear() => _saved.clear();
 }
 
-/// Renders a lesson natively: its Markdown is cut into chunks (see
-/// [LessonContent.parse]) shown in a lazy list, with selectable text.
+/// Shows a lesson as one HTML page in a WebView ([LessonHtml]), so the browser
+/// lays out the Markdown and the HTML in it, scrolls and selects the text.
 class LessonContentView extends StatefulWidget {
   final String markdown;
 
@@ -361,105 +372,60 @@ class LessonContentView extends StatefulWidget {
 }
 
 class _LessonContentViewState extends State<LessonContentView> {
-  /// Builds chunks well ahead of the viewport so their heights are measured
-  /// early, keeping the scroll extent (and scrollbar) from jumping.
-  static const double _cacheExtent = 4000;
+  // On Windows the WebView ignores the base URL of an HTML string, so the
+  // page would have no real HTTPS origin and YouTube would reject its embeds
+  // (Error 153). There, load a harmless youtube-nocookie.com page and replace
+  // its document. Elsewhere the page is loaded locally with that base URL.
+  static const _windowsHostPage = 'https://www.youtube-nocookie.com/robots.txt';
 
-  final ScrollController _scroll = ScrollController();
+  static bool get _useHostPage =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
+
+  final WebViewController _web = WebViewController();
+  late final Future<void> _configured = _configure();
   late LessonContent _content;
-  late List<GlobalKey> _keys;
-  late List<double?> _chunkHeights;
-  final Set<GlobalKey> _pendingMeasurements = {};
-  double? _layoutWidth;
-  double? _textScale;
-  double? _bodyFontSize;
+  late String _body;
+  String? _shownCss;
+  String? _shownBody;
 
-  /// Hides the list while it jumps back to a saved position, so the lesson
-  /// does not flash at the top first.
-  bool _restoring = false;
+  /// Whether the page is being loaded, so the navigation to it is allowed.
+  bool _loading = true;
+
+  /// What to run once the page has loaded: the Windows injection, then a
+  /// scroll asked for meanwhile.
+  String? _injection;
+  String? _pendingAnchor;
+
+  /// The regular YouTube link of the video last started, for a link out of
+  /// its player that the WebView cannot follow (`intent:` on Android).
+  String? _playingWatch;
+
+  /// The first page opens at this heading or, after it was left, at the
+  /// saved place. Later reloads (a new theme) keep the current place.
+  String? _startAnchor;
+  double _scrollY = 0;
 
   @override
   void initState() {
     super.initState();
     _attach(widget.controller);
     _parse();
-    final initialHeading = widget.initialHeading;
     final key = widget.scrollKey;
     final saved = key == null ? null : LessonScrollMemory._saved[key];
+    final initialHeading = widget.initialHeading;
     if (initialHeading != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _scrollToNamed(initialHeading);
-      });
+      _startAnchor = _content.headingFor(initialHeading)?.anchor;
     } else if (saved != null && saved.text == _textHash) {
-      _restoring = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _restore(saved));
+      _scrollY = saved.pixels;
     }
+    _configured;
   }
 
   int get _textHash => Object.hash(widget.markdown, _content.chunks.length);
 
-  /// The chunk at the top of the view and how far it is scrolled into it.
-  _SavedScroll? _position() {
-    if (!_scroll.hasClients) return null;
-    final pixels = _scroll.position.pixels;
-    int? chunk;
-    var offset = 0.0;
-    for (var index = 0; index < _keys.length; index++) {
-      final top = _chunkTop(index);
-      if (top == null || top > pixels + 0.5) continue;
-      if (chunk == null || index > chunk) {
-        chunk = index;
-        offset = pixels - top;
-      }
-    }
-    return (chunk: chunk, offset: offset, pixels: pixels, text: _textHash);
-  }
-
-  /// The scroll offset at which chunk [index] starts at the top of the view,
-  /// or null while it is not built.
-  double? _chunkTop(int index) {
-    final box = _keys[index].currentContext?.findRenderObject();
-    if (box is! RenderBox || !box.attached || !box.hasSize) return null;
-    return RenderAbstractViewport.of(box).getOffsetToReveal(box, 0).offset;
-  }
-
-  /// Saves where the lesson is scrolled to. With [onlyAnchored], only when a
-  /// chunk can still be measured: while the view is being taken down its
-  /// chunks may already be detached, and the place saved when scrolling
-  /// stopped is better than a bare pixel offset.
-  void _savePosition({bool onlyAnchored = false}) {
-    final key = widget.scrollKey;
-    if (key == null || _restoring) return;
-    final position = _position();
-    if (position == null || (onlyAnchored && position.chunk == null)) return;
-    LessonScrollMemory._saved[key] = position;
-  }
-
-  /// Jumps back to [saved]: to its chunk (by its estimated offset until it
-  /// is built), then into it, until the place settles.
-  Future<void> _restore(_SavedScroll saved) async {
-    try {
-      for (var attempt = 0; attempt < 10; attempt++) {
-        if (!mounted || !_scroll.hasClients) return;
-        final position = _scroll.position;
-        final chunk = saved.chunk;
-        double target;
-        if (chunk == null || chunk >= _keys.length) {
-          target = saved.pixels;
-        } else {
-          final top = _chunkTop(chunk);
-          target = (top ?? _estimatedOffsetForChunk(chunk)) + saved.offset;
-          if (top != null && (position.pixels - target).abs() <= 1) return;
-        }
-        position.jumpTo(
-          target.clamp(position.minScrollExtent, position.maxScrollExtent),
-        );
-        await SchedulerBinding.instance.endOfFrame;
-        if (chunk == null) return;
-      }
-    } finally {
-      if (mounted) setState(() => _restoring = false);
-    }
+  void _parse() {
+    _content = widget.content ?? LessonContent.parse(widget.markdown);
+    _body = LessonHtml.body(_content);
   }
 
   void _attach(LessonContentController? controller) {
@@ -472,21 +438,61 @@ class _LessonContentViewState extends State<LessonContentView> {
     controller?._scrollToNamed = null;
   }
 
+  Future<void> _configure() async {
+    final platform = _web.platform;
+    if (platform is AndroidWebViewController) {
+      // A tap on a video's thumbnail is a gesture in the page; let the
+      // player start without another one.
+      try {
+        await platform.setMediaPlaybackRequiresUserGesture(false);
+      } catch (_) {}
+    }
+    await _web.setJavaScriptMode(JavaScriptMode.unrestricted);
+    // Audio, text-to-speech, links and the scroll position go through the
+    // app, not the WebView.
+    await _web.addJavaScriptChannel('Lingua', onMessageReceived: _onMessage);
+    await _web.setNavigationDelegate(
+      NavigationDelegate(
+        onNavigationRequest: _onNavigationRequest,
+        onPageFinished: (_) => _onPageFinished(),
+      ),
+    );
+  }
+
+  NavigationDecision _onNavigationRequest(NavigationRequest request) {
+    if (!mounted) return NavigationDecision.prevent;
+    // The player's own links (the YouTube logo, "Watch on YouTube") leave
+    // the app. Everything else is prevented once the page has loaded: links
+    // in the lesson are handled by [_onLink].
+    if (YouTubeEmbed.leavesPlayer(request.url)) {
+      _launch(Uri.parse(request.url));
+      return NavigationDecision.prevent;
+    }
+    if (request.isMainFrame) {
+      return _loading
+          ? NavigationDecision.navigate
+          : NavigationDecision.prevent;
+    }
+    return NavigationDecision.navigate;
+  }
+
+  void _onPageFinished() {
+    if (!mounted) return;
+    final injection = _injection;
+    _injection = null;
+    if (injection != null) {
+      _web.runJavaScript(injection);
+    }
+    _loading = false;
+    final anchor = _pendingAnchor;
+    _pendingAnchor = null;
+    if (anchor != null) _runScrollTo(anchor);
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final width = MediaQuery.sizeOf(context).width;
-    final textScale = MediaQuery.textScalerOf(context).scale(14);
-    final bodyFontSize = Theme.of(context).textTheme.bodyMedium?.fontSize ?? 14;
-    if (_layoutWidth != null &&
-        (_layoutWidth != width ||
-            _textScale != textScale ||
-            _bodyFontSize != bodyFontSize)) {
-      _chunkHeights = List<double?>.filled(_content.chunks.length, null);
-    }
-    _layoutWidth = width;
-    _textScale = textScale;
-    _bodyFontSize = bodyFontSize;
+    _show();
   }
 
   @override
@@ -499,108 +505,101 @@ class _LessonContentViewState extends State<LessonContentView> {
     if (oldWidget.markdown != widget.markdown ||
         oldWidget.content != widget.content) {
       _parse();
+      _show();
     }
-  }
-
-  @override
-  void deactivate() {
-    // Leaving the lesson, such as going back to the list: keep the place,
-    // in case scrolling had not settled.
-    _savePosition(onlyAnchored: true);
-    super.deactivate();
   }
 
   @override
   void dispose() {
     _detach(widget.controller);
-    _scroll.dispose();
     super.dispose();
   }
 
-  void _parse() {
-    _content = widget.content ?? LessonContent.parse(widget.markdown);
-    _keys = List.generate(_content.chunks.length, (_) => GlobalKey());
-    _chunkHeights = List<double?>.filled(_content.chunks.length, null);
-  }
-
-  void _recordChunkHeight(int index) {
-    final renderObject = _keys[index].currentContext?.findRenderObject();
-    if (renderObject is! RenderBox || !renderObject.hasSize) return;
-    _chunkHeights[index] = renderObject.size.height;
-  }
-
-  void _scheduleChunkMeasurement(int index) {
-    final key = _keys[index];
-    if (!_pendingMeasurements.add(key)) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _pendingMeasurements.remove(key);
-      if (!mounted || !identical(_keys[index], key)) return;
-      _recordChunkHeight(index);
-    });
-  }
-
-  double _estimatedChunkHeight(int index) {
-    final measuredHeight = _chunkHeights[index];
-    if (measuredHeight != null) return measuredHeight;
-
-    var measuredCharacters = 0;
-    var totalMeasuredHeight = 0.0;
-    for (var i = 0; i < _chunkHeights.length; i++) {
-      final height = _chunkHeights[i];
-      if (height == null) continue;
-      measuredCharacters += math.max(1, _content.chunks[i].length);
-      totalMeasuredHeight += height;
-    }
-    if (measuredCharacters > 0) {
-      return math.max(
-        48,
-        _content.chunks[index].length *
-            totalMeasuredHeight /
-            measuredCharacters,
+  /// Loads the lesson page, unless the WebView already shows it.
+  Future<void> _show() async {
+    await _configured;
+    if (!mounted) return;
+    final theme = Theme.of(context);
+    final fontSize = MediaQuery.textScalerOf(context).scale(16);
+    final css = LessonHtml.css(theme, fontSize: fontSize);
+    if (css == _shownCss && _body == _shownBody) return;
+    _shownCss = css;
+    _shownBody = _body;
+    final start = LessonHtml.start(scrollY: _scrollY, anchor: _startAnchor);
+    _startAnchor = null;
+    _loading = true;
+    try {
+      await _web.setBackgroundColor(theme.colorScheme.surface);
+    } catch (_) {}
+    if (_useHostPage) {
+      _injection = LessonHtml.injection(css, _body, start: start);
+      await _web.loadRequest(Uri.parse(_windowsHostPage));
+    } else {
+      _injection = null;
+      await _web.loadHtmlString(
+        LessonHtml.page(css, _body, start: start),
+        baseUrl: '${YouTubeEmbed.playerOrigin}/',
       );
     }
-
-    final width = math.min(_layoutWidth ?? 900, 900) - 48;
-    final charactersPerLine = math.max(1, width / (8 * (_textScale ?? 1)));
-    final estimatedLines = _content.chunks[index].length / charactersPerLine;
-    return math.max(80, estimatedLines * _bodyFontSize! * 1.5 + 48);
   }
 
-  double _estimatedOffsetForChunk(int index) {
-    var offset = 20.0;
-    for (var i = 0; i < index; i++) {
-      offset += _estimatedChunkHeight(i);
+  void _onMessage(JavaScriptMessage message) {
+    if (!mounted) return;
+    final Object? data;
+    try {
+      data = jsonDecode(message.message);
+    } on FormatException {
+      return;
     }
-    return offset;
+    if (data is! Map) return;
+    switch (data['type']) {
+      case 'scroll':
+        final y = data['y'];
+        if (y is num) _rememberScroll(y.toDouble());
+      case 'youtube':
+        final watch = data['watch'];
+        _playingWatch = watch is String && watch.isNotEmpty ? watch : null;
+      case 'link':
+        final href = data['href'];
+        if (href is String) _onLink(href);
+      case 'audio':
+      case 'tts':
+        _playAudio(data);
+    }
   }
 
-  /// Animates toward an estimated offset, refining it as chunks are measured.
-  Future<void> _scrollTo(LessonHeading heading) async {
-    final index = heading.chunk;
-    if (index < 0 || index >= _keys.length) return;
-    for (var attempt = 0; attempt < 10; attempt++) {
-      if (!mounted) return;
-      final context = _keys[index].currentContext;
-      if (context != null) {
-        if (!context.mounted) continue;
-        await Scrollable.ensureVisible(
-          context,
-          duration: const Duration(milliseconds: 250),
-        );
-        return;
-      }
-      if (!_scroll.hasClients) return;
-      final position = _scroll.position;
-      final target = _estimatedOffsetForChunk(index)
-          .clamp(position.minScrollExtent, position.maxScrollExtent);
-      if ((position.pixels - target).abs() > 1) {
-        await _scroll.animateTo(
-          target,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOutCubic,
-        );
-      }
-      await SchedulerBinding.instance.endOfFrame;
+  void _rememberScroll(double y) {
+    _scrollY = y;
+    final key = widget.scrollKey;
+    if (key != null) {
+      LessonScrollMemory._saved[key] = (pixels: y, text: _textHash);
+    }
+  }
+
+  void _playAudio(Map<dynamic, dynamic> data) {
+    final audio = context.read<AudioService>();
+    final isTts = data['type'] == 'tts';
+    final source = isTts ? data['text'] : data['src'];
+    if (source is! String || source.trim().isEmpty) return;
+    final key = isTts ? 'tts_${source.trim()}' : source.trim();
+    if (audio.isPlaying && audio.currentlyPlayingKey == key) {
+      audio.stop();
+    } else if (isTts) {
+      audio.speak(source, language: 'ko');
+    } else {
+      audio.playAudio(source);
+    }
+  }
+
+  void _runScrollTo(String anchor) {
+    _web.runJavaScript('linguaScrollTo(${jsonEncode(anchor)}, true);');
+  }
+
+  void _scrollTo(LessonHeading heading) {
+    if (_loading) {
+      _pendingAnchor = heading.anchor;
+    } else {
+      _runScrollTo(heading.anchor);
     }
   }
 
@@ -613,10 +612,17 @@ class _LessonContentViewState extends State<LessonContentView> {
   }
 
   /// Handles `#anchor` and `[[#Heading]]` links by scrolling to the heading,
-  /// and passes links to other lessons to [LessonContentView.onLessonLink].
-  bool _onLink(String href) {
+  /// passes links to other lessons to [LessonContentView.onLessonLink], and
+  /// opens web links outside the app.
+  Future<void> _onLink(String href) async {
     final link = LessonLink.fromHref(href);
-    if (link == null) return false;
+    if (link == null) {
+      final uri = Uri.tryParse(href);
+      if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
+        await _launch(uri);
+      }
+      return;
+    }
     if (link.isOtherLesson) {
       widget.onLessonLink?.call(link);
     } else if (!_scrollToNamed(link.heading!)) {
@@ -624,52 +630,27 @@ class _LessonContentViewState extends State<LessonContentView> {
         SnackBar(content: Text('No heading “${link.heading}” in this lesson.')),
       );
     }
-    return true;
+  }
+
+  Future<void> _launch(Uri uri) async {
+    if (uri.scheme != 'http' && uri.scheme != 'https') {
+      // `intent:` and `vnd.youtube:` links from the player: open the regular
+      // YouTube link of the video instead, when there is one.
+      final watch = _playingWatch;
+      if (watch == null) return;
+      uri = Uri.parse(watch);
+    }
+    final opened = await YouTubeEmbed.openExternally(
+      uri,
+      (url, mode) => launchUrl(url, mode: mode),
+    );
+    if (!opened && mounted) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('Could not open the link.')),
+      );
+    }
   }
 
   @override
-  Widget build(BuildContext context) {
-    return NotificationListener<ScrollEndNotification>(
-      onNotification: (_) {
-        _savePosition();
-        return false;
-      },
-      child: Opacity(opacity: _restoring ? 0 : 1, child: _list(context)),
-    );
-  }
-
-  Widget _list(BuildContext context) {
-    return SelectionArea(
-      child: ListView.builder(
-        controller: _scroll,
-        scrollCacheExtent: const ScrollCacheExtent.pixels(_cacheExtent),
-        padding: const EdgeInsets.fromLTRB(24, 20, 24, 48),
-        itemCount: _content.chunks.length,
-        itemBuilder: (context, index) {
-          _scheduleChunkMeasurement(index);
-          return NotificationListener<SizeChangedLayoutNotification>(
-            onNotification: (_) {
-              _recordChunkHeight(index);
-              return false;
-            },
-            child: SizeChangedLayoutNotifier(
-              key: _keys[index],
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 900),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: MarkdownContent(
-                      content: _content.chunks[index],
-                      onLink: _onLink,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
+  Widget build(BuildContext context) => WebViewWidget(controller: _web);
 }

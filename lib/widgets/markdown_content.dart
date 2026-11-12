@@ -1,12 +1,14 @@
 import 'dart:ui' as ui;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'audio_button.dart';
 import 'cached_markdown_image.dart';
+import 'markdown_details.dart';
 import 'markdown_heading.dart';
+import 'markdown_inline_html.dart';
 import 'youtube_embed.dart';
 
 class MarkdownContent extends StatelessWidget {
@@ -64,7 +66,8 @@ class MarkdownContent extends StatelessWidget {
     // Replace <p> with empty or single newline and </p> with double newlines
     text = text.replaceAll(RegExp(r'<p\s*>', caseSensitive: false), '');
     text = text.replaceAll(RegExp(r'</p\s*>', caseSensitive: false), '\n\n');
-    text = text.replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n');
+    // `<br>` is left for [HtmlBreakSyntax], which makes it a line break
+    // wherever it is, a table cell included.
     text = text.replaceAll(
       RegExp(r'<hr\b[^>]*\/?>', caseSensitive: false),
       '\n\n---\n\n',
@@ -102,8 +105,37 @@ class MarkdownContent extends StatelessWidget {
     );
   }
 
+  /// The Markdown around `<details>` blocks, and each block as a summary
+  /// that shows and hides its own Markdown.
+  Widget _buildWithDetails(List<MarkdownDetailsPart> parts) {
+    MarkdownContent markdown(String text) => MarkdownContent(
+      content: text,
+      style: style,
+      selectable: selectable,
+      onLink: onLink,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final part in parts)
+          if (part.isDetails)
+            MarkdownDetails(
+              initiallyOpen: part.open,
+              summary: markdown(part.summary!),
+              child: markdown(part.text),
+            )
+          else
+            markdown(part.text),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final parts = MarkdownDetailsPart.split(content);
+    if (parts != null) return _buildWithDetails(parts);
+
     final theme = Theme.of(context);
     final normalized = _normalizeContent(content);
 
@@ -132,7 +164,7 @@ class MarkdownContent extends StatelessWidget {
       return EdgeInsets.only(top: margin, bottom: extraBottomMargin);
     }
 
-    final mdStyle = MarkdownStyleSheet.fromTheme(theme).copyWith(
+    final mdStyle = MarkdownStyleSheet(
       p: style ?? theme.textTheme.bodyMedium?.copyWith(height: 1.5),
       h1: h1,
       h2: h2,
@@ -153,6 +185,40 @@ class MarkdownContent extends StatelessWidget {
       h5Padding: headingPadding(h5, 1.67),
       h6Padding: headingPadding(h6, 2.33),
       blockSpacing: blockSpacing,
+      // The rest is what MarkdownStyleSheet.fromTheme gives, which takes the
+      // ThemeData of the deprecated flutter/material.dart, not the app's.
+      a: const TextStyle(color: Colors.blue),
+      pPadding: EdgeInsets.zero,
+      blockquote: theme.textTheme.bodyMedium,
+      img: theme.textTheme.bodyMedium,
+      checkbox: theme.textTheme.bodyMedium?.copyWith(color: theme.primaryColor),
+      listIndent: 24.0,
+      listBullet: theme.textTheme.bodyMedium,
+      listBulletPadding: const EdgeInsets.only(right: 4),
+      tableHead: const TextStyle(fontWeight: FontWeight.w600),
+      tableBody: theme.textTheme.bodyMedium,
+      tableHeadAlign: TextAlign.center,
+      tablePadding: const EdgeInsets.only(bottom: 4.0),
+      tableBorder: TableBorder.all(color: theme.dividerColor),
+      tableColumnWidth: const FlexColumnWidth(),
+      tableCellsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      tableCellsDecoration: const BoxDecoration(),
+      blockquotePadding: const EdgeInsets.symmetric(
+        horizontal: 12,
+        vertical: 4,
+      ),
+      blockquoteDecoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(3),
+        border: Border(
+          left: BorderSide(color: theme.colorScheme.primary, width: 3),
+        ),
+      ),
+      codeblockPadding: const EdgeInsets.all(8.0),
+      codeblockDecoration: BoxDecoration(
+        color: theme.cardTheme.color ?? theme.cardColor,
+        borderRadius: BorderRadius.circular(2.0),
+      ),
       // Inline styles merge into the block's style. Leave out the font size
       // and line height so bold or italic text in a heading or table keeps
       // that block's size.
@@ -171,6 +237,10 @@ class MarkdownContent extends StatelessWidget {
         border: Border(top: BorderSide(width: 1, color: theme.dividerColor)),
       ),
     );
+    // For headings, which are built from this sheet. Body text gets these
+    // styles from [InlineHtmlBuilder]: the renderer copies the sheet and
+    // drops styles it does not know.
+    mdStyle.styles.addAll(inlineHtmlStyles(theme));
 
     Future<void> openLink(String href) async {
       if (onLink?.call(href) ?? false) return;
@@ -219,7 +289,9 @@ class MarkdownContent extends StatelessWidget {
       data: normalized,
       selectable: selectable,
       styleSheet: mdStyle,
+      inlineSyntaxes: inlineHtmlSyntaxes(),
       builders: {
+        ...InlineHtmlBuilder.all(theme),
         'h1': headingBuilder(mdStyle.h1Padding),
         'h2': headingBuilder(mdStyle.h2Padding),
         'h3': headingBuilder(mdStyle.h3Padding),
@@ -290,9 +362,13 @@ class _SpoilerTextState extends State<SpoilerText> {
 
   @override
   Widget build(BuildContext context) {
-    final style = Theme.of(context).textTheme.bodyMedium;
+    final theme = Theme.of(context);
+    final content = TextSpan(
+      style: theme.textTheme.bodyMedium,
+      children: inlineMarkdownSpans(widget.text, theme),
+    );
     return Semantics(
-      label: _revealed ? widget.text : 'Spoiler. Tap to reveal.',
+      label: _revealed ? content.toPlainText() : 'Spoiler. Tap to reveal.',
       child: MouseRegion(
         onEnter: (_) => setState(() => _hovered = true),
         onExit: (_) => setState(() => _hovered = false),
@@ -302,15 +378,11 @@ class _SpoilerTextState extends State<SpoilerText> {
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 150),
             child: _revealed
-                ? Text(
-                    widget.text,
-                    key: const ValueKey('revealed'),
-                    style: style,
-                  )
+                ? Text.rich(content, key: const ValueKey('revealed'))
                 : ImageFiltered(
                     key: const ValueKey('blurred'),
                     imageFilter: ui.ImageFilter.blur(sigmaX: 5, sigmaY: 5),
-                    child: Text(widget.text, style: style),
+                    child: Text.rich(content),
                   ),
           ),
         ),

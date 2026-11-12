@@ -1,15 +1,17 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lingua_srs/models/lesson.dart';
+import 'package:lingua_srs/models/sentence.dart';
 import 'package:lingua_srs/models/vocab_item.dart';
 import 'package:lingua_srs/providers/app_provider.dart';
 import 'package:lingua_srs/services/audio_service.dart';
 import 'package:lingua_srs/services/lesson_ai_prompt.dart';
 import 'package:lingua_srs/services/lesson_export_service.dart';
+import 'package:lingua_srs/services/lesson_file_update.dart';
 import 'package:lingua_srs/services/markdown_archive_service.dart';
 import 'package:lingua_srs/services/tts_voice.dart';
 import 'package:lingua_srs/services/yaml_parser_service.dart';
@@ -317,6 +319,98 @@ ${header}vocabulary:
       final vocab = provider.lessons.single.vocabularies.single;
       expect(vocab.reading, 'xuésheng');
       expect(vocab.traditional, '學生');
+    });
+  });
+
+  group('reimport merge', () {
+    testWidgets('keeps a reading edited in the app while the file is as it '
+        'was, and takes one the file changed', (tester) async {
+      final provider = await _loadedProvider(tester);
+      final lesson = (await tester.runAsync(
+        () => provider.importYaml(_mandarinYaml),
+      ))!;
+      // Edited in the app.
+      lesson.vocabularies.single.reading = 'xué sheng';
+
+      await tester.runAsync(() => provider.importYaml(_mandarinYaml));
+      expect(provider.lessons.single.vocabularies.single.reading, 'xué sheng');
+
+      // Only the file changed its traditional form: that is taken, and the
+      // app's reading stays.
+      await tester.runAsync(
+        () => provider.importYaml(_mandarinYaml.replaceFirst('學生', '學生們')),
+      );
+      final vocab = provider.lessons.single.vocabularies.single;
+      expect(vocab.traditional, '學生們');
+      expect(vocab.reading, 'xué sheng');
+    });
+  });
+
+  group('writing words back to the file', () {
+    Map<String, Sentence> byId(YamlParseResult parsed) => {
+      for (final sentence in parsed.sentences) sentence.id: sentence,
+    };
+
+    test('needs nothing for a file the app agrees with', () {
+      for (final yaml in [_mandarinYaml, _koreanYaml]) {
+        final parsed = YamlParserService.parseLessonYaml(yaml);
+        expect(
+          LessonFileUpdate.plan(yaml, parsed.lesson, byId(parsed)),
+          isNull,
+        );
+      }
+    });
+
+    test('writes Hanja added in the app, and a changed one under its key', () {
+      final parsed = YamlParserService.parseLessonYaml(_koreanYaml);
+      final [student, tree] = parsed.lesson.vocabularies;
+      student.hanja = '學生 (edited)';
+      tree.hanja = '木';
+
+      final update = LessonFileUpdate.plan(
+        _koreanYaml,
+        parsed.lesson,
+        byId(parsed),
+      )!;
+
+      expect(update.changed, 2);
+      final [first, second] = YamlParserService.parseLessonYaml(update.text)
+          .lesson
+          .vocabularies;
+      expect(first.hanja, '學生 (edited)');
+      expect(second.hanja, '木');
+      expect(second.targetWord, '나무');
+    });
+
+    test('writes a reading under the key the entry has, pinyin if none', () {
+      const yaml = '''
+---
+target: zh-TW
+vocabulary:
+  nouns:
+    - zh: 學生
+      reading: xuesheng
+      en: student
+    - zh: 老師
+      en: teacher
+---
+# Lesson
+''';
+      final parsed = YamlParserService.parseLessonYaml(yaml);
+      final [student, teacher] = parsed.lesson.vocabularies;
+      student.reading = 'xuésheng';
+      teacher.reading = 'lǎoshī';
+
+      final text = LessonFileUpdate.plan(
+        yaml,
+        parsed.lesson,
+        byId(parsed),
+      )!.text;
+
+      // The value may be written with or without quotes.
+      expect(text, contains(RegExp('reading: ["\']?xuésheng')));
+      expect(text, contains(RegExp('pinyin: ["\']?lǎoshī')));
+      expect(text, isNot(contains('xuesheng')));
     });
   });
 

@@ -57,9 +57,7 @@ class BackupService {
       if (!_isSupportedPreference(value)) {
         throw StateError('Unsupported preference value for "$key".');
       }
-      preferences[key] = value is List<String>
-          ? List<String>.from(value)
-          : value!;
+      preferences[key] = value is List ? List<String>.from(value) : value!;
     }
 
     final directory = await getApplicationSupportDirectory();

@@ -1,9 +1,33 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollCacheExtent;
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:lingua_srs/services/audio_service.dart';
 import 'package:lingua_srs/services/lesson_links.dart';
 import 'package:lingua_srs/widgets/lesson_content_view.dart';
+import 'package:provider/provider.dart';
+import 'package:webview_platform_interface/webview_platform_interface.dart';
+
+import 'fake_webview_platform.dart';
+
+/// Records what the page asks the audio service to play.
+class _RecordingAudio extends ChangeNotifier implements AudioService {
+  final played = <String>[];
+
+  @override
+  bool get isPlaying => false;
+  @override
+  String? get currentlyPlayingKey => null;
+  @override
+  Future<void> speak(String text, {String? language}) async =>
+      played.add('speak:$text:$language');
+  @override
+  Future<void> playAudio(String? urlOrPath, {String? playingKey}) async =>
+      played.add('audio:$urlOrPath');
+  @override
+  Future<void> stop() async {}
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => Future<void>.value();
+}
 
 void main() {
   group('LessonContent.parse', () {
@@ -69,6 +93,50 @@ void main() {
       expect(content.chunks[1], endsWith('body'));
       expect(content.chunks[2], 'after');
       expect(content.headings.single.chunk, 1);
+    });
+  });
+
+  group('details blocks', () {
+    test('stay in one chunk, headings and blank lines included', () {
+      final content = LessonContent.parse(
+        'before\n\n<details>\n<summary>More</summary>\n\n'
+        '## Inside\n\none\n\ntwo\n\n</details>\n\n## After\n\nend',
+        maxChars: 1,
+      );
+
+      // before | the whole block | ## After | end
+      expect(content.chunks, hasLength(4));
+      expect(content.chunks[1], startsWith('<details>'));
+      expect(content.chunks[1], contains('## Inside'));
+      expect(content.chunks[1], endsWith('</details>'));
+      expect(content.chunks[2], startsWith('## After'));
+      expect(content.headings.map((h) => h.chunk), [1, 2]);
+    });
+
+    test('a tag in code does not start one', () {
+      final content = LessonContent.parse(
+        'Write `<details>` to fold text.\n\n## Next\n\nend',
+      );
+
+      expect(content.chunks, hasLength(2));
+    });
+
+    test('the Details component is gone: only its content is kept', () {
+      final text = LessonContent.preprocess(
+        '<Details summary="Examples">\n\ninside\n\n</Details>',
+      );
+
+      expect(text.trim(), 'inside');
+    });
+
+    test('details and summary tags are kept for the renderer', () {
+      final text = LessonContent.preprocess(
+        '<details open>\n<summary>More</summary>\n\ninside\n\n</details>',
+      );
+
+      expect(text, contains('<details open>'));
+      expect(text, contains('<summary>More</summary>'));
+      expect(text, contains('</details>'));
     });
   });
 
@@ -186,247 +254,227 @@ void main() {
     });
   });
 
-  testWidgets('renders chunks and scrolls to a far heading', (tester) async {
-    final controller = LessonContentController();
-    final markdown = [
-      for (var i = 0; i < 40; i++)
-        '# Section $i\n\n${'word ' * ((i % 5 + 1) * 150)}',
-    ].join('\n\n');
-    final headings = LessonContent.parse(markdown).headings;
+  group('LessonContentView', () {
+    const lesson =
+        '# Lesson\n\nIntro.\n\n## Past tense\n\nText.\n\n'
+        '[[Lesson 26#Past tense]]\n';
+    late FakeWebViewPlatform platform;
+    late _RecordingAudio audio;
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: LessonContentView(markdown: markdown, controller: controller),
-        ),
-      ),
-    );
+    setUp(() {
+      platform = FakeWebViewPlatform();
+      WebViewPlatform.instance = platform;
+      audio = _RecordingAudio();
+      LessonScrollMemory.clear();
+    });
 
-    expect(find.textContaining('Section 0', findRichText: true), findsWidgets);
-    expect(find.textContaining('Section 39', findRichText: true), findsNothing);
-
-    controller.scrollToHeading(headings.last);
-    await tester.pumpAndSettle();
-
-    expect(find.textContaining('Section 39', findRichText: true), findsWidgets);
-  });
-
-  testWidgets('builds chunks ahead to stabilize the scroll extent', (
-    tester,
-  ) async {
-    final markdown = [
-      for (var i = 0; i < 40; i++) '# Section $i\n\n${'word ' * 100}',
-    ].join('\n\n');
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(body: LessonContentView(markdown: markdown)),
-      ),
-    );
-
-    final list = tester.widget<ListView>(find.byType(ListView));
-    expect(list.scrollCacheExtent, const ScrollCacheExtent.pixels(4000));
-  });
-
-  testWidgets('lesson markdown fills its reading column', (tester) async {
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(body: LessonContentView(markdown: '# A short heading')),
-      ),
-    );
-
-    final markdownBox = tester.renderObject<RenderBox>(
-      find.byType(MarkdownBody),
-    );
-    expect(markdownBox.size.width, greaterThan(700));
-  });
-
-  group('lesson links', () {
-    final markdown = [
-      '[[#Section 39]]',
-      '[[Other lesson#Part two|other]]',
-      for (var i = 0; i < 40; i++) '# Section $i\n\n${'word ' * 300}',
-    ].join('\n\n');
-
-    testWidgets('a [[#Heading]] link scrolls to the heading', (tester) async {
+    Future<void> show(
+      WidgetTester tester, {
+      String markdown = lesson,
+      String? initialHeading,
+      String? scrollKey,
+      LessonContentController? controller,
+      void Function(LessonLink link)? onLessonLink,
+    }) async {
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(body: LessonContentView(markdown: markdown)),
+        ChangeNotifierProvider<AudioService>.value(
+          value: audio,
+          child: MaterialApp(
+            home: Scaffold(
+              body: LessonContentView(
+                key: UniqueKey(),
+                markdown: markdown,
+                controller: controller,
+                initialHeading: initialHeading,
+                scrollKey: scrollKey,
+                onLessonLink: onLessonLink,
+              ),
+            ),
+          ),
         ),
       );
-      expect(
-        find.textContaining('Section 39', findRichText: true),
-        findsOneWidget,
-      );
+      await tester.pump();
+      await tester.pump();
+    }
 
-      await tester.tap(find.text('Section 39', findRichText: true));
-      await tester.pumpAndSettle();
+    testWidgets('loads the lesson as one page, with a real origin', (
+      tester,
+    ) async {
+      await show(tester);
 
-      expect(
-        find.textContaining('Section 0', findRichText: true),
-        findsNothing,
-      );
-      expect(
-        find.textContaining('Section 39', findRichText: true),
-        findsWidgets,
-      );
+      final web = platform.controller;
+      expect(web.baseUrl, 'https://www.youtube-nocookie.com/');
+      expect(web.html, contains('<h1 id="lesson">Lesson</h1>'));
+      expect(web.html, contains('<h2 id="past-tense">Past tense</h2>'));
+      expect(web.html, contains('linguaStart(0.0, null)'));
+    });
+
+    testWidgets('a link to a heading scrolls the page to it', (tester) async {
+      await show(tester);
+      platform.controller.finish();
+
+      platform.controller.send({'type': 'link', 'href': '#Past tense'});
+      await tester.pump();
+
+      expect(platform.controller.scripts, [
+        'linguaScrollTo("past-tense", true);',
+      ]);
+    });
+
+    testWidgets('a scroll asked for while loading waits for the page', (
+      tester,
+    ) async {
+      final controller = LessonContentController();
+      await show(tester, controller: controller);
+
+      expect(controller.scrollToHeadingNamed('past-tense'), isTrue);
+      expect(platform.controller.scripts, isEmpty);
+      platform.controller.finish();
+      expect(platform.controller.scripts, [
+        'linguaScrollTo("past-tense", true);',
+      ]);
+      expect(controller.scrollToHeadingNamed('nowhere'), isFalse);
+    });
+
+    testWidgets('a link to a missing heading says so', (tester) async {
+      await show(tester);
+      platform.controller.finish();
+
+      platform.controller.send({'type': 'link', 'href': '#nowhere'});
+      await tester.pump();
+
+      expect(find.text('No heading “nowhere” in this lesson.'), findsOneWidget);
     });
 
     testWidgets('a link to another lesson goes to onLessonLink', (
       tester,
     ) async {
       final links = <LessonLink>[];
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: LessonContentView(
-              markdown: markdown,
-              onLessonLink: links.add,
-            ),
-          ),
-        ),
-      );
+      await show(tester, onLessonLink: links.add);
 
-      await tester.tap(find.text('other', findRichText: true));
+      platform.controller.send({
+        'type': 'link',
+        'href': const LessonLink(
+          lesson: 'Lesson 26',
+          heading: 'Past tense',
+        ).href,
+      });
       await tester.pump();
 
-      expect(links.single.lesson, 'Other lesson');
-      expect(links.single.heading, 'Part two');
+      expect(links.single.lesson, 'Lesson 26');
+      expect(links.single.heading, 'Past tense');
+      expect(platform.controller.scripts, isEmpty);
     });
 
     testWidgets('opens at initialHeading', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: LessonContentView(
-              markdown: markdown,
-              initialHeading: 'section-39',
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
+      await show(tester, initialHeading: 'Past tense');
 
       expect(
-        find.textContaining('Section 0', findRichText: true),
-        findsNothing,
+        platform.controller.html,
+        contains('linguaStart(0.0, "past-tense")'),
       );
     });
-  });
 
-  group('returning to a lesson', () {
-    final markdown = [
-      for (var i = 0; i < 40; i++)
-        '# Section $i\n\n${'word ' * ((i % 5 + 1) * 150)}',
-    ].join('\n\n');
-    final headings = LessonContent.parse(markdown).headings;
+    testWidgets('plays audio and speaks text for the page', (tester) async {
+      await show(tester);
 
-    setUp(LessonScrollMemory.clear);
+      platform.controller.send({'type': 'audio', 'src': 'https://a/b.mp3'});
+      platform.controller.send({'type': 'tts', 'text': '안녕'});
+      platform.controller.send({'type': 'tts', 'text': '  '});
+      await tester.pump();
 
-    Future<void> open(
-      WidgetTester tester, {
-      String? key = 'lesson-1',
-      String text = '',
-      String? initialHeading,
-      LessonContentController? controller,
-    }) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: LessonContentView(
-              markdown: text.isEmpty ? markdown : text,
-              scrollKey: key,
-              initialHeading: initialHeading,
-              controller: controller,
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-    }
-
-    /// Leaves the lesson, as going back to the lesson list does.
-    Future<void> leave(WidgetTester tester) async {
-      await tester.pumpWidget(const MaterialApp(home: SizedBox()));
-      await tester.pumpAndSettle();
-    }
-
-    Finder section(int i) =>
-        find.textContaining('Section $i', findRichText: true).first;
-
-    testWidgets('opens it where it was left', (tester) async {
-      final controller = LessonContentController();
-      await open(tester, controller: controller);
-      controller.scrollToHeading(headings[30]);
-      await tester.pumpAndSettle();
-      // Part of the way into the section, as reading leaves it.
-      await tester.drag(find.byType(ListView), const Offset(0, -120));
-      await tester.pumpAndSettle();
-      final before = tester.getTopLeft(section(30)).dy;
-
-      await leave(tester);
-      await open(tester);
-
-      expect(
-        find.textContaining('Section 0', findRichText: true),
-        findsNothing,
-      );
-      expect(tester.getTopLeft(section(30)).dy, closeTo(before, 2));
+      expect(audio.played, ['audio:https://a/b.mp3', 'speak:안녕:ko']);
     });
 
-    testWidgets('keeps a place left by scrolling by hand', (tester) async {
-      await open(tester);
-      await tester.fling(find.byType(ListView), const Offset(0, -3000), 3000);
-      await tester.pumpAndSettle();
-      final position = tester
-          .state<ScrollableState>(find.byType(Scrollable))
-          .position
-          .pixels;
-      expect(position, greaterThan(1000));
-
-      await leave(tester);
-      await open(tester);
-
-      final restored = tester
-          .state<ScrollableState>(find.byType(Scrollable))
-          .position
-          .pixels;
-      expect(restored, closeTo(position, 2));
-    });
-
-    testWidgets('starts other lessons, and changed text, at the top', (
+    testWidgets('keeps out navigations once the page has loaded', (
       tester,
     ) async {
-      final controller = LessonContentController();
-      await open(tester, controller: controller);
-      controller.scrollToHeading(headings[30]);
-      await tester.pumpAndSettle();
-      await leave(tester);
+      await show(tester);
+      final delegate = platform.controller.delegate!;
+      NavigationRequest request(String url, {bool main = true}) =>
+          NavigationRequest(url: url, isMainFrame: main);
 
-      await open(tester, key: 'lesson-2');
-      expect(section(0), findsOneWidget);
-      await leave(tester);
-
-      await open(tester, text: '$markdown\n\n# Added\n\nmore');
-      expect(section(0), findsOneWidget);
+      expect(
+        delegate.onNavigationRequest!(request('about:blank')),
+        NavigationDecision.navigate,
+      );
+      platform.controller.finish();
+      expect(
+        delegate.onNavigationRequest!(request('https://example.com/')),
+        NavigationDecision.prevent,
+      );
+      expect(
+        delegate.onNavigationRequest!(
+          request('https://www.youtube-nocookie.com/embed/x', main: false),
+        ),
+        NavigationDecision.navigate,
+      );
     });
 
-    testWidgets('goes to a linked heading instead of the saved place', (
+    testWidgets('a link out of the player opens the playing video', (
       tester,
     ) async {
-      final controller = LessonContentController();
-      await open(tester, controller: controller);
-      controller.scrollToHeading(headings[30]);
-      await tester.pumpAndSettle();
-      await leave(tester);
+      await show(tester);
+      platform.controller.finish();
+      final delegate = platform.controller.delegate!;
 
-      await open(tester, initialHeading: 'Section 10');
+      platform.controller.send({
+        'type': 'youtube',
+        'watch': 'https://www.youtube.com/watch?v=abc',
+      });
+      await tester.pump();
 
-      expect(section(10), findsOneWidget);
       expect(
-        find.textContaining('Section 30', findRichText: true),
-        findsNothing,
+        delegate.onNavigationRequest!(
+          const NavigationRequest(
+            url: 'intent://watch?v=abc#Intent;scheme=vnd.youtube;end',
+            isMainFrame: false,
+          ),
+        ),
+        NavigationDecision.prevent,
       );
+    });
+
+    group('returning to a lesson', () {
+      testWidgets('opens it where it was left', (tester) async {
+        await show(tester, scrollKey: 'a');
+        platform.controller.send({'type': 'scroll', 'y': 420});
+
+        await tester.pumpWidget(const SizedBox());
+        await show(tester, scrollKey: 'a');
+
+        expect(platform.controller.html, contains('linguaStart(420.0, null)'));
+      });
+
+      testWidgets('starts other lessons, and changed text, at the top', (
+        tester,
+      ) async {
+        await show(tester, scrollKey: 'a');
+        platform.controller.send({'type': 'scroll', 'y': 420});
+
+        await tester.pumpWidget(const SizedBox());
+        await show(tester, scrollKey: 'b');
+        expect(platform.controller.html, contains('linguaStart(0.0, null)'));
+
+        await tester.pumpWidget(const SizedBox());
+        await show(tester, scrollKey: 'a', markdown: '# Changed\n\nText.');
+        expect(platform.controller.html, contains('linguaStart(0.0, null)'));
+      });
+
+      testWidgets('goes to a linked heading instead of the saved place', (
+        tester,
+      ) async {
+        await show(tester, scrollKey: 'a');
+        platform.controller.send({'type': 'scroll', 'y': 420});
+
+        await tester.pumpWidget(const SizedBox());
+        await show(tester, scrollKey: 'a', initialHeading: 'Past tense');
+
+        expect(
+          platform.controller.html,
+          contains('linguaStart(0.0, "past-tense")'),
+        );
+      });
     });
   });
 }

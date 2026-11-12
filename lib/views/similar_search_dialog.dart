@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../models/vocab_item.dart';
 import '../models/vocab_merge_record.dart';

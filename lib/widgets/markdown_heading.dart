@@ -1,5 +1,5 @@
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:markdown/markdown.dart' as md;
 
@@ -98,7 +98,7 @@ class _MarkdownHeadingTextState extends State<MarkdownHeadingText> {
       'del' || 's' => sheet.del,
       'code' => sheet.code,
       'a' => sheet.a,
-      _ => null,
+      _ => sheet.styles[tag],
     };
     if (style == null) return null;
     return TextStyle(
@@ -108,6 +108,7 @@ class _MarkdownHeadingTextState extends State<MarkdownHeadingText> {
       fontStyle: style.fontStyle,
       fontFamily: style.fontFamily,
       decoration: style.decoration,
+      fontFeatures: style.fontFeatures,
     );
   }
 

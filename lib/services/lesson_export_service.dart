@@ -108,6 +108,32 @@ class LessonExportService {
     return root;
   }
 
+  /// [sentence] as an example of [vocab] in a lesson file: with the word's
+  /// `**` marking, which import requires, suggested when the word has none.
+  static String exampleTarget(
+    Lesson lesson,
+    VocabItem vocab,
+    Sentence sentence,
+  ) {
+    var target = vocab.targetTextFor(sentence);
+    if (!Sentence.hasEmphasis(target)) {
+      target = Sentence.suggestEmphasis(
+        sentence.targetText,
+        vocab.targetWord,
+        korean: lesson.targetLanguageCode == 'ko',
+      );
+      if (!Sentence.hasEmphasis(target) && target.isNotEmpty) {
+        target = '**$target**';
+      }
+    }
+    return target;
+  }
+
+  /// The key a word's reading is written under in [lesson]'s YAML: `pinyin`
+  /// in a Chinese lesson, `reading` in any other.
+  static String readingKey(Lesson lesson) =>
+      lesson.targetLanguageCode == 'zh' ? 'pinyin' : 'reading';
+
   static Map<String, dynamic> _vocabEntry(
     Lesson lesson,
     VocabItem vocab,
@@ -118,10 +144,7 @@ class LessonExportService {
       'target': vocab.targetWord,
       'meaning': vocab.translation,
     };
-    if (vocab.reading.isNotEmpty) {
-      entry[lesson.targetLanguageCode == 'zh' ? 'pinyin' : 'reading'] =
-          vocab.reading;
-    }
+    if (vocab.reading.isNotEmpty) entry[readingKey(lesson)] = vocab.reading;
     if (vocab.simplified.isNotEmpty) entry['simplified'] = vocab.simplified;
     if (vocab.traditional.isNotEmpty) entry['traditional'] = vocab.traditional;
     if (vocab.hanja.isNotEmpty) entry['hanja'] = vocab.hanja;
@@ -136,17 +159,7 @@ class LessonExportService {
     for (final id in vocab.sentenceIds) {
       final sentence = sentenceById[id];
       if (sentence == null) continue;
-      var target = vocab.targetTextFor(sentence);
-      if (!Sentence.hasEmphasis(target)) {
-        target = Sentence.suggestEmphasis(
-          sentence.targetText,
-          vocab.targetWord,
-          korean: lesson.targetLanguageCode == 'ko',
-        );
-        if (!Sentence.hasEmphasis(target) && target.isNotEmpty) {
-          target = '**$target**';
-        }
-      }
+      final target = exampleTarget(lesson, vocab, sentence);
 
       final example = <String, String>{'target': target};
       final translation = vocab.translationTextFor(sentence);
