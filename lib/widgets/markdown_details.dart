@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// A piece of Markdown text: plain Markdown, or one `<details>` block.
 class MarkdownDetailsPart {

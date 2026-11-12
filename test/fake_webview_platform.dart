@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:webview_platform_interface/webview_platform_interface.dart';
 
 /// A WebView platform that loads nothing: it records the page, the scripts
