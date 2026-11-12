@@ -27,6 +27,10 @@ const _narrowWidth = 320.0;
 /// From this content width, Next 7 days and New cards sit side by side.
 const _twoColumnWidth = 720.0;
 
+/// Under this content width, a bar of the Next 48 hours chart is two hours,
+/// so the 24 bars stay wide enough to see and tap.
+const _hourlyNarrowWidth = 480.0;
+
 const _pagePadding = 20.0;
 
 /// Colours shared with other screens: right and wrong as in the study
@@ -98,6 +102,42 @@ String newCardsLeftText(int left, int limit) {
   if (days == null) return cards;
   return '$cards, about ${formatCount(days)} '
       '${days == 1 ? 'day' : 'days'} at ${formatCount(limit)} a day';
+}
+
+/// The line over the Next 48 hours chart, e.g. "12 due now · 30 more in the
+/// next 6 hours · 65 more by this time tomorrow". [within6h] are the cards
+/// coming due over the next 6 hours, [later24h] those after that until the
+/// same time tomorrow. While nothing is due, [nextDue] says when the first
+/// card is, e.g. "at 6:20 PM".
+@visibleForTesting
+String hourlyForecastSummary({
+  required int dueNow,
+  required int within6h,
+  required int later24h,
+  String? nextDue,
+}) {
+  final parts = <String>[
+    if (dueNow > 0)
+      '${formatCount(dueNow)} due now'
+    else if (nextDue != null)
+      'Next card due $nextDue'
+    else
+      'Nothing due',
+  ];
+  var counted = dueNow > 0;
+  if (within6h > 0) {
+    parts.add(
+      '${formatCount(within6h)}${counted ? ' more' : ''} in the next 6 hours',
+    );
+    counted = true;
+  }
+  if (later24h > 0) {
+    parts.add(
+      '${formatCount(later24h)}${counted ? ' more' : ''} '
+      'by this time tomorrow',
+    );
+  }
+  return parts.join(' · ');
 }
 
 class ActivityHeatmapView extends StatefulWidget {
@@ -207,6 +247,8 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
           final ratingCounts = provider.dailyRatingCounts;
           final newCardCounts = provider.dailyNewCardCounts;
           final forecast = dueForecast(provider.lessons, today);
+          final times = dueTimes(provider.lessons);
+          final hourly = dueForecastHourly(times, today);
           final newPerDay = newCardsPerDay(
             newCardCounts,
             provider.lessons,
@@ -248,6 +290,15 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
               // Centred by padding rather than a narrower list, so the whole
               // window still scrolls and the scrollbar stays at its edge.
               final sidePadding = (constraints.maxWidth - contentWidth) / 2;
+              final hourlySection = hourly.any((count) => count > 0)
+                  ? _hourlySection(
+                      context,
+                      hourly: hourly,
+                      times: times,
+                      now: today,
+                      width: contentWidth,
+                    )
+                  : null;
               final forecastSection = maxDue > 0
                   ? _forecastSection(
                       context,
@@ -493,6 +544,10 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                     ],
                   ),
                   const SizedBox(height: 24),
+                  if (hourlySection != null) ...[
+                    hourlySection,
+                    const SizedBox(height: 24),
+                  ],
                   if (forecastSection != null &&
                       newCardsSection != null &&
                       contentWidth >= _twoColumnWidth) ...[
@@ -611,6 +666,223 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
         ),
       ],
     );
+  }
+
+  /// A bar per clock hour for the cards coming due over the next two days,
+  /// under a line that sums them up. The review limit works over a rolling
+  /// 24 hours, so this shows when cards come due within it better than the
+  /// days of Next 7 days do. On a narrow screen a bar is two hours.
+  Widget _hourlySection(
+    BuildContext context, {
+    required List<int> hourly,
+    required List<DateTime> times,
+    required DateTime now,
+    required double width,
+  }) {
+    final theme = Theme.of(context);
+    final start = forecastHourStart(now);
+    final dueNow = times.where((time) => !time.isAfter(now)).length;
+    final summary = hourlyForecastSummary(
+      dueNow: dueNow,
+      within6h: countDueBetween(times, now, now.add(const Duration(hours: 6))),
+      later24h: countDueBetween(
+        times,
+        now.add(const Duration(hours: 6)),
+        now.add(const Duration(hours: 24)),
+      ),
+      // [times] are earliest first, so with none due the first is next.
+      nextDue: dueNow == 0 && times.isNotEmpty
+          ? _nextDueLabel(context, times.first, now)
+          : null,
+    );
+
+    final hoursPerBar = width < _hourlyNarrowWidth ? 2 : 1;
+    final bars = <({DateTime from, DateTime to, int count})>[];
+    for (var first = 0; first < hourly.length; first += hoursPerBar) {
+      final last = first + hoursPerBar < hourly.length
+          ? first + hoursPerBar
+          : hourly.length;
+      bars.add((
+        from: start.add(Duration(hours: first)),
+        to: start.add(Duration(hours: last)),
+        count: hourly.sublist(first, last).fold(0, (sum, n) => sum + n),
+      ));
+    }
+    final maximum = bars.fold(
+      0,
+      (maximum, bar) => bar.count > maximum ? bar.count : maximum,
+    );
+
+    // "Now" under the first bar, then a label every 6 clock hours: the
+    // weekday at midnight, the time otherwise.
+    final labels = <(int, String)>[(0, 'Now')];
+    for (var index = 1; index < bars.length; index++) {
+      for (
+        var hour = bars[index].from;
+        hour.isBefore(bars[index].to);
+        hour = hour.add(const Duration(hours: 1))
+      ) {
+        if (hour.hour % 6 != 0) continue;
+        labels.add((
+          index,
+          hour.hour == 0 ? _weekdayName(hour) : _hourLabel(context, hour),
+        ));
+        break;
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Next 48 hours', style: theme.textTheme.titleMedium),
+        Text(
+          summary,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 64,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final (index, bar) in bars.indexed)
+                Expanded(
+                  child: _hourBar(
+                    context,
+                    count: bar.count,
+                    maximum: maximum,
+                    // The first bar holds the cards due now, as Today does
+                    // in Next 7 days.
+                    color: index == 0 ? _dueColor : null,
+                    tooltip:
+                        '${_hourRangeLabel(context, bar.from, bar.to, now, first: index == 0)}: '
+                        '${formatCount(bar.count)} due',
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 4),
+        SizedBox(
+          height: 16,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final barWidth = constraints.maxWidth / bars.length;
+              return Stack(
+                children: [
+                  for (final (index, label) in labels)
+                    // Leave room for "Now", and for the last label to fit.
+                    if (index == 0 ||
+                        (index * barWidth >= 40 &&
+                            index * barWidth <= constraints.maxWidth - 40))
+                      Positioned(
+                        left: index * barWidth,
+                        child: Text(label, style: theme.textTheme.labelSmall),
+                      ),
+                ],
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// A bar of the Next 48 hours chart: too many to print their counts, so
+  /// the count is in the tooltip.
+  Widget _hourBar(
+    BuildContext context, {
+    required int count,
+    required int maximum,
+    required String tooltip,
+    Color? color,
+  }) {
+    final height = count == 0 || maximum == 0 ? 0.0 : 60.0 * count / maximum;
+    return Semantics(
+      label: tooltip,
+      excludeSemantics: true,
+      child: Tooltip(
+        message: tooltip,
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: Container(
+            width: double.infinity,
+            // A card or two still shows against a busy hour.
+            height: count > 0 && height < 2 ? 2 : height,
+            margin: const EdgeInsets.symmetric(horizontal: 1),
+            decoration: BoxDecoration(
+              color: color ?? Theme.of(context).colorScheme.primary,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(2),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The time of [time] as the device shows times, e.g. "6:20 PM" or
+  /// "18:20".
+  String _timeLabel(BuildContext context, DateTime time) =>
+      MaterialLocalizations.of(context).formatTimeOfDay(
+        TimeOfDay.fromDateTime(time),
+        alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context),
+      );
+
+  /// A whole hour for the chart's axis, short: "6 PM", or "18:00" on a
+  /// 24-hour clock.
+  String _hourLabel(BuildContext context, DateTime hour) {
+    if (MediaQuery.alwaysUse24HourFormatOf(context)) {
+      return '${hour.hour.toString().padLeft(2, '0')}:00';
+    }
+    final twelve = hour.hour % 12 == 0 ? 12 : hour.hour % 12;
+    return '$twelve ${hour.hour < 12 ? 'AM' : 'PM'}';
+  }
+
+  /// "Today", "Tomorrow" or the weekday of [day], as seen from [now].
+  String _relativeDay(DateTime day, DateTime now) {
+    final days = DateTime.utc(
+      day.year,
+      day.month,
+      day.day,
+    ).difference(DateTime.utc(now.year, now.month, now.day)).inDays;
+    return switch (days) {
+      0 => 'Today',
+      1 => 'Tomorrow',
+      _ => _weekdayName(day),
+    };
+  }
+
+  /// A bar's tooltip time: "Today 6:00 PM–7:00 PM", or "Now to 4:00 PM" for
+  /// the first bar, which also holds the cards already overdue.
+  String _hourRangeLabel(
+    BuildContext context,
+    DateTime from,
+    DateTime to,
+    DateTime now, {
+    required bool first,
+  }) {
+    final end = _timeLabel(context, to);
+    if (first) return 'Now to $end';
+    return '${_relativeDay(from, now)} ${_timeLabel(context, from)}–$end';
+  }
+
+  /// When the next card is due: "at 6:20 PM", "tomorrow at 8:00 AM", or a
+  /// date further off ("on Nov 20").
+  String _nextDueLabel(BuildContext context, DateTime due, DateTime now) {
+    final days = DateTime.utc(
+      due.year,
+      due.month,
+      due.day,
+    ).difference(DateTime.utc(now.year, now.month, now.day)).inDays;
+    return switch (days) {
+      0 => 'at ${_timeLabel(context, due)}',
+      1 => 'tomorrow at ${_timeLabel(context, due)}',
+      _ => 'on ${_shortDate(due)}',
+    };
   }
 
   String _monthLabel(List<DateTime> weeks, int index) {
@@ -1215,8 +1487,14 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
   /// "Today", then the weekday of each day after it.
   String _forecastLabel(DateTime today, int daysAhead) {
     if (daysAhead == 0) return 'Today';
+    return _weekdayName(
+      DateTime(today.year, today.month, today.day + daysAhead),
+    );
+  }
+
+  /// "Mon" to "Sun".
+  String _weekdayName(DateTime day) {
     const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    final day = DateTime(today.year, today.month, today.day + daysAhead);
     return weekdays[day.weekday - 1];
   }
 
