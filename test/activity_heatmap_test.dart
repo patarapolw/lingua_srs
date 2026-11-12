@@ -524,7 +524,8 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Now'), findsOneWidget);
-    // An hour a bar on an 800-wide view, the overdue card in the first.
+    // On an 800-wide view it keeps to the left column, under Next 7 days,
+    // so two hours a bar; the overdue card is in the first.
     final tooltips = tester
         .widgetList<Tooltip>(
           find.descendant(
@@ -539,7 +540,13 @@ void main() {
         )
         .map((tooltip) => tooltip.message!)
         .toList();
-    expect(tooltips, hasLength(48));
+    expect(tooltips, hasLength(24));
+    // 20 of page padding and a 360-wide column: no wider than Next 7 days.
+    expect(tester.getTopRight(find.byTooltip(tooltips.last)).dx, 380);
+    expect(
+      tester.getTopLeft(find.text('Next 48 hours')).dx,
+      tester.getTopLeft(find.text('Next 7 days')).dx,
+    );
     expect(tooltips.first, startsWith('Now to '));
     expect(tooltips.first, endsWith(': 1 due'));
     expect(
@@ -568,50 +575,60 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('a bar of the next 48 hours is two hours on a phone', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(360, 2000);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    provider.lessons.add(
-      Lesson(
-        title: 'L',
-        vocabularies: [
-          VocabItem(
-            targetWord: 'a',
-            translation: 'a',
-            pos: 'nouns',
-            cardTargetToNative: SrsCard(
-              direction: CardDirection.targetToNative,
-              status: SrsStatus.review,
-              interval: 3,
-              lastReviewed: DateTime.now().subtract(const Duration(days: 3)),
-              dueDate: DateTime.now().add(const Duration(hours: 5)),
+  testWidgets(
+    'a bar of the next 48 hours is an hour on a mid-sized window, two on a '
+    'phone',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      provider.lessons.add(
+        Lesson(
+          title: 'L',
+          vocabularies: [
+            VocabItem(
+              targetWord: 'a',
+              translation: 'a',
+              pos: 'nouns',
+              cardTargetToNative: SrsCard(
+                direction: CardDirection.targetToNative,
+                status: SrsStatus.review,
+                interval: 3,
+                lastReviewed: DateTime.now().subtract(const Duration(days: 3)),
+                dueDate: DateTime.now().add(const Duration(hours: 5)),
+              ),
             ),
+          ],
+        ),
+      );
+
+      Future<int> barsAt(double width) async {
+        tester.view.physicalSize = Size(width, 2000);
+        await tester.pumpWidget(
+          ChangeNotifierProvider<AppProvider>.value(
+            value: provider,
+            child: const MaterialApp(home: ActivityHeatmapView()),
           ),
-        ],
-      ),
-    );
+        );
+        await tester.pump();
+        final section = find
+            .ancestor(
+              of: find.text('Next 48 hours'),
+              matching: find.byType(Column),
+            )
+            .first;
+        return find
+            .descendant(of: section, matching: find.byType(Tooltip))
+            .evaluate()
+            .length;
+      }
 
-    await tester.pumpWidget(
-      ChangeNotifierProvider<AppProvider>.value(
-        value: provider,
-        child: const MaterialApp(home: ActivityHeatmapView()),
-      ),
-    );
-
-    expect(find.text('Next 48 hours'), findsOneWidget);
-    final section = find
-        .ancestor(of: find.text('Next 48 hours'), matching: find.byType(Column))
-        .first;
-    expect(
-      find.descendant(of: section, matching: find.byType(Tooltip)),
-      findsNWidgets(24),
-    );
-    expect(tester.takeException(), isNull);
-  });
+      expect(await barsAt(360), 24);
+      // One column, 560 wide: room for an hour a bar.
+      expect(await barsAt(600), 48);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   group('on a wide window', () {
     Future<void> pumpAt(WidgetTester tester, double width) async {

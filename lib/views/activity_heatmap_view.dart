@@ -27,6 +27,9 @@ const _narrowWidth = 320.0;
 /// From this content width, Next 7 days and New cards sit side by side.
 const _twoColumnWidth = 720.0;
 
+/// The gap between the two columns of that row.
+const _columnGap = 40.0;
+
 /// Under this content width, a bar of the Next 48 hours chart is two hours,
 /// so the 24 bars stay wide enough to see and tap.
 const _hourlyNarrowWidth = 480.0;
@@ -290,13 +293,19 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
               // Centred by padding rather than a narrower list, so the whole
               // window still scrolls and the scrollbar stays at its edge.
               final sidePadding = (constraints.maxWidth - contentWidth) / 2;
+              final isWide = contentWidth >= _twoColumnWidth;
+              // On a wide window, a column of the row Next 7 days shares
+              // with New cards.
+              final columnWidth = (contentWidth - _columnGap) / 2;
+              // Never wider than Next 7 days, so the daily chart stays the
+              // focus on a large screen.
               final hourlySection = hourly.any((count) => count > 0)
                   ? _hourlySection(
                       context,
                       hourly: hourly,
                       times: times,
                       now: today,
-                      width: contentWidth,
+                      width: isWide ? columnWidth : contentWidth,
                     )
                   : null;
               final forecastSection = maxDue > 0
@@ -546,12 +555,24 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                   const SizedBox(height: 24),
                   if (forecastSection != null &&
                       newCardsSection != null &&
-                      contentWidth >= _twoColumnWidth) ...[
+                      isWide) ...[
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(child: forecastSection),
-                        const SizedBox(width: 40),
+                        // Next 48 hours under the days, in their column.
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              forecastSection,
+                              if (hourlySection != null) ...[
+                                const SizedBox(height: 24),
+                                hourlySection,
+                              ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: _columnGap),
                         Expanded(child: newCardsSection),
                       ],
                     ),
@@ -565,11 +586,18 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                       newCardsSection,
                       const SizedBox(height: 24),
                     ],
-                  ],
-                  // A finer look after the days, which matter more.
-                  if (hourlySection != null) ...[
-                    hourlySection,
-                    const SizedBox(height: 24),
+                    // A finer look after the days, which matter more; on a
+                    // wide window no wider than a column of the row above.
+                    if (hourlySection != null) ...[
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: SizedBox(
+                          width: isWide ? columnWidth : contentWidth,
+                          child: hourlySection,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                    ],
                   ],
                   // Each section above ends with its own gap.
                   if (leeches.isNotEmpty) ...[
