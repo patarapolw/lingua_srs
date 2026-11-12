@@ -26,6 +26,11 @@ constexpr const wchar_t kGetPreferredBrightnessRegKey[] =
   L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize";
 constexpr const wchar_t kGetPreferredBrightnessRegValue[] = L"AppsUseLightTheme";
 
+// The smallest the client area may be, in logical pixels, so Flutter is never
+// laid out narrower than the phone widths the screens are designed for (#184).
+constexpr int kMinimumClientWidth = 360;
+constexpr int kMinimumClientHeight = 480;
+
 // The number of Win32Window objects that currently exist.
 static int g_active_window_count = 0;
 
@@ -195,6 +200,31 @@ Win32Window::MessageHandler(HWND hwnd,
       SetWindowPos(hwnd, nullptr, newRectSize->left, newRectSize->top, newWidth,
                    newHeight, SWP_NOZORDER | SWP_NOACTIVATE);
 
+      return 0;
+    }
+    case WM_GETMINMAXINFO: {
+      // ptMinTrackSize is the size of the whole window, so add the frame and
+      // title bar to the minimum client area, scaled by the window's DPI. A
+      // minimized window has no client area to measure; keep the defaults.
+      if (IsIconic(hwnd)) {
+        break;
+      }
+      RECT window_rect;
+      RECT client_rect;
+      if (!GetWindowRect(hwnd, &window_rect) ||
+          !GetClientRect(hwnd, &client_rect)) {
+        break;
+      }
+      LONG frame_width = (window_rect.right - window_rect.left) -
+                         (client_rect.right - client_rect.left);
+      LONG frame_height = (window_rect.bottom - window_rect.top) -
+                          (client_rect.bottom - client_rect.top);
+      double scale_factor = FlutterDesktopGetDpiForHWND(hwnd) / 96.0;
+      auto info = reinterpret_cast<MINMAXINFO*>(lparam);
+      info->ptMinTrackSize.x =
+          Scale(kMinimumClientWidth, scale_factor) + frame_width;
+      info->ptMinTrackSize.y =
+          Scale(kMinimumClientHeight, scale_factor) + frame_height;
       return 0;
     }
     case WM_SIZE: {

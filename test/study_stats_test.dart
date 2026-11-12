@@ -143,6 +143,89 @@ void main() {
     });
   });
 
+  group('dueTimes', () {
+    test('lists studied cards earliest first, each shared card once', () {
+      final shared = _word('shared', _due('shared', DateTime(2026, 11, 7)));
+      final lesson = Lesson(
+        title: 'L',
+        vocabularies: [
+          _word('late', _due('late', DateTime(2026, 11, 9))),
+          shared,
+          _word('early', _due('early', DateTime(2026, 11, 1))),
+          _word(
+            'new',
+            SrsCard(id: 'new', direction: CardDirection.targetToNative),
+          ),
+          _word('suspended', _due('suspended', _today, suspended: true)),
+        ],
+      );
+      final other = Lesson(
+        title: 'B',
+        vocabularies: [
+          VocabItem(
+            id: 'shared',
+            targetWord: 'shared',
+            translation: 'shared',
+            pos: 'nouns',
+          )..shared = shared.shared,
+        ],
+      );
+
+      expect(dueTimes([lesson, other]), [
+        DateTime(2026, 11, 1),
+        DateTime(2026, 11, 7),
+        DateTime(2026, 11, 9),
+      ]);
+    });
+  });
+
+  group('dueForecastHourly', () {
+    test('counts cards by clock hour, overdue ones in the first', () {
+      // _now is 15:30, so the first hour is 15:00 to 16:00.
+      final times = [
+        _daysAgo(2),
+        DateTime(2026, 11, 6, 15, 10),
+        DateTime(2026, 11, 6, 15, 59),
+        DateTime(2026, 11, 6, 16),
+        DateTime(2026, 11, 6, 18, 45),
+        DateTime(2026, 11, 8, 14, 59),
+        DateTime(2026, 11, 8, 15),
+      ];
+
+      final counts = dueForecastHourly(times, _now);
+
+      expect(counts, hasLength(48));
+      expect(counts[0], 3);
+      expect(counts[1], 1);
+      expect(counts[3], 1);
+      expect(counts[47], 1);
+      // The card at 15:00 two days on is past the 48 hours.
+      expect(counts.fold(0, (sum, count) => sum + count), 6);
+    });
+
+    test('takes the number of hours', () {
+      final times = [DateTime(2026, 11, 6, 20)];
+
+      expect(dueForecastHourly(times, _now, hours: 6), [0, 0, 0, 0, 0, 1]);
+      expect(dueForecastHourly(times, _now, hours: 3), [0, 0, 0]);
+    });
+
+    test('starts at the clock hour now is in', () {
+      expect(forecastHourStart(_now), DateTime(2026, 11, 6, 15));
+    });
+  });
+
+  test('countDueBetween counts the times after from, up to until', () {
+    final times = [
+      DateTime(2026, 11, 6, 15, 30),
+      DateTime(2026, 11, 6, 16),
+      DateTime(2026, 11, 6, 21, 30),
+      DateTime(2026, 11, 6, 21, 31),
+    ];
+
+    expect(countDueBetween(times, _now, DateTime(2026, 11, 6, 21, 30)), 2);
+  });
+
   test('formatCount puts commas between thousands', () {
     expect(formatCount(0), '0');
     expect(formatCount(999), '999');
