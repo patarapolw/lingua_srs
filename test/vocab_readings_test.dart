@@ -451,6 +451,41 @@ vocabulary:
       expect(text, contains(RegExp('pinyin: ["\']?lǎoshī')));
       expect(text, isNot(contains('xuesheng')));
     });
+
+    test('keeps the quotes of the value it replaces, or of the word', () {
+      const yaml = '''
+---
+target: zh-CN
+vocabulary:
+  nouns:
+    - zh: "这"
+      en: "this"
+      pinyin: "zhe4"
+    - zh: '我'
+      en: 'I'
+    - zh: 你
+      en: you
+---
+# Lesson
+''';
+      final parsed = YamlParserService.parseLessonYaml(yaml);
+      final [zhe, wo, ni] = parsed.lesson.vocabularies;
+      zhe.reading = 'zhè';
+      wo.reading = 'wǒ';
+      ni.reading = 'nǐ';
+      zhe.translation = 'this one';
+
+      final text = LessonFileUpdate.plan(
+        yaml,
+        parsed.lesson,
+        byId(parsed),
+      )!.text;
+
+      expect(text, contains('pinyin: "zhè"'));
+      expect(text, contains('en: "this one"'));
+      expect(text, contains("pinyin: 'wǒ'"));
+      expect(text, contains('pinyin: nǐ'));
+    });
   });
 
   group('back of the card', () {

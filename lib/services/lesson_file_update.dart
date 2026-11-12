@@ -128,8 +128,28 @@ class LessonFileUpdate {
       if (word == null) continue;
       final location = parsed.locations[index];
       var touched = false;
+      // A value is written in the quotes of the one it replaces, or for a
+      // key the entry does not have yet, in those of the entry's word, so
+      // a file written `zh: "这"` keeps its quotes.
+      ScalarStyle? styleOf(Object? key) {
+        final node = editor.parseAt([
+          ...location.path,
+          key,
+        ], orElse: () => YamlScalar.wrap(null));
+        return node is YamlScalar && node.value != null ? node.style : null;
+      }
+
       void set(Object? key, String value) {
-        apply(() => editor.update([...location.path, key], value));
+        final style = styleOf(key) ?? styleOf(location.targetKey);
+        apply(
+          () => editor.update(
+            [...location.path, key],
+            style == ScalarStyle.DOUBLE_QUOTED ||
+                    style == ScalarStyle.SINGLE_QUOTED
+                ? YamlScalar.wrap(value, style: style!)
+                : value,
+          ),
+        );
         touched = true;
       }
 
