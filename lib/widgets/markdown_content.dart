@@ -191,9 +191,7 @@ class MarkdownContent extends StatelessWidget {
       pPadding: EdgeInsets.zero,
       blockquote: theme.textTheme.bodyMedium,
       img: theme.textTheme.bodyMedium,
-      checkbox: theme.textTheme.bodyMedium?.copyWith(
-        color: theme.primaryColor,
-      ),
+      checkbox: theme.textTheme.bodyMedium?.copyWith(color: theme.primaryColor),
       listIndent: 24.0,
       listBullet: theme.textTheme.bodyMedium,
       listBulletPadding: const EdgeInsets.only(right: 4),
