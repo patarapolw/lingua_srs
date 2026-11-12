@@ -32,6 +32,45 @@ class Lesson {
   static String languageCodeOf(String language) =>
       language.trim().toLowerCase().split(RegExp(r'[-_]')).first;
 
+  /// The region a language's bare code already stands for: `ko` is Korean
+  /// as spoken in Korea, so `ko-KR` says nothing more than `ko`.
+  ///
+  /// Only languages with one such region are here. Chinese, English,
+  /// Spanish, Portuguese, French and Arabic are not: their regions differ in
+  /// script, voice or spelling, and none is the plain default.
+  static const _defaultRegions = {
+    'ko': 'kr',
+    'ja': 'jp',
+    'th': 'th',
+    'vi': 'vn',
+    'id': 'id',
+    'tr': 'tr',
+    'de': 'de',
+    'it': 'it',
+    'ru': 'ru',
+    'pl': 'pl',
+    'uk': 'ua',
+    'cs': 'cz',
+    'hu': 'hu',
+    'ro': 'ro',
+    'el': 'gr',
+    'he': 'il',
+    'hi': 'in',
+    'fi': 'fi',
+    'da': 'dk',
+  };
+
+  /// [language] without a region that adds nothing to it: `ko` for `ko-KR`
+  /// and `ja` for `ja_JP`. A region that tells a variant apart is kept as
+  /// written (`zh-TW`, `pt-BR`, `de-AT`), and so is anything else.
+  static String withoutDefaultRegion(String language) {
+    final tag = language.trim();
+    final parts = tag.toLowerCase().split(RegExp(r'[-_]'));
+    return parts.length == 2 && _defaultRegions[parts[0]] == parts[1]
+        ? parts[0]
+        : tag;
+  }
+
   /// [title], [unitTitle], [fileName] and [fileFolder] are kept with Korean syllables
   /// composed ([composeHangul]), so names from a Mac, which can store them as
   /// separate jamo, match the same names from anywhere else. Every lesson is

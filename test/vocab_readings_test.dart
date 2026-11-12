@@ -146,6 +146,45 @@ vocabulary:
       }
     });
 
+    test('drops a region that says nothing more than the language', () {
+      String languageOf(String target, String key) =>
+          YamlParserService.parseLessonYaml('''
+target: $target
+vocabulary:
+  nouns:
+    - $key: word
+      en: word
+''').lesson.targetLanguage;
+
+      // Whether the entries are keyed by the language or by `target:`.
+      for (final key in ['ko', 'target']) {
+        expect(languageOf('ko-KR', key), 'ko', reason: key);
+        expect(languageOf('ko_kr', key), 'ko', reason: key);
+      }
+      expect(languageOf('ja-JP', 'ja'), 'ja');
+      expect(languageOf('ja-JP', 'target'), 'ja');
+      expect(languageOf('th-TH', 'target'), 'th');
+      expect(languageOf('de-DE', 'de'), 'de');
+      // A region that tells a variant apart stays.
+      expect(languageOf('de-AT', 'de'), 'de-AT');
+      expect(languageOf('pt-BR', 'pt'), 'pt-BR');
+      expect(languageOf('en-GB', 'target'), 'en-GB');
+      expect(languageOf('zh-CN', 'zh'), 'zh-CN');
+    });
+
+    test('dropping the region does not change the id a word gets', () {
+      String idOf(String target) => YamlParserService.parseLessonYaml('''
+target: $target
+vocabulary:
+  nouns:
+    - target: 단어
+      en: word
+''').lesson.vocabularies.single.id;
+
+      // As before this change: the id is made from `target:` as written.
+      expect(idOf('ko-KR'), isNot(idOf('ko')));
+    });
+
     test('an entry key still decides the language when it is another one', () {
       final parsed = YamlParserService.parseLessonYaml('''
 target: ko

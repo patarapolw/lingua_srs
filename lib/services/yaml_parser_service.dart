@@ -541,14 +541,17 @@ class YamlParserService {
     // Entries keyed by a language (`zh:`) say the language but not the region
     // or script. The file's `target: zh-TW` says both, so it is kept when it
     // is that same language: the region picks the voice and tells which
-    // characters the lesson is written in.
+    // characters the lesson is written in. A region that says nothing more
+    // than the language (`ko-KR`, `ja-JP`) is dropped. Generated ids were
+    // made from the language as it was read above, and still are.
     final stated = statedTargetLang;
-    final lessonTargetLang =
-        stated != null &&
-            stated.toLowerCase() != targetLang &&
-            Lesson.languageCodeOf(stated) == targetLang
-        ? stated
-        : targetLang;
+    final lessonTargetLang = Lesson.withoutDefaultRegion(
+      stated != null &&
+              stated.toLowerCase() != targetLang &&
+              Lesson.languageCodeOf(stated) == targetLang
+          ? stated
+          : targetLang,
+    );
 
     final lesson = Lesson(
       title: title,
