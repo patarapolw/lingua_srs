@@ -612,9 +612,10 @@ class _LessonDetailViewState extends State<LessonDetailView> {
               lessonStudyLabel(
                 due: lesson.dueCardsCount,
                 newCards: lesson.newCardsCount,
+                // The lesson's language has the limit to itself.
                 remainingNewCards: context
                     .watch<AppProvider>()
-                    .remainingNewCards24h,
+                    .remainingNewCards24hOf(lesson.languageKey),
               ),
             ),
             onPressed: lesson.activeCardsCount == 0

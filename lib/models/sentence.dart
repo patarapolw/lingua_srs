@@ -57,6 +57,11 @@ class Sentence {
   String notes;
   String? lessonId;
 
+  /// The language the sentence is in, as a code without a region (`zh`),
+  /// for a sentence added to the pool by hand. Null for one that came with
+  /// a lesson, whose language is the lesson's.
+  String? language;
+
   Sentence({
     String? id,
     required this.targetText,
@@ -66,6 +71,7 @@ class Sentence {
     this.ttsText,
     this.notes = '',
     this.lessonId,
+    this.language,
   }) : id = id ?? const Uuid().v4();
 
   /// Whether a recording is saved, whether or not it is switched on.
@@ -352,6 +358,8 @@ class Sentence {
     SharedVocab.ttsField: ttsText,
     'notes': notes,
     'lessonId': lessonId,
+    // Left out when there is none, so other sentences are saved as before.
+    if (language != null) 'language': language,
   };
 
   factory Sentence.fromJson(Map<String, dynamic> json) => Sentence(
@@ -363,5 +371,6 @@ class Sentence {
     ttsText: SharedVocab.ttsFromJson(json),
     notes: json['notes'] as String? ?? '',
     lessonId: json['lessonId'] as String?,
+    language: json['language'] as String?,
   );
 }

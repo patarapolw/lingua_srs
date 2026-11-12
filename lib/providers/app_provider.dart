@@ -17,6 +17,7 @@ import '../models/vocab_merge_record.dart';
 import '../services/ai_discussion_search.dart';
 import '../services/deepseek_service.dart';
 import '../services/hangul_text.dart';
+import '../services/language_activity.dart';
 import '../services/lesson_ai_prompt.dart';
 import '../services/lesson_file_update.dart';
 import '../services/lesson_word_match.dart';
@@ -133,6 +134,15 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   /// counts stay in [_dailyReviewCounts] and [_reviewTimestamps24h].
   Map<String, Map<String, dynamic>> _remoteActivity = {};
 
+  /// This device's reviews by language, next to the totals above. Only
+  /// reviews made since languages were recorded are in it.
+  LanguageActivity _languageActivity = LanguageActivity();
+
+  /// The language the reviews in no language's share belong to: those made
+  /// before languages were recorded, here or on a device with an older app.
+  /// Settled once, see [_settleActivityRestLanguage].
+  String? _activityRestLanguage;
+
   List<Lesson> get lessons => _lessons;
 
   /// The languages being learned, as [Lesson.languageKey]s, in the order
@@ -167,32 +177,71 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     ];
   }
 
-  /// The Sentence Pool of [activeLanguage]: sentences its words use or that
-  /// came with its lessons. A sentence no lesson of any language has, such
-  /// as one typed into the pool, is listed in every language.
+  /// The Sentence Pool of [activeLanguage]. A pool is shared by the regions
+  /// of a language, so Mainland and Taiwan Mandarin lessons have one pool,
+  /// and every sentence is in exactly one: see [_sentenceLanguages].
   List<Sentence> get activeSentences {
-    final shown = activeLessons;
-    if (identical(shown, _lessons)) return _sentences;
-    final shownLessons = {for (final lesson in shown) lesson.id};
-    final used = <String>{};
-    final usedElsewhere = <String>{};
-    final otherLessons = <String>{};
-    for (final lesson in _lessons) {
-      final isShown = shownLessons.contains(lesson.id);
-      if (!isShown) otherLessons.add(lesson.id);
-      for (final vocab in lesson.vocabularies) {
-        (isShown ? used : usedElsewhere).addAll(vocab.sentenceIds);
-      }
-    }
+    final active = activeLanguage;
+    if (active == null || languages.length < 2) return _sentences;
+    final code = Lesson.languageCodeOf(active);
+    final codes = {
+      for (final language in languages) Lesson.languageCodeOf(language),
+    };
+    if (codes.length < 2) return _sentences;
+    final languageOf = _sentenceLanguages(codes);
     return [
       for (final sentence in _sentences)
-        if (used.contains(sentence.id) ||
-            shownLessons.contains(sentence.lessonId) ||
-            (!usedElsewhere.contains(sentence.id) &&
-                !otherLessons.contains(sentence.lessonId)))
-          sentence,
+        if (languageOf[sentence.id] == code) sentence,
     ];
   }
+
+  /// The language of every sentence, as one of [codes] (language codes
+  /// without a region):
+  /// - that of the lessons whose words use it, the first of them if they
+  ///   are of several languages;
+  /// - else that of the lesson it came with;
+  /// - else the language it was added to the pool in ([Sentence.language]);
+  /// - else the language its script says ([_scriptLanguage]);
+  /// - else that of the first lesson.
+  Map<String, String> _sentenceLanguages(Set<String> codes) {
+    final byUse = <String, String>{};
+    final byLesson = <String, String>{};
+    for (final lesson in _lessons) {
+      final code = lesson.targetLanguageCode;
+      byLesson[lesson.id] = code;
+      for (final vocab in lesson.vocabularies) {
+        for (final id in vocab.sentenceIds) {
+          byUse.putIfAbsent(id, () => code);
+        }
+      }
+    }
+    final fallback = _lessons.first.targetLanguageCode;
+    String? known(String? code) => codes.contains(code) ? code : null;
+    return {
+      for (final sentence in _sentences)
+        sentence.id:
+            byUse[sentence.id] ??
+            byLesson[sentence.lessonId] ??
+            known(sentence.language) ??
+            known(_scriptLanguage(sentence.targetText)) ??
+            fallback,
+    };
+  }
+
+  static final _hangul = RegExp(r'[\u1100-\u11FF\u3130-\u318F\uAC00-\uD7A3]');
+  static final _kana = RegExp(r'[\u3040-\u30FF]');
+  static final _han = RegExp(r'[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]');
+
+  /// The language [text] is written in, as far as its script tells: Korean
+  /// for Hangul, Japanese for kana, Chinese for Han characters alone. Null
+  /// for any other script.
+  static String? _scriptLanguage(String text) => _hangul.hasMatch(text)
+      ? 'ko'
+      : _kana.hasMatch(text)
+      ? 'ja'
+      : _han.hasMatch(text)
+      ? 'zh'
+      : null;
 
   /// Shows [language], a [Lesson.languageKey], from now on. Kept on this
   /// device only.
@@ -229,59 +278,141 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   int get maxReviews24h => _maxReviews24h;
   int get maxNewCards24h => _maxNewCards24h;
 
-  /// Reviews per day on every device: this one's and those pulled by sync.
-  Map<DateTime, int> get dailyReviewCounts {
-    final counts = {..._dailyReviewCounts};
-    for (final activity in _remoteActivity.values) {
-      final day = DateTime.tryParse('${activity['day']}');
-      final count = activity['count'];
-      if (day == null || count is! num) continue;
-      final date = DateTime(day.year, day.month, day.day);
-      counts[date] = (counts[date] ?? 0) + count.toInt();
-    }
-    return Map.unmodifiable(counts);
+  /// Whether [language] stands for every lesson: while one language is
+  /// being learned nothing is told apart, and counts are the totals.
+  bool _isEveryLanguage(String? language) =>
+      language == null || languages.length < 2;
+
+  /// The lessons of [language]: all of them when [_isEveryLanguage].
+  Iterable<Lesson> _lessonsOf(String? language) => _isEveryLanguage(language)
+      ? _lessons
+      : _lessons.where((lesson) => lesson.languageKey == language);
+
+  /// The language that takes the reviews recorded without one: the one
+  /// settled on while it still has lessons, else the first there is.
+  String? get _restLanguage {
+    final all = languages;
+    if (all.isEmpty) return null;
+    return all.contains(_activityRestLanguage)
+        ? _activityRestLanguage
+        : all.first;
   }
 
-  /// Reviews per day and rating on every device. Reviews counted before
-  /// ratings were recorded, here or on a device with an older app, are only
-  /// in [dailyReviewCounts], so a day's ratings can add up to less than its
-  /// total.
-  Map<DateTime, Map<SrsRating, int>> get dailyRatingCounts {
-    final counts = {
-      for (final entry in _dailyRatingCounts.entries)
-        entry.key: {...entry.value},
-    };
-    for (final activity in _remoteActivity.values) {
-      final day = DateTime.tryParse('${activity['day']}');
-      final ratings = ratingCountsFromJson(activity['ratings']);
-      if (day == null || ratings.isEmpty) continue;
-      final dayCounts = counts.putIfAbsent(
-        DateTime(day.year, day.month, day.day),
-        () => {},
-      );
-      for (final entry in ratings.entries) {
-        dayCounts[entry.key] = (dayCounts[entry.key] ?? 0) + entry.value;
+  /// Settles which language the reviews recorded without one belong to, once
+  /// there are lessons: the language reviewed the most so far. For someone
+  /// who studied one language before adding another, that is the first one.
+  Future<void> _settleActivityRestLanguage() async {
+    if (_activityRestLanguage != null || _lessons.isEmpty) return;
+    final reviews = <String, int>{};
+    for (final lesson in _lessons) {
+      var count = 0;
+      for (final vocab in lesson.vocabularies) {
+        count +=
+            vocab.cardTargetToNative.repetitions +
+            vocab.cardNativeToTarget.repetitions;
       }
+      reviews[lesson.languageKey] = (reviews[lesson.languageKey] ?? 0) + count;
     }
-    return Map.unmodifiable({
-      for (final entry in counts.entries)
-        entry.key: Map<SrsRating, int>.unmodifiable(entry.value),
-    });
+    var most = languages.first;
+    for (final language in languages) {
+      if (reviews[language]! > reviews[most]!) most = language;
+    }
+    _activityRestLanguage = most;
+    await StorageService.saveActivityRestLanguage(most);
   }
 
-  /// New cards started per day on every device. Days from before this was
-  /// counted, here or on a device with an older app, have none.
-  Map<DateTime, int> get dailyNewCardCounts {
-    final counts = {..._dailyNewCardCounts};
+  /// Reviews per day of [language] on every device: this one's and those
+  /// pulled by sync. Each day's reviews, ratings and new cards started.
+  Map<DateTime, ActivityShare> _activityDays(String? language) {
+    final every = _isEveryLanguage(language);
+    final takesRest = language == _restLanguage;
+    final days = <DateTime, ActivityShare>{};
+    void add(
+      DateTime day,
+      ActivityShare total,
+      Map<String, ActivityShare> Function() byLanguage,
+    ) {
+      final share = every
+          ? total
+          : ActivityShare.of(
+              total,
+              byLanguage(),
+              language!,
+              takesRest: takesRest,
+            );
+      if (share.isEmpty) return;
+      days.putIfAbsent(day, ActivityShare.new).add(share);
+    }
+
+    for (final day in {
+      ..._dailyReviewCounts.keys,
+      ..._dailyRatingCounts.keys,
+      ..._dailyNewCardCounts.keys,
+    }) {
+      add(
+        day,
+        ActivityShare(
+          count: _dailyReviewCounts[day] ?? 0,
+          ratings: {...?_dailyRatingCounts[day]},
+          newCards: _dailyNewCardCounts[day] ?? 0,
+        ),
+        () => _languageActivity.sharesOn(day),
+      );
+    }
     for (final activity in _remoteActivity.values) {
       final day = DateTime.tryParse('${activity['day']}');
-      final count = activity['newCards'];
-      if (day == null || count is! num || count <= 0) continue;
-      final date = DateTime(day.year, day.month, day.day);
-      counts[date] = (counts[date] ?? 0) + count.toInt();
+      if (day == null) continue;
+      add(
+        DateTime(day.year, day.month, day.day),
+        ActivityShare.fromJson(activity),
+        () => _remoteShares(activity),
+      );
     }
-    return Map.unmodifiable(counts);
+    return days;
   }
+
+  /// The shares by language in another device's activity record. A record
+  /// from an older app has none.
+  static Map<String, ActivityShare> _remoteShares(
+    Map<String, dynamic> activity,
+  ) {
+    final byLanguage = activity['languages'];
+    return {
+      if (byLanguage is Map)
+        for (final entry in byLanguage.entries)
+          '${entry.key}': ActivityShare.fromJson(entry.value),
+    };
+  }
+
+  /// Reviews per day of the language shown ([activeLanguage]), on every
+  /// device.
+  Map<DateTime, int> get dailyReviewCounts =>
+      dailyReviewCountsOf(activeLanguage);
+
+  /// Reviews per day of [language], a [Lesson.languageKey], on every device:
+  /// this one's and those pulled by sync. Null for every language.
+  Map<DateTime, int> dailyReviewCountsOf(String? language) => Map.unmodifiable({
+    for (final entry in _activityDays(language).entries)
+      if (entry.value.count > 0) entry.key: entry.value.count,
+  });
+
+  /// Reviews per day and rating of the language shown, on every device.
+  /// Reviews counted before ratings were recorded, here or on a device with
+  /// an older app, are only in [dailyReviewCounts], so a day's ratings can
+  /// add up to less than its total.
+  Map<DateTime, Map<SrsRating, int>> get dailyRatingCounts => Map.unmodifiable({
+    for (final entry in _activityDays(activeLanguage).entries)
+      if (entry.value.ratings.isNotEmpty)
+        entry.key: Map<SrsRating, int>.unmodifiable(entry.value.ratings),
+  });
+
+  /// New cards started per day of the language shown, on every device. Days
+  /// from before this was counted, here or on a device with an older app,
+  /// have none.
+  Map<DateTime, int> get dailyNewCardCounts => Map.unmodifiable({
+    for (final entry in _activityDays(activeLanguage).entries)
+      if (entry.value.newCards > 0) entry.key: entry.value.newCards,
+  });
 
   Map<String, List<AiDiscussionMessage>> get aiDiscussions => Map.unmodifiable(
     _aiDiscussions.map<String, List<AiDiscussionMessage>>(
@@ -294,29 +425,67 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   Map<String, bool> get lessonFolderExpansion =>
       Map.unmodifiable(_lessonFolderExpansion);
 
-  /// Reviews on every device in the last 24 hours, so studying on two
-  /// devices does not double the limit.
-  int get reviewsInLast24Hours {
+  /// Reviews of the language shown on every device in the last 24 hours,
+  /// so studying on two devices does not double the limit.
+  int get reviewsInLast24Hours => reviewsInLast24HoursOf(activeLanguage);
+
+  /// Reviews of [language] on every device in the last 24 hours. Each
+  /// language has the 24-hour limits to itself.
+  int reviewsInLast24HoursOf(String? language) {
     final now = DateTime.now();
-    _reviewTimestamps24h.removeWhere((t) => now.difference(t).inHours >= 24);
-    var remote = 0;
-    for (final activity in _remoteActivity.values) {
-      final reviews = activity['reviews'];
-      if (reviews is! List) continue;
+    bool recent(DateTime time) => now.difference(time).inHours < 24;
+    int recentIn(Object? reviews) {
+      if (reviews is! List) return 0;
+      var count = 0;
       for (final review in reviews) {
         final time = DateTime.tryParse('$review');
-        if (time != null && now.difference(time).inHours < 24) remote++;
+        if (time != null && recent(time)) count++;
       }
+      return count;
     }
-    return _reviewTimestamps24h.length + remote;
+
+    _reviewTimestamps24h.removeWhere((time) => !recent(time));
+    final every = _isEveryLanguage(language);
+    final takesRest = language == _restLanguage;
+    // What of [all] reviews is the language's, given each language's own.
+    int share(int all, Map<String, int> byLanguage) {
+      if (every) return all;
+      var own = byLanguage[language] ?? 0;
+      if (takesRest) {
+        final recorded = byLanguage.values.fold(0, (sum, n) => sum + n);
+        if (all > recorded) own += all - recorded;
+      }
+      return own;
+    }
+
+    var count = share(_reviewTimestamps24h.length, {
+      for (final entry in _languageActivity.reviewTimes.entries)
+        entry.key: entry.value.where(recent).length,
+    });
+    for (final activity in _remoteActivity.values) {
+      final byLanguage = activity['languages'];
+      count += share(recentIn(activity['reviews']), {
+        if (byLanguage is Map)
+          for (final entry in byLanguage.entries)
+            if (entry.value is Map)
+              '${entry.key}': recentIn((entry.value as Map)['reviews']),
+      });
+    }
+    return count;
   }
 
-  /// Cards seen for the first time in the last 24 hours. Derived from the
-  /// cards, so undoing or re-rating a first review gives the quota back.
-  int get newCardsIntroducedLast24h {
+  /// Cards of the language shown seen for the first time in the last 24
+  /// hours.
+  int get newCardsIntroducedLast24h =>
+      newCardsIntroducedLast24hOf(activeLanguage);
+
+  /// Cards of [language] seen for the first time in the last 24 hours.
+  /// Derived from the cards, so undoing or re-rating a first review gives
+  /// the quota back.
+  int newCardsIntroducedLast24hOf(String? language) {
     final now = DateTime.now();
     final counted = <String>{};
-    for (final lesson in _lessons) {
+    for (final lesson in _lessonsOf(language)) {
       for (final vocab in lesson.vocabularies) {
         for (final card in [
           vocab.cardTargetToNative,
@@ -333,23 +502,39 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     return counted.length;
   }
 
-  /// Reviews of already-seen cards. A card's first review counts against the
-  /// new-card limit instead.
+  /// Reviews of already-seen cards of the language shown. A card's first
+  /// review counts against the new-card limit instead.
   int get reviewsOfSeenCardsInLast24Hours =>
-      max(0, reviewsInLast24Hours - newCardsIntroducedLast24h);
+      _reviewsOfSeenCardsInLast24HoursOf(activeLanguage);
 
-  int get remainingReviews24h {
+  int _reviewsOfSeenCardsInLast24HoursOf(String? language) => max(
+    0,
+    reviewsInLast24HoursOf(language) - newCardsIntroducedLast24hOf(language),
+  );
+
+  /// Reviews the language shown has left in its 24-hour limit.
+  int get remainingReviews24h => remainingReviews24hOf(activeLanguage);
+
+  /// Reviews [language] has left in the 24-hour limit, which every language
+  /// has to itself.
+  int remainingReviews24hOf(String? language) {
     if (_maxReviews24h <= 0) return 999999;
-    return max(0, _maxReviews24h - reviewsOfSeenCardsInLast24Hours);
+    return max(
+      0,
+      _maxReviews24h - _reviewsOfSeenCardsInLast24HoursOf(language),
+    );
   }
 
-  /// New cards that can be started now. The limit refills 16 hours after a
-  /// batch and stays at most the limit per 24 hours on average; see
-  /// [NewCardQuota].
-  int get remainingNewCards24h {
+  /// New cards of the language shown that can be started now.
+  int get remainingNewCards24h => remainingNewCards24hOf(activeLanguage);
+
+  /// New cards of [language] that can be started now. The limit, which
+  /// every language has to itself, refills 16 hours after a batch and stays
+  /// at most the limit per 24 hours on average; see [NewCardQuota].
+  int remainingNewCards24hOf(String? language) {
     if (_maxNewCards24h <= 0) return 999999;
     final starts = <String, DateTime>{};
-    for (final lesson in _lessons) {
+    for (final lesson in _lessonsOf(language)) {
       for (final vocab in lesson.vocabularies) {
         for (final card in [
           vocab.cardTargetToNative,
@@ -430,6 +615,9 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     _dailyRatingCounts = await StorageService.loadDailyRatingCounts();
     _dailyNewCardCounts = await StorageService.loadDailyNewCardCounts();
     _remoteActivity = await StorageService.loadSyncRemoteActivity();
+    _languageActivity = await StorageService.loadLanguageActivity();
+    _activityRestLanguage = await StorageService.loadActivityRestLanguage();
+    await _settleActivityRestLanguage();
     _lessons = await StorageService.loadLessons();
     if (_dailyReviewCounts.isEmpty && _backfillDailyReviewCounts()) {
       await StorageService.saveDailyReviewCounts(_dailyReviewCounts);
@@ -933,6 +1121,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
         dailyRatingCounts: _dailyRatingCounts,
         dailyNewCardCounts: _dailyNewCardCounts,
         reviewTimestamps: _reviewTimestamps24h,
+        languageActivity: _languageActivity,
         deviceId: deviceId,
       );
 
@@ -1151,6 +1340,12 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   }
 
   Future<Sentence> addSentenceToPool(Sentence sentence) async {
+    // Added by hand, it has no lesson to tell its language: it is in the
+    // language shown.
+    if (sentence.lessonId == null && sentence.language == null) {
+      final active = activeLanguage;
+      if (active != null) sentence.language = Lesson.languageCodeOf(active);
+    }
     final canonical = _upsertSentence(sentence);
     await StorageService.saveSentences(_sentences);
     notifyListeners();
@@ -2967,14 +3162,16 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     return getRandomSentenceForVocab(vocab);
   }
 
-  /// Reviews of already-seen cards today, on every device: today's reviews
-  /// less the new cards started today.
-  int get seenCardReviewsToday {
+  /// Reviews of already-seen cards of the language shown today, on every
+  /// device: today's reviews less the new cards started today.
+  int get seenCardReviewsToday => _seenCardReviewsTodayOf(activeLanguage);
+
+  int _seenCardReviewsTodayOf(String? language) {
     final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final reviews = dailyReviewCounts[today] ?? 0;
-    final newCards = dailyNewCardCounts[today] ?? 0;
-    return max(0, reviews - newCards);
+    final today = _activityDays(
+      language,
+    )[DateTime(now.year, now.month, now.day)];
+    return today == null ? 0 : max(0, today.count - today.newCards);
   }
 
   /// The part of speech [item] is grouped by when a queue is interleaved.
@@ -2993,6 +3190,10 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     final List<Lesson> targetLessons = lessonId == null
         ? activeLessons
         : _lessons.where((l) => l.id == lessonId).toList();
+    // The limits are the language's own: the one shown, or the lesson's.
+    final language = lessonId == null
+        ? activeLanguage
+        : targetLessons.firstOrNull?.languageKey;
 
     final List<StudyCardItem> queue = [];
     final seenCardIds = <String>{};
@@ -3055,7 +3256,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       }
       // Sub-24h intervals (1 h / 12 h) ignore the review limit and do not use
       // up any of its quota.
-      var reviewBudget = remainingReviews24h;
+      var reviewBudget = remainingReviews24hOf(language);
       final reviews = <StudyCardItem>[];
       for (final item in interleaveByGroup(due, posKeyOf, rand)) {
         if (item.card.isShortInterval) {
@@ -3068,11 +3269,11 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       final prioritizedNewCards = [
         ...newCardsInPriorityOrder,
         ...otherNewCards,
-      ].take(remainingNewCards24h).toList();
+      ].take(remainingNewCards24hOf(language)).toList();
       return mixNewCardsIntoReviews(
         reviews: reviews,
         newCards: prioritizedNewCards,
-        leadIn: newCardLeadIn(seenCardReviewsToday),
+        leadIn: newCardLeadIn(_seenCardReviewsTodayOf(language)),
       );
     }
 
@@ -3218,10 +3419,14 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   /// toward the 24-hour limit. Pass the same [at]
   /// to [undoCardReview] to take the count back, or to [recountCardReview]
   /// when the rating changes.
+  ///
+  /// The review is also counted for its language: [language], a
+  /// [Lesson.languageKey], or else that of a lesson [card] is in.
   Future<void> recordCardReview(
     SrsCard card,
     SrsRating rating, {
     DateTime? at,
+    String? language,
   }) async {
     // Decide before processReview reschedules the card: reviewing a card that
     // was on a sub-24h interval does not count toward the 24 h review limit.
@@ -3234,6 +3439,20 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     _addRatingCount(date, rating, 1);
     if (startsNewCard) {
       _dailyNewCardCounts[date] = (_dailyNewCardCounts[date] ?? 0) + 1;
+    }
+    final reviewed = language ?? _languageOfCard(card);
+    if (reviewed != null) {
+      _languageActivity
+        ..prune(now)
+        ..record(
+          reviewed,
+          now,
+          rating,
+          newCard: startsNewCard,
+          timed: countsTowardLimit,
+        );
+      await StorageService.saveLanguageActivity(_languageActivity);
+      await _settleActivityRestLanguage();
     }
     await StorageService.saveDailyReviewCounts(_dailyReviewCounts);
     await StorageService.saveDailyRatingCounts(_dailyRatingCounts);
@@ -3257,8 +3476,13 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     DateTime at,
     SrsRating rating, {
     bool startedNewCard = false,
+    String? language,
   }) async {
     final date = DateTime(at.year, at.month, at.day);
+    if (language != null) {
+      _languageActivity.undo(language, at, rating, newCard: startedNewCard);
+      await StorageService.saveLanguageActivity(_languageActivity);
+    }
     _decrementDayCount(_dailyReviewCounts, date);
     _addRatingCount(date, rating, -1);
     if (startedNewCard) _decrementDayCount(_dailyNewCardCounts, date);
@@ -3279,14 +3503,32 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   Future<void> recountCardReview(
     DateTime at,
     SrsRating from,
-    SrsRating to,
-  ) async {
+    SrsRating to, {
+    String? language,
+  }) async {
     if (from == to) return;
     final date = DateTime(at.year, at.month, at.day);
+    if (language != null) {
+      _languageActivity.recount(language, at, from, to);
+      await StorageService.saveLanguageActivity(_languageActivity);
+    }
     _addRatingCount(date, from, -1);
     _addRatingCount(date, to, 1);
     notifyListeners();
     await StorageService.saveDailyRatingCounts(_dailyRatingCounts);
+  }
+
+  /// The language of a lesson [card] is in, or null when no lesson has it.
+  String? _languageOfCard(SrsCard card) {
+    for (final lesson in _lessons) {
+      for (final vocab in lesson.vocabularies) {
+        if (vocab.cardTargetToNative.id == card.id ||
+            vocab.cardNativeToTarget.id == card.id) {
+          return lesson.languageKey;
+        }
+      }
+    }
+    return null;
   }
 
   /// Takes one off [date] in [counts], dropping the day when it reaches zero.

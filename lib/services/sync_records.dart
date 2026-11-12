@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 
+import 'language_activity.dart';
 import '../models/ai_discussion_message.dart';
 import '../models/lesson.dart';
 import '../models/sentence.dart';
@@ -130,6 +131,7 @@ abstract final class SyncSnapshot {
     Map<DateTime, Map<SrsRating, int>> dailyRatingCounts = const {},
     Map<DateTime, int> dailyNewCardCounts = const {},
     required List<DateTime> reviewTimestamps,
+    LanguageActivity? languageActivity,
     required String deviceId,
   }) {
     final records = <SyncRecordKey, Map<String, dynamic>>{};
@@ -192,6 +194,11 @@ abstract final class SyncSnapshot {
       final ratings = ratingCountsToJson(
         dailyRatingCounts[entry.key] ?? const {},
       );
+      final languages =
+          languageActivity?.recordJson(
+            DateTime(entry.key.year, entry.key.month, entry.key.day),
+          ) ??
+          const <String, dynamic>{};
       add(SyncKinds.activity, '$deviceId:$day', {
         'day': day,
         'count': entry.value,
@@ -204,6 +211,10 @@ abstract final class SyncSnapshot {
           for (final time in reviewTimestamps)
             if (_dayKey(time) == day) time.toUtc().toIso8601String(),
         ]..sort(),
+        // Each language's share of the above, for reviews made since
+        // languages were recorded. Left out when there is none, so older
+        // records do not change.
+        if (languages.isNotEmpty) 'languages': languages,
       });
     }
 

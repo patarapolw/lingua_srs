@@ -23,6 +23,7 @@ lingua_srs/
 │   ├── services/
 │   │   ├── srs_service.dart           # SM-2 algorithm implementation
 │   │   ├── new_card_quota.dart        # Daily new-card limit: refills 16 h after a batch, averages to the limit per day
+│   │   ├── language_activity.dart     # Reviews by language: each language's share of a day's counts and of the 24-hour limit
 │   │   ├── study_stats.dart           # Streak, right/wrong split, due forecast by hour and day, and new cards per day for Study activity
 │   │   ├── card_preview.dart          # Picks the new cards a preview shows; study_view shuffles and shows them
 │   │   ├── study_queue_order.dart     # Study queue order: part-of-speech interleaving, new cards mixed into reviews

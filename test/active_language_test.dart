@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lingua_srs/models/lesson.dart';
+import 'package:lingua_srs/models/sentence.dart';
+import 'package:lingua_srs/models/srs_card.dart';
 import 'package:lingua_srs/providers/app_provider.dart';
 import 'package:lingua_srs/services/audio_service.dart';
 import 'package:lingua_srs/services/tts_voice.dart';
@@ -282,6 +284,201 @@ void main() {
       await tester.runAsync(() => provider.deleteLessonGroup(['Shared']));
 
       expect(titles(provider.lessons), ['Taiwan 1']);
+    });
+  });
+
+  group('sentences', () {
+    testWidgets('a sentence added by hand is in the language shown only', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      await import(tester, provider, _korean);
+      await import(tester, provider, _taiwan);
+
+      await tester.runAsync(
+        () => provider.addSentenceToPool(
+          Sentence(targetText: 'Hand-written.', translationText: 'By hand.'),
+        ),
+      );
+
+      List<String> shown() => [
+        for (final sentence in provider.activeSentences) sentence.targetText,
+      ];
+      expect(shown(), ['我是學生。', 'Hand-written.']);
+      await tester.runAsync(() => provider.setActiveLanguage('ko'));
+      expect(shown(), ['저는 학생이에요.']);
+    });
+
+    testWidgets('a sentence with no lesson and no language goes by its '
+        'script', (tester) async {
+      final provider = await loadedProvider(tester);
+      await import(tester, provider, _korean);
+      await import(tester, provider, _taiwan);
+      // As saved before sentences had a language.
+      provider.sentences.addAll([
+        Sentence(targetText: '안녕하세요.', translationText: 'Hello.'),
+        Sentence(targetText: '你好。', translationText: 'Hello.'),
+      ]);
+
+      List<String> shown() => [
+        for (final sentence in provider.activeSentences) sentence.targetText,
+      ];
+      expect(shown(), ['我是學生。', '你好。']);
+      await tester.runAsync(() => provider.setActiveLanguage('ko'));
+      expect(shown(), ['저는 학생이에요.', '안녕하세요.']);
+    });
+
+    testWidgets('Mainland and Taiwan lessons share one pool', (tester) async {
+      final provider = await loadedProvider(tester);
+      await import(tester, provider, _korean);
+      await import(tester, provider, _taiwan);
+      await import(tester, provider, _mainland);
+      expect(provider.activeLanguage, 'zh-cn');
+
+      // The Mainland lesson has no sentence of its own.
+      expect(
+        [for (final sentence in provider.activeSentences) sentence.targetText],
+        ['我是學生。'],
+      );
+
+      // Words and lessons stay apart.
+      expect(
+        [for (final group in provider.vocabGroups) group.entry.targetWord],
+        ['学生'],
+      );
+    });
+  });
+
+  group('activity and limits', () {
+    final day = DateTime(2026, 1, 5);
+
+    Future<AppProvider> studied(WidgetTester tester) async {
+      final provider = await loadedProvider(tester, {
+        // Counted before reviews were recorded with a language.
+        'lingua_srs_daily_review_counts': '{"2026-01-05": 5}',
+      });
+      await import(tester, provider, _korean);
+      await import(tester, provider, _taiwan);
+      return provider;
+    }
+
+    SrsCard cardOf(AppProvider provider, int lesson, [int word = 0]) =>
+        provider.lessons[lesson].vocabularies[word].cardTargetToNative;
+
+    testWidgets('a review is counted for its language only', (tester) async {
+      final provider = await studied(tester);
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+
+      await tester.runAsync(
+        () => provider.recordCardReview(cardOf(provider, 1), SrsRating.good),
+      );
+      await tester.runAsync(
+        () =>
+            provider.recordCardReview(cardOf(provider, 1, 1), SrsRating.again),
+      );
+      await tester.runAsync(
+        () => provider.recordCardReview(cardOf(provider, 0), SrsRating.good),
+      );
+
+      expect(provider.dailyReviewCountsOf('zh-tw')[today], 2);
+      expect(provider.dailyReviewCountsOf('ko')[today], 1);
+      // Every language together, as before.
+      expect(provider.dailyReviewCountsOf(null)[today], 3);
+
+      // The getters without a language are of the one shown.
+      expect(provider.activeLanguage, 'zh-tw');
+      expect(provider.dailyReviewCounts[today], 2);
+      expect(provider.dailyRatingCounts[today], {
+        SrsRating.good: 1,
+        SrsRating.again: 1,
+      });
+      expect(provider.dailyNewCardCounts[today], 2);
+      expect(provider.reviewsInLast24Hours, 2);
+      expect(provider.newCardsIntroducedLast24h, 2);
+
+      await tester.runAsync(() => provider.setActiveLanguage('ko'));
+      expect(provider.dailyReviewCounts[today], 1);
+      expect(provider.dailyRatingCounts[today], {SrsRating.good: 1});
+      expect(provider.reviewsInLast24Hours, 1);
+      expect(provider.newCardsIntroducedLast24h, 1);
+    });
+
+    testWidgets('reviews counted before languages were recorded belong to '
+        'the first language', (tester) async {
+      final provider = await studied(tester);
+
+      expect(provider.dailyReviewCountsOf('ko')[day], 5);
+      expect(provider.dailyReviewCountsOf('zh-tw')[day], isNull);
+      expect(provider.dailyReviewCountsOf(null)[day], 5);
+    });
+
+    testWidgets('each language has the 24-hour limits to itself', (
+      tester,
+    ) async {
+      final provider = await studied(tester);
+      await tester.runAsync(() => provider.setMaxNewCards24h(1));
+      expect(provider.remainingNewCards24hOf('ko'), 1);
+      expect(provider.remainingNewCards24hOf('zh-tw'), 1);
+
+      await tester.runAsync(
+        () => provider.recordCardReview(cardOf(provider, 1), SrsRating.good),
+      );
+
+      expect(provider.remainingNewCards24hOf('zh-tw'), 0);
+      expect(provider.remainingNewCards24hOf('ko'), 1);
+      // The Korean queue still starts its new card.
+      await tester.runAsync(() => provider.setActiveLanguage('ko'));
+      expect(provider.remainingNewCards24h, 1);
+      expect(
+        provider.getStudyQueue().where((item) => item.card.isNewCard),
+        isNotEmpty,
+      );
+      await tester.runAsync(() => provider.setActiveLanguage('zh-tw'));
+      expect(
+        provider.getStudyQueue().where((item) => item.card.isNewCard),
+        isEmpty,
+      );
+    });
+
+    testWidgets('undoing a review takes it back from its language', (
+      tester,
+    ) async {
+      final provider = await studied(tester);
+      final at = DateTime.now();
+      final today = DateTime(at.year, at.month, at.day);
+      await tester.runAsync(
+        () => provider.recordCardReview(
+          cardOf(provider, 1),
+          SrsRating.good,
+          at: at,
+          language: 'zh-tw',
+        ),
+      );
+      expect(provider.dailyReviewCountsOf('zh-tw')[today], 1);
+
+      await tester.runAsync(
+        () => provider.undoCardReview(
+          at,
+          SrsRating.good,
+          startedNewCard: true,
+          language: 'zh-tw',
+        ),
+      );
+
+      expect(provider.dailyReviewCountsOf('zh-tw')[today], isNull);
+      expect(provider.dailyReviewCountsOf('ko')[today], isNull);
+      expect(provider.reviewsInLast24HoursOf('zh-tw'), 0);
+    });
+
+    testWidgets('with one language the counts are the totals', (tester) async {
+      final provider = await loadedProvider(tester, {
+        'lingua_srs_daily_review_counts': '{"2026-01-05": 5}',
+      });
+      await import(tester, provider, _korean);
+
+      expect(provider.dailyReviewCounts[day], 5);
+      expect(provider.dailyReviewCountsOf('ko')[day], 5);
     });
   });
 

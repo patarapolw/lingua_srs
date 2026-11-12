@@ -939,7 +939,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
   List<Widget> _suggestedExamples(AppProvider provider, ThemeData theme) {
     final word = _targetWordCtrl.text.trim();
     if (word.isEmpty) return const [];
-    final matches = provider.sentences
+    final matches = provider.activeSentences
         .where(
           (sentence) =>
               !_sentenceIds.contains(sentence.id) &&
@@ -1177,7 +1177,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setSheetState) {
-            final pool = provider.sentences.where((sentence) {
+            final pool = provider.activeSentences.where((sentence) {
               return KoreanTextSearch.matches(
                 query: searchCtrl.text,
                 targetText: sentence.targetText,
