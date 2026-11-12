@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:collection';
 import 'dart:math';
 
@@ -89,10 +88,6 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   /// Whether AI features are shown. A device-only preference, not synced.
   bool _showAi = true;
 
-  /// The language picked to be shown, as a [Lesson.languageKey]. See
-  /// [activeLanguage] for the one in effect.
-  String? _pickedLanguage;
-
   /// Enabled options as `<target>_romanization` / `<target>_ipa`.
   Set<String> _pronunciationOptions = {};
   String _deepSeekApiKey = '';
@@ -134,76 +129,6 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   Map<String, Map<String, dynamic>> _remoteActivity = {};
 
   List<Lesson> get lessons => _lessons;
-
-  /// The languages being learned, as [Lesson.languageKey]s, in the order
-  /// their first lessons were added.
-  List<String> get languages {
-    final seen = <String>{};
-    return [
-      for (final lesson in _lessons)
-        if (seen.add(lesson.languageKey)) lesson.languageKey,
-    ];
-  }
-
-  /// The language shown: lessons, pools, the study queue and Study activity
-  /// are of one language at a time, so that Korean and Chinese do not mix.
-  /// The one picked with [setActiveLanguage] while it still has lessons,
-  /// else the first there is. Null while there are no lessons.
-  String? get activeLanguage {
-    final all = languages;
-    if (all.isEmpty) return null;
-    return all.contains(_pickedLanguage) ? _pickedLanguage : all.first;
-  }
-
-  /// The lessons of [activeLanguage]: all of them while only one language
-  /// is being learned.
-  List<Lesson> get activeLessons {
-    final all = languages;
-    if (all.length < 2) return _lessons;
-    final active = all.contains(_pickedLanguage) ? _pickedLanguage : all.first;
-    return [
-      for (final lesson in _lessons)
-        if (lesson.languageKey == active) lesson,
-    ];
-  }
-
-  /// The Sentence Pool of [activeLanguage]: sentences its words use or that
-  /// came with its lessons. A sentence no lesson of any language has, such
-  /// as one typed into the pool, is listed in every language.
-  List<Sentence> get activeSentences {
-    final shown = activeLessons;
-    if (identical(shown, _lessons)) return _sentences;
-    final shownLessons = {for (final lesson in shown) lesson.id};
-    final used = <String>{};
-    final usedElsewhere = <String>{};
-    final otherLessons = <String>{};
-    for (final lesson in _lessons) {
-      final isShown = shownLessons.contains(lesson.id);
-      if (!isShown) otherLessons.add(lesson.id);
-      for (final vocab in lesson.vocabularies) {
-        (isShown ? used : usedElsewhere).addAll(vocab.sentenceIds);
-      }
-    }
-    return [
-      for (final sentence in _sentences)
-        if (used.contains(sentence.id) ||
-            shownLessons.contains(sentence.lessonId) ||
-            (!usedElsewhere.contains(sentence.id) &&
-                !otherLessons.contains(sentence.lessonId)))
-          sentence,
-    ];
-  }
-
-  /// Shows [language], a [Lesson.languageKey], from now on. Kept on this
-  /// device only.
-  Future<void> setActiveLanguage(String language) async {
-    if (_pickedLanguage == language) return;
-    final shown = activeLanguage;
-    _pickedLanguage = language;
-    if (shown != activeLanguage) notifyListeners();
-    await StorageService.saveActiveLanguage(language);
-  }
-
   List<Sentence> get sentences => _sentences;
   bool get autoplayAudio => _autoplayAudio;
 
@@ -424,7 +349,6 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     _maxNewCards24h = results.$9;
     // Records only have `.wait` up to nine fields, so this loads on its own.
     _showAi = await StorageService.loadShowAi();
-    _pickedLanguage = await StorageService.loadActiveLanguage();
     _typedQuestions = await StorageService.loadTypedQuestions();
     _dailyReviewCounts = await StorageService.loadDailyReviewCounts();
     _dailyRatingCounts = await StorageService.loadDailyRatingCounts();
@@ -1013,27 +937,6 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       ),
   ];
 
-  /// [aiDiscussionSummaries] of [activeLanguage]: chats about its lessons
-  /// and their words. A chat whose lesson or word is gone belongs to no
-  /// language, and is listed in every one.
-  List<AiDiscussionSummary> get activeAiDiscussionSummaries {
-    final all = aiDiscussionSummaries;
-    final shown = activeLessons;
-    if (identical(shown, _lessons)) return all;
-    final lessonIds = {for (final lesson in shown) lesson.id};
-    final vocabIds = {
-      for (final lesson in shown)
-        for (final vocab in lesson.vocabularies) vocab.id,
-    };
-    return [
-      for (final summary in all)
-        if (summary.lesson != null
-            ? lessonIds.contains(summary.lesson!.id)
-            : summary.vocab == null || vocabIds.contains(summary.vocab!.id))
-          summary,
-    ];
-  }
-
   /// Earlier discussions worth showing when [discussionId] is opened: other
   /// discussions of the same word first, then related words.
   List<AiDiscussionSuggestion> relatedAiDiscussions(
@@ -1418,22 +1321,13 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     Map<String, VocabItem>? vocabIndex,
   }) {
     _mergedInto = {};
-    final shownBefore = activeLanguage;
     try {
-      final lesson = _applyParsedLessonTracked(
+      return _applyParsedLessonTracked(
         parsed,
         existing: existing,
         sentenceIndex: sentenceIndex,
         vocabIndex: vocabIndex,
       );
-      // A new lesson in a language that is not the one shown would be
-      // imported out of sight: show its language.
-      final language = lesson.languageKey;
-      if (existing == null && shownBefore != null && language != shownBefore) {
-        _pickedLanguage = language;
-        unawaited(StorageService.saveActiveLanguage(language));
-      }
-      return lesson;
     } finally {
       _mergedInto = null;
     }
@@ -2395,13 +2289,9 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
 
   // ---------------------------------------------------------------- merging
 
-  /// Every distinct word, with the lessons it is in. Only the words of
-  /// [activeLanguage]: the same characters can be another word in another
-  /// language, so words are never listed, compared or merged across
-  /// languages.
   List<VocabGroup> get vocabGroups {
     final byId = <String, VocabGroup>{};
-    for (final lesson in activeLessons) {
+    for (final lesson in _lessons) {
       for (final vocab in lesson.vocabularies) {
         final group = byId.putIfAbsent(
           vocab.id,
@@ -2788,9 +2678,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   }
 
   Future<void> deleteLessonGroup(List<String> folderPath) async {
-    // Only what the list shows: a folder can also hold lessons of another
-    // language, which stay.
-    final deletedIds = activeLessons
+    final deletedIds = _lessons
         .where((lesson) => isHierarchyPathWithin(lesson.folderPath, folderPath))
         .map((lesson) => lesson.id)
         .toSet();
@@ -2830,7 +2718,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       );
     }
 
-    final affectedLessons = activeLessons
+    final affectedLessons = _lessons
         .where((lesson) => isHierarchyPathWithin(lesson.folderPath, folderPath))
         .toList();
     if (affectedLessons.isEmpty) {
@@ -2921,7 +2809,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   }
 
   Future<void> resetLessonGroupSrs(List<String> folderPath) async {
-    final lessons = activeLessons.where(
+    final lessons = _lessons.where(
       (lesson) => isHierarchyPathWithin(lesson.folderPath, folderPath),
     );
     for (final lesson in lessons) {
@@ -2989,9 +2877,8 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     bool dueOnly = true,
     bool mistakesOnly = false,
   }) {
-    // Without a lesson: every lesson of the language shown.
     final List<Lesson> targetLessons = lessonId == null
-        ? activeLessons
+        ? _lessons
         : _lessons.where((l) => l.id == lessonId).toList();
 
     final List<StudyCardItem> queue = [];

@@ -28,15 +28,6 @@ class Lesson {
   /// for `zh-TW`, `ko` for `ko-KR`.
   String get targetLanguageCode => languageCodeOf(targetLanguage);
 
-  /// What tells this lesson's language from another's when lessons are
-  /// shown one language at a time: [targetLanguage] in lower case with `-`
-  /// between its parts, without a region that adds nothing (`ko` for
-  /// `ko-KR`). Regions that differ stay apart: `zh-cn` and `zh-tw`.
-  String get languageKey => languageKeyOf(targetLanguage);
-
-  static String languageKeyOf(String language) =>
-      withoutDefaultRegion(language).toLowerCase().replaceAll('_', '-');
-
   /// [language] as a lowercase code without a region or script.
   static String languageCodeOf(String language) =>
       language.trim().toLowerCase().split(RegExp(r'[-_]')).first;

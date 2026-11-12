@@ -96,7 +96,6 @@ lingua_srs/
 │       ├── emphasis_text.dart         # Sentence text with **bold** segments, no Markdown
 │       ├── folder_picker_dialog.dart  # Pick an existing or new folder to move a lesson/folder into
 │       ├── lesson_hierarchy_view.dart # Lesson folder tree with reordering
-│       ├── language_selector.dart     # App bar dropdown for the language shown
 │       ├── lesson_clash_dialog.dart   # Asks which of two same-named lessons in a folder is primary
 │       ├── lesson_content_view.dart   # Lesson reader: the lesson as one page in a WebView, headings and scroll memory
 │       ├── lesson_html.dart           # Lesson Markdown to the HTML page, CSS and script the reader's WebView shows

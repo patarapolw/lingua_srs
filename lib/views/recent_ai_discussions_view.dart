@@ -1,7 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
-import '../widgets/language_selector.dart';
 import '../providers/app_provider.dart';
 import '../services/ai_discussion_search.dart';
 import '../widgets/emphasis_text.dart';
@@ -31,14 +30,11 @@ class _RecentAiDiscussionsViewState extends State<RecentAiDiscussionsView> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
-    final saved = provider.activeAiDiscussionSummaries;
+    final saved = provider.aiDiscussionSummaries;
     final discussions = AiDiscussionSearch.search(_query, saved);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Recent Discussions'),
-        actions: const [LanguageSelector()],
-      ),
+      appBar: AppBar(title: const Text('Recent Discussions')),
       body: provider.isLoading
           ? const Center(child: CircularProgressIndicator())
           : saved.isEmpty
