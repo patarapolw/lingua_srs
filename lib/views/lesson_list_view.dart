@@ -10,6 +10,7 @@ import '../providers/app_provider.dart';
 import '../services/lesson_export_service.dart';
 import '../widgets/folder_picker_dialog.dart';
 import '../widgets/lesson_clash_dialog.dart';
+import '../widgets/language_selector.dart';
 import '../widgets/lesson_hierarchy_view.dart';
 import 'activity_heatmap_view.dart';
 import 'lesson_detail_view.dart';
@@ -204,7 +205,7 @@ class LessonListView extends StatelessWidget {
 
   List<List<String>> _folderPaths(AppProvider provider) {
     final pathsByKey = <String, List<String>>{};
-    for (final lesson in provider.lessons) {
+    for (final lesson in provider.activeLessons) {
       final parts = lesson.folderPath;
       for (var index = 0; index < parts.length; index++) {
         final path = parts.take(index + 1).toList();
@@ -323,7 +324,7 @@ class LessonListView extends StatelessWidget {
   ) => _exportLessons(
     context,
     provider,
-    provider.lessons
+    provider.activeLessons
         .where((lesson) => isHierarchyPathWithin(lesson.folderPath, folderPath))
         .toList(),
     folderPath.last,
@@ -368,15 +369,6 @@ class LessonListView extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(Icons.drag_handle, color: theme.colorScheme.outline),
-                      const SizedBox(width: 4),
-                      CircleAvatar(
-                        radius: 24,
-                        backgroundColor: theme.colorScheme.secondaryContainer,
-                        child: _LanguageBadgeText(
-                          language: lesson.targetLanguage,
-                          color: theme.colorScheme.onSecondaryContainer,
-                        ),
-                      ),
                     ],
                   ),
             title: Text(
@@ -605,7 +597,8 @@ class LessonListView extends StatelessWidget {
     final dayAfterTomorrowStart = DateTime(now.year, now.month, now.day + 2);
     final mistakeCardIds = <String>{};
     var totalRecentMistakes = 0;
-    for (final l in provider.lessons) {
+    // Counts, and the lessons listed, are of the language shown.
+    for (final l in provider.activeLessons) {
       for (final vocab in l.vocabularies) {
         for (final card in [
           vocab.cardTargetToNative,
@@ -675,6 +668,7 @@ class LessonListView extends StatelessWidget {
                 ],
               ),
         actions: [
+          const LanguageSelector(),
           Consumer<AppProvider>(
             builder: (context, provider, _) {
               return PopupMenuButton<String>(
@@ -973,7 +967,7 @@ class LessonListView extends StatelessWidget {
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: LessonHierarchyView(
-                        lessons: provider.lessons,
+                        lessons: provider.activeLessons,
                         order: provider.lessonHierarchyOrder,
                         folderExpansion: provider.lessonFolderExpansion,
                         lessonBuilder: (context, lesson, orderActions) =>
@@ -1077,46 +1071,6 @@ class LessonNameClashBanner extends StatelessWidget {
             onPressed: () => _resolve(context),
             child: const Text('Sort out'),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/// A lesson's language inside its round badge: the language code, with the
-/// region or script smaller underneath (ZH over CN), scaled down to fit.
-class _LanguageBadgeText extends StatelessWidget {
-  const _LanguageBadgeText({required this.language, required this.color});
-
-  final String language;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final parts = language.split(RegExp('[-_]'));
-    final code = parts.first.toUpperCase();
-    final rest = parts.skip(1).join('-').toUpperCase();
-    return Padding(
-      padding: const EdgeInsets.all(6),
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              code,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: color,
-                height: 1.1,
-              ),
-            ),
-            if (rest.isNotEmpty)
-              Text(
-                rest,
-                style: TextStyle(fontSize: 10, color: color, height: 1.1),
-              ),
-          ],
         ),
       ),
     );
