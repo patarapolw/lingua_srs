@@ -2318,19 +2318,23 @@ class _StudyViewState extends State<StudyView> {
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
                                             Flexible(
-                                              child: Text(
-                                                item.vocab.targetWord,
-                                                style: theme
-                                                    .textTheme
-                                                    .headlineMedium
-                                                    ?.copyWith(
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                      color: theme
-                                                          .colorScheme
-                                                          .primary,
-                                                    ),
-                                                textAlign: TextAlign.center,
+                                              child: CharacterZoom.tappable(
+                                                context: context,
+                                                vocab: item.vocab,
+                                                child: Text(
+                                                  item.vocab.targetWord,
+                                                  style: theme
+                                                      .textTheme
+                                                      .headlineMedium
+                                                      ?.copyWith(
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        color: theme
+                                                            .colorScheme
+                                                            .primary,
+                                                      ),
+                                                  textAlign: TextAlign.center,
+                                                ),
                                               ),
                                             ),
                                             AudioButton(

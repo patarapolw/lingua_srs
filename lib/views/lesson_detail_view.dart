@@ -905,18 +905,22 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                                                 WrapCrossAlignment.center,
                                             spacing: 10,
                                             children: [
-                                              Text(
-                                                vocab.targetWord,
-                                                style: theme
-                                                    .textTheme
-                                                    .headlineSmall
-                                                    ?.copyWith(
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                      color: theme
-                                                          .colorScheme
-                                                          .primary,
-                                                    ),
+                                              CharacterZoom.tappable(
+                                                context: context,
+                                                vocab: vocab,
+                                                child: Text(
+                                                  vocab.targetWord,
+                                                  style: theme
+                                                      .textTheme
+                                                      .headlineSmall
+                                                      ?.copyWith(
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        color: theme
+                                                            .colorScheme
+                                                            .primary,
+                                                      ),
+                                                ),
                                               ),
                                               Chip(
                                                 label: Text(vocab.pos),

@@ -512,6 +512,91 @@ vocabulary:
       expect(find.byKey(const ValueKey('vocab-reading')), findsNothing);
     });
 
+    testWidgets('tapping the word zooms into it and its other forms', (
+      tester,
+    ) async {
+      await study(tester, _mandarinYaml);
+      await reveal(tester);
+
+      await tester.tap(find.byKey(const ValueKey('vocab-zoom-word')));
+      await tester.pumpAndSettle();
+
+      final zoom = find.byKey(const ValueKey('character-zoom'));
+      expect(zoom, findsOneWidget);
+      expect(
+        find.descendant(of: zoom, matching: find.text('学生')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: zoom, matching: find.text('學生')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: zoom, matching: find.text('Traditional')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a Korean word zooms into its Hanja, not its Hangul', (
+      tester,
+    ) async {
+      await study(
+        tester,
+        '---\nvocabulary:\n  nouns:\n    - ko: 학생\n      hanja: 學生\n'
+        '      en: student\n---\n# Lesson\n',
+      );
+      await reveal(tester);
+
+      await tester.tap(find.byKey(const ValueKey('vocab-zoom-word')));
+      await tester.pumpAndSettle();
+
+      final zoom = find.byKey(const ValueKey('character-zoom'));
+      expect(
+        find.descendant(of: zoom, matching: find.text('學生')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: zoom, matching: find.text('Hanja')),
+        findsOneWidget,
+      );
+      // The Hangul is only the heading, not drawn large.
+      expect(
+        find.descendant(of: zoom, matching: find.text('학생')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a Korean word written in Hanja zooms into itself', (
+      tester,
+    ) async {
+      await study(
+        tester,
+        '---\nvocabulary:\n  nouns:\n    - ko: 學生\n      en: student\n'
+        '---\n# Lesson\n',
+      );
+      await reveal(tester);
+
+      await tester.tap(find.byKey(const ValueKey('vocab-zoom-word')));
+      await tester.pumpAndSettle();
+
+      final zoom = find.byKey(const ValueKey('character-zoom'));
+      expect(
+        find.descendant(of: zoom, matching: find.text('學生')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a Hangul word without Hanja has no zoom', (tester) async {
+      await study(
+        tester,
+        '---\nvocabulary:\n  nouns:\n    - ko: 나무\n      en: tree\n---\n'
+        '# Lesson\n',
+      );
+      await reveal(tester);
+
+      expect(find.byKey(const ValueKey('vocab-zoom-word')), findsNothing);
+    });
+
     testWidgets('shows neither line for a word without them', (tester) async {
       await study(
         tester,
