@@ -582,11 +582,7 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                       forecastSection,
                       const SizedBox(height: 24),
                     ],
-                    if (newCardsSection != null) ...[
-                      newCardsSection,
-                      const SizedBox(height: 24),
-                    ],
-                    // A finer look after the days, which matter more; on a
+                    // Right under the days it gives a finer look at; on a
                     // wide window no wider than a column of the row above.
                     if (hourlySection != null) ...[
                       Align(
@@ -596,6 +592,10 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                           child: hourlySection,
                         ),
                       ),
+                      const SizedBox(height: 24),
+                    ],
+                    if (newCardsSection != null) ...[
+                      newCardsSection,
                       const SizedBox(height: 24),
                     ],
                   ],

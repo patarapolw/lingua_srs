@@ -598,6 +598,8 @@ void main() {
                 dueDate: DateTime.now().add(const Duration(hours: 5)),
               ),
             ),
+            // A new card, so New cards shows too.
+            VocabItem(targetWord: 'c', translation: 'c', pos: 'nouns'),
           ],
         ),
       );
@@ -624,6 +626,11 @@ void main() {
       }
 
       expect(await barsAt(360), 24);
+      // In one column it comes right under Next 7 days, before New cards.
+      final daily = tester.getTopLeft(find.text('Next 7 days')).dy;
+      final hourly = tester.getTopLeft(find.text('Next 48 hours')).dy;
+      expect(hourly, greaterThan(daily));
+      expect(hourly, lessThan(tester.getTopLeft(find.text('New cards')).dy));
       // One column, 560 wide: room for an hour a bar.
       expect(await barsAt(600), 48);
       expect(tester.takeException(), isNull);
