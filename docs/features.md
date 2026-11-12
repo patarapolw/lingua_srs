@@ -66,7 +66,7 @@ Full feature reference. For a short overview see the [README](../README.md).
 8. **Keyboard Navigation & Anki-Style Hotkeys**: see [hotkeys.md](hotkeys.md).
 
 9. **Adaptive Desktop & Mobile UI**:
-   - **Desktop**: Navigation Rail sidebar, wide-screen flashcard canvas, complete hotkey bar, undo & navigation controls.
+   - **Desktop**: Navigation Rail sidebar, wide-screen flashcard canvas, complete hotkey bar, undo & navigation controls. The window can't be made smaller than 360 × 480 pixels, the size of a small phone, so every screen keeps a layout it was designed for.
    - **Mobile**: Responsive bottom navigation (swipe left or right to change tab), touch-friendly card taps, swipeable sheet editors.
 
 10. **Recent Mistakes & Adaptive Queueing**:
