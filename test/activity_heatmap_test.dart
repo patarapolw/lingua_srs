@@ -546,10 +546,24 @@ void main() {
       tooltips.where((message) => message.endsWith(': 1 due')),
       hasLength(3),
     );
-    // It comes before the 7-day forecast.
+    // It comes after the 7-day forecast, which stays the focus.
     expect(
       tester.getTopLeft(find.text('Next 48 hours')).dy,
-      lessThan(tester.getTopLeft(find.text('Next 7 days')).dy),
+      greaterThan(tester.getTopLeft(find.text('Next 7 days')).dy),
+    );
+    // In grey, not the primary colour or the Due amber of Next 7 days.
+    final firstBar = tester.widget<Container>(
+      find
+          .descendant(
+            of: find.byTooltip(tooltips.first),
+            matching: find.byType(Container),
+          )
+          .last,
+    );
+    final context = tester.element(find.text('Next 48 hours'));
+    expect(
+      (firstBar.decoration as BoxDecoration?)?.color,
+      Theme.of(context).colorScheme.outline,
     );
     expect(tester.takeException(), isNull);
   });

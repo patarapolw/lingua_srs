@@ -544,10 +544,6 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                     ],
                   ),
                   const SizedBox(height: 24),
-                  if (hourlySection != null) ...[
-                    hourlySection,
-                    const SizedBox(height: 24),
-                  ],
                   if (forecastSection != null &&
                       newCardsSection != null &&
                       contentWidth >= _twoColumnWidth) ...[
@@ -569,6 +565,11 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                       newCardsSection,
                       const SizedBox(height: 24),
                     ],
+                  ],
+                  // A finer look after the days, which matter more.
+                  if (hourlySection != null) ...[
+                    hourlySection,
+                    const SizedBox(height: 24),
                   ],
                   // Each section above ends with its own gap.
                   if (leeches.isNotEmpty) ...[
@@ -671,7 +672,9 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
   /// A bar per clock hour for the cards coming due over the next two days,
   /// under a line that sums them up. The review limit works over a rolling
   /// 24 hours, so this shows when cards come due within it better than the
-  /// days of Next 7 days do. On a narrow screen a bar is two hours.
+  /// days of Next 7 days do. It sits below the daily charts, smaller and in
+  /// a quiet grey, so they stay the focus. On a narrow screen a bar is two
+  /// hours.
   Widget _hourlySection(
     BuildContext context, {
     required List<int> hourly,
@@ -734,16 +737,21 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Next 48 hours', style: theme.textTheme.titleMedium),
+        Text(
+          'Next 48 hours',
+          style: theme.textTheme.titleSmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
         Text(
           summary,
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
         SizedBox(
-          height: 64,
+          height: 32,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -753,9 +761,6 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
                     context,
                     count: bar.count,
                     maximum: maximum,
-                    // The first bar holds the cards due now, as Today does
-                    // in Next 7 days.
-                    color: index == 0 ? _dueColor : null,
                     tooltip:
                         '${_hourRangeLabel(context, bar.from, bar.to, now, first: index == 0)}: '
                         '${formatCount(bar.count)} due',
@@ -790,16 +795,15 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
     );
   }
 
-  /// A bar of the Next 48 hours chart: too many to print their counts, so
-  /// the count is in the tooltip.
+  /// A bar of the Next 48 hours chart, in grey: too many to print their
+  /// counts, so the count is in the tooltip.
   Widget _hourBar(
     BuildContext context, {
     required int count,
     required int maximum,
     required String tooltip,
-    Color? color,
   }) {
-    final height = count == 0 || maximum == 0 ? 0.0 : 60.0 * count / maximum;
+    final height = count == 0 || maximum == 0 ? 0.0 : 30.0 * count / maximum;
     return Semantics(
       label: tooltip,
       excludeSemantics: true,
@@ -813,7 +817,7 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
             height: count > 0 && height < 2 ? 2 : height,
             margin: const EdgeInsets.symmetric(horizontal: 1),
             decoration: BoxDecoration(
-              color: color ?? Theme.of(context).colorScheme.primary,
+              color: Theme.of(context).colorScheme.outline,
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(2),
               ),
