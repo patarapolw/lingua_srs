@@ -117,6 +117,30 @@ void main() {
       expect([for (final r in removed) r.index], [2, 4]);
     });
 
+    test('skipCardInPlace keeps the card on screen, drops its copies', () {
+      final a = itemFor('a');
+      final b = itemFor('b');
+      // a was rated Again at 0; its copy at 2 is on screen and is skipped.
+      final queue = [a, b, dupOf(a), itemFor('c'), dupOf(a)];
+      final onScreen = queue[2];
+      final before = List.of(queue);
+      final againIds = {a.card.id};
+
+      final removed = skipCardInPlace(
+        queue: queue,
+        index: 2,
+        againCardIds: againIds,
+      );
+
+      expect(words(queue), ['a', 'b', 'a', 'c']);
+      expect(queue[2], same(onScreen));
+      expect(againIds, isEmpty);
+      expect([for (final r in removed) r.index], [4]);
+
+      restoreRemovedItems(queue, removed);
+      expect(queue, before);
+    });
+
     test('restoreRemovedItems puts the queue back as it was', () {
       final a = itemFor('a');
       final queue = [itemFor('x'), a, itemFor('b'), dupOf(a), itemFor('c')];
@@ -450,7 +474,7 @@ void main() {
       expect(find.textContaining('(1/2)'), findsOneWidget);
     });
 
-    testWidgets('suspend asks, then takes the card out of the session', (
+    testWidgets('suspend asks, then moves on, keeping the card in place', (
       tester,
     ) async {
       final provider = await loadedProvider(tester);
@@ -465,7 +489,38 @@ void main() {
       expect(seeded.due.isSuspended, isTrue);
       expect(seeded.fresh.isSuspended, isFalse);
       expect(find.text('NEW'), findsOneWidget);
-      expect(find.textContaining('(1/1)'), findsOneWidget);
+      // Like a rated card, the suspended one keeps its place in the session.
+      expect(find.textContaining('(2/2)'), findsOneWidget);
+      expect(find.text('✓ 0'), findsOneWidget);
+      expect(find.text('✗ 0'), findsOneWidget);
+    });
+
+    testWidgets('going back shows the suspended card, with nothing to rate', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      final seeded = await seed(tester, provider);
+      final repetitions = seeded.due.repetitions;
+      await openStudy(tester, provider, seeded.lesson);
+
+      await chooseFromMenu(tester, 'Suspend card');
+      await tester.tap(find.widgetWithText(FilledButton, 'Suspend'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.chevron_left));
+      await tester.pumpAndSettle();
+      expect(find.text('NEW'), findsNothing);
+      expect(find.textContaining('(1/2)'), findsOneWidget);
+      expect(find.text('Suspended'), findsOneWidget);
+      expect(find.textContaining('Good'), findsNothing);
+      expect(find.textContaining('Again'), findsNothing);
+
+      await tester.tap(find.byIcon(Icons.chevron_right));
+      await tester.pumpAndSettle();
+      expect(find.text('NEW'), findsOneWidget);
+      expect(find.textContaining('(2/2)'), findsOneWidget);
+      expect(seeded.due.isSuspended, isTrue);
+      expect(seeded.due.repetitions, repetitions);
     });
 
     testWidgets('cancelling suspend leaves the card in the session', (
@@ -497,6 +552,13 @@ void main() {
       expect(seeded.due.isSuspended, isFalse);
       expect(find.text('NEW'), findsNothing);
       expect(find.textContaining('(1/2)'), findsOneWidget);
+      // Back to being answered: the front, and no going forward.
+      expect(find.textContaining('Show Answer'), findsOneWidget);
+      expect(find.text('Suspended'), findsNothing);
+      expect(
+        find.byTooltip('Cannot go forward beyond unanswered cards'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('wrap up keeps only the Again card already started', (

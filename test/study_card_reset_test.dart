@@ -412,15 +412,23 @@ void main() {
       final card = shown.cardTargetToNative;
       expect(card.status, SrsStatus.isNew);
       expect(card.repetitions, 0);
-      // The next card is up, unrevealed, and the skipped one is gone.
+      // The next card is up, unrevealed.
       expect(find.text(other.targetWord), findsWidgets);
       expect(find.text(shown.targetWord), findsNothing);
       expect(find.textContaining('Show Answer'), findsOneWidget);
       expect(find.text('NEW'), findsNothing);
-      // Like a suspend: the card leaves the session without being rated.
-      expect(find.textContaining('(1/1)'), findsOneWidget);
+      // Like a suspend: the card is left behind in place, unrated.
+      expect(find.textContaining('(2/2)'), findsOneWidget);
       expect(find.text('✓ 0'), findsOneWidget);
       expect(find.text('✗ 0'), findsOneWidget);
+
+      // Going back shows it, with nothing to rate.
+      await tester.tap(find.byIcon(Icons.chevron_left));
+      await tester.pumpAndSettle();
+      expect(find.text(shown.targetWord), findsWidgets);
+      expect(find.text('Reset to New and skipped'), findsOneWidget);
+      expect(find.textContaining('Good'), findsNothing);
+      expect(card.status, SrsStatus.isNew);
     });
 
     testWidgets('undo after reset and skip restores the card and its place', (
