@@ -58,6 +58,10 @@ class VocabEntryLocation {
   final Object? translationKey;
   final Object? ttsKey;
 
+  /// The keys the entry's reading and other forms are written with, by
+  /// [VocabSource.formFields] name. A field the entry does not have has none.
+  final Map<String, Object?> formKeys;
+
   /// The entry's examples that became sentences, in the order of
   /// [VocabItem.sentenceIds] as parsed.
   final List<ExampleLocation> examples;
@@ -70,6 +74,7 @@ class VocabEntryLocation {
     this.targetKey,
     this.translationKey,
     this.ttsKey,
+    this.formKeys = const {},
     this.examples = const [],
     this.hasExamples = false,
   });
@@ -260,6 +265,8 @@ class YamlParserService {
     String? unitTitle = defaultUnitTitle;
     String targetLang = 'ko';
     String nativeLang = 'en';
+    // The `target:` of the file, if it has one.
+    String? statedTargetLang;
 
     // 1. Detect lesson title & languages if present at root
     for (final key in doc.keys) {
@@ -273,6 +280,7 @@ class YamlParserService {
           lowerKey == 'target_lang' ||
           lowerKey == 'language') {
         targetLang = doc[key].toString().trim();
+        statedTargetLang = targetLang;
       } else if (lowerKey == 'native' || lowerKey == 'native_lang') {
         nativeLang = doc[key].toString().trim();
       } else if (lowerKey == 'unit' || lowerKey == 'unit_title') {
@@ -328,9 +336,14 @@ class YamlParserService {
         Object? targetKey;
         Object? translationKey;
         Object? ttsKey;
+        final formKeys = <String, Object?>{};
         final exampleLocations = <ExampleLocation>[];
         String targetWord = '';
         String translation = '';
+        String reading = '';
+        String simplified = '';
+        String traditional = '';
+        String hanja = '';
         String? vocabId;
         String? vocabAudio;
         String? ttsText;
@@ -376,6 +389,22 @@ class YamlParserService {
           } else if (_isTtsKey(fKey) && fVal.isNotEmpty) {
             ttsText = fVal; // tts: alternate text for TTS
             ttsKey = field.key;
+          } else if (readingKeys.contains(fKey) && reading.isEmpty) {
+            reading = fVal; // pinyin, or another reading
+            if (fVal.isNotEmpty) formKeys[VocabSource.readingField] = field.key;
+          } else if (simplifiedKeys.contains(fKey) && simplified.isEmpty) {
+            simplified = fVal;
+            if (fVal.isNotEmpty) {
+              formKeys[VocabSource.simplifiedField] = field.key;
+            }
+          } else if (traditionalKeys.contains(fKey) && traditional.isEmpty) {
+            traditional = fVal;
+            if (fVal.isNotEmpty) {
+              formKeys[VocabSource.traditionalField] = field.key;
+            }
+          } else if (hanjaKeys.contains(fKey) && hanja.isEmpty) {
+            hanja = fVal;
+            if (fVal.isNotEmpty) formKeys[VocabSource.hanjaField] = field.key;
           }
         }
 
@@ -457,6 +486,10 @@ class YamlParserService {
             idIsExplicit: vocabId != null,
             targetWord: targetWord,
             translation: translation,
+            reading: reading,
+            simplified: simplified,
+            traditional: traditional,
+            hanja: hanja,
             pos: sectionPath.last,
             sectionPath: sectionPath,
             audioUrl: vocabAudio,
@@ -469,6 +502,10 @@ class YamlParserService {
           vocab.source = VocabSource(
             targetWord: targetWord,
             translation: translation,
+            reading: reading,
+            simplified: simplified,
+            traditional: traditional,
+            hanja: hanja,
             sectionPath: sectionPath,
             examples: [
               for (final id in itemSentenceIds)
@@ -482,6 +519,7 @@ class YamlParserService {
               targetKey: targetKey,
               translationKey: translationKey,
               ttsKey: ttsKey,
+              formKeys: formKeys,
               examples: exampleLocations,
               hasExamples: item['examples'] is List,
             ),
@@ -500,10 +538,25 @@ class YamlParserService {
       }
     }
 
+    // Entries keyed by a language (`zh:`) say the language but not the region
+    // or script. The file's `target: zh-TW` says both, so it is kept when it
+    // is that same language: the region picks the voice and tells which
+    // characters the lesson is written in. A region that says nothing more
+    // than the language (`ko-KR`, `ja-JP`) is dropped. Generated ids were
+    // made from the language as it was read above, and still are.
+    final stated = statedTargetLang;
+    final lessonTargetLang = Lesson.withoutDefaultRegion(
+      stated != null &&
+              stated.toLowerCase() != targetLang &&
+              Lesson.languageCodeOf(stated) == targetLang
+          ? stated
+          : targetLang,
+    );
+
     final lesson = Lesson(
       title: title,
       unitTitle: unitTitle,
-      targetLanguage: targetLang,
+      targetLanguage: lessonTargetLang,
       nativeLanguage: nativeLang,
       vocabularies: vocabList,
       markdownContent: markdownContent,
@@ -564,6 +617,11 @@ class YamlParserService {
   /// Korean word, or the reading of a word written in characters, such as the
   /// pinyin of a Chinese word.
   static const readingKeys = ['hangul', 'reading', 'pinyin'];
+
+  /// Keys that hold the simplified and the traditional form of a Chinese
+  /// word in vocabulary YAML.
+  static const simplifiedKeys = ['simplified'];
+  static const traditionalKeys = ['traditional'];
 
   /// Hanja (CJK ideographs).
   static final _hanja = RegExp(r'[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]');

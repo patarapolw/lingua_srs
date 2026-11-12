@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../models/lesson.dart';
 import '../providers/app_provider.dart';
 import '../services/korean_pronunciation_service.dart';
 
@@ -22,7 +23,7 @@ class PronunciationLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (languageCode != 'ko' ||
+    if (Lesson.languageCodeOf(languageCode) != 'ko' ||
         !KoreanPronunciationService.containsHangul(text)) {
       return const SizedBox.shrink();
     }

@@ -58,6 +58,10 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     with SingleTickerProviderStateMixin {
   late TextEditingController _targetWordCtrl;
   late TextEditingController _translationCtrl;
+  late TextEditingController _readingCtrl;
+  late TextEditingController _simplifiedCtrl;
+  late TextEditingController _traditionalCtrl;
+  late TextEditingController _hanjaCtrl;
   late TextEditingController _posCtrl;
   late TextEditingController _audioCtrl;
   late bool _useAudio;
@@ -197,6 +201,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                       ],
                     ),
                     if (!widget.isNew) ...[
+                      ..._writingFields(provider),
                       const SizedBox(height: 16),
                       _duplicateFrontWarning(
                         provider,
@@ -551,6 +556,10 @@ class _VocabEditDialogState extends State<VocabEditDialog>
   void dispose() {
     _targetWordCtrl.dispose();
     _translationCtrl.dispose();
+    _readingCtrl.dispose();
+    _simplifiedCtrl.dispose();
+    _traditionalCtrl.dispose();
+    _hanjaCtrl.dispose();
     _posCtrl.dispose();
     _audioCtrl.dispose();
     _ttsCtrl.dispose();
@@ -567,6 +576,10 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     super.initState();
     _targetWordCtrl = TextEditingController(text: widget.vocab.targetWord);
     _translationCtrl = TextEditingController(text: widget.vocab.translation);
+    _readingCtrl = TextEditingController(text: widget.vocab.reading);
+    _simplifiedCtrl = TextEditingController(text: widget.vocab.simplified);
+    _traditionalCtrl = TextEditingController(text: widget.vocab.traditional);
+    _hanjaCtrl = TextEditingController(text: widget.vocab.hanja);
     _posCtrl = TextEditingController(text: widget.vocab.pos);
     _audioCtrl = TextEditingController(text: widget.vocab.audioUrl ?? '');
     _useAudio = widget.vocab.useAudio;
@@ -1326,6 +1339,64 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     return proceed ?? false;
   }
 
+  /// Fields for how the word is read and otherwise written, shown on the back
+  /// of its cards. Which ones are offered depends on the lesson's language:
+  /// Hanja for Korean, pinyin and both character forms for Chinese, and a
+  /// reading for any other language. A field that already has text is always
+  /// shown, whatever the language, so it can be edited or cleared.
+  List<Widget> _writingFields(AppProvider provider) {
+    final language = provider.lessons
+        .where((lesson) => lesson.id == widget.lessonId)
+        .firstOrNull
+        ?.targetLanguageCode;
+    final korean = language == null || language == 'ko';
+    final chinese = language == 'zh';
+    final fields = [
+      if (!korean || widget.vocab.reading.isNotEmpty)
+        (
+          key: 'vocab-reading-field',
+          controller: _readingCtrl,
+          label: chinese ? 'Pinyin (optional)' : 'Reading (optional)',
+          hint: chinese ? 'e.g. xuésheng' : null,
+        ),
+      if (chinese || widget.vocab.simplified.isNotEmpty)
+        (
+          key: 'vocab-simplified-field',
+          controller: _simplifiedCtrl,
+          label: 'Simplified (optional)',
+          hint: 'e.g. 学生',
+        ),
+      if (chinese || widget.vocab.traditional.isNotEmpty)
+        (
+          key: 'vocab-traditional-field',
+          controller: _traditionalCtrl,
+          label: 'Traditional (optional)',
+          hint: 'e.g. 學生',
+        ),
+      if (korean || widget.vocab.hanja.isNotEmpty)
+        (
+          key: 'vocab-hanja-field',
+          controller: _hanjaCtrl,
+          label: 'Hanja (optional)',
+          hint: 'e.g. 學生 for 학생',
+        ),
+    ];
+    return [
+      for (final field in fields) ...[
+        const SizedBox(height: 16),
+        TextField(
+          key: ValueKey(field.key),
+          controller: field.controller,
+          decoration: InputDecoration(
+            labelText: field.label,
+            hintText: field.hint,
+            border: const OutlineInputBorder(),
+          ),
+        ),
+      ],
+    ];
+  }
+
   Future<void> _save() async {
     // This word's `**` marking of its examples, taken from the edits below.
     final marks = <String, SentenceEmphasis>{};
@@ -1415,6 +1486,10 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     provider.rebindVocabId(widget.vocab, _originalId);
     widget.vocab.targetWord = _targetWordCtrl.text.trim();
     widget.vocab.translation = _translationCtrl.text.trim();
+    widget.vocab.reading = _readingCtrl.text.trim();
+    widget.vocab.simplified = _simplifiedCtrl.text.trim();
+    widget.vocab.traditional = _traditionalCtrl.text.trim();
+    widget.vocab.hanja = _hanjaCtrl.text.trim();
     widget.vocab.pos = _posCtrl.text.trim();
     widget.vocab.audioUrl = _audioCtrl.text.trim().isEmpty
         ? null

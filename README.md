@@ -57,7 +57,7 @@ SRS that puts language learning first: custom lessons, lesson-by-lesson vocabula
   - Export lessons or whole units as ZIP.
 - **Keyboard-enabled**: Anki-style [hotkeys](docs/hotkeys.md), with undo.
 
-Currently only Korean ➔ English is supported. Full details in [docs/features.md](docs/features.md).
+Korean ➔ English is the best supported; Mandarin Chinese has pinyin, simplified and traditional forms, and Korean words can carry their Hanja. Full details in [docs/features.md](docs/features.md).
 
 ## Running
 

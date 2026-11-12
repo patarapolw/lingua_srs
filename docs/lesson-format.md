@@ -42,7 +42,7 @@ vocabulary:
       en: "three items"
 ```
 
-Each entry needs a target-language field (such as `ko`) and a translation field (such as `en`). `tts`, `audio`, `notes`, `disambiguation`, `id` and `examples` are optional.
+Each entry needs a target-language field (such as `ko`) and a translation field (such as `en`). `tts`, `audio`, `notes`, `disambiguation`, `id` and `examples` are optional, and so are the reading and character-form fields under [Readings and character forms](#readings-and-character-forms).
 
 - **`tts`** is alternate text for text-to-speech, used when there is no `audio` file (or its *Use this recording* box is unticked), for example to spell out a number. It also works on entries in `examples`. The older names `ko_text` (`<language>_text`) and `target_text` are still read, and export writes `tts`.
   - **Locale prefix.** Start the `tts` text with a locale and a colon, with no space after the colon, to have it spoken by another voice than the lesson's language: `tts: "zh-TW:垃圾"` is said by a Taiwanese Mandarin voice, `tts: "ko:세 개"` by a Korean one. The locale is a 2–3 letter language with an optional script or region (`zh`, `zh-TW`, `zh-Hant`), with no text in front of it. A colon followed by whitespace is always text, and so is anything before the colon that is not a locale (`10:30`). The prefix is kept as part of the text in the editor, and is not spoken. A prefix with no text after it (`tts: "zh-TW:"`) says the word or sentence itself in that locale. A prefix whose language is unknown (`xx:`) is ignored: the rest, or the word or sentence, is spoken in the lesson's language, and the `tts` text is kept as written. The prefix only picks the voice: how the characters are read is up to that voice, so to force a reading, respell it (`tts: "樂色"` for lè sè). On Android, the editors' *Spoken in …* button picks the prefix from the languages the phone can speak.
@@ -52,6 +52,39 @@ Each entry needs a target-language field (such as `ko`) and a translation field 
 - **Shared sentences.** The Sentence Pool holds each sentence once, as plain text, even when several words list it as an example. The `**` emphasis belongs to the word: two words can mark different parts of the same sentence. Edit the text from the Sentence Pool or from a word's example editor (which warns that the text changes for every word that uses the sentence, and requires `**` in the sentence); edit the emphasis from the word. When the text of a shared sentence changes, each word keeps its emphasis wherever the surrounding text is unchanged, and otherwise it is suggested again from the word.
 - **`disambiguation`** shows an extra cue on the card front. Cards with the same front prompt are flagged even when their example sentences differ.
 - **`id`** makes entries explicitly share SRS progress (including across part-of-speech groups) or forces separate identities. Without an `id`, entries with the same target form and meaning share progress; different meanings get separate generated IDs. So an entry is identified by its `id`, or without one by its word and translation together; see [Importing a file again](#importing-a-file-again) for what happens when either is edited.
+
+## Readings and character forms
+
+A word can say how it is read and how else it is written. These fields are optional, are shown on the answer side of the word's cards (never on the front), and can be edited in the vocabulary editor. They do not get review cards of their own.
+
+Mandarin Chinese: `pinyin` (or `reading`), `simplified` and `traditional`.
+
+```yaml
+target: zh-CN
+vocabulary:
+  nouns:
+    - zh: "学生"
+      pinyin: "xuésheng"
+      simplified: "学生"
+      traditional: "學生"
+      en: "student"
+```
+
+Korean: `hanja`, for a Sino-Korean word.
+
+```yaml
+vocabulary:
+  nouns:
+    - ko: "학생"
+      hanja: "學生"
+      en: "student"
+```
+
+- **Importing the file again** treats these like the word and its translation: one edited in the app stays while the file's entry is as it was, and one changed in the file is taken. Writing the app's words back to a folder writes them too, under the key the entry already uses.
+- **`pinyin`** and **`reading`** are the same field: how the word is read. `reading` suits any language whose writing does not show it, such as kana for a Japanese word. When an entry has both, the first one is used. Export writes `pinyin` in a Chinese lesson and `reading` in any other.
+- **`simplified`** and **`traditional`** record both forms of a Chinese word, whichever one the lesson is written in. The card shows the form that differs from the word itself: a `zh: 学生` card shows *Traditional: 學生*.
+- **`hanja`** is the Hanja of a Korean word, shown as *Hanja: 學生*. Leave it out for a native Korean word.
+- **`target:`** names the lesson's language. Entries are keyed by the language alone (`zh:`, not `zh-TW:`), so write the region or script on `target:` (`zh-CN`, `zh-TW`, `zh-Hant`); it is kept, and picks the text-to-speech voice (Taiwanese for `zh-TW` and `zh-Hant`, mainland otherwise). Without `target:`, the language is taken from the entry key (`zh`). A region that says nothing more than the language is dropped: `ko-KR` is `ko`, `ja-JP` is `ja`, `th-TH` is `th`, and likewise `vi-VN`, `id-ID`, `tr-TR`, `de-DE`, `it-IT`, `ru-RU`, `pl-PL`, `uk-UA`, `cs-CZ`, `hu-HU`, `ro-RO`, `el-GR`, `he-IL`, `hi-IN`, `fi-FI` and `da-DK`. A region that tells a variant apart is kept (`pt-BR`, `en-GB`, `de-AT`), and Chinese, English, Spanish, Portuguese, French and Arabic always keep theirs.
 
 ## Markdown frontmatter
 
@@ -206,7 +239,7 @@ After **Pick Folder**, tick **Write words from the app back to the files** to br
 
 - **What is written:** words and translations edited in the app; `audio`, `notes`, `disambiguation` and `tts` typed in the app; examples added, removed or marked another way; and words added in the app, at the end of their section (a new section is made if there is none). A word the file already has an entry for, with its `id` or with its word and translation, is not added again, even when the lesson in the app holds it twice.
 - **What is not touched:** the lesson text, other frontmatter keys (`title`, `outline`, …), comments, and entries that did not change.
-- **Small diffs, for a folder kept in Git.** Nothing is written unless the box is ticked, and then only to files whose words differ from the app's. A changed value changes its line; an example added or removed adds or removes its own lines; a new word is added after the last entry of its section. Quotes, comments, key order and line endings elsewhere stay as they are. New entries and examples are written with their values in double quotes. Writing twice changes nothing the second time, and importing a file the app wrote changes nothing in the app.
+- **Small diffs, for a folder kept in Git.** Nothing is written unless the box is ticked, and then only to files whose words differ from the app's. A changed value changes its line, in the quotes the old value had; a key added to an entry (a `pinyin` the entry had none of) takes the quotes of the entry's word. An example added or removed adds or removes its own lines; a new word is added after the last entry of its section. Quotes, comments, key order and line endings elsewhere stay as they are. New entries and examples are written with their values in double quotes. Writing twice changes nothing the second time, and importing a file the app wrote changes nothing in the app.
 - **What is not written, so that files do not change back and forth:** a difference in letter case or spacing only in an example sentence (sentences are shared between lessons, and two files may write one differently); `audio`, `notes`, `disambiguation` and `tts` that came from another lesson's file; and a marking removed from an example in the app.
 - **Nothing is removed from a file except examples you removed from a word.** A word deleted in the app stays in the file, and is added again if that file is imported after a change. A word that came from a file and is no longer in it is not put back.
 - **A file edited after the folder was scanned** is skipped. A file that cannot be updated safely is left as it is and listed: the app reads its own result back before it writes.

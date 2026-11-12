@@ -381,6 +381,76 @@ void main() {
     },
   );
 
+  testWidgets('Edit dialog offers Hanja for a Korean word and saves it', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    final vocab = VocabItem(
+      targetWord: '학생',
+      translation: 'student',
+      pos: 'nouns',
+    );
+    unawaited(
+      VocabEditDialog.show(tester.element(find.byType(Scaffold).first), vocab),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(TextField, 'Hanja (optional)'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Pinyin (optional)'), findsNothing);
+    expect(find.widgetWithText(TextField, 'Reading (optional)'), findsNothing);
+    expect(
+      find.widgetWithText(TextField, 'Traditional (optional)'),
+      findsNothing,
+    );
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Hanja (optional)'),
+      ' 學生 ',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(vocab.hanja, '學生');
+  });
+
+  testWidgets('Edit dialog offers pinyin and both forms for a Chinese word', (
+    tester,
+  ) async {
+    final provider = await pumpApp(tester);
+    final vocab = VocabItem(
+      targetWord: '学生',
+      translation: 'student',
+      reading: 'xuésheng',
+      pos: 'nouns',
+    );
+    final lesson = Lesson(
+      title: 'Chinese',
+      targetLanguage: 'zh-TW',
+      vocabularies: [vocab],
+    );
+    provider.lessons.add(lesson);
+    unawaited(
+      VocabEditDialog.show(
+        tester.element(find.byType(Scaffold).first),
+        vocab,
+        lessonId: lesson.id,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final pinyin = find.widgetWithText(TextField, 'Pinyin (optional)');
+    expect(tester.widget<TextField>(pinyin).controller!.text, 'xuésheng');
+    expect(
+      find.widgetWithText(TextField, 'Simplified (optional)'),
+      findsOneWidget,
+    );
+    expect(
+      find.widgetWithText(TextField, 'Traditional (optional)'),
+      findsOneWidget,
+    );
+    expect(find.widgetWithText(TextField, 'Hanja (optional)'), findsNothing);
+  });
+
   testWidgets('Edit dialog shows one AI button per direction with a key', (
     tester,
   ) async {

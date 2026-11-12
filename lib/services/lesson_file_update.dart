@@ -128,8 +128,28 @@ class LessonFileUpdate {
       if (word == null) continue;
       final location = parsed.locations[index];
       var touched = false;
+      // A value is written in the quotes of the one it replaces, or for a
+      // key the entry does not have yet, in those of the entry's word, so
+      // a file written `zh: "这"` keeps its quotes.
+      ScalarStyle? styleOf(Object? key) {
+        final node = editor.parseAt([
+          ...location.path,
+          key,
+        ], orElse: () => YamlScalar.wrap(null));
+        return node is YamlScalar && node.value != null ? node.style : null;
+      }
+
       void set(Object? key, String value) {
-        apply(() => editor.update([...location.path, key], value));
+        final style = styleOf(key) ?? styleOf(location.targetKey);
+        apply(
+          () => editor.update(
+            [...location.path, key],
+            style == ScalarStyle.DOUBLE_QUOTED ||
+                    style == ScalarStyle.SINGLE_QUOTED
+                ? YamlScalar.wrap(value, style: style!)
+                : value,
+          ),
+        );
         touched = true;
       }
 
@@ -144,6 +164,12 @@ class LessonFileUpdate {
           translation != fileWord.translation &&
           location.translationKey != null) {
         set(location.translationKey, translation);
+      }
+      // The reading and other forms, under the key the entry has for each.
+      for (final field in VocabSource.formFields) {
+        final value = word.formOf(field).trim();
+        if (value.isEmpty || value == fileWord.formOf(field)) continue;
+        set(location.formKeys[field] ?? _formKey(lesson, field), value);
       }
       // A detail is shared by every lesson that has the word, and another
       // lesson's file may say something else: only what was typed in the
@@ -543,6 +569,13 @@ class LessonFileUpdate {
     return value;
   }
 
+  /// The key a reading or form is written under when the entry has none for
+  /// it yet.
+  static String _formKey(Lesson lesson, String field) =>
+      field == VocabSource.readingField
+      ? LessonExportService.readingKey(lesson)
+      : field;
+
   static Map<String, Object> _entry(
     Lesson lesson,
     VocabItem word,
@@ -562,6 +595,8 @@ class LessonFileUpdate {
       if (word.idIsExplicit) 'id': word.id,
       keys.target: word.targetWord.trim(),
       keys.translation: word.translation.trim(),
+      for (final field in VocabSource.formFields)
+        _formKey(lesson, field): ?text(word.formOf(field)),
       'audio': ?text(word.audioUrl),
       'tts': ?text(word.ttsText),
       'notes': ?text(word.notes),

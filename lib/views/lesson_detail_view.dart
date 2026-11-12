@@ -11,6 +11,7 @@ import '../services/srs_service.dart';
 import '../widgets/audio_button.dart';
 import '../widgets/emphasis_text.dart';
 import '../widgets/markdown_content.dart';
+import '../widgets/vocab_forms.dart';
 import 'vocab_edit_dialog.dart';
 import 'study_view.dart';
 import 'yaml_import_view.dart';
@@ -260,7 +261,7 @@ class _LessonDetailViewState extends State<LessonDetailView> {
           initialYaml:
               'vocabulary:\n'
               '  nouns:\n'
-              '    - ${lesson.targetLanguage}: ""\n'
+              '    - ${lesson.targetLanguageCode}: ""\n'
               '      ${lesson.nativeLanguage}: ""\n',
           vocabularyOnly: true,
         ),
@@ -904,18 +905,22 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                                                 WrapCrossAlignment.center,
                                             spacing: 10,
                                             children: [
-                                              Text(
-                                                vocab.targetWord,
-                                                style: theme
-                                                    .textTheme
-                                                    .headlineSmall
-                                                    ?.copyWith(
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                      color: theme
-                                                          .colorScheme
-                                                          .primary,
-                                                    ),
+                                              CharacterZoom.tappable(
+                                                context: context,
+                                                vocab: vocab,
+                                                child: Text(
+                                                  vocab.targetWord,
+                                                  style: theme
+                                                      .textTheme
+                                                      .headlineSmall
+                                                      ?.copyWith(
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        color: theme
+                                                            .colorScheme
+                                                            .primary,
+                                                      ),
+                                                ),
                                               ),
                                               Chip(
                                                 label: Text(vocab.pos),
@@ -933,6 +938,12 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                                                 compact: true,
                                               ),
                                             ],
+                                          ),
+                                          VocabForms(
+                                            vocab: vocab,
+                                            alignment: WrapAlignment.start,
+                                            readingStyle:
+                                                theme.textTheme.bodyLarge,
                                           ),
                                           const SizedBox(height: 4),
                                           Text(

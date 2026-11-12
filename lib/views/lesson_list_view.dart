@@ -372,12 +372,9 @@ class LessonListView extends StatelessWidget {
                       CircleAvatar(
                         radius: 24,
                         backgroundColor: theme.colorScheme.secondaryContainer,
-                        child: Text(
-                          lesson.targetLanguage.toUpperCase(),
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: theme.colorScheme.onSecondaryContainer,
-                          ),
+                        child: _LanguageBadgeText(
+                          language: lesson.targetLanguage,
+                          color: theme.colorScheme.onSecondaryContainer,
                         ),
                       ),
                     ],
@@ -1080,6 +1077,46 @@ class LessonNameClashBanner extends StatelessWidget {
             onPressed: () => _resolve(context),
             child: const Text('Sort out'),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A lesson's language inside its round badge: the language code, with the
+/// region or script smaller underneath (ZH over CN), scaled down to fit.
+class _LanguageBadgeText extends StatelessWidget {
+  const _LanguageBadgeText({required this.language, required this.color});
+
+  final String language;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final parts = language.split(RegExp('[-_]'));
+    final code = parts.first.toUpperCase();
+    final rest = parts.skip(1).join('-').toUpperCase();
+    return Padding(
+      padding: const EdgeInsets.all(6),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              code,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: color,
+                height: 1.1,
+              ),
+            ),
+            if (rest.isNotEmpty)
+              Text(
+                rest,
+                style: TextStyle(fontSize: 10, color: color, height: 1.1),
+              ),
+          ],
         ),
       ),
     );

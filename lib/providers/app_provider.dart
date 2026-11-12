@@ -1896,6 +1896,23 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
         file.translation,
         word.translation,
       );
+    // A reading or form has no "as edited" to fall back on: a word saved
+    // before these were kept had none, so what the file says now is new.
+    String form(String was, String theirs, String ours) =>
+        theirs == was || ours != was ? ours : theirs;
+    word
+      ..reading = form(base?.reading ?? '', file.reading, word.reading)
+      ..simplified = form(
+        base?.simplified ?? '',
+        file.simplified,
+        word.simplified,
+      )
+      ..traditional = form(
+        base?.traditional ?? '',
+        file.traditional,
+        word.traditional,
+      )
+      ..hanja = form(base?.hanja ?? '', file.hanja, word.hanja);
     if (base == null || !_sameNames(base.sectionPath, file.sectionPath)) {
       word
         ..pos = file.pos

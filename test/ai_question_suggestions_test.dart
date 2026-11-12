@@ -347,8 +347,88 @@ void main() {
       }
     });
 
+    test('supports Mandarin by code, region and name', () {
+      for (final language in [
+        'zh',
+        'zh-CN',
+        'zh-TW',
+        'zh_Hant',
+        'Chinese',
+        'Mandarin',
+        'Mandarin Chinese',
+      ]) {
+        expect(
+          AiQuestionSuggestions.supports(language),
+          isTrue,
+          reason: language,
+        );
+        expect(
+          AiQuestionSuggestions.languageCode(language),
+          'zh',
+          reason: language,
+        );
+      }
+    });
+
+    test('Mandarin words are asked about characters, pinyin and measure '
+        'words, not Korean speech levels', () {
+      final noun = AiQuestionSuggestions.wordFirstQuestions(
+        language: 'zh-TW',
+        word: '學生',
+        hasSentence: false,
+        verbOrAdjective: false,
+      );
+      expect(noun, contains('What does each character in "學生" mean?'));
+      expect(noun, contains('Which measure word goes with "學生"?'));
+      expect(noun.join(' '), contains('pinyin'));
+
+      final verb = AiQuestionSuggestions.wordFollowUps(
+        language: 'zh',
+        word: '吃',
+        hasSentence: true,
+        verbOrAdjective: true,
+      );
+      expect(verb, contains('How is "吃" used with 了, 过 and complements?'));
+      expect(verb.join(' '), isNot(contains('measure word')));
+      for (final question in [...noun, ...verb]) {
+        expect(question, isNot(contains('speech level')), reason: question);
+        expect(question, isNot(contains('Hanja')), reason: question);
+      }
+    });
+
+    test('a Mandarin word is not guessed to be a verb from how it is '
+        'written', () {
+      expect(
+        AiQuestionSuggestions.isVerbOrAdjective(
+          language: 'zh',
+          word: '吃',
+          categories: const ['food'],
+        ),
+        isFalse,
+      );
+      expect(
+        AiQuestionSuggestions.isVerbOrAdjective(
+          language: 'zh',
+          word: '吃',
+          categories: const ['verbs'],
+        ),
+        isTrue,
+      );
+    });
+
+    test('Han characters are Mandarin text, and Hangul is not', () {
+      expect(
+        AiQuestionSuggestions.hasTargetText(language: 'zh', text: 'Is 學 used?'),
+        isTrue,
+      );
+      expect(
+        AiQuestionSuggestions.hasTargetText(language: 'zh', text: '먹다'),
+        isFalse,
+      );
+    });
+
     test('does not support another language yet', () {
-      for (final language in ['ja', 'es', 'fr', 'zh-CN', '', 'kor']) {
+      for (final language in ['ja', 'es', 'fr', '', 'kor']) {
         expect(
           AiQuestionSuggestions.supports(language),
           isFalse,
