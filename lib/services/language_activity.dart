@@ -223,8 +223,7 @@ class LanguageActivity {
       for (final entry in reviews.entries) {
         if (entry.value is! List) continue;
         final times = [
-          for (final time in entry.value as List)
-            if (tryLoadedTime('$time') case final parsed?) parsed,
+          for (final time in entry.value as List) ?tryLoadedTime('$time'),
         ];
         if (times.isNotEmpty) activity.reviewTimes['${entry.key}'] = times;
       }
