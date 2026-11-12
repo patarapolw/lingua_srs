@@ -194,10 +194,9 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
       ),
       body: Consumer<AppProvider>(
         builder: (context, provider, _) {
-          // What is counted from the cards (stages, leeches, what comes due,
-          // new cards left) is of the language shown. The calendar, the
-          // streak and the daily counts are of every language: a review is
-          // not recorded with its language.
+          // Everything here is of the language shown: what is counted from
+          // the cards, and the review counts, which the provider keeps by
+          // language.
           final lessons = provider.activeLessons;
           final counts = provider.dailyReviewCounts;
           final yearStart = DateTime(today.year, today.month, today.day - 364);
