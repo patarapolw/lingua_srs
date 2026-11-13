@@ -54,20 +54,24 @@ class WordAiPrompt {
       nativeLanguage: nativeLanguage,
     );
     return [
-      'Whenever your answer has sentences in $targetLanguage that use '
-          '"$targetWord" (they ask for more examples, other ways to use it or '
-          'sentences to practise with, or you give one while explaining), '
-          'write them in the answer as usual, each with its translation. '
-          'Never give them only as YAML. Then, at the very end of the answer, '
-          'repeat those sentences in YAML inside a collapsed '
+      'Only give sentences in $targetLanguage when the question calls for '
+          'them (the learner asks for examples, other ways to use the word or '
+          'sentences to practise with, or a sentence helps explain); most '
+          'answers need none. When your answer does have sentences that use '
+          '"$targetWord", write them in the answer as usual, each with its '
+          'translation, never only as YAML. Then, at the very end of the '
+          'answer, repeat those same sentences in YAML inside a collapsed '
           '`<details>` block, exactly in this format, with the blank lines. '
-          'Leave out of the YAML the example sentence above and any sentence '
-          'that does not use the word; if none is left, leave the block out. '
-          'Write each sentence the way the word is written here. In every '
-          'sentence, wrap the word (in the form it takes there) in **bold**. '
-          'In the translation, also wrap in **bold** the words that translate '
-          'it; if no words in the translation match it, leave the translation '
-          'without bold. `notes` is optional. Quote every value.',
+          'The YAML only repeats sentences written in the answer above: never '
+          'put a sentence in it that is not in the answer. Leave out of it the '
+          'example sentence above and any sentence that does not use the '
+          'word; if none is left, or the answer has no sentences, leave the '
+          'block out. Write each sentence the way the word is written here. '
+          'In every sentence, wrap the word (in the form it takes '
+          'there) in **bold**. In the translation, also wrap in **bold** the '
+          'words that translate it; if no words in the translation match it, '
+          'leave the translation without bold. `notes` is optional. Quote '
+          'every value.',
       '$examplesSummaryTag\n'
           '\n'
           '```yaml\n'
@@ -84,7 +88,7 @@ class WordAiPrompt {
 
   /// How the collapsed block of example sentences in YAML opens.
   static const examplesSummaryTag =
-      '<details>\n<summary>Sentences as YAML</summary>';
+      '<details>\n<summary>New sentences</summary>';
 
   /// The YAML keys of a sentence and its translation for these languages:
   /// their codes when the lesson format knows them, else `target` and

@@ -1886,7 +1886,7 @@ void main() {
         'More examples:\n\n'
         '- **사과**가 맛있어요. The **apple** is tasty.\n'
         '- **사과** 두 개 주세요. Two **apples**, please.\n\n'
-        '<details>\n<summary>Sentences as YAML</summary>\n\n'
+        '<details>\n<summary>New sentences</summary>\n\n'
         '```yaml\n'
         'examples:\n'
         '  - ko: "**사과**가 맛있어요."\n'

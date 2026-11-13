@@ -173,8 +173,10 @@ void main() {
       expect(prompt, contains('Never give them only as YAML'));
       expect(prompt, contains(WordAiPrompt.examplesSummaryTag));
       expect(prompt, contains('```\n\n</details>'));
-      // Not only when asked for examples: any sentence using the word.
-      expect(prompt, contains('you give one while explaining'));
+      // Sentences only when called for, and the YAML only repeats them.
+      expect(prompt, contains('most answers need none'));
+      expect(prompt, contains('never put a sentence in it that is not in'));
+      expect(prompt, isNot(contains('YAML</summary>')));
     });
 
     test('reads the sentences out of a collapsed block', () {
