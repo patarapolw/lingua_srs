@@ -162,7 +162,7 @@ void main() {
     test('the prompt asks for them in an examples block', () {
       final prompt = buildPrompt();
 
-      expect(prompt, contains('new example sentences for "사과"'));
+      expect(prompt, contains('sentences in ko that use "사과"'));
       expect(prompt, contains('examples:\n  - ko: "... **...** ..."'));
       expect(prompt, contains('    en: "... **...** ..."'));
     });
