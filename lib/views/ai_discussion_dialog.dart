@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../models/ai_discussion_message.dart';
 import '../models/lesson.dart';
 import '../models/typed_question.dart';
+import '../models/vocab_item.dart';
 import '../providers/app_provider.dart';
 import '../services/ai_discussion_search.dart';
 import '../services/ai_question_suggestions.dart';
@@ -47,6 +48,10 @@ class AiDiscussionDialog extends StatefulWidget {
   final List<String> categories;
   final Lesson? lesson;
 
+  /// The word a word chat is about, which example sentences in an answer can
+  /// be added to. Null for a lesson chat, or when the word is not known.
+  final VocabItem? vocab;
+
   /// The word or lesson this chat was about no longer exists. The chat opens
   /// read-only, and can be continued without it.
   final bool orphaned;
@@ -62,6 +67,7 @@ class AiDiscussionDialog extends StatefulWidget {
     this.sentenceTranslation,
     this.categories = const [],
     this.lesson,
+    this.vocab,
     this.orphaned = false,
   });
 
@@ -262,8 +268,12 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
   /// listed earlier ([SuggestedVocabularyHints]).
   Widget _answer(String content) {
     final markdown = MarkdownContent(content: content, selectable: true);
+    if (widget.orphaned) return markdown;
+    if (widget.vocab case final vocab?) {
+      return _withExamples(markdown, vocab, content);
+    }
     final lesson = widget.lesson;
-    if (lesson == null || widget.orphaned) return markdown;
+    if (lesson == null) return markdown;
     final found = _vocabularyOffer(lesson, content);
     if (found == null) return markdown;
     final (filter: offer, :hints) = found;
@@ -317,6 +327,95 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
           ),
       ],
     );
+  }
+
+  /// The example sentences in each answer of a word chat, by the answer's
+  /// text ([WordAiPrompt.examplesYaml]).
+  final Map<String, List<ExampleSentence>> _examples = {};
+
+  /// How many sentences were added from each answer, by its text, to say so
+  /// under its button.
+  final Map<String, int> _addedExamples = {};
+
+  /// An answer in a word chat. One with example sentences in YAML gets a
+  /// button to choose which of them to add to [vocab]; sentences the word
+  /// has already are not offered, and are named under the button.
+  Widget _withExamples(Widget markdown, VocabItem vocab, String content) {
+    final examples = _examples.putIfAbsent(
+      content,
+      () => WordAiPrompt.examplesYaml(content),
+    );
+    if (examples.isEmpty) return markdown;
+    final provider = context.read<AppProvider>();
+    bool known(ExampleSentence example) {
+      final existing = provider.findDuplicateSentence(example.sentence);
+      return existing != null && vocab.sentenceIds.contains(existing.id);
+    }
+
+    final fresh = [
+      for (final example in examples)
+        if (!known(example)) example,
+    ];
+    final added = _addedExamples[content];
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        markdown,
+        const SizedBox(height: 6),
+        OutlinedButton.icon(
+          icon: const Icon(Icons.playlist_add),
+          label: Text(
+            fresh.isEmpty
+                ? 'Already examples of this word'
+                : 'Add ${fresh.length == 1 ? 'example' : 'examples'} '
+                      'to "${vocab.targetWord}"',
+          ),
+          onPressed: fresh.isEmpty
+              ? null
+              : () => _addExamples(vocab, fresh, content),
+        ),
+        if (added != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              'Added $added ${added == 1 ? 'sentence' : 'sentences'} to '
+              '"${vocab.targetWord}".',
+              style: theme.textTheme.bodySmall,
+            ),
+          )
+        else if (fresh.isNotEmpty && fresh.length < examples.length)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              'Left out (already an example of this word): '
+              '${examples.length - fresh.length}',
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// Asks which of [examples] to add to [vocab], then adds those. Nothing is
+  /// added if the learner cancels.
+  Future<void> _addExamples(
+    VocabItem vocab,
+    List<ExampleSentence> examples,
+    String content,
+  ) async {
+    final chosen = await showDialog<List<ExampleSentence>>(
+      context: context,
+      builder: (_) =>
+          _ExamplePicker(word: vocab.targetWord, examples: examples),
+    );
+    if (chosen == null || chosen.isEmpty || !mounted) return;
+    final added = await context.read<AppProvider>().addSuggestedExamples(
+      vocab,
+      chosen,
+    );
+    if (!mounted) return;
+    setState(() => _addedExamples[content] = added.length);
   }
 
   /// 배 "ship" (you have "pear"), or (also listed as "pear").
@@ -1033,6 +1132,7 @@ AiDiscussionDialog aiDiscussionDialogFor(AiDiscussionSummary discussion) {
     sentenceTranslation: discussion.sentence?.translationText,
     categories: discussion.vocab?.categoryLabels ?? const [],
     lesson: discussion.isLesson ? discussion.lesson : null,
+    vocab: discussion.isLesson ? null : discussion.vocab,
     orphaned: discussion.isOrphaned,
   );
 }
@@ -1081,6 +1181,73 @@ class _OrphanedNotice extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Lists the example sentences an AI answer suggests for [word], each with a
+/// checkbox, all ticked to start with. Closes with the ticked ones, or null
+/// when cancelled.
+class _ExamplePicker extends StatefulWidget {
+  const _ExamplePicker({required this.word, required this.examples});
+
+  final String word;
+  final List<ExampleSentence> examples;
+
+  @override
+  State<_ExamplePicker> createState() => _ExamplePickerState();
+}
+
+class _ExamplePickerState extends State<_ExamplePicker> {
+  late final List<bool> _ticked = List.filled(widget.examples.length, true);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final count = _ticked.where((ticked) => ticked).length;
+    return AlertDialog(
+      title: Text('Add examples to "${widget.word}"'),
+      content: SizedBox(
+        width: 480,
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            Text(
+              'Suggested by AI: check each sentence and its translation. '
+              'You can edit them later in the word\'s editor.',
+              style: theme.textTheme.bodySmall,
+            ),
+            const SizedBox(height: 8),
+            for (var i = 0; i < widget.examples.length; i++)
+              CheckboxListTile(
+                value: _ticked[i],
+                onChanged: (value) =>
+                    setState(() => _ticked[i] = value ?? false),
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: EdgeInsets.zero,
+                title: EmphasisText(widget.examples[i].emphasis.target),
+                subtitle: widget.examples[i].emphasis.translation.isEmpty
+                    ? null
+                    : EmphasisText(widget.examples[i].emphasis.translation),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: count == 0
+              ? null
+              : () => Navigator.pop(context, [
+                  for (var i = 0; i < widget.examples.length; i++)
+                    if (_ticked[i]) widget.examples[i],
+                ]),
+          child: Text(count == 1 ? 'Add 1 sentence' : 'Add $count sentences'),
+        ),
+      ],
     );
   }
 }

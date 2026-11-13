@@ -120,20 +120,24 @@ class LessonAiPrompt {
   /// The vocabulary YAML in an AI [answer]: the first fenced code block whose
   /// root is `vocabulary:`, or null if there is none. It is not checked here;
   /// the import screen parses it and shows any errors.
-  static String? vocabularyYaml(String answer) {
+  static String? vocabularyYaml(String answer) =>
+      yamlBlock(answer, root: 'vocabulary');
+
+  /// The first fenced YAML (or unlabelled) code block in [answer] with a
+  /// [root] key at its start of line, with a final newline; null if none.
+  static String? yamlBlock(String answer, {required String root}) {
     final fence = RegExp(
       r'^[ \t]*```[ \t]*([A-Za-z]*)[ \t]*\r?\n([\s\S]*?)^[ \t]*```',
       multiLine: true,
     );
+    final rootKey = RegExp('^${RegExp.escape(root)}:', multiLine: true);
     for (final match in fence.allMatches(answer)) {
       final language = match.group(1)!.toLowerCase();
       if (language.isNotEmpty && language != 'yaml' && language != 'yml') {
         continue;
       }
       final body = match.group(2)!.trimRight();
-      if (RegExp(r'^vocabulary:', multiLine: true).hasMatch(body)) {
-        return '$body\n';
-      }
+      if (rootKey.hasMatch(body)) return '$body\n';
     }
     return null;
   }
@@ -160,16 +164,18 @@ class LessonAiPrompt {
     required bool Function(Sentence sentence) isNew,
   }) {
     for (final vocab in parsed.lesson.vocabularies) {
-      vocab.notes = _withNote(vocab.notes, aiWordNote);
+      vocab.notes = withNote(vocab.notes, aiWordNote);
     }
     for (final sentence in parsed.sentences) {
       if (isNew(sentence)) {
-        sentence.notes = _withNote(sentence.notes, aiSentenceNote);
+        sentence.notes = withNote(sentence.notes, aiSentenceNote);
       }
     }
   }
 
-  static String _withNote(String notes, String note) {
+  /// [notes] with [note] after them as a paragraph of its own, unless it is
+  /// there already.
+  static String withNote(String notes, String note) {
     final text = notes.trim();
     if (text.contains(note)) return notes;
     return text.isEmpty ? note : '$text\n\n$note';

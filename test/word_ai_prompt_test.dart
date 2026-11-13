@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lingua_srs/models/ai_discussion_message.dart';
 import 'package:lingua_srs/services/word_ai_prompt.dart';
+import 'package:lingua_srs/services/yaml_parser_service.dart';
 
 String buildPrompt({String? sentence, String? translation}) =>
     WordAiPrompt.systemPrompt(
@@ -154,6 +155,111 @@ void main() {
         WordAiPrompt.withCurrentSentence(const [], sentenceTarget: '사과'),
         isEmpty,
       );
+    });
+  });
+
+  group('Example sentences in YAML', () {
+    test('the prompt asks for them in an examples block', () {
+      final prompt = buildPrompt();
+
+      expect(prompt, contains('sentences that use "사과"'));
+      expect(prompt, contains('examples:\n  - ko: "... **...** ..."'));
+      expect(prompt, contains('    en: "... **...** ..."'));
+    });
+
+    test('the YAML is a collapsed copy of sentences in the answer', () {
+      final prompt = buildPrompt();
+
+      expect(prompt, contains('never only as YAML'));
+      expect(prompt, contains(WordAiPrompt.examplesSummaryTag));
+      expect(prompt, contains('```\n\n</details>'));
+      // Sentences only when called for, and the YAML only repeats them.
+      expect(prompt, contains('most answers need none'));
+      expect(prompt, contains('never put a sentence in it that is not in'));
+      expect(prompt, isNot(contains('YAML</summary>')));
+    });
+
+    test('reads the sentences out of a collapsed block', () {
+      final examples = WordAiPrompt.examplesYaml(
+        '1. **사과**가 맛있어요. — The **apple** is tasty.\n\n'
+        '${WordAiPrompt.examplesSummaryTag}\n\n'
+        '```yaml\n'
+        'examples:\n'
+        '  - ko: "**사과**가 맛있어요."\n'
+        '    en: "The **apple** is tasty."\n'
+        '```\n\n'
+        '</details>\n',
+      );
+
+      expect(examples.single.sentence.targetText, '사과가 맛있어요.');
+    });
+
+    test('uses keys the lesson format reads', () {
+      expect(
+        WordAiPrompt.exampleKeys(targetLanguage: 'zh-TW', nativeLanguage: 'en'),
+        ('zh', 'en'),
+      );
+      // Thai and Vietnamese are not lesson-format keys.
+      expect(
+        WordAiPrompt.exampleKeys(targetLanguage: 'th', nativeLanguage: 'vi'),
+        ('target', 'translation'),
+      );
+    });
+
+    test('reads the sentences out of an answer', () {
+      final examples = WordAiPrompt.examplesYaml(
+        'Here are more:\n\n'
+        '```yaml\n'
+        'examples:\n'
+        '  - ko: "**사과**가 맛있어요."\n'
+        '    en: "The **apple** is tasty."\n'
+        '    notes: "Casual polite."\n'
+        '  - ko: "**사과** 두 개 주세요."\n'
+        '    en: "Two apples, please."\n'
+        '```\n'
+        'Try saying them aloud.',
+      );
+
+      expect(examples, hasLength(2));
+      final first = examples.first;
+      expect(first.sentence.targetText, '사과가 맛있어요.');
+      expect(first.sentence.translationText, 'The apple is tasty.');
+      expect(first.sentence.notes, 'Casual polite.');
+      expect(first.emphasis.target, '**사과**가 맛있어요.');
+      expect(first.emphasis.translation, 'The **apple** is tasty.');
+      expect(examples.last.emphasis.translation, 'Two apples, please.');
+    });
+
+    test('finds nothing in an answer without the block', () {
+      expect(WordAiPrompt.examplesYaml('사과 means apple.'), isEmpty);
+      // A vocabulary block is for lesson chats.
+      expect(
+        WordAiPrompt.examplesYaml(
+          '```yaml\nvocabulary:\n  nouns:\n    - ko: "배"\n```\n',
+        ),
+        isEmpty,
+      );
+      // A block that cannot be read offers nothing rather than failing.
+      expect(
+        WordAiPrompt.examplesYaml('```yaml\nexamples: "none"\n```\n'),
+        isEmpty,
+      );
+      expect(
+        WordAiPrompt.examplesYaml('```yaml\nexamples:\n  - ko: "a\n```\n'),
+        isEmpty,
+      );
+    });
+
+    test('skips an example without a sentence', () {
+      final examples = YamlParserService.parseExampleSentences(
+        'examples:\n'
+        '  - en: "Only a translation."\n'
+        '  - "not a map"\n'
+        '  - ko: "**사과**예요."\n',
+      );
+
+      expect(examples.map((e) => e.sentence.targetText), ['사과예요.']);
+      expect(examples.single.sentence.translationText, '');
     });
   });
 }

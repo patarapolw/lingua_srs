@@ -122,7 +122,13 @@ class MarkdownContent extends StatelessWidget {
           if (part.isDetails)
             MarkdownDetails(
               initiallyOpen: part.open,
-              summary: markdown(part.summary!),
+              // Never selectable: selectable text takes the tap, so only the
+              // arrow would open the block, which is hard to hit on a phone.
+              summary: MarkdownContent(
+                content: part.summary!,
+                style: style,
+                onLink: onLink,
+              ),
               child: markdown(part.text),
             )
           else

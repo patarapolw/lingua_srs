@@ -1188,6 +1188,67 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     }
   }
 
+  /// Adds example sentences an AI suggested in a chat about [vocab] to the
+  /// word. A new one joins the Sentence Pool with
+  /// [LessonAiPrompt.aiSentenceNote] after its notes; one already in the pool
+  /// is the learner's, and that sentence is linked as it is. Each is linked
+  /// to the word with the AI's `**` marking, or, when the AI marked nothing,
+  /// one suggested from the word as the word editor does. Sentences the word
+  /// already has are left as they are. Returns the sentences newly linked.
+  Future<List<Sentence>> addSuggestedExamples(
+    VocabItem vocab,
+    List<ExampleSentence> examples,
+  ) async {
+    String? lessonId;
+    for (final lesson in _lessons) {
+      if (lesson.vocabularies.any((other) => identical(other, vocab))) {
+        lessonId = lesson.id;
+        break;
+      }
+    }
+    final added = <Sentence>[];
+    for (final (:sentence, :emphasis) in examples) {
+      final canonical =
+          findDuplicateSentence(sentence) ??
+          _upsertSentence(
+            Sentence(
+              targetText: sentence.targetText,
+              translationText: sentence.translationText,
+              audioUrl: sentence.audioUrl,
+              ttsText: sentence.ttsText,
+              notes: LessonAiPrompt.withNote(
+                sentence.notes,
+                LessonAiPrompt.aiSentenceNote,
+              ),
+              lessonId: lessonId,
+            ),
+          );
+      if (vocab.sentenceIds.contains(canonical.id)) continue;
+      vocab.sentenceIds.add(canonical.id);
+      final target = Sentence.hasEmphasis(emphasis.target)
+          ? emphasis.target
+          : Sentence.suggestEmphasis(
+              canonical.targetText,
+              vocab.targetWord,
+              korean: true,
+            );
+      if (Sentence.hasEmphasis(target)) {
+        vocab.sentenceEmphasis[canonical.id] = SentenceEmphasis(
+          target: target,
+          translation: Sentence.hasEmphasis(emphasis.target)
+              ? emphasis.translation
+              : Sentence.suggestEmphasis(
+                  canonical.translationText,
+                  vocab.translation,
+                ),
+        );
+      }
+      added.add(canonical);
+    }
+    await saveState();
+    return added;
+  }
+
   Future<void> unlinkSentenceFromVocab(
     VocabItem vocab,
     String sentenceId,
