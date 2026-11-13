@@ -12,6 +12,7 @@ import '../services/korean_text_search.dart';
 import '../services/tts_text.dart';
 import '../widgets/audio_button.dart';
 import '../widgets/audio_edit_fields.dart';
+import '../widgets/emphasis_field.dart';
 import '../widgets/emphasis_text.dart';
 import '../widgets/markdown_notes_field.dart';
 import 'similar_meanings_dialog.dart';
@@ -679,6 +680,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
       target: sentence.targetText,
       translation: sentence.translationText,
       otherUsers: _otherUsers(this.context.read<AppProvider>(), sentence.id),
+      fromPool: true,
     );
     if (edited == null || !mounted) return;
 
@@ -694,11 +696,16 @@ class _VocabEditDialogState extends State<VocabEditDialog>
   /// Edits an example for this word: its text, which is the same sentence for
   /// every word that uses it, and the `**` emphasis, which is this word's own.
   /// [otherUsers] other words share the sentence and are warned about.
+  ///
+  /// A pool sentence ([fromPool]) opens with its text locked, so toggling
+  /// emphasis cannot change the sentence by accident; *Edit text* unlocks it.
   Future<({String target, String translation})?> _editEmphasis({
     required String target,
     required String translation,
     int otherUsers = 0,
+    bool fromPool = false,
   }) async {
+    var textEditable = !fromPool;
     final targetCtrl = TextEditingController(
       text: Sentence.suggestEmphasis(
         target,
@@ -723,7 +730,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (otherUsers > 0) ...[
+                    if (otherUsers > 0 && textEditable) ...[
                       Text(
                         'This sentence is also used by $otherUsers other '
                         '${otherUsers == 1 ? 'word' : 'words'}. Changing '
@@ -735,14 +742,37 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                       ),
                       const SizedBox(height: 12),
                     ],
-                    TextField(
+                    if (!textEditable)
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '${EmphasisField.howTo('a part')}. The text '
+                              'is locked.',
+                              style: theme.textTheme.bodySmall,
+                            ),
+                          ),
+                          TextButton.icon(
+                            icon: const Icon(Icons.edit_outlined),
+                            label: const Text('Edit text'),
+                            onPressed: () =>
+                                setDialogState(() => textEditable = true),
+                          ),
+                        ],
+                      ),
+                    const SizedBox(height: 8),
+                    EmphasisField(
                       controller: targetCtrl,
+                      textEditable: textEditable,
                       minLines: 1,
                       maxLines: 5,
                       onChanged: (_) => setDialogState(() {}),
                       decoration: InputDecoration(
                         labelText: 'Sentence',
-                        helperText: 'Wrap each part in **double asterisks**; use several for several words.',
+                        helperText: textEditable
+                            ? '${EmphasisField.howTo('a part')}, or wrap '
+                                  'it in **double asterisks**.'
+                            : null,
                         helperMaxLines: 2,
                         errorText: targetOk ? null : _needsEmphasis,
                         border: const OutlineInputBorder(),
@@ -757,8 +787,9 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                       ),
                     ),
                     const SizedBox(height: 12),
-                    TextField(
+                    EmphasisField(
                       controller: translationCtrl,
+                      textEditable: textEditable,
                       minLines: 1,
                       maxLines: 5,
                       onChanged: (_) => setDialogState(() {}),
@@ -800,6 +831,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
       target: current.target,
       translation: current.translation,
       otherUsers: _otherUsers(context.read<AppProvider>(), sentence.id),
+      fromPool: true,
     );
     if (edited == null || !mounted) return;
     setState(() => _pendingEmphasis[sentence.id] = edited);
@@ -1026,13 +1058,15 @@ class _VocabEditDialogState extends State<VocabEditDialog>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  TextField(
+                  EmphasisField(
                     controller: targetCtrl,
                     onChanged: (_) => setDialogState(() {}),
                     decoration: InputDecoration(
                       labelText: 'Sentence',
                       hintText: 'e.g. 저는 **배**를 먹어요',
-                      helperText: 'Wrap the word being studied in **double asterisks**.',
+                      helperText:
+                          '${EmphasisField.howTo('the word being studied')}, '
+                          'or wrap it in **double asterisks**.',
                       helperMaxLines: 2,
                       errorText:
                           showEmphasisError &&
@@ -1042,7 +1076,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                     ),
                   ),
                   const SizedBox(height: 12),
-                  TextField(
+                  EmphasisField(
                     controller: transCtrl,
                     decoration: const InputDecoration(
                       labelText: 'English translation',

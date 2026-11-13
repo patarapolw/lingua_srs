@@ -243,6 +243,164 @@ class Sentence {
     return kept.isEmpty ? null : markEmphasis(newPlain, kept);
   }
 
+  /// Turns `**` emphasis on or off for the selection [start]–[end] of
+  /// [marked], counted in the characters of [marked] itself (as a text field
+  /// selects them), without changing the text.
+  ///
+  /// - A selection wholly inside emphasis loses its emphasis; the rest of the
+  ///   segment stays emphasized.
+  /// - Any other selection is emphasized, joining any segment it overlaps or
+  ///   touches. Spaces at either end of it are left out.
+  /// - With nothing selected, the segment at the cursor loses its emphasis,
+  ///   or else the word at the cursor (up to spaces) is emphasized.
+  ///
+  /// Returns the new text and the selection on it, which covers the same
+  /// characters as before. A selection of nothing but spaces, or one that
+  /// includes a `*`, is returned unchanged.
+  static ({String text, int start, int end}) toggleEmphasis(
+    String marked,
+    int start,
+    int end,
+  ) {
+    final unchanged = (text: marked, start: start, end: end);
+    if (start > end) {
+      final first = end;
+      end = start;
+      start = first;
+    }
+    final plain = stripEmphasis(marked);
+    final ranges = emphasisRanges(marked);
+    var from = _plainOffset(marked, start);
+    var to = _plainOffset(marked, end);
+
+    bool inside(({int start, int end}) range) =>
+        range.start <= from && to <= range.end;
+
+    List<({int start, int end})> result;
+    if (from == to) {
+      final at = ranges.where(inside).firstOrNull;
+      if (at != null) {
+        result = [...ranges]..remove(at);
+      } else {
+        final space = RegExp(r'\s');
+        while (from > 0 && !space.hasMatch(plain[from - 1])) {
+          from--;
+        }
+        while (to < plain.length && !space.hasMatch(plain[to])) {
+          to++;
+        }
+        if (from == to || plain.substring(from, to).contains('*')) {
+          return unchanged;
+        }
+        result = _addRange(ranges, from, to);
+      }
+    } else if (_covered(ranges, from, to)) {
+      result = [
+        for (final range in ranges)
+          if (range.end <= from || range.start >= to)
+            range
+          else ...[
+            if (range.start < from) (start: range.start, end: from),
+            if (range.end > to) (start: to, end: range.end),
+          ],
+      ];
+    } else {
+      while (from < to && plain[from].trim().isEmpty) {
+        from++;
+      }
+      while (to > from && plain[to - 1].trim().isEmpty) {
+        to--;
+      }
+      if (from == to || plain.substring(from, to).contains('*')) {
+        return unchanged;
+      }
+      result = _addRange(ranges, from, to);
+    }
+
+    final text = markEmphasis(plain, result);
+    final newStart = _markedOffset(from, result, isEnd: false);
+    return (
+      text: text,
+      start: newStart,
+      end: from == to ? newStart : _markedOffset(to, result, isEnd: true),
+    );
+  }
+
+  /// Whether all of the selection [start]–[end] of [marked] (counted as in
+  /// [toggleEmphasis]) is already emphasized, so toggling it takes the
+  /// emphasis away. An empty selection never is.
+  static bool isEmphasized(String marked, int start, int end) {
+    final from = _plainOffset(marked, start < end ? start : end);
+    final to = _plainOffset(marked, start < end ? end : start);
+    return from < to && _covered(emphasisRanges(marked), from, to);
+  }
+
+  /// Where [offset] of [marked] falls in its text without `**`. An offset on
+  /// a marker counts as the edge of the text it marks.
+  static int _plainOffset(String marked, int offset) {
+    var removed = 0;
+    for (final match in _emphasisPattern.allMatches(marked)) {
+      if (offset <= match.start) break;
+      if (offset <= match.start + 2) return match.start - removed;
+      if (offset <= match.end - 2) return offset - removed - 2;
+      if (offset < match.end) return match.end - removed - 4;
+      removed += 4;
+    }
+    return offset - removed;
+  }
+
+  /// Where [plainOffset] falls once [ranges] are wrapped in `**`: inside a
+  /// segment it starts or ends, as a selection of that segment would be.
+  static int _markedOffset(
+    int plainOffset,
+    List<({int start, int end})> ranges, {
+    required bool isEnd,
+  }) {
+    var offset = plainOffset;
+    for (final range in ranges) {
+      if (range.end < plainOffset || (range.end == plainOffset && !isEnd)) {
+        offset += 4;
+      } else if (range.start < plainOffset ||
+          (range.start == plainOffset && !isEnd)) {
+        offset += 2;
+      }
+    }
+    return offset;
+  }
+
+  /// Whether every character from [from] to [to] is inside one of [ranges].
+  static bool _covered(List<({int start, int end})> ranges, int from, int to) {
+    var cursor = from;
+    for (final range in ranges) {
+      if (range.end <= cursor) continue;
+      if (range.start > cursor) return false;
+      cursor = range.end;
+      if (cursor >= to) return true;
+    }
+    return cursor >= to;
+  }
+
+  /// [ranges] with [from]–[to] added, merging the ones that overlap or touch.
+  static List<({int start, int end})> _addRange(
+    List<({int start, int end})> ranges,
+    int from,
+    int to,
+  ) {
+    final result = <({int start, int end})>[];
+    for (final range in ranges) {
+      if (range.end < from || range.start > to) {
+        result.add(range);
+      } else {
+        from = math.min(from, range.start);
+        to = math.max(to, range.end);
+      }
+    }
+    result
+      ..add((start: from, end: to))
+      ..sort((a, b) => a.start.compareTo(b.start));
+    return result;
+  }
+
   /// Generates cloze deletion sentence for target word.
   /// 1. If target word is wrapped in markdown bold (**word**), replaces **word** with (___).
   /// 2. If targetWord matches directly, replaces with (___).

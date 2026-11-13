@@ -19,6 +19,7 @@ import 'package:lingua_srs/views/study_view.dart';
 import 'package:lingua_srs/views/vocab_edit_dialog.dart';
 import 'package:lingua_srs/views/vocab_merge_dialogs.dart';
 import 'package:lingua_srs/views/yaml_import_view.dart';
+import 'package:lingua_srs/widgets/emphasis_field.dart';
 import 'package:lingua_srs/widgets/emphasis_text.dart';
 import 'package:lingua_srs/widgets/markdown_content.dart';
 import 'package:lingua_srs/widgets/markdown_notes_field.dart';
@@ -2002,6 +2003,38 @@ vocabulary:
       matching: find.widgetWithText(TextField, label),
     );
 
+    /// Selects [start]–[end] of the [label] field of the open dialog and taps
+    /// [button] (Emphasize or Remove emphasis) under it.
+    Future<void> toggleEmphasis(
+      WidgetTester tester,
+      String label,
+      int start,
+      int end, {
+      String button = 'Emphasize',
+    }) async {
+      final field = inSentenceDialog(label);
+      await tester.tap(field);
+      await tester.pump();
+      tester.widget<TextField>(field).controller!.selection = TextSelection(
+        baseOffset: start,
+        extentOffset: end,
+      );
+      await tester.pump();
+      await tester.tap(
+        find.descendant(
+          of: find.ancestor(of: field, matching: find.byType(EmphasisField)),
+          matching: find.text(button),
+        ),
+      );
+      await tester.pump();
+    }
+
+    /// Unlocks the text of a pool sentence in the open example editor.
+    Future<void> unlockText(WidgetTester tester) async {
+      await tester.tap(find.text('Edit text'));
+      await tester.pump();
+    }
+
     Future<void> save(WidgetTester tester) async {
       await tester.tap(find.widgetWithText(FilledButton, 'Save'));
       await tester.pumpAndSettle();
@@ -2425,11 +2458,17 @@ vocabulary:
       await tester.tap(exampleTile());
       await tester.pumpAndSettle();
       expect(find.text('Edit Example'), findsOneWidget);
-      await tester.enterText(
-        inSentenceDialog('Sentence'),
+      // A pool sentence opens with its text locked; only emphasis changes.
+      expect(
+        tester.widget<TextField>(inSentenceDialog('Sentence')).readOnly,
+        isTrue,
+      );
+      // 사과 is at 7–9 of the suggested `**배**와 사과를 먹어요`.
+      await toggleEmphasis(tester, 'Sentence', 7, 9);
+      expect(
+        tester.widget<TextField>(inSentenceDialog('Sentence')).controller!.text,
         '**배**와 **사과**를 먹어요',
       );
-      await tester.pump();
       expect(find.textContaining('Cloze: (___)와 (___)를 먹어요'), findsOneWidget);
       await tester.tap(find.widgetWithText(FilledButton, 'Apply'));
       await tester.pumpAndSettle();
@@ -2468,6 +2507,7 @@ vocabulary:
 
       await tester.tap(exampleTile());
       await tester.pumpAndSettle();
+      await unlockText(tester);
       await tester.enterText(inSentenceDialog('Sentence'), '**배**와 사과를 먹었어요');
       await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
       await tester.pumpAndSettle();
@@ -2495,8 +2535,12 @@ vocabulary:
 
       await tester.tap(exampleTile());
       await tester.pumpAndSettle();
-      await tester.enterText(inSentenceDialog('Sentence'), '배와 사과를 먹어요');
-      await tester.pump();
+      // 배 is at 2–3 of the suggested `**배**와 사과를 먹어요`.
+      await toggleEmphasis(tester, 'Sentence', 2, 3, button: 'Remove emphasis');
+      expect(
+        tester.widget<TextField>(inSentenceDialog('Sentence')).controller!.text,
+        '배와 사과를 먹어요',
+      );
 
       expect(
         find.textContaining('Wrap the word being studied in ** **'),
@@ -2610,6 +2654,7 @@ vocabulary:
 
       await tester.tap(exampleTile());
       await tester.pumpAndSettle();
+      await unlockText(tester);
       await tester.enterText(inSentenceDialog('Sentence'), '**배**와 사과를 먹었어요');
       await tester.tap(find.widgetWithText(FilledButton, 'Apply'));
       await tester.pumpAndSettle();
@@ -2645,6 +2690,10 @@ vocabulary:
         await tester.tap(exampleTile());
         await tester.pumpAndSettle();
 
+        // While the text is locked only the emphasis can change, which is
+        // this word's own, so the warning waits for Edit text.
+        expect(find.textContaining('also used by 1 other word'), findsNothing);
+        await unlockText(tester);
         expect(
           find.textContaining('also used by 1 other word'),
           findsOneWidget,
