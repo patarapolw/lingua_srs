@@ -111,6 +111,38 @@ void main() {
       expect(find.text('one'), findsNothing);
     });
 
+    testWidgets('in selectable text, tapping the summary text opens it', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: MarkdownContent(
+                content:
+                    '<details>\n<summary>New sentences</summary>\n\n'
+                    '- **one**\n\n</details>',
+                selectable: true,
+              ),
+            ),
+          ),
+        ),
+      );
+      final inside = find.byWidgetPredicate(
+        (widget) => widget is MarkdownContent && widget.content == '- **one**',
+      );
+      expect(inside, findsNothing);
+
+      // The middle of the summary's text, away from the arrow.
+      await tester.tap(find.text('New sentences'));
+      await tester.pump();
+      expect(inside, findsOneWidget);
+
+      await tester.tap(find.text('New sentences'));
+      await tester.pump();
+      expect(inside, findsNothing);
+    });
+
     testWidgets('an open block starts shown', (tester) async {
       await pump(
         tester,
