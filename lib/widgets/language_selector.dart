@@ -12,8 +12,14 @@ class LanguageSelector extends StatelessWidget {
   const LanguageSelector({super.key});
 
   /// The name shown for [language], a `Lesson.languageKey`:
-  /// `Chinese (Taiwan)` for `zh-tw`.
-  static String nameOf(String language) => LocaleNames.of(language);
+  /// `Mandarin Chinese (Taiwan)` for `zh-tw`.
+  static String nameOf(String language) =>
+      _names[language.toLowerCase()] ?? LocaleNames.of(language);
+
+  static const _names = {
+    'zh-cn': 'Mandarin Chinese (Mainland)',
+    'zh-tw': 'Mandarin Chinese (Taiwan)',
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +49,7 @@ class LanguageSelector extends StatelessWidget {
                       ? theme.colorScheme.primary
                       : Colors.transparent,
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
                 Flexible(child: Text(nameOf(language))),
               ],
             ),
@@ -54,8 +60,6 @@ class LanguageSelector extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.language, size: 20),
-            const SizedBox(width: 6),
             Text(
               compact ? active.toUpperCase() : nameOf(active),
               style: theme.textTheme.labelLarge,

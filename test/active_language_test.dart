@@ -483,6 +483,11 @@ void main() {
   });
 
   group('LanguageSelector', () {
+    test('names Mandarin variants', () {
+      expect(LanguageSelector.nameOf('zh-cn'), 'Mandarin Chinese (Mainland)');
+      expect(LanguageSelector.nameOf('zh-tw'), 'Mandarin Chinese (Taiwan)');
+    });
+
     Future<void> pump(WidgetTester tester, AppProvider provider) async {
       tester.view.physicalSize = const Size(1200, 900);
       tester.view.devicePixelRatio = 1.0;
@@ -520,7 +525,7 @@ void main() {
       await import(tester, provider, _taiwan);
       await pump(tester, provider);
 
-      expect(find.text('Chinese (Taiwan)'), findsOneWidget);
+      expect(find.text('Mandarin Chinese (Taiwan)'), findsOneWidget);
       expect(find.text('學生'), findsOneWidget);
       expect(find.text('학생'), findsNothing);
 
