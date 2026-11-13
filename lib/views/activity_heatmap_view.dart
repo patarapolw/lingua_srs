@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../widgets/language_selector.dart';
 import '../models/lesson.dart';
 import '../models/srs_card.dart';
 import '../models/vocab_item.dart';
@@ -189,9 +190,14 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
             ? null
             : BackButton(onPressed: widget.onBack),
         title: const Text('Study activity'),
+        actions: const [LanguageSelector()],
       ),
       body: Consumer<AppProvider>(
         builder: (context, provider, _) {
+          // Everything here is of the language shown: what is counted from
+          // the cards, and the review counts, which the provider keeps by
+          // language.
+          final lessons = provider.activeLessons;
           final counts = provider.dailyReviewCounts;
           final yearStart = DateTime(today.year, today.month, today.day - 364);
           final earliest = counts.entries
@@ -224,8 +230,8 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
               ),
           ];
 
-          final leeches = _findLeeches(provider.lessons);
-          final stageCounts = _studyStageCounts(provider.lessons);
+          final leeches = _findLeeches(lessons);
+          final stageCounts = _studyStageCounts(lessons);
           final maxStageCount = stageCounts.values.fold(
             0,
             (maximum, count) => count > maximum ? count : maximum,
@@ -249,15 +255,11 @@ class _ActivityHeatmapViewState extends State<ActivityHeatmapView> {
           );
           final ratingCounts = provider.dailyRatingCounts;
           final newCardCounts = provider.dailyNewCardCounts;
-          final forecast = dueForecast(provider.lessons, today);
-          final times = dueTimes(provider.lessons);
+          final forecast = dueForecast(lessons, today);
+          final times = dueTimes(lessons);
           final hourly = dueForecastHourly(times, today);
-          final newPerDay = newCardsPerDay(
-            newCardCounts,
-            provider.lessons,
-            today,
-          );
-          final newLeft = newCardsLeft(provider.lessons);
+          final newPerDay = newCardsPerDay(newCardCounts, lessons, today);
+          final newLeft = newCardsLeft(lessons);
           final maxDue = forecast.fold(
             0,
             (maximum, count) => count > maximum ? count : maximum,

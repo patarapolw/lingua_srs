@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../widgets/language_selector.dart';
 import '../models/sentence.dart';
 import '../providers/app_provider.dart';
 import '../services/tts_text.dart';
@@ -205,7 +206,7 @@ class _SentencePoolViewState extends State<SentencePoolView> {
     final provider = context.watch<AppProvider>();
     final theme = Theme.of(context);
 
-    final filtered = provider.sentences.where((s) {
+    final filtered = provider.activeSentences.where((s) {
       if (_filter.isEmpty) return true;
       final query = _filter.toLowerCase();
       return s.targetText.toLowerCase().contains(query) ||
@@ -215,7 +216,7 @@ class _SentencePoolViewState extends State<SentencePoolView> {
 
     // On a narrow screen the search box takes the whole width, so its hint is
     // never cut, and the count becomes a caption line under it.
-    final count = provider.sentences.length;
+    final count = provider.activeSentences.length;
     final countLabel = '$count ${count == 1 ? 'sentence' : 'sentences'}';
     final narrow = MediaQuery.sizeOf(context).width < 700;
     final searchField = TextField(
@@ -250,6 +251,7 @@ class _SentencePoolViewState extends State<SentencePoolView> {
       appBar: AppBar(
         title: const Text('Sentence Pool'),
         actions: [
+          const LanguageSelector(),
           if (MediaQuery.sizeOf(context).width < 700)
             IconButton(
               icon: const Icon(Icons.add_comment_outlined),

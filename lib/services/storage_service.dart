@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'language_activity.dart';
 import '../models/ai_discussion_message.dart';
 import '../models/lesson.dart';
 import '../models/saved_time.dart';
@@ -38,6 +39,7 @@ class StorageService {
   static const String _keyTypedQuestions = 'lingua_srs_typed_questions';
   static const String _keyAutoplay = 'lingua_srs_autoplay';
   static const String _keyShowAi = 'lingua_srs_show_ai';
+  static const String _keyActiveLanguage = 'lingua_srs_active_language';
   static const String _keyPronunciation = 'lingua_srs_pronunciation';
   static const String _keyLessonHierarchyOrder =
       'lingua_srs_lesson_hierarchy_order';
@@ -53,6 +55,9 @@ class StorageService {
   static const String _keyDailyRatingCounts = 'lingua_srs_daily_rating_counts';
   static const String _keyDailyNewCardCounts =
       'lingua_srs_daily_new_card_counts';
+  static const String _keyLanguageActivity = 'lingua_srs_language_activity';
+  static const String _keyActivityRestLanguage =
+      'lingua_srs_activity_rest_language';
 
   /// Defaults for the rolling 24-hour limits. 0 means unlimited.
   static const int defaultMaxReviews24h = 100;
@@ -377,6 +382,18 @@ class StorageService {
     await prefs.setBool(_keyShowAi, value);
   }
 
+  /// The language whose lessons are shown on this device, as a
+  /// `Lesson.languageKey`, or null when none was picked.
+  static Future<String?> loadActiveLanguage() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyActiveLanguage);
+  }
+
+  static Future<void> saveActiveLanguage(String language) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyActiveLanguage, language);
+  }
+
   static Future<Set<String>> loadPronunciationOptions() async {
     final prefs = await SharedPreferences.getInstance();
     return (prefs.getStringList(_keyPronunciation) ?? const <String>[]).toSet();
@@ -490,6 +507,35 @@ class StorageService {
 
   static Future<void> saveDailyNewCardCounts(Map<DateTime, int> counts) =>
       _saveDayCounts(_keyDailyNewCardCounts, counts);
+
+  /// This device's reviews by language, kept next to the totals above.
+  static Future<LanguageActivity> loadLanguageActivity() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_keyLanguageActivity);
+    if (raw == null || raw.isEmpty) return LanguageActivity();
+    try {
+      return LanguageActivity.fromJson(jsonDecode(raw));
+    } catch (_) {
+      return LanguageActivity();
+    }
+  }
+
+  static Future<void> saveLanguageActivity(LanguageActivity activity) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyLanguageActivity, jsonEncode(activity.toJson()));
+  }
+
+  /// The language (a `Lesson.languageKey`) that reviews counted before
+  /// languages were recorded belong to, or null when it was not settled yet.
+  static Future<String?> loadActivityRestLanguage() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyActivityRestLanguage);
+  }
+
+  static Future<void> saveActivityRestLanguage(String language) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyActivityRestLanguage, language);
+  }
 
   /// A count per day, saved as `{"YYYY-MM-DD": count}`.
   static Future<Map<DateTime, int>> _loadDayCounts(String key) async {

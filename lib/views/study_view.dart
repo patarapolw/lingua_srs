@@ -787,6 +787,15 @@ class _StudyViewState extends State<StudyView> {
     super.dispose();
   }
 
+  /// The language of the lesson [card] is studied from, which its reviews
+  /// are counted under.
+  String? _languageOf(SrsCard card) {
+    for (final item in _queue) {
+      if (item.card.id == card.id) return item.lesson.languageKey;
+    }
+    return null;
+  }
+
   void _loadQueue() {
     final provider = context.read<AppProvider>();
     final cramMode = _cramMode;
@@ -1003,7 +1012,12 @@ class _StudyViewState extends State<StudyView> {
         provider.saveState();
       } else if (isFirstSessionRating) {
         final countedAt = record.countedAt = DateTime.now();
-        provider.recordCardReview(card, SrsRating.again, at: countedAt);
+        provider.recordCardReview(
+          card,
+          SrsRating.again,
+          at: countedAt,
+          language: _languageOf(card),
+        );
       }
 
       // Interleaved re-queuing:
@@ -1042,7 +1056,12 @@ class _StudyViewState extends State<StudyView> {
         // Practice-only cram never touches the card.
       } else if (isFirstSessionRating) {
         final countedAt = record.countedAt = DateTime.now();
-        provider.recordCardReview(card, rating, at: countedAt);
+        provider.recordCardReview(
+          card,
+          rating,
+          at: countedAt,
+          language: _languageOf(card),
+        );
       }
     }
 
@@ -1101,7 +1120,12 @@ class _StudyViewState extends State<StudyView> {
     // Still one review, now under the new rating.
     final countedAt = record.countedAt;
     if (countedAt != null) {
-      provider.recountCardReview(countedAt, previousRating, rating);
+      provider.recountCardReview(
+        countedAt,
+        previousRating,
+        rating,
+        language: _languageOf(record.card),
+      );
     }
     provider.saveState();
     _navigateForward();
@@ -1188,6 +1212,7 @@ class _StudyViewState extends State<StudyView> {
         countedAt,
         record.ratingGiven,
         startedNewCard: record.oldStatus == SrsStatus.isNew,
+        language: _languageOf(record.card),
       );
     }
 

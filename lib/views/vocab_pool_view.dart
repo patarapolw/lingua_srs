@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../widgets/language_selector.dart';
 import '../models/vocab_merge_record.dart';
 import '../providers/app_provider.dart';
 import '../services/vocab_pool_search.dart';
@@ -133,7 +134,10 @@ class _VocabPoolViewState extends State<VocabPoolView> {
     ];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Vocab Pool')),
+      appBar: AppBar(
+        title: const Text('Vocab Pool'),
+        actions: const [LanguageSelector()],
+      ),
       body: Column(
         children: [
           Padding(

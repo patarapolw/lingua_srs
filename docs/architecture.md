@@ -23,6 +23,7 @@ lingua_srs/
 │   ├── services/
 │   │   ├── srs_service.dart           # SM-2 algorithm implementation
 │   │   ├── new_card_quota.dart        # Daily new-card limit: refills 16 h after a batch, averages to the limit per day
+│   │   ├── language_activity.dart     # Reviews by language: each language's share of a day's counts and of the 24-hour limit
 │   │   ├── study_stats.dart           # Streak, right/wrong split, due forecast by hour and day, and new cards per day for Study activity
 │   │   ├── card_preview.dart          # Picks the new cards a preview shows; study_view shuffles and shows them
 │   │   ├── study_queue_order.dart     # Study queue order: part-of-speech interleaving, new cards mixed into reviews
@@ -97,6 +98,7 @@ lingua_srs/
 │       ├── emphasis_field.dart        # Sentence field: Emphasize button and Ctrl+B toggle `**` on the selection; can lock the text
 │       ├── folder_picker_dialog.dart  # Pick an existing or new folder to move a lesson/folder into
 │       ├── lesson_hierarchy_view.dart # Lesson folder tree with reordering
+│       ├── language_selector.dart     # App bar dropdown for the language shown
 │       ├── lesson_clash_dialog.dart   # Asks which of two same-named lessons in a folder is primary
 │       ├── lesson_content_view.dart   # Lesson reader: the lesson as one page in a WebView, headings and scroll memory
 │       ├── lesson_html.dart           # Lesson Markdown to the HTML page, CSS and script the reader's WebView shows
