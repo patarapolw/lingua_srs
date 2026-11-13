@@ -1884,13 +1884,17 @@ void main() {
   group('Example sentences in a word chat', () {
     const answer =
         'More examples:\n\n'
+        '- **사과**가 맛있어요. The **apple** is tasty.\n'
+        '- **사과** 두 개 주세요. Two **apples**, please.\n\n'
+        '<details>\n<summary>Sentences as YAML</summary>\n\n'
         '```yaml\n'
         'examples:\n'
         '  - ko: "**사과**가 맛있어요."\n'
         '    en: "The **apple** is tasty."\n'
         '  - ko: "**사과** 두 개 주세요."\n'
         '    en: "Two **apples**, please."\n'
-        '```\n';
+        '```\n\n'
+        '</details>\n';
 
     /// Opens the chat about 사과 with [answer] saved in it.
     Future<(AppProvider, VocabItem)> openWordChat(

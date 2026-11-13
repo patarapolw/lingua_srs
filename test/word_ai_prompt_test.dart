@@ -167,6 +167,31 @@ void main() {
       expect(prompt, contains('    en: "... **...** ..."'));
     });
 
+    test('the YAML is a collapsed copy of sentences in the answer', () {
+      final prompt = buildPrompt();
+
+      expect(prompt, contains('Never give them only as YAML'));
+      expect(prompt, contains(WordAiPrompt.examplesSummaryTag));
+      expect(prompt, contains('```\n\n</details>'));
+      // Not only when asked for examples: any sentence using the word.
+      expect(prompt, contains('you give one while explaining'));
+    });
+
+    test('reads the sentences out of a collapsed block', () {
+      final examples = WordAiPrompt.examplesYaml(
+        '1. **사과**가 맛있어요. — The **apple** is tasty.\n\n'
+        '${WordAiPrompt.examplesSummaryTag}\n\n'
+        '```yaml\n'
+        'examples:\n'
+        '  - ko: "**사과**가 맛있어요."\n'
+        '    en: "The **apple** is tasty."\n'
+        '```\n\n'
+        '</details>\n',
+      );
+
+      expect(examples.single.sentence.targetText, '사과가 맛있어요.');
+    });
+
     test('uses keys the lesson format reads', () {
       expect(
         WordAiPrompt.exampleKeys(targetLanguage: 'zh-TW', nativeLanguage: 'en'),
