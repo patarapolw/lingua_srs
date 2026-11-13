@@ -294,6 +294,14 @@ class MarkdownContent extends StatelessWidget {
     return MarkdownBody(
       data: normalized,
       selectable: selectable,
+      // The renderer's own default is the toolbar of the deprecated
+      // flutter/material.dart, which looks up localizations the app's
+      // material_ui MaterialApp does not provide, and fails when text is
+      // selected. This one is material_ui's.
+      contextMenuBuilder: (context, editableTextState) =>
+          AdaptiveTextSelectionToolbar.editableText(
+            editableTextState: editableTextState,
+          ),
       styleSheet: mdStyle,
       inlineSyntaxes: inlineHtmlSyntaxes(),
       builders: {

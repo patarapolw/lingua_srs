@@ -284,6 +284,30 @@ void main() {
     expect(calls, hasLength(1));
   });
 
+  testWidgets('shows the toolbar when selectable text is selected', (
+    tester,
+  ) async {
+    // Regression test for #204: the renderer's default toolbar needed the
+    // localizations of flutter/material.dart, which the app does not
+    // provide, and showed a red error screen instead.
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: MarkdownContent(
+            content: 'Select these words',
+            selectable: true,
+          ),
+        ),
+      ),
+    );
+
+    await tester.longPress(find.text('Select these words'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Copy'), findsOneWidget);
+  });
+
   testWidgets('spoiler text reveals on tap for touch interaction', (
     tester,
   ) async {
