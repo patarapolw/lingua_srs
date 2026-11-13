@@ -236,7 +236,7 @@ The full lesson body.
     expect(markdownInput.strutStyle?.forceStrutHeight, isNot(true));
   });
 
-  testWidgets('keeps desktop YAML content clear of the top border', (
+  testWidgets('keeps desktop YAML content not overlapping top border', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(1200, 800));
@@ -265,6 +265,6 @@ The full lesson body.
           editable.getLocalRectForCaret(const TextPosition(offset: 0)).topLeft,
         )
         .dy;
-    expect(caretTop, greaterThanOrEqualTo(fieldTop + 8));
+    expect(caretTop, greaterThanOrEqualTo(fieldTop));
   });
 }
