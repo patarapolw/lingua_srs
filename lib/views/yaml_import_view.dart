@@ -915,14 +915,16 @@ class _YamlImportViewState extends State<YamlImportView>
                             fontFamily: 'monospace',
                             fontSize: 14,
                             height: 1.45,
+                            leadingDistribution: TextLeadingDistribution.even,
                           ),
-                          // Fixed line boxes keep the first line from riding up
-                          // against the top border.
+                          // No forced strut height: fallback glyphs (CJK) are
+                          // taller than the strut and would be pushed up over
+                          // the top border on desktop.
                           strutStyle: const StrutStyle(
                             fontFamily: 'monospace',
                             fontSize: 14,
                             height: 1.45,
-                            forceStrutHeight: true,
+                            leadingDistribution: TextLeadingDistribution.even,
                           ),
                           decoration: InputDecoration(
                             border: const OutlineInputBorder(),
