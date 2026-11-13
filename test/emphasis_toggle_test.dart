@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lingua_srs/models/sentence.dart';
@@ -60,6 +62,13 @@ void main() {
       expect(_toggle('저는 배를 먹어요', 4, 3), '저는 **[배]**를 먹어요');
     });
 
+    test('isEmphasized tells which label the button shows', () {
+      expect(Sentence.isEmphasized('저는 **배**를 먹어요', 5, 6), isTrue);
+      expect(Sentence.isEmphasized('저는 **배**를 먹어요', 3, 8), isTrue);
+      expect(Sentence.isEmphasized('저는 **배**를 먹어요', 5, 9), isFalse);
+      expect(Sentence.isEmphasized('저는 **배**를 먹어요', 5, 5), isFalse);
+    });
+
     test('toggling twice gives the sentence back', () {
       const plain = 'I eat a pear and an apple';
       final once = Sentence.toggleEmphasis(plain, 8, 12);
@@ -89,32 +98,66 @@ void main() {
       return controller;
     }
 
-    testWidgets('the B button emphasizes the selection', (tester) async {
-      final controller = await pump(tester, text: '저는 배를 먹어요');
+    /// Focuses the field and selects [start]–[end] of it.
+    Future<void> select(
+      WidgetTester tester,
+      TextEditingController controller,
+      int start,
+      int end,
+    ) async {
       await tester.tap(find.byType(TextField));
       await tester.pump();
+      controller.selection = TextSelection(
+        baseOffset: start,
+        extentOffset: end,
+      );
+      await tester.pump();
+    }
+
+    testWidgets('Emphasize shows only while text is selected', (tester) async {
+      final controller = await pump(tester, text: '저는 배를 먹어요');
+      expect(find.text('Emphasize'), findsNothing);
+
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
+      expect(find.text('Emphasize'), findsNothing, reason: 'only a cursor');
+
       controller.selection = const TextSelection(
         baseOffset: 3,
         extentOffset: 4,
       );
-      await tester.tap(find.byIcon(Icons.format_bold));
+      await tester.pump();
+      expect(find.text('Emphasize'), findsOneWidget);
+    });
+
+    testWidgets('Emphasize, then Remove emphasis, on the same selection', (
+      tester,
+    ) async {
+      final controller = await pump(tester, text: '저는 배를 먹어요');
+      await select(tester, controller, 3, 4);
+      await tester.tap(find.text('Emphasize'));
       await tester.pump();
       expect(controller.text, '저는 **배**를 먹어요');
 
-      // The same selection, now inside the markers, toggles it back off.
-      await tester.tap(find.byIcon(Icons.format_bold));
+      // The selection stays on 배, now inside the markers.
+      await tester.tap(find.text('Remove emphasis'));
       await tester.pump();
       expect(controller.text, '저는 배를 먹어요');
     });
 
+    testWidgets('a mouse click on Emphasize keeps the selection it acts on', (
+      tester,
+    ) async {
+      final controller = await pump(tester, text: 'I eat a pear');
+      await select(tester, controller, 8, 12);
+      await tester.tap(find.text('Emphasize'), kind: PointerDeviceKind.mouse);
+      await tester.pump();
+      expect(controller.text, 'I eat a **pear**');
+    });
+
     testWidgets('Ctrl+B toggles emphasis', (tester) async {
       final controller = await pump(tester, text: 'I eat a pear');
-      await tester.tap(find.byType(TextField));
-      await tester.pump();
-      controller.selection = const TextSelection(
-        baseOffset: 8,
-        extentOffset: 12,
-      );
+      await select(tester, controller, 8, 12);
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
       await tester.sendKeyEvent(LogicalKeyboardKey.keyB);
       await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
@@ -133,13 +176,26 @@ void main() {
         isTrue,
       );
 
-      controller.selection = const TextSelection(
-        baseOffset: 8,
-        extentOffset: 12,
-      );
-      await tester.tap(find.byIcon(Icons.format_bold));
+      await select(tester, controller, 8, 12);
+      await tester.tap(find.text('Emphasize'));
       await tester.pump();
       expect(controller.text, 'I eat a **pear**');
+    });
+
+    test('mentions the shortcut on a computer only', () {
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      expect(
+        EmphasisField.howTo('a part'),
+        'Select a part and choose Emphasize',
+      );
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      expect(
+        EmphasisField.howTo('a part'),
+        'Select a part and choose Emphasize (or press ⌘B)',
+      );
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      expect(EmphasisField.howTo('a part'), endsWith('(or press Ctrl+B)'));
     });
   });
 }

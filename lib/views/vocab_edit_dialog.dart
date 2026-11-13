@@ -747,9 +747,8 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                         children: [
                           Expanded(
                             child: Text(
-                              'Select a part and tap B (or press '
-                              '${EmphasisField.shortcutLabel}) to emphasize '
-                              'it or take its emphasis away.',
+                              '${EmphasisField.howTo('a part')}. The text '
+                              'is locked.',
                               style: theme.textTheme.bodySmall,
                             ),
                           ),
@@ -771,10 +770,8 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                       decoration: InputDecoration(
                         labelText: 'Sentence',
                         helperText: textEditable
-                            ? 'Select a part and tap B (or press '
-                                  '${EmphasisField.shortcutLabel}) to '
-                                  'emphasize it, or wrap it in '
-                                  '**double asterisks**.'
+                            ? '${EmphasisField.howTo('a part')}, or wrap '
+                                  'it in **double asterisks**.'
                             : null,
                         helperMaxLines: 2,
                         errorText: targetOk ? null : _needsEmphasis,
@@ -1068,9 +1065,8 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                       labelText: 'Sentence',
                       hintText: 'e.g. 저는 **배**를 먹어요',
                       helperText:
-                          'Select the word being studied and tap B (or press '
-                          '${EmphasisField.shortcutLabel}), or wrap it in '
-                          '**double asterisks**.',
+                          '${EmphasisField.howTo('the word being studied')}, '
+                          'or wrap it in **double asterisks**.',
                       helperMaxLines: 2,
                       errorText:
                           showEmphasisError &&

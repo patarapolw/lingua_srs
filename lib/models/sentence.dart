@@ -326,6 +326,15 @@ class Sentence {
     );
   }
 
+  /// Whether all of the selection [start]–[end] of [marked] (counted as in
+  /// [toggleEmphasis]) is already emphasized, so toggling it takes the
+  /// emphasis away. An empty selection never is.
+  static bool isEmphasized(String marked, int start, int end) {
+    final from = _plainOffset(marked, start < end ? start : end);
+    final to = _plainOffset(marked, start < end ? end : start);
+    return from < to && _covered(emphasisRanges(marked), from, to);
+  }
+
   /// Where [offset] of [marked] falls in its text without `**`. An offset on
   /// a marker counts as the edge of the text it marks.
   static int _plainOffset(String marked, int offset) {
