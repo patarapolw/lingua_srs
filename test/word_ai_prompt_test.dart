@@ -162,7 +162,7 @@ void main() {
     test('the prompt asks for them in an examples block', () {
       final prompt = buildPrompt();
 
-      expect(prompt, contains('sentences in ko that use "사과"'));
+      expect(prompt, contains('sentences that use "사과"'));
       expect(prompt, contains('examples:\n  - ko: "... **...** ..."'));
       expect(prompt, contains('    en: "... **...** ..."'));
     });
@@ -170,7 +170,7 @@ void main() {
     test('the YAML is a collapsed copy of sentences in the answer', () {
       final prompt = buildPrompt();
 
-      expect(prompt, contains('Never give them only as YAML'));
+      expect(prompt, contains('never only as YAML'));
       expect(prompt, contains(WordAiPrompt.examplesSummaryTag));
       expect(prompt, contains('```\n\n</details>'));
       // Sentences only when called for, and the YAML only repeats them.
