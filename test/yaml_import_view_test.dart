@@ -220,4 +220,51 @@ The full lesson body.
 
     expect(find.textContaining('existing lesson'), findsOneWidget);
   });
+
+  testWidgets('does not force the editor line height (CJK clipping)', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(const MaterialApp(home: YamlImportView()));
+    await tester.pumpAndSettle();
+
+    final markdownInput = tester
+        .widgetList<TextField>(find.byType(TextField))
+        .last;
+    expect(markdownInput.strutStyle?.forceStrutHeight, isNot(true));
+  });
+
+  testWidgets('keeps desktop YAML content clear of the top border', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: YamlImportView(initialYaml: 'target: zh-TW\nvocabulary:\n'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final border = find
+        .byWidgetPredicate(
+          (widget) =>
+              widget is InputDecorator &&
+              widget.decoration.border is OutlineInputBorder,
+        )
+        .last;
+    final fieldTop = tester.getTopLeft(border).dy;
+    final editable = tester
+        .state<EditableTextState>(find.byType(EditableText).last)
+        .renderEditable;
+    final caretTop = editable
+        .localToGlobal(
+          editable.getLocalRectForCaret(const TextPosition(offset: 0)).topLeft,
+        )
+        .dy;
+    expect(caretTop, greaterThanOrEqualTo(fieldTop + 8));
+  });
 }

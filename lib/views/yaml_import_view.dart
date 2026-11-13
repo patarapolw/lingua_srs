@@ -61,6 +61,7 @@ class _YamlImportViewState extends State<YamlImportView>
   );
   final TextEditingController _lessonNameController = TextEditingController();
   final TextEditingController _yamlController = TextEditingController();
+  final FocusNode _yamlFocusNode = FocusNode();
   String? _errorMessage;
   YamlParseResult? _previewResult;
   String? _defaultUnitTitle;
@@ -102,6 +103,7 @@ class _YamlImportViewState extends State<YamlImportView>
   void dispose() {
     _lessonNameController.dispose();
     _yamlController.dispose();
+    _yamlFocusNode.dispose();
     _parseTimer?.cancel();
     _tabController.dispose();
     _parseGeneration++;
@@ -822,6 +824,98 @@ class _YamlImportViewState extends State<YamlImportView>
             LayoutBuilder(
               builder: (context, constraints) {
                 final narrow = constraints.maxWidth < 700;
+                final yamlInputField = TextField(
+                  controller: _yamlController,
+                  focusNode: _yamlFocusNode,
+                  maxLines: null,
+                  expands: true,
+                  enabled: !_isParsing && _directoryFiles.isEmpty,
+                  textAlignVertical: TextAlignVertical.top,
+                  keyboardType: TextInputType.multiline,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  style: const TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 14,
+                    height: 1.45,
+                    leadingDistribution: TextLeadingDistribution.even,
+                  ),
+                  // No forced strut height: fallback glyphs (CJK) are
+                  // taller than the strut and would be pushed up over the
+                  // top border on desktop.
+                  strutStyle: const StrutStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 14,
+                    height: 1.45,
+                    leadingDistribution: TextLeadingDistribution.even,
+                  ),
+                  decoration: InputDecoration(
+                    border: narrow
+                        ? const OutlineInputBorder()
+                        : InputBorder.none,
+                    alignLabelWithHint: true,
+                    hintText: vocabularyOnly
+                        ? 'vocabulary:\n'
+                              '  nouns:  # Replace with a part of speech\n'
+                              '    - ko: "Korean word"\n'
+                              '      en: "English meaning"\n'
+                              '      examples:\n'
+                              '        - ko: "Sentence with **word**"\n'
+                              '          en: "Translated sentence with **meaning**"'
+                        : '---\n'
+                              'vocabulary:\n'
+                              '  nouns:  # Replace with a part of speech\n'
+                              '    - ko: "Korean word"\n'
+                              '      audio: "https://example.com/word-audio.mp3"\n'
+                              '      en: "English meaning"\n'
+                              '      notes: "Optional **Markdown** notes"\n'
+                              '      examples:\n'
+                              '        - ko: "Sentence with **word**"\n'
+                              '          en: "Translated sentence with **meaning**"\n'
+                              '        - ko: "Another **example** sentence"\n'
+                              '          audio: "https://example.com/sentence-audio.mp3"\n'
+                              '          en: "Another translation"\n'
+                              '---\n'
+                              '\n'
+                              '# Lesson 26\n'
+                              '\n'
+                              'Lesson contents go **here**.',
+                    hintStyle: TextStyle(
+                      color: theme.colorScheme.onSurfaceVariant.withValues(
+                        alpha: 0.65,
+                      ),
+                      fontFamily: 'monospace',
+                      fontSize: 14,
+                      height: 1.45,
+                    ),
+                    contentPadding: narrow
+                        ? const EdgeInsets.all(16)
+                        : EdgeInsets.zero,
+                  ),
+                  onChanged: (_) => _parseCurrentYaml(),
+                );
+                final yamlEditor = narrow
+                    ? yamlInputField
+                    : AnimatedBuilder(
+                        animation: Listenable.merge([
+                          _yamlFocusNode,
+                          _yamlController,
+                        ]),
+                        builder: (context, child) => InputDecorator(
+                          decoration: const InputDecoration(
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                          isEmpty: _yamlController.text.isEmpty,
+                          isFocused: _yamlFocusNode.hasFocus,
+                          expands: true,
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: child,
+                          ),
+                        ),
+                        child: yamlInputField,
+                      );
                 final editor = Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
@@ -901,70 +995,7 @@ class _YamlImportViewState extends State<YamlImportView>
                         ),
                       ],
                       const SizedBox(height: 8),
-                      Expanded(
-                        child: TextField(
-                          controller: _yamlController,
-                          maxLines: null,
-                          expands: true,
-                          enabled: !_isParsing && _directoryFiles.isEmpty,
-                          textAlignVertical: TextAlignVertical.top,
-                          keyboardType: TextInputType.multiline,
-                          autocorrect: false,
-                          enableSuggestions: false,
-                          style: const TextStyle(
-                            fontFamily: 'monospace',
-                            fontSize: 14,
-                            height: 1.45,
-                          ),
-                          // Fixed line boxes keep the first line from riding up
-                          // against the top border.
-                          strutStyle: const StrutStyle(
-                            fontFamily: 'monospace',
-                            fontSize: 14,
-                            height: 1.45,
-                            forceStrutHeight: true,
-                          ),
-                          decoration: InputDecoration(
-                            border: const OutlineInputBorder(),
-                            alignLabelWithHint: true,
-                            hintText: vocabularyOnly
-                                ? 'vocabulary:\n'
-                                      '  nouns:  # Replace with a part of speech\n'
-                                      '    - ko: "Korean word"\n'
-                                      '      en: "English meaning"\n'
-                                      '      examples:\n'
-                                      '        - ko: "Sentence with **word**"\n'
-                                      '          en: "Translated sentence with **meaning**"'
-                                : '---\n'
-                                      'vocabulary:\n'
-                                      '  nouns:  # Replace with a part of speech\n'
-                                      '    - ko: "Korean word"\n'
-                                      '      audio: "https://example.com/word-audio.mp3"\n'
-                                      '      en: "English meaning"\n'
-                                      '      notes: "Optional **Markdown** notes"\n'
-                                      '      examples:\n'
-                                      '        - ko: "Sentence with **word**"\n'
-                                      '          en: "Translated sentence with **meaning**"\n'
-                                      '        - ko: "Another **example** sentence"\n'
-                                      '          audio: "https://example.com/sentence-audio.mp3"\n'
-                                      '          en: "Another translation"\n'
-                                      '---\n'
-                                      '\n'
-                                      '# Lesson 26\n'
-                                      '\n'
-                                      'Lesson contents go **here**.',
-                            hintStyle: TextStyle(
-                              color: theme.colorScheme.onSurfaceVariant
-                                  .withValues(alpha: 0.65),
-                              fontFamily: 'monospace',
-                              fontSize: 14,
-                              height: 1.45,
-                            ),
-                            contentPadding: const EdgeInsets.all(16),
-                          ),
-                          onChanged: (_) => _parseCurrentYaml(),
-                        ),
-                      ),
+                      Expanded(child: yamlEditor),
                     ],
                   ),
                 );
