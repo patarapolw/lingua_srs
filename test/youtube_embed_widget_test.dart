@@ -169,6 +169,10 @@ class _TestAndroidController extends _TestController
   }
 
   @override
+  Future<WebViewNavigationHistory> getNavigationHistory() =>
+      throw UnsupportedError('Navigation history is not used by this test');
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
