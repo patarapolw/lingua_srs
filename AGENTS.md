@@ -36,6 +36,16 @@ Flutter app (Dart, `provider` state management). See [README.md](README.md) for 
 - If the person has a Flutter debug session running and the Dart MCP server is connected to it, hot reload after your change passes `flutter analyze` (hot restart after changing state or `main`). Don't start a second session for an app that is already running; if you start one, end it before you finish.
 - A Dart MCP server that is missing or fails to start is expected, not a failure to report. Don't write it into commit messages or PR descriptions (for example "The Dart MCP server failed to start, so hot restart was never done"), and don't list hot restart as unverified. Verify with `flutter analyze` and `flutter test`; checking the running app is left to the person.
 
+## Flutter in a cloud session (optional, not yet confirmed end to end)
+
+A cloud session can download the full Flutter SDK from the same host as the Dart SDK. This has only been checked up to the download; extracting, `flutter pub get`, `flutter analyze` and `flutter test` have not been run this way yet. Update this section once they have.
+
+- Find the current stable release in `https://storage.googleapis.com/flutter_infra_release/releases/releases_linux.json`: `current_release.stable` is a hash, and the release with that hash gives its `archive` path. Download `https://storage.googleapis.com/flutter_infra_release/releases/<archive>` (about 1.5 GB) into a folder outside the repository, extract it there, and use its `flutter/bin/flutter`. Don't commit it or its path.
+- It costs several minutes per session: the download took about a minute, and extracting it took longer. Nothing is kept between sessions.
+- `flutter test` will likely need more than the SDK. As in `ci.yml`, super_clipboard's build hook compiles Rust: it needs `pkg-config` and `libgtk-3-dev` and downloads a Rust toolchain. If that step fails or is blocked, run `flutter analyze` and leave the tests to CI.
+- Use it only when it will pay off, such as a change with new or changed tests. Then run `flutter analyze` and only the test files you changed (`flutter test test/<file>.dart`), not the whole suite, which CI runs anyway. For a small change, the rules below (push and let CI run it) are cheaper.
+- If the person says not to download Flutter, don't.
+
 ## Environments without Flutter/Dart (e.g. cloud agents)
 
 If `flutter` or `dart` isn't available, you can't run tests or `flutter analyze`. In that case:
