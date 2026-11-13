@@ -1,4 +1,7 @@
 import '../models/ai_discussion_message.dart';
+import '../models/lesson.dart';
+import 'lesson_ai_prompt.dart';
+import 'yaml_parser_service.dart';
 
 /// Builds the prompts for AI chats about a vocabulary word.
 ///
@@ -30,7 +33,78 @@ class WordAiPrompt {
       ],
       'Answer questions about this vocabulary and example sentence clearly. Explain nuances and usage when useful.',
       'Format your answer using Markdown.',
+      examplesYamlInstructions(
+        targetLanguage: targetLanguage,
+        nativeLanguage: nativeLanguage,
+        targetWord: targetWord,
+      ),
     ].join('\n');
+  }
+
+  /// How the AI writes example sentences for the word, so that an answer can
+  /// add them to the word ([examplesYaml]). The keys are ones the lesson
+  /// format reads as a sentence and its translation.
+  static String examplesYamlInstructions({
+    required String targetLanguage,
+    required String nativeLanguage,
+    required String targetWord,
+  }) {
+    final (target, native) = exampleKeys(
+      targetLanguage: targetLanguage,
+      nativeLanguage: nativeLanguage,
+    );
+    return [
+      'Whenever you give the learner new example sentences for "$targetWord" '
+          '(they ask for more examples, other ways to use it, or sentences to '
+          'practise with), besides any explanation put them in one ```yaml '
+          'code block in this format. Write each sentence the way the word '
+          'is written here, and do not repeat the example sentence above. In '
+          'every sentence, wrap the word (in the form it takes there) in '
+          '**bold**. In the translation, also wrap in **bold** the words that '
+          'translate it; if no words in the translation match it, leave the '
+          'translation without bold. `notes` is optional. Quote every value.',
+      '```yaml\n'
+          'examples:\n'
+          '  - $target: "... **...** ..."\n'
+          '    $native: "... **...** ..."\n'
+          '    notes: "..."\n'
+          '```',
+      'The learner can choose which of them to add to the word.',
+    ].join('\n');
+  }
+
+  /// The YAML keys of a sentence and its translation for these languages:
+  /// their codes when the lesson format knows them, else `target` and
+  /// `translation`.
+  static (String, String) exampleKeys({
+    required String targetLanguage,
+    required String nativeLanguage,
+  }) {
+    const generic = {'target', 'term', 'word'};
+    final target = Lesson.languageCodeOf(targetLanguage);
+    final native = Lesson.languageCodeOf(nativeLanguage);
+    return (
+      YamlParserService.knownLangKeys.contains(target) &&
+              !generic.contains(target)
+          ? target
+          : 'target',
+      YamlParserService.knownNativeKeys.contains(native)
+          ? native
+          : 'translation',
+    );
+  }
+
+  /// The example sentences in an AI [answer]: those of the first fenced code
+  /// block whose root is `examples:`. Empty if there is none, or if it cannot
+  /// be read.
+  static List<ExampleSentence> examplesYaml(String answer) {
+    final yaml = LessonAiPrompt.yamlBlock(answer, root: 'examples');
+    if (yaml == null) return const [];
+    try {
+      return YamlParserService.parseExampleSentences(yaml);
+    } on FormatException {
+      return const [];
+    }
   }
 
   /// The label of the note put in front of the latest question.

@@ -180,6 +180,10 @@ class VocabularyYamlFilter {
   });
 }
 
+/// An example sentence for a word: the plain sentence for the Sentence Pool,
+/// and the word's own `**` marking of it.
+typedef ExampleSentence = ({Sentence sentence, SentenceEmphasis emphasis});
+
 class YamlParserService {
   /// Known language keys for auto-detection
   static const List<String> knownLangKeys = [
@@ -206,6 +210,81 @@ class YamlParserService {
     'meaning',
     'trans',
   ];
+
+  /// The fields of one example of a word: its sentence and translation as
+  /// written (with any `**`), the keys they are under, and its recording,
+  /// text-to-speech text and notes.
+  static ({
+    String target,
+    String translation,
+    Object? targetKey,
+    Object? translationKey,
+    String? audio,
+    String? tts,
+    String notes,
+  })
+  _exampleFields(Map example) {
+    var target = '';
+    var translation = '';
+    Object? targetKey;
+    Object? translationKey;
+    String? tts;
+    for (final field in example.entries) {
+      final key = field.key.toString().trim().toLowerCase();
+      final value = field.value?.toString().trim() ?? '';
+      if (knownLangKeys.contains(key) && target.isEmpty) {
+        target = value;
+        if (value.isNotEmpty) targetKey = field.key;
+      } else if (knownNativeKeys.contains(key) && translation.isEmpty) {
+        translation = value;
+        if (value.isNotEmpty) translationKey = field.key;
+      } else if (_isTtsKey(key) && value.isNotEmpty) {
+        tts = value;
+      }
+    }
+    return (
+      target: target,
+      translation: translation,
+      targetKey: targetKey,
+      translationKey: translationKey,
+      audio: example['audio']?.toString().trim(),
+      tts: tts,
+      notes: example['notes'] == null ? '' : _notesText(example['notes']),
+    );
+  }
+
+  /// Example sentences for one word, as an AI chat about the word gives them:
+  /// YAML with an `examples:` list at its root, each example written as in a
+  /// word's `examples` in a lesson (see docs/lesson-format.md). An example
+  /// without a sentence is skipped. Each [ExampleSentence.sentence] is plain
+  /// text, and its [ExampleSentence.emphasis] keeps the `**` as written,
+  /// which may be none. Throws a [FormatException] for YAML that is not that.
+  static List<ExampleSentence> parseExampleSentences(String yaml) {
+    final doc = loadYaml(yaml);
+    final examples = doc is Map ? doc['examples'] : null;
+    if (examples is! List) {
+      throw const FormatException('Expected an "examples:" list.');
+    }
+    return [
+      for (final example in examples)
+        if (example is Map)
+          if (_exampleFields(example) case final fields
+              when fields.target.isNotEmpty)
+            (
+              sentence: Sentence(
+                targetText: Sentence.stripEmphasis(fields.target),
+                translationText: Sentence.stripEmphasis(fields.translation),
+                audioUrl: fields.audio,
+                ttsText: fields.tts,
+                notes: fields.notes,
+              ),
+              emphasis: SentenceEmphasis(
+                target: fields.target,
+                translation: fields.translation,
+              ),
+            ),
+    ];
+  }
 
   /// The error for Markdown given to [parseLessonYaml] with `allowMarkdown`
   /// false.
@@ -413,36 +492,17 @@ class YamlParserService {
           for (var exIndex = 0; exIndex < examples.length; exIndex++) {
             final ex = examples[exIndex];
             if (ex is! Map) continue;
-
-            String exTarget = '';
-            String exTrans = '';
-            Object? exTargetKey;
-            Object? exTransKey;
-            String? exAudio;
-            String? exTts;
-            String exNotes = '';
-
-            if (ex['audio'] != null) {
-              exAudio = ex['audio'].toString().trim();
-            }
-            if (ex['notes'] != null) {
-              exNotes = _notesText(ex['notes']);
-            }
-
-            for (final exField in ex.entries) {
-              final exKey = exField.key.toString().trim().toLowerCase();
-              final exVal = exField.value?.toString().trim() ?? '';
-
-              if (knownLangKeys.contains(exKey) && exTarget.isEmpty) {
-                exTarget = exVal;
-                if (exVal.isNotEmpty) exTargetKey = exField.key;
-              } else if (knownNativeKeys.contains(exKey) && exTrans.isEmpty) {
-                exTrans = exVal;
-                if (exVal.isNotEmpty) exTransKey = exField.key;
-              } else if (_isTtsKey(exKey) && exVal.isNotEmpty) {
-                exTts = exVal;
-              }
-            }
+            final (
+              target: exTarget,
+              translation: exTrans,
+              targetKey: exTargetKey,
+              translationKey: exTransKey,
+              audio: exAudio,
+              tts: exTts,
+              notes: exNotes,
+            ) = _exampleFields(
+              ex,
+            );
 
             if (exTarget.isNotEmpty || exTrans.isNotEmpty) {
               // The sentence is shared and kept plain; the `**` marking is

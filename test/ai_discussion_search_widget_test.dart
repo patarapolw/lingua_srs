@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lingua_srs/models/ai_discussion_message.dart';
 import 'package:lingua_srs/models/lesson.dart';
+import 'package:lingua_srs/models/sentence.dart';
 import 'package:lingua_srs/models/vocab_item.dart';
 import 'package:lingua_srs/providers/app_provider.dart';
 import 'package:lingua_srs/services/audio_service.dart';
@@ -1877,6 +1878,181 @@ void main() {
       await openChat(tester, provider, id, lesson: lesson);
 
       expect(find.text('Edit and add to lesson'), findsNothing);
+    });
+  });
+
+  group('Example sentences in a word chat', () {
+    const answer =
+        'More examples:\n\n'
+        '```yaml\n'
+        'examples:\n'
+        '  - ko: "**사과**가 맛있어요."\n'
+        '    en: "The **apple** is tasty."\n'
+        '  - ko: "**사과** 두 개 주세요."\n'
+        '    en: "Two **apples**, please."\n'
+        '```\n';
+
+    /// Opens the chat about 사과 with [answer] saved in it.
+    Future<(AppProvider, VocabItem)> openWordChat(
+      WidgetTester tester, {
+      void Function(AppProvider provider, VocabItem apple)? before,
+    }) async {
+      final (provider, lesson) = await loadedProvider(
+        tester,
+        discussions: {
+          'v-apple:no-sentence': [_msg('assistant', answer, 1)],
+        },
+      );
+      final apple = lesson.vocabularies.first;
+      before?.call(provider, apple);
+      await pumpWith(
+        tester,
+        provider,
+        Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) => AiDiscussionDialog(
+                  discussionId: 'v-apple:no-sentence',
+                  targetWord: '사과',
+                  translation: 'apple',
+                  targetLanguage: 'ko',
+                  nativeLanguage: 'en',
+                  vocab: apple,
+                ),
+              ),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      return (provider, apple);
+    }
+
+    /// Runs the save after adding until [done], on the real clock.
+    Future<void> settleSave(WidgetTester tester, bool Function() done) async {
+      for (var i = 0; i < 100 && !done(); i++) {
+        await tester.pump(const Duration(milliseconds: 20));
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+      }
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('adds the ticked sentences to the word', (tester) async {
+      final (provider, apple) = await openWordChat(tester);
+
+      await tester.tap(find.text('Add examples to "사과"'));
+      await tester.pumpAndSettle();
+      expect(find.text('Add 2 sentences'), findsOneWidget);
+      // Leave out the second one.
+      await tester.tap(find.byType(CheckboxListTile).last);
+      await tester.pump();
+      await tester.tap(find.text('Add 1 sentence'));
+      await settleSave(tester, () => apple.sentenceIds.isNotEmpty);
+
+      final sentence = provider.getSentencesForVocab(apple).single;
+      expect(sentence.targetText, '사과가 맛있어요.');
+      expect(sentence.translationText, 'The apple is tasty.');
+      expect(sentence.notes, LessonAiPrompt.aiSentenceNote);
+      expect(apple.targetTextFor(sentence), '**사과**가 맛있어요.');
+      expect(apple.translationTextFor(sentence), 'The **apple** is tasty.');
+      expect(find.text('Added 1 sentence to "사과".'), findsOneWidget);
+      // The one left out can still be added.
+      expect(find.text('Add example to "사과"'), findsOneWidget);
+    });
+
+    testWidgets('sentences the word has are not offered again', (tester) async {
+      await openWordChat(
+        tester,
+        before: (provider, apple) {
+          final mine = Sentence(
+            targetText: '사과가 맛있어요.',
+            translationText: 'The apple is tasty.',
+            notes: 'Mine.',
+          );
+          provider.sentences.add(mine);
+          apple.sentenceIds.add(mine.id);
+        },
+      );
+
+      expect(find.text('Add example to "사과"'), findsOneWidget);
+      expect(
+        find.text('Left out (already an example of this word): 1'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Add example to "사과"'));
+      await tester.pumpAndSettle();
+      expect(find.byType(CheckboxListTile), findsOneWidget);
+      expect(find.text('사과 두 개 주세요.'), findsNothing);
+    });
+
+    testWidgets('a sentence already in the pool is linked as it is', (
+      tester,
+    ) async {
+      late Sentence mine;
+      final (provider, apple) = await openWordChat(
+        tester,
+        before: (provider, _) {
+          mine = Sentence(
+            targetText: '사과가 맛있어요.',
+            translationText: 'The apple is tasty.',
+            notes: 'Mine.',
+          );
+          provider.sentences.add(mine);
+        },
+      );
+
+      await tester.tap(find.text('Add examples to "사과"'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add 2 sentences'));
+      await settleSave(tester, () => apple.sentenceIds.length == 2);
+
+      expect(apple.sentenceIds.first, mine.id);
+      expect(mine.notes, 'Mine.');
+      expect(
+        provider.sentences.where((s) => s.targetText == '사과가 맛있어요.'),
+        hasLength(1),
+      );
+      expect(find.text('Already examples of this word'), findsOneWidget);
+    });
+
+    testWidgets('cancelling adds nothing', (tester) async {
+      final (provider, apple) = await openWordChat(tester);
+
+      await tester.tap(find.text('Add examples to "사과"'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(apple.sentenceIds, isEmpty);
+      expect(provider.sentences, isEmpty);
+    });
+
+    testWidgets('a word chat without the word has no button', (tester) async {
+      final (provider, _) = await loadedProvider(
+        tester,
+        discussions: {
+          'v-apple:no-sentence': [_msg('assistant', answer, 1)],
+        },
+      );
+      await pumpWith(
+        tester,
+        provider,
+        const AiDiscussionDialog(
+          discussionId: 'v-apple:no-sentence',
+          targetWord: '사과',
+          translation: 'apple',
+          targetLanguage: 'ko',
+          nativeLanguage: 'en',
+        ),
+      );
+
+      expect(find.textContaining('Add example'), findsNothing);
     });
   });
 }
