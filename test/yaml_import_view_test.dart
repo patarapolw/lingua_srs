@@ -30,7 +30,7 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: YamlImportView()));
     await tester.pumpAndSettle();
 
-    expect(find.text('e.g. Unit 2::Lesson 26'), findsOneWidget);
+    expect(find.text('e.g. Unit 2::Lesson 1'), findsOneWidget);
     expect(tester.widgetList<TextField>(find.byType(TextField)).length, 2);
     final markdownInput = tester
         .widgetList<TextField>(find.byType(TextField))
@@ -46,7 +46,7 @@ void main() {
     final parsedHint = YamlParserService.parseLessonYaml(
       markdownInput.decoration!.hintText!,
     );
-    expect(parsedHint.lesson.title, 'Lesson 26');
+    expect(parsedHint.lesson.title, 'Lesson 1');
     expect(parsedHint.lesson.vocabularies, hasLength(1));
     expect(parsedHint.lesson.vocabularies.single.targetWord, 'Korean word');
     expect(parsedHint.sentences, hasLength(2));
@@ -103,7 +103,7 @@ The full lesson body.
     await tester.pumpWidget(
       const MaterialApp(
         home: YamlImportView(
-          initialLessonName: 'Unit 2::Lesson 26',
+          initialLessonName: 'Unit 2::Lesson 1',
           initialYaml:
               'vocabulary:\n  nouns:\n    - ko: "새"\n      en: "new"\n',
         ),
@@ -115,7 +115,7 @@ The full lesson body.
         .widgetList<TextField>(find.byType(TextField))
         .map((field) => field.controller?.text)
         .toList();
-    expect(fields, contains('Unit 2::Lesson 26'));
+    expect(fields, contains('Unit 2::Lesson 1'));
     expect(
       fields.any((text) => text?.contains('vocabulary:') ?? false),
       isTrue,
@@ -129,7 +129,7 @@ The full lesson body.
     await tester.pumpWidget(
       const MaterialApp(
         home: YamlImportView(
-          initialLessonName: 'Lesson 26',
+          initialLessonName: 'Lesson 1',
           initialYaml:
               'vocabulary:\n  nouns:\n    - ko: "배"\n      en: "pear"\n',
           previewInitialYaml: true,
@@ -165,7 +165,7 @@ The full lesson body.
     await tester.pumpWidget(
       const MaterialApp(
         home: YamlImportView(
-          initialLessonName: 'Lesson 26',
+          initialLessonName: 'Lesson 1',
           vocabularyOnly: true,
         ),
       ),

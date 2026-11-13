@@ -15,7 +15,7 @@ class LessonReaderView extends StatefulWidget {
   final String lessonId;
 
   /// Text or anchor of a heading to scroll to on opening, for a link such as
-  /// `[[Lesson 26#Past tense]]`.
+  /// `[[Lesson 1#Past tense]]`.
   final String? initialHeading;
 
   const LessonReaderView({

@@ -8,24 +8,24 @@ import 'package:lingua_srs/services/yaml_parser_service.dart';
 void main() {
   group('LessonLink.prepareWikiLinks', () {
     test('turns a lesson link into a Markdown link named by its target', () {
-      final text = LessonLink.prepareWikiLinks('See [[Lesson 26]].');
+      final text = LessonLink.prepareWikiLinks('See [[Lesson 1]].');
 
-      expect(text, startsWith('See [Lesson 26](<lingua-lesson:'));
+      expect(text, startsWith('See [Lesson 1](<lingua-lesson:'));
       final href = RegExp(r'\(<([^>]+)>\)').firstMatch(text)![1]!;
       final link = LessonLink.fromHref(href)!;
-      expect(link.lesson, 'Lesson 26');
+      expect(link.lesson, 'Lesson 1');
       expect(link.heading, isNull);
     });
 
     test('names a lesson heading link with › between the parts', () {
       final text = LessonLink.prepareWikiLinks(
-        '[[ Unit 2 :: Lesson 26 #Past tense ]]',
+        '[[ Unit 2 :: Lesson 1 #Past tense ]]',
       );
 
-      expect(text, startsWith('[Unit 2 › Lesson 26 › Past tense]'));
+      expect(text, startsWith('[Unit 2 › Lesson 1 › Past tense]'));
       final href = RegExp(r'\(<([^>]+)>\)').firstMatch(text)![1]!;
       final link = LessonLink.fromHref(href)!;
-      expect(link.lesson, 'Unit 2::Lesson 26');
+      expect(link.lesson, 'Unit 2::Lesson 1');
       expect(link.heading, 'Past tense');
     });
 
@@ -40,22 +40,20 @@ void main() {
     });
 
     test('uses the label after |', () {
-      final text = LessonLink.prepareWikiLinks(
-        '[[Lesson 26#Past tense|table]]',
-      );
+      final text = LessonLink.prepareWikiLinks('[[Lesson 1#Past tense|table]]');
 
       expect(text, startsWith('[table](<lingua-lesson:'));
     });
 
     test('escapes brackets in the label', () {
-      final text = LessonLink.prepareWikiLinks('[[Lesson 26|see \\ ]]');
+      final text = LessonLink.prepareWikiLinks('[[Lesson 1|see \\ ]]');
 
       expect(text, startsWith(r'[see \\](<'));
     });
 
     test('leaves code and empty links alone', () {
       const markdown =
-          '`[[Lesson 26]]` and ``a [[b]]``\n\n```\n[[Lesson 26]]\n```\n\n'
+          '`[[Lesson 1]]` and ``a [[b]]``\n\n```\n[[Lesson 1]]\n```\n\n'
           '[[ ]] [[#]]';
 
       expect(LessonLink.prepareWikiLinks(markdown), markdown);
@@ -93,8 +91,8 @@ void main() {
   });
 
   group('LessonLink.resolveLesson', () {
-    final unit1 = Lesson(title: 'Lesson 26', unitTitle: 'Unit 1');
-    final unit2 = Lesson(title: 'Lesson 26', unitTitle: 'Unit 2');
+    final unit1 = Lesson(title: 'Lesson 1', unitTitle: 'Unit 1');
+    final unit2 = Lesson(title: 'Lesson 1', unitTitle: 'Unit 2');
     final other = Lesson(title: 'Other', unitTitle: 'Unit 2');
     final top = Lesson(title: 'Greetings');
     final lessons = [unit1, unit2, other, top];
@@ -107,31 +105,31 @@ void main() {
 
     test('tells lessons with the same title apart by folder', () {
       expect(
-        LessonLink.resolveLesson(lessons, 'Unit 2::Lesson 26'),
+        LessonLink.resolveLesson(lessons, 'Unit 2::Lesson 1'),
         same(unit2),
       );
       expect(
-        LessonLink.resolveLesson(lessons, 'unit 1 :: lesson 26'),
+        LessonLink.resolveLesson(lessons, 'unit 1 :: lesson 1'),
         same(unit1),
       );
     });
 
     test('prefers the lesson nearest to the one with the link', () {
       expect(
-        LessonLink.resolveLesson(lessons, 'Lesson 26', from: other),
+        LessonLink.resolveLesson(lessons, 'Lesson 1', from: other),
         same(unit2),
       );
-      expect(LessonLink.resolveLesson(lessons, 'Lesson 26'), same(unit1));
+      expect(LessonLink.resolveLesson(lessons, 'Lesson 1'), same(unit1));
     });
   });
 
   group('.md links', () {
     test('reads a relative .md link and its heading', () {
       final link = LessonLink.fromHref(
-        '../unit-2/lesson%2026.md?x=1#Past%20tense',
+        '../unit-2/lesson%201.md?x=1#Past%20tense',
       )!;
 
-      expect(link.file, '../unit-2/lesson 26.md');
+      expect(link.file, '../unit-2/lesson 1.md');
       expect(link.heading, 'Past tense');
       expect(link.isOtherLesson, isTrue);
     });
@@ -143,14 +141,14 @@ void main() {
     });
 
     final unit2 = Lesson(
-      title: 'Lesson 26',
+      title: 'Lesson 1',
       unitTitle: 'Unit 2',
-      fileName: 'lesson-26.md',
+      fileName: 'lesson-1.md',
     );
     final unit1 = Lesson(
-      title: 'Lesson 26',
+      title: 'Lesson 1',
       unitTitle: 'Unit 1',
-      fileName: 'lesson-26.md',
+      fileName: 'lesson-1.md',
     );
     final three = Lesson(title: 'Lesson 3', unitTitle: 'Unit 1');
     final intro = Lesson(title: 'Intro');
@@ -158,11 +156,11 @@ void main() {
 
     test('finds the lesson at a relative virtual path', () {
       expect(
-        LessonLink.resolveFile(lessons, '../unit-2/lesson-26.md', from: three),
+        LessonLink.resolveFile(lessons, '../unit-2/lesson-1.md', from: three),
         same(unit2),
       );
       expect(
-        LessonLink.resolveFile(lessons, 'lesson-26.md', from: three),
+        LessonLink.resolveFile(lessons, 'lesson-1.md', from: three),
         same(unit1),
       );
       expect(
@@ -173,7 +171,7 @@ void main() {
 
     test('starts at the top folder for a leading /', () {
       expect(
-        LessonLink.resolveFile(lessons, '/Unit_2/Lesson 26.md', from: intro),
+        LessonLink.resolveFile(lessons, '/Unit_2/Lesson 1.md', from: intro),
         same(unit2),
       );
     });
@@ -200,13 +198,13 @@ void main() {
   group('virtual file names', () {
     test('folder import keeps the Markdown file name', () {
       final parsed = YamlParserService.parseLessonYaml(
-        '---\nvocabulary:\n---\n# Lesson 26 {#l26}\n',
-        sourcePath: 'unit-2/lesson-26.md',
+        '---\nvocabulary:\n---\n# Lesson 1 {#l1}\n',
+        sourcePath: 'unit-2/lesson-1.md',
       );
 
-      expect(parsed.lesson.fileName, 'lesson-26.md');
-      expect(parsed.lesson.title, 'Lesson 26');
-      expect(parsed.lesson.virtualPath, ['lesson-26.md']);
+      expect(parsed.lesson.fileName, 'lesson-1.md');
+      expect(parsed.lesson.title, 'Lesson 1');
+      expect(parsed.lesson.virtualPath, ['lesson-1.md']);
     });
 
     test('other files and typed lessons fall back to the title', () {
@@ -221,17 +219,17 @@ void main() {
 
     test('is saved and exported', () {
       final lesson = Lesson(
-        title: 'Lesson 26',
+        title: 'Lesson 1',
         unitTitle: 'Unit 2',
-        fileName: 'lesson-26.md',
+        fileName: 'lesson-1.md',
       );
 
-      expect(Lesson.fromJson(lesson.toJson()).fileName, 'lesson-26.md');
+      expect(Lesson.fromJson(lesson.toJson()).fileName, 'lesson-1.md');
       expect(Lesson.fromJson(Lesson(title: 'A').toJson()).fileName, isNull);
       final zip = ZipDecoder().decodeBytes(
         LessonExportService.createZip([lesson], const []),
       );
-      expect(zip.files.single.name, 'Unit 2/lesson-26.md');
+      expect(zip.files.single.name, 'Unit 2/lesson-1.md');
     });
   });
 
@@ -260,9 +258,9 @@ void main() {
     test('names a path from the top folder, safe as file names', () {
       expect(
         LessonLink.virtualPathText(
-          Lesson(title: 'Lesson 26', unitTitle: 'Unit 2', fileName: 'l26.md'),
+          Lesson(title: 'Lesson 1', unitTitle: 'Unit 2', fileName: 'l1.md'),
         ),
-        '/Unit 2/l26.md',
+        '/Unit 2/l1.md',
       );
       expect(
         LessonLink.virtualPathText(Lesson(title: 'Lesson / 1')),
@@ -293,10 +291,10 @@ void main() {
   group('links that also work on a site built from the folder', () {
     test('read page links, links without an extension and folders', () {
       expect(
-        LessonLink.fromHref('../unit-2/lesson-26#past')!.file,
-        '../unit-2/lesson-26',
+        LessonLink.fromHref('../unit-2/lesson-1#past')!.file,
+        '../unit-2/lesson-1',
       );
-      expect(LessonLink.fromHref('./lesson-26.html')!.file, './lesson-26.html');
+      expect(LessonLink.fromHref('./lesson-1.html')!.file, './lesson-1.html');
       expect(LessonLink.fromHref('/unit-2/')!.file, '/unit-2/index.md');
       expect(LessonLink.fromHref('worksheet.pdf'), isNull);
       expect(LessonLink.fromHref('photo.png'), isNull);
@@ -304,9 +302,9 @@ void main() {
     });
 
     final lesson = Lesson(
-      title: 'Lesson 26',
+      title: 'Lesson 1',
       unitTitle: 'Unit 2::Past Tense',
-      fileName: 'lesson-26.md',
+      fileName: 'lesson-1.md',
       fileFolder: 'unit-2/past_tense',
     );
     final index = Lesson(
@@ -320,9 +318,9 @@ void main() {
 
     test('find the lesson by its page or extensionless path', () {
       for (final href in [
-        '../../unit-2/past_tense/lesson-26',
-        '/unit-2/past_tense/lesson-26.html',
-        '../../unit-2/past_tense/lesson-26.md',
+        '../../unit-2/past_tense/lesson-1',
+        '/unit-2/past_tense/lesson-1.html',
+        '../../unit-2/past_tense/lesson-1.md',
       ]) {
         final link = LessonLink.fromHref(href)!;
         expect(
@@ -342,48 +340,48 @@ void main() {
   group('original folder names', () {
     test('are kept in the virtual path while the lesson stays put', () {
       final lesson = Lesson(
-        title: 'Lesson 26',
+        title: 'Lesson 1',
         unitTitle: 'Unit 2::Past Tense',
-        fileName: 'lesson-26.md',
+        fileName: 'lesson-1.md',
         fileFolder: 'unit-2/past_tense',
       );
 
       expect(lesson.folderPath, ['Unit 2', 'Past Tense']);
       expect(
         LessonLink.virtualPathText(lesson),
-        '/unit-2/past_tense/lesson-26.md',
+        '/unit-2/past_tense/lesson-1.md',
       );
       expect(Lesson.fromJson(lesson.toJson()).fileFolder, 'unit-2/past_tense');
       final zip = ZipDecoder().decodeBytes(
         LessonExportService.createZip([lesson], const []),
       );
-      expect(zip.files.single.name, 'unit-2/past_tense/lesson-26.md');
+      expect(zip.files.single.name, 'unit-2/past_tense/lesson-1.md');
     });
 
     test('give way to the app folders after a move', () {
       final lesson = Lesson(
-        title: 'Lesson 26',
+        title: 'Lesson 1',
         unitTitle: 'Unit 2',
-        fileName: 'lesson-26.md',
+        fileName: 'lesson-1.md',
         fileFolder: 'unit-2',
       )..moveToFolder(['Review']);
 
       expect(lesson.virtualFolder, ['Review']);
-      expect(LessonLink.virtualPathText(lesson), '/Review/lesson-26.md');
+      expect(LessonLink.virtualPathText(lesson), '/Review/lesson-1.md');
     });
 
     test('come from the imported path', () {
       final parsed = YamlParserService.parseLessonYaml(
-        '---\nvocabulary:\n---\n# Lesson 26\n',
+        '---\nvocabulary:\n---\n# Lesson 1\n',
         defaultUnitTitle: 'Unit 2::Past Tense',
-        sourcePath: 'unit-2/past_tense/lesson-26.md',
+        sourcePath: 'unit-2/past_tense/lesson-1.md',
       );
 
       expect(parsed.lesson.fileFolder, 'unit-2/past_tense');
       expect(parsed.lesson.virtualPath, [
         'unit-2',
         'past_tense',
-        'lesson-26.md',
+        'lesson-1.md',
       ]);
       expect(
         YamlParserService.parseLessonYaml(

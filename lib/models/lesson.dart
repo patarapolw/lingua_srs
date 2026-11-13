@@ -13,7 +13,7 @@ class Lesson {
   List<VocabItem> vocabularies;
   String markdownContent;
 
-  /// Name of the Markdown file the lesson was imported from (`lesson-26.md`),
+  /// Name of the Markdown file the lesson was imported from (`lesson-1.md`),
   /// so `.md` links between lesson files keep working. Null for lessons made
   /// in the app; see [virtualFileName].
   String? fileName;

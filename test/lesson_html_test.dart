@@ -120,7 +120,7 @@ void main() {
     });
 
     test('lesson links are links the app handles', () {
-      final html = body('[[Unit 2::Lesson 26#Past tense]]');
+      final html = body('[[Unit 2::Lesson 1#Past tense]]');
 
       expect(html, contains('<a href="lingua-lesson:'));
     });

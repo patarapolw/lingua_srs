@@ -169,11 +169,11 @@ void main() {
 
     test('turns [[lesson links]] into Markdown links', () {
       final text = LessonContent.preprocess(
-        '[[Lesson 26#Past tense]]\n\n```\n[[Lesson 26]]\n```',
+        '[[Lesson 1#Past tense]]\n\n```\n[[Lesson 1]]\n```',
       );
 
-      expect(text, contains('[Lesson 26 › Past tense](<lingua-lesson:'));
-      expect(text, contains('```\n[[Lesson 26]]\n```'));
+      expect(text, contains('[Lesson 1 › Past tense](<lingua-lesson:'));
+      expect(text, contains('```\n[[Lesson 1]]\n```'));
     });
 
     test('does not alter fenced code content', () {
@@ -257,7 +257,7 @@ void main() {
   group('LessonContentView', () {
     const lesson =
         '# Lesson\n\nIntro.\n\n## Past tense\n\nText.\n\n'
-        '[[Lesson 26#Past tense]]\n';
+        '[[Lesson 1#Past tense]]\n';
     late FakeWebViewPlatform platform;
     late _RecordingAudio audio;
 
@@ -355,13 +355,13 @@ void main() {
       platform.controller.send({
         'type': 'link',
         'href': const LessonLink(
-          lesson: 'Lesson 26',
+          lesson: 'Lesson 1',
           heading: 'Past tense',
         ).href,
       });
       await tester.pump();
 
-      expect(links.single.lesson, 'Lesson 26');
+      expect(links.single.lesson, 'Lesson 1');
       expect(links.single.heading, 'Past tense');
       expect(platform.controller.scripts, isEmpty);
     });

@@ -43,7 +43,7 @@ void main() {
 
   group('YAML Parser & Vocabulary Models', () {
     const sampleYaml = '''
-Lesson: Unit 2::Lesson 26
+Lesson: Unit 2::Lesson 1
 
 nouns:
   - ko: 아줌마
@@ -205,7 +205,7 @@ vocabulary:
 
     test('Parses lesson title, categories and cards', () {
       final res = YamlParserService.parseLessonYaml(sampleYaml);
-      expect(res.lesson.title, 'Unit 2::Lesson 26');
+      expect(res.lesson.title, 'Unit 2::Lesson 1');
       expect(res.lesson.vocabularies.length, 2);
 
       final noun = res.lesson.vocabularies[0];
@@ -421,19 +421,19 @@ The complete lesson body.
 ---
 vocabulary:
 ---
-# Lesson 26
+# Lesson 1
 Original text.
 ''');
-      await provider.updateLessonMarkdown(lesson.id, '# Lesson 26\nEdited.');
+      await provider.updateLessonMarkdown(lesson.id, '# Lesson 1\nEdited.');
 
-      expect(lesson.markdownContent, '# Lesson 26\nEdited.');
+      expect(lesson.markdownContent, '# Lesson 1\nEdited.');
       final reloadedProvider = AppProvider();
       while (reloadedProvider.isLoading) {
         await Future<void>.delayed(Duration.zero);
       }
       expect(
         reloadedProvider.lessons.single.markdownContent,
-        '# Lesson 26\nEdited.',
+        '# Lesson 1\nEdited.',
       );
       provider.dispose();
       reloadedProvider.dispose();
@@ -578,13 +578,13 @@ extra:
 vocabulary:
   nouns:
     - ko: 목적지
-      audio: https://example.com/Lesson26v6.mp3
+      audio: https://example.com/Lesson1v6.mp3
       en: destination
       examples:
         - ko: 우리가 **목적지**에 거의 도착했어요
           en: We have almost arrived at our **destination**
 ---
-# Lesson 26: \~는 것 Describing Nouns with Verbs
+# Lesson 1: \~는 것 Describing Nouns with Verbs
 
 Lesson content is not part of the vocabulary data.
 ''';
@@ -595,10 +595,7 @@ Lesson content is not part of the vocabulary data.
       );
 
       expect(result.lesson.unitTitle, 'Unit 2');
-      expect(
-        result.lesson.title,
-        'Lesson 26: ~는 것 Describing Nouns with Verbs',
-      );
+      expect(result.lesson.title, 'Lesson 1: ~는 것 Describing Nouns with Verbs');
       expect(result.lesson.displayTitle, result.lesson.title);
       expect(result.lesson.vocabularies, hasLength(1));
       expect(result.lesson.vocabularies.single.targetWord, '목적지');
@@ -610,7 +607,7 @@ Lesson content is not part of the vocabulary data.
       );
       expect(
         result.lesson.vocabularies.single.audioUrl,
-        'https://example.com/Lesson26v6.mp3',
+        'https://example.com/Lesson1v6.mp3',
       );
       expect(result.sentences, hasLength(1));
       expect(result.lesson.vocabularies.single.sentenceIds, [
@@ -727,9 +724,9 @@ vocabulary:
     test('Splits Unit::Lesson title into hierarchy display fields', () {
       final lesson = YamlParserService.parseLessonYaml(sampleYaml).lesson;
 
-      expect(lesson.title, 'Unit 2::Lesson 26');
+      expect(lesson.title, 'Unit 2::Lesson 1');
       expect(lesson.folderPath, ['Unit 2']);
-      expect(lesson.displayTitle, 'Lesson 26');
+      expect(lesson.displayTitle, 'Lesson 1');
     });
 
     test('Uses :: separated lesson paths and keeps slashes literal', () {
@@ -819,7 +816,7 @@ vocabulary:
           'lingua_srs_lessons': jsonEncode([
             Lesson(
               id: 'existing-lesson',
-              title: 'Unit 2::Lesson 26',
+              title: 'Unit 2::Lesson 1',
               vocabularies: [
                 VocabItem(
                   targetWord: '목적지',
@@ -869,13 +866,13 @@ vocabulary:
 vocabulary:
   nouns:
     - ko: 목적지
-      audio: https://example.com/Lesson26v6.mp3
+      audio: https://example.com/Lesson1v6.mp3
       en: destination
       examples:
         - ko: 우리가 **목적지**에 거의 도착했어요
           en: We have almost arrived at our **destination**
 ---
-# Lesson 26: Describing Nouns with Verbs
+# Lesson 1: Describing Nouns with Verbs
 ''';
         final imported = await provider.importYaml(
           frontmatter,
@@ -885,7 +882,7 @@ vocabulary:
         expect(provider.lessons, hasLength(1));
         expect(imported.id, 'existing-lesson');
         expect(imported.unitTitle, 'Unit 2');
-        expect(imported.displayTitle, 'Lesson 26: Describing Nouns with Verbs');
+        expect(imported.displayTitle, 'Lesson 1: Describing Nouns with Verbs');
         expect(imported.vocabularies, hasLength(2));
         final refreshedVocab = imported.vocabularies.firstWhere(
           (vocab) => vocab.targetWord == '목적지',
@@ -893,7 +890,7 @@ vocabulary:
         final customVocab = imported.vocabularies.firstWhere(
           (vocab) => vocab.targetWord == '사용자 단어',
         );
-        expect(refreshedVocab.audioUrl, 'https://example.com/Lesson26v6.mp3');
+        expect(refreshedVocab.audioUrl, 'https://example.com/Lesson1v6.mp3');
         expect(refreshedVocab.cardTargetToNative.id, 'reviewed-card');
         expect(refreshedVocab.cardTargetToNative.repetitions, 3);
         expect(refreshedVocab.cardTargetToNative.status, SrsStatus.review);

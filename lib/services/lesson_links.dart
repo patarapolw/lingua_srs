@@ -2,10 +2,10 @@ import '../models/lesson.dart';
 import 'hangul_text.dart';
 
 /// A link from lesson Markdown to a lesson, a heading, or a heading in
-/// another lesson: named in plain text (`[[Unit 2::Lesson 26#Past tense]]`)
-/// or by a relative `.md` path (`[...](../unit-2/lesson-26.md#past-tense)`).
+/// another lesson: named in plain text (`[[Unit 2::Lesson 1#Past tense]]`)
+/// or by a relative `.md` path (`[...](../unit-2/lesson-1.md#past-tense)`).
 class LessonLink {
-  /// The linked lesson's name or path (`Lesson 26`, `Unit 2::Lesson 26`), or
+  /// The linked lesson's name or path (`Lesson 1`, `Unit 2::Lesson 1`), or
   /// null for a heading in the same lesson or a [file] link.
   final String? lesson;
 
@@ -73,8 +73,8 @@ class LessonLink {
   }
 
   /// Whether [path], a link with no scheme, can name a lesson file the way a
-  /// site built from the same folder links to it: `lesson-26.md`, the page
-  /// it becomes (`lesson-26.html`, or `lesson-26` with no extension), or a
+  /// site built from the same folder links to it: `lesson-1.md`, the page
+  /// it becomes (`lesson-1.html`, or `lesson-1` with no extension), or a
   /// folder (`unit-2/`) for its `index.md`. Other files, such as
   /// `worksheet.pdf`, are not lessons.
   static bool _isLessonPath(String path) {
@@ -104,7 +104,7 @@ class LessonLink {
   /// Turns `[[target]]` and `[[target|label]]` into Markdown links, leaving
   /// code alone. The target is `Lesson`, `Folder::Lesson`, `#Heading` or
   /// `Lesson#Heading`. Without a label, the link reads as its target:
-  /// `Lesson 26 › Past tense`.
+  /// `Lesson 1 › Past tense`.
   static String prepareWikiLinks(String markdown) {
     if (!markdown.contains('[[')) return markdown;
     final code = <String>[];
@@ -191,7 +191,7 @@ class LessonLink {
     return wanted.isNotEmpty && slug(heading) == wanted;
   }
 
-  /// The lesson named [name] (`Lesson 26` or `Unit 2::Lesson 26`), matched
+  /// The lesson named [name] (`Lesson 1` or `Unit 2::Lesson 1`), matched
   /// against the end of each lesson's folder path and title, ignoring case.
   /// When several match, the one closest to [from] in the folder tree wins.
   static Lesson? resolveLesson(
@@ -224,8 +224,8 @@ class LessonLink {
   /// The lesson a relative `.md` [file] link from [from] points to, by
   /// virtual path ([Lesson.virtualPath]): `..` goes up a folder, and a
   /// leading `/` starts at the top. Names compare loosely, the way folder
-  /// import names folders, so `unit-2/lesson-26.md` finds a lesson in the
-  /// folder `Unit 2` imported from `lesson-26.md`, or titled `Lesson 26`.
+  /// import names folders, so `unit-2/lesson-1.md` finds a lesson in the
+  /// folder `Unit 2` imported from `lesson-1.md`, or titled `Lesson 1`.
   ///
   /// If no lesson is at that path (say, only part of a course was
   /// imported), the nearest lesson with that file name or title is used.
@@ -268,12 +268,12 @@ class LessonLink {
   }
 
   /// [Lesson.virtualPath] as a path from the top folder, the way a `.md`
-  /// link can name it: `/Unit 2/lesson-26.md`.
+  /// link can name it: `/Unit 2/lesson-1.md`.
   static String virtualPathText(Lesson lesson) =>
       '/${lesson.virtualPath.join('/')}';
 
   /// A Markdown link to [lesson] by its virtual path, for pasting into
-  /// another lesson: `[Lesson 26](</Unit 2/lesson-26.md>)`.
+  /// another lesson: `[Lesson 1](</Unit 2/lesson-1.md>)`.
   static String markdownLinkTo(Lesson lesson) {
     final label = _escapeLabel(lesson.displayTitle);
     final path = virtualPathText(

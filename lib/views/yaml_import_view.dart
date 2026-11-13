@@ -870,7 +870,7 @@ class _YamlImportViewState extends State<YamlImportView>
                         textInputAction: TextInputAction.next,
                         decoration: InputDecoration(
                           border: const OutlineInputBorder(),
-                          hintText: 'e.g. Unit 2::Lesson 26',
+                          hintText: 'e.g. Unit 2::Lesson 1',
                           helperText: vocabularyOnly
                               ? 'The words are added to this lesson; its other '
                                     'words, its text and SRS progress are kept.'
@@ -952,7 +952,7 @@ class _YamlImportViewState extends State<YamlImportView>
                                       '          en: "Another translation"\n'
                                       '---\n'
                                       '\n'
-                                      '# Lesson 26\n'
+                                      '# Lesson 1\n'
                                       '\n'
                                       'Lesson contents go **here**.',
                             hintStyle: TextStyle(

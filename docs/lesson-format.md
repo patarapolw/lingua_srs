@@ -7,7 +7,7 @@ Lessons are Markdown files with YAML frontmatter (or plain YAML). Write them in 
 In **Add Lessons**, enter a lesson name in the single-line **Lesson name** field. Use `::` to separate hierarchy levels:
 
 ```text
-Unit 2::Lesson 26
+Unit 2::Lesson 1
 ```
 
 The first part becomes the parent unit; remaining parts form the lesson title and any deeper hierarchy (`Topic::Subtopic::Lesson A`). A single name such as `Greetings` creates a top-level lesson.
@@ -130,15 +130,15 @@ The reader shows the whole lesson as one page, so long lessons scroll smoothly, 
 Link to another lesson, or to a section, by its name in double brackets. The link reads as what it names, so the source stays readable as plain text:
 
 ```markdown
-See [[Lesson 26]] for the vocabulary.
-The past tense is in [[Unit 2::Lesson 26#Past tense]].
+See [[Lesson 1]] for the vocabulary.
+The past tense is in [[Unit 2::Lesson 1#Past tense]].
 Review [[#Greetings]] before you start.
-[[Lesson 26#Past tense|the past-tense table]]
+[[Lesson 1#Past tense|the past-tense table]]
 ```
 
-- **`[[Lesson 26]]`** opens the lesson titled *Lesson 26*. When two lessons share a title, add folders in front with `::` (`[[Unit 2::Lesson 26]]`), the same way lesson names are written; otherwise the one nearest in the folder tree to the lesson with the link opens. Case does not matter.
+- **`[[Lesson 1]]`** opens the lesson titled *Lesson 1*. When two lessons share a title, add folders in front with `::` (`[[Unit 2::Lesson 1]]`), the same way lesson names are written; otherwise the one nearest in the folder tree to the lesson with the link opens. Case does not matter.
 - **`#Heading`** after a lesson name opens that lesson at the heading. On its own (`[[#Greetings]]`) it scrolls to the heading in the same lesson. Write the heading's text as it reads; case and punctuation do not matter, so `[[#Hello, World!]]` and `[[#hello-world]]` find the same heading.
-- **`|label`** sets the text shown. Without it, the link shows its target, with `›` between parts: `Unit 2 › Lesson 26 › Past tense`.
+- **`|label`** sets the text shown. Without it, the link shows its target, with `›` between parts: `Unit 2 › Lesson 1 › Past tense`.
 - Plain Markdown links to a heading in the same lesson work too: `[greetings](#greetings)` or `[greetings](<#Greetings>)`.
 
 A link to a lesson or heading that does not exist says so when tapped. Brackets inside code (`` `[[...]]` ``) are left as they are.
@@ -148,19 +148,19 @@ A link to a lesson or heading that does not exist says so when tapped. Brackets 
 A lesson folder can also be written and previewed outside the app (see [Editing lessons outside the app](#editing-lessons-outside-the-app)), and the same links work in both. Links between lesson files, the way VitePress, Obsidian, VS Code and GitHub write them, open the lesson they point to:
 
 ```markdown
-[Lesson 26](../unit-2/lesson-26.md#past-tense)
-[Lesson 26](../unit-2/lesson-26#past-tense)
+[Lesson 1](../unit-2/lesson-1.md#past-tense)
+[Lesson 1](../unit-2/lesson-1#past-tense)
 [Unit 2](../unit-2/)
 [Intro](/intro.md)
 ```
 
-- **Forms:** a link may name the file (`lesson-26.md`), the page VitePress makes of it (`lesson-26.html`, or `lesson-26` with no extension), or a folder (`unit-2/`), which opens its `index.md`. Links to other files, such as `worksheet.pdf`, and links with a scheme (`https:`) are left alone.
+- **Forms:** a link may name the file (`lesson-1.md`), the page VitePress makes of it (`lesson-1.html`, or `lesson-1` with no extension), or a folder (`unit-2/`), which opens its `index.md`. Links to other files, such as `worksheet.pdf`, and links with a scheme (`https:`) are left alone.
 - **Virtual path:** every lesson has one, made of folders and a file name.
-  - A lesson imported from a folder or ZIP keeps the names of its file and folders as they were on disk (`/unit-2/past_tense/lesson-26.md`), while the app shows the folders renamed (*Unit 2 › Past Tense*).
-  - Any other lesson uses its app folders and its title (`/Unit 2/Lesson 26.md`), with characters a file name cannot hold (`/`, `:`, `?`, …) made `_`.
+  - A lesson imported from a folder or ZIP keeps the names of its file and folders as they were on disk (`/unit-2/past_tense/lesson-1.md`), while the app shows the folders renamed (*Unit 2 › Past Tense*).
+  - Any other lesson uses its app folders and its title (`/Unit 2/Lesson 1.md`), with characters a file name cannot hold (`/`, `:`, `?`, …) made `_`.
   - When you move a lesson to another folder, its virtual folder follows the app folders.
 - **Seeing it:** the lesson's Markdown editor (**Edit Markdown** in the reader) shows its virtual path, and its link button copies a Markdown link to the lesson to paste into another one.
-- **Following a link:** it starts from the folder of the lesson it is in. `..` goes up a folder, and a leading `/` starts at the top: the folder that was picked, or the ZIP's top level, which is the same place as in the VitePress preview when you pick the folder VitePress serves. Folder and file names compare ignoring case and punctuation, so `unit-2/lesson-26` also finds a lesson in the folder *Unit 2*. If no lesson is at that path, for example when only part of a course was imported, the nearest lesson with that file name or title opens.
+- **Following a link:** it starts from the folder of the lesson it is in. `..` goes up a folder, and a leading `/` starts at the top: the folder that was picked, or the ZIP's top level, which is the same place as in the VitePress preview when you pick the folder VitePress serves. Folder and file names compare ignoring case and punctuation, so `unit-2/lesson-1` also finds a lesson in the folder *Unit 2*. If no lesson is at that path, for example when only part of a course was imported, the nearest lesson with that file name or title opens.
 - **Korean names** are kept as whole syllables. macOS can store a name such as `한국어` as separate jamo, which looks the same but would not match, so the app composes it when the lesson is imported, loaded or synced.
 - **Export** writes each lesson to its virtual path, so links still work after exporting and importing again.
 - **Older lessons:** a lesson imported before file and folder names were kept takes them the next time you import its folder or ZIP, even if its file has not changed and is skipped. It takes them when the file is the only lesson in that app folder it matches by name; until then it uses its title and app folders. Virtual paths follow the real files: there is nothing to rename by hand.
@@ -176,7 +176,7 @@ When a heading's text repeats, its anchor gets `-1`, `-2`, … in order, as on G
 ### Polite {#past-polite}
 ```
 
-`{#past-polite}` is not shown, and `[[#past-polite|polite past]]` or `[polite past](#past-polite)` links to that heading (from another lesson, `[[Lesson 26#past-polite]]`). Classes and other attributes (`{#id .note lang=ko}`) are allowed and ignored. A link looks for a heading with that id or anchor first, then for one with that text, then for one with the same letters and digits, so an anchor copied from another tool (VitePress writes `1. Intro` as `#_1-intro`) finds its heading too.
+`{#past-polite}` is not shown, and `[[#past-polite|polite past]]` or `[polite past](#past-polite)` links to that heading (from another lesson, `[[Lesson 1#past-polite]]`). Classes and other attributes (`{#id .note lang=ko}`) are allowed and ignored. A link looks for a heading with that id or anchor first, then for one with that text, then for one with the same letters and digits, so an anchor copied from another tool (VitePress writes `1. Intro` as `#_1-intro`) finds its heading too.
 
 ## Editing lessons outside the app
 

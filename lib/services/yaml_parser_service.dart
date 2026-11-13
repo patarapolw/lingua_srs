@@ -940,15 +940,15 @@ class YamlParserService {
     );
   }
 
-  /// The file name of a Markdown [path] (`unit-2/lesson-26.md` gives
-  /// `lesson-26.md`), or null for other files.
+  /// The file name of a Markdown [path] (`unit-2/lesson-1.md` gives
+  /// `lesson-1.md`), or null for other files.
   static String? _markdownFileName(String? path) {
     if (path == null) return null;
     final name = path.split(RegExp(r'[/\\]')).last.trim();
     return name.toLowerCase().endsWith('.md') && name.length > 3 ? name : null;
   }
 
-  /// The folders of [path], `/`-separated (`unit-2/lesson-26.md` gives
+  /// The folders of [path], `/`-separated (`unit-2/lesson-1.md` gives
   /// `unit-2`), or null for a file at the top.
   static String? _folderOf(String path) {
     final parts = path

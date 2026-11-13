@@ -179,16 +179,16 @@ void main() {
       const vocab = '---\nvocabulary:\n---\n';
       final target = (await tester.runAsync(
         () => provider.importYaml(
-          '$vocab# Lesson 26\n\n## Past tense\n\nPast text.\n',
-          defaultTitle: 'Lesson 26',
+          '$vocab# Lesson 1\n\n## Past tense\n\nPast text.\n',
+          defaultTitle: 'Lesson 1',
           defaultUnitTitle: 'Unit 2',
         ),
       ))!;
       final source = (await tester.runAsync(
         () => provider.importYaml(
-          '$vocab# Start\n\n[[Unit 2::Lesson 26#Past tense]]\n\n'
+          '$vocab# Start\n\n[[Unit 2::Lesson 1#Past tense]]\n\n'
           '[[Missing lesson]]\n\n'
-          '[as a file](unit-2/lesson-26.md#past-tense)\n',
+          '[as a file](unit-2/lesson-1.md#past-tense)\n',
           defaultTitle: 'Start',
         ),
       ))!;
@@ -213,7 +213,7 @@ void main() {
       webview.controller.send({
         'type': 'link',
         'href': const LessonLink(
-          lesson: 'Unit 2::Lesson 26',
+          lesson: 'Unit 2::Lesson 1',
           heading: 'Past tense',
         ).href,
       });
@@ -232,7 +232,7 @@ void main() {
 
       webview.controller.send({
         'type': 'link',
-        'href': 'unit-2/lesson-26.md#past-tense',
+        'href': 'unit-2/lesson-1.md#past-tense',
       });
       await tester.pumpAndSettle();
 

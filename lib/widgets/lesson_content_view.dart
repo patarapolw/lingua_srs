@@ -345,7 +345,7 @@ class LessonContentView extends StatefulWidget {
   final LessonContentController? controller;
 
   /// Called for a tapped link to another lesson, such as
-  /// `[[Lesson 26#Past tense]]`. Links to a heading in this lesson scroll to
+  /// `[[Lesson 1#Past tense]]`. Links to a heading in this lesson scroll to
   /// it without calling this.
   final void Function(LessonLink link)? onLessonLink;
 
