@@ -1987,8 +1987,14 @@ void main() {
       );
       await tester.tap(find.text('Add example to "사과"'));
       await tester.pumpAndSettle();
+      // Only the sentence the word does not have is in the list.
+      Finder inList(String text) => find.descendant(
+        of: find.byType(CheckboxListTile),
+        matching: find.text(text),
+      );
       expect(find.byType(CheckboxListTile), findsOneWidget);
-      expect(find.text('사과 두 개 주세요.'), findsNothing);
+      expect(inList('사과 두 개 주세요.'), findsOneWidget);
+      expect(inList('사과가 맛있어요.'), findsNothing);
     });
 
     testWidgets('a sentence already in the pool is linked as it is', (
