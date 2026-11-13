@@ -94,6 +94,7 @@ lingua_srs/
 │       ├── audio_edit_fields.dart     # Audio URL (preview, use-recording checkbox) and collapsible TTS text fields for edit dialogs
 │       ├── tts_language_sheet.dart    # Bottom sheet to pick the language of a `tts` prefix
 │       ├── emphasis_text.dart         # Sentence text with **bold** segments, no Markdown
+│       ├── emphasis_field.dart        # Sentence field: B button and Ctrl+B toggle `**` on the selection; can lock the text
 │       ├── folder_picker_dialog.dart  # Pick an existing or new folder to move a lesson/folder into
 │       ├── lesson_hierarchy_view.dart # Lesson folder tree with reordering
 │       ├── lesson_clash_dialog.dart   # Asks which of two same-named lessons in a folder is primary
