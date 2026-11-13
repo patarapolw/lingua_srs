@@ -220,4 +220,19 @@ The full lesson body.
 
     expect(find.textContaining('existing lesson'), findsOneWidget);
   });
+
+  testWidgets('does not force the editor line height (CJK clipping)', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(const MaterialApp(home: YamlImportView()));
+    await tester.pumpAndSettle();
+
+    final markdownInput = tester
+        .widgetList<TextField>(find.byType(TextField))
+        .last;
+    expect(markdownInput.strutStyle?.forceStrutHeight, isNot(true));
+  });
 }
