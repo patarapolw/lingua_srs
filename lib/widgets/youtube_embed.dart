@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
@@ -185,7 +187,11 @@ class YouTubeEmbed extends StatefulWidget {
     return embed
         .replace(
           host: 'www.youtube-nocookie.com',
-          queryParameters: {...embed.queryParameters, 'origin': playerOrigin},
+          queryParameters: {
+            ...embed.queryParameters,
+            'origin': playerOrigin,
+            'playsinline': '1',
+          },
         )
         .toString();
   }
@@ -196,9 +202,17 @@ class YouTubeEmbed extends StatefulWidget {
 
 class _YouTubeEmbedState extends State<YouTubeEmbed> {
   WebViewController? _controller;
+  final _playerKey = GlobalKey();
   bool _failed = false;
   bool _starting = false;
+  bool _orientationFullscreen = false;
+  bool _landscapeFullscreenDismissed = false;
   int _generation = 0;
+  Orientation? _lastOrientation;
+  Route<void>? _orientationFullscreenRoute;
+  Route<void>? _customFullscreenRoute;
+  VoidCallback? _exitCustomFullscreen;
+  NavigatorState? _fullscreenNavigator;
   late Future<String?> _titleFuture;
 
   // On Windows, loadHtmlString's base URL does not give the document a real
@@ -286,6 +300,10 @@ document.body.appendChild(f);
         // The thumbnail tap occurs outside the WebView, so it is not a
         // WebView gesture capable of authorizing autoplay.
         await platform.setMediaPlaybackRequiresUserGesture(false);
+        await platform.setCustomWidgetCallbacks(
+          onShowCustomWidget: _showCustomFullscreenWidget,
+          onHideCustomWidget: _hideCustomFullscreenWidget,
+        );
       }
       await controller.setJavaScriptMode(JavaScriptMode.unrestricted);
       await controller.setNavigationDelegate(
@@ -367,6 +385,138 @@ document.body.appendChild(f);
     }
   }
 
+  bool get _supportsOrientationFullscreen =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
+
+  void _updateFullscreenForOrientation(Orientation orientation) {
+    final previous = _lastOrientation;
+    _lastOrientation = orientation;
+    if (orientation == Orientation.portrait) {
+      _landscapeFullscreenDismissed = false;
+      if (previous == Orientation.landscape) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted ||
+              MediaQuery.orientationOf(context) != Orientation.portrait) {
+            return;
+          }
+          _exitCustomFullscreen?.call();
+          _exitOrientationFullscreen();
+        });
+      }
+    } else if (previous == Orientation.portrait &&
+        _supportsOrientationFullscreen &&
+        _controller != null &&
+        !_landscapeFullscreenDismissed &&
+        _customFullscreenRoute == null &&
+        _orientationFullscreenRoute == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _enterOrientationFullscreen();
+      });
+    }
+  }
+
+  Route<void> _fullscreenRoute(Widget child) => PageRouteBuilder<void>(
+    opaque: true,
+    pageBuilder: (context, _, _) =>
+        Scaffold(backgroundColor: Colors.black, body: child),
+    transitionDuration: Duration.zero,
+    reverseTransitionDuration: Duration.zero,
+  );
+
+  void _updateFullscreenSystemUi() {
+    final fullscreen =
+        _orientationFullscreenRoute != null || _customFullscreenRoute != null;
+    unawaited(
+      SystemChrome.setEnabledSystemUIMode(
+        fullscreen ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
+      ),
+    );
+  }
+
+  void _enterOrientationFullscreen() {
+    final controller = _controller;
+    if (!mounted ||
+        controller == null ||
+        _orientationFullscreenRoute != null ||
+        _customFullscreenRoute != null ||
+        _landscapeFullscreenDismissed) {
+      return;
+    }
+    final navigator = Navigator.of(context);
+    final route = _fullscreenRoute(
+      Semantics(
+        label: 'YouTube fullscreen video',
+        key: const ValueKey('youtube-fullscreen-player'),
+        child: WebViewWidget(key: _playerKey, controller: controller),
+      ),
+    );
+    _fullscreenNavigator = navigator;
+    _orientationFullscreenRoute = route;
+    setState(() => _orientationFullscreen = true);
+    _updateFullscreenSystemUi();
+    unawaited(
+      navigator.push(route).whenComplete(() {
+        if (!identical(_orientationFullscreenRoute, route)) return;
+        _orientationFullscreenRoute = null;
+        if (_customFullscreenRoute == null) _fullscreenNavigator = null;
+        _orientationFullscreen = false;
+        _landscapeFullscreenDismissed = true;
+        _updateFullscreenSystemUi();
+        if (mounted) setState(() {});
+      }),
+    );
+  }
+
+  void _exitOrientationFullscreen() {
+    final route = _orientationFullscreenRoute;
+    if (route == null) return;
+    _orientationFullscreenRoute = null;
+    _orientationFullscreen = false;
+    _fullscreenNavigator?.removeRoute(route);
+    if (_customFullscreenRoute == null) _fullscreenNavigator = null;
+    _updateFullscreenSystemUi();
+    if (mounted) setState(() {});
+  }
+
+  void _showCustomFullscreenWidget(
+    Widget widget,
+    VoidCallback onCustomWidgetHidden,
+  ) {
+    if (!mounted) {
+      onCustomWidgetHidden();
+      return;
+    }
+    final navigator = Navigator.of(context);
+    final route = _fullscreenRoute(widget);
+    _customFullscreenRoute = route;
+    _exitCustomFullscreen = onCustomWidgetHidden;
+    _fullscreenNavigator = navigator;
+    _updateFullscreenSystemUi();
+    unawaited(
+      navigator.push(route).whenComplete(() {
+        if (!identical(_customFullscreenRoute, route)) return;
+        _customFullscreenRoute = null;
+        _exitCustomFullscreen = null;
+        if (_orientationFullscreenRoute == null) _fullscreenNavigator = null;
+        onCustomWidgetHidden();
+        _updateFullscreenSystemUi();
+      }),
+    );
+  }
+
+  void _hideCustomFullscreenWidget() {
+    final route = _customFullscreenRoute;
+    _customFullscreenRoute = null;
+    _exitCustomFullscreen = null;
+    if (route != null && route.isActive) {
+      _fullscreenNavigator?.removeRoute(route);
+    }
+    if (_orientationFullscreenRoute == null) _fullscreenNavigator = null;
+    _updateFullscreenSystemUi();
+  }
+
   Widget _thumbnail(BuildContext context) {
     final thumbnail = YouTubeEmbed.thumbnailUrl(widget.embedUrl);
     return Material(
@@ -426,6 +576,7 @@ document.body.appendChild(f);
 
   @override
   Widget build(BuildContext context) {
+    _updateFullscreenForOrientation(MediaQuery.orientationOf(context));
     final controller = _controller;
     final Widget player;
     if (_failed) {
@@ -448,10 +599,12 @@ document.body.appendChild(f);
       );
     } else if (_starting) {
       player = const Center(child: CircularProgressIndicator());
+    } else if (_orientationFullscreen) {
+      player = const SizedBox.shrink();
     } else if (controller == null) {
       player = _thumbnail(context);
     } else {
-      player = WebViewWidget(controller: controller);
+      player = WebViewWidget(key: _playerKey, controller: controller);
     }
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -464,7 +617,7 @@ document.body.appendChild(f);
             child: player,
           ),
         ),
-        if (controller != null && !_failed)
+        if (controller != null && !_failed && !_orientationFullscreen)
           TextButton(
             onPressed: _openOnYouTube,
             child: const Text('Video not playing? Open on YouTube'),

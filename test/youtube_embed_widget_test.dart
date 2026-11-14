@@ -1,8 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:lingua_srs/widgets/youtube_embed.dart';
 import 'package:webview_all_android/webview_all_android.dart';
 import 'package:webview_platform_interface/webview_platform_interface.dart';
@@ -37,6 +38,7 @@ void main() {
     await tester.pump();
     expect(platform.events, [
       'gesture:false',
+      'fullscreen',
       'javascript',
       'delegate',
       'html',
@@ -55,6 +57,90 @@ void main() {
     await tester.tap(find.byIcon(Icons.play_circle_fill));
     await tester.pump();
     expect(platform.events, ['javascript', 'delegate', 'html']);
+  });
+
+  testWidgets('rotation moves the active player fullscreen and back', (
+    tester,
+  ) async {
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    platform.android = true;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (_) async => null);
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null),
+    );
+
+    Widget app(Size size) => MaterialApp(
+      home: MediaQuery(
+        data: MediaQueryData(size: size),
+        child: const Scaffold(body: YouTubeEmbed(embedUrl: playlist)),
+      ),
+    );
+
+    await tester.pumpWidget(app(const Size(400, 800)));
+    await tester.tap(find.byIcon(Icons.play_circle_fill));
+    await tester.pumpAndSettle();
+    expect(find.byType(WebViewWidget), findsOneWidget);
+
+    await tester.pumpWidget(app(const Size(800, 400)));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('youtube-fullscreen-player')),
+      findsOneWidget,
+    );
+    expect(find.byType(WebViewWidget), findsOneWidget);
+
+    await tester.pumpWidget(app(const Size(400, 800)));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('youtube-fullscreen-player')),
+      findsNothing,
+    );
+    expect(find.byType(WebViewWidget), findsOneWidget);
+  });
+
+  testWidgets('iframe fullscreen returns inline after rotating to portrait', (
+    tester,
+  ) async {
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    platform.android = true;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (_) async => null);
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null),
+    );
+
+    Widget app(Size size) => MaterialApp(
+      home: MediaQuery(
+        data: MediaQueryData(size: size),
+        child: const Scaffold(body: YouTubeEmbed(embedUrl: playlist)),
+      ),
+    );
+
+    await tester.pumpWidget(app(const Size(400, 800)));
+    await tester.tap(find.byIcon(Icons.play_circle_fill));
+    await tester.pumpAndSettle();
+
+    var exited = false;
+    platform.onShowCustomWidget!(const Text('native fullscreen video'), () {
+      exited = true;
+      platform.onHideCustomWidget!();
+    });
+    await tester.pumpAndSettle();
+    expect(find.text('native fullscreen video'), findsOneWidget);
+
+    await tester.pumpWidget(app(const Size(800, 400)));
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(app(const Size(400, 800)));
+    await tester.pumpAndSettle();
+
+    expect(exited, isTrue);
+    expect(find.text('native fullscreen video'), findsNothing);
+    expect(find.byType(WebViewWidget), findsOneWidget);
   });
 
   testWidgets('Windows loads a packaged HTTPS host asset', (tester) async {
@@ -120,7 +206,12 @@ void main() {
     );
     gate.complete();
     await tester.pump();
-    expect(platform.events, ['gesture:false', 'javascript', 'delegate']);
+    expect(platform.events, [
+      'gesture:false',
+      'fullscreen',
+      'javascript',
+      'delegate',
+    ]);
     expect(find.byIcon(Icons.play_circle_fill), findsOneWidget);
   });
 }
@@ -129,6 +220,8 @@ class _TestWebViewPlatform extends WebViewPlatform {
   bool android = false;
   Completer<void>? autoplayGate;
   final events = <String>[];
+  void Function(Widget, VoidCallback)? onShowCustomWidget;
+  VoidCallback? onHideCustomWidget;
   String? html;
   String? baseUrl;
   String? asset;
@@ -190,6 +283,16 @@ class _TestAndroidController extends _TestController
   Future<void> setMediaPlaybackRequiresUserGesture(bool require) async {
     owner.events.add('gesture:$require');
     await owner.autoplayGate?.future;
+  }
+
+  @override
+  Future<void> setCustomWidgetCallbacks({
+    required OnShowCustomWidgetCallback? onShowCustomWidget,
+    required OnHideCustomWidgetCallback? onHideCustomWidget,
+  }) async {
+    owner.events.add('fullscreen');
+    owner.onShowCustomWidget = onShowCustomWidget;
+    owner.onHideCustomWidget = onHideCustomWidget;
   }
 
   @override
