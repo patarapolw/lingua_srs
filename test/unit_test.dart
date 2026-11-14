@@ -142,6 +142,70 @@ Lesson text.
       expect(parsed.lesson.markdownContent, contains('Lesson text.'));
     });
 
+    test('keeps a footer after the Vocabulary closing comment', () {
+      const source = '''
+---
+vocabulary:
+---
+# Title
+
+## Vocabulary
+Preview text.
+<!-- /Vocabulary -->
+
+Footer text.
+''';
+      for (final markdown in [source, source.replaceAll('\n', '\r\n')]) {
+        final parsed = YamlParserService.parseLessonYaml(markdown);
+        expect(
+          parsed.lesson.markdownContent.replaceAll('\r\n', '\n'),
+          '# Title\n\n\nFooter text.',
+        );
+      }
+    });
+
+    test('a Vocabulary closing comment alone leaves no lesson content', () {
+      final parsed = YamlParserService.parseLessonYaml('''
+---
+vocabulary:
+---
+# Title
+## Vocabulary
+<!-- /Vocabulary -->
+''');
+
+      expect(parsed.lesson.markdownContent, isEmpty);
+    });
+
+    test('keeps a heading immediately after an empty Vocabulary section', () {
+      final parsed = YamlParserService.parseLessonYaml('''
+---
+vocabulary:
+---
+# Title
+## Vocabulary
+## Notes
+Lesson text.
+''');
+
+      expect(parsed.lesson.markdownContent, '# Title\n## Notes\nLesson text.');
+    });
+
+    test('ignores a Vocabulary closing comment outside the section', () {
+      final parsed = YamlParserService.parseLessonYaml('''
+---
+vocabulary:
+---
+# Title
+
+<!-- /Vocabulary -->
+
+Lesson text.
+''');
+
+      expect(parsed.lesson.markdownContent, contains('<!-- /Vocabulary -->'));
+    });
+
     test('tts is alternate TTS text for vocabulary and examples', () {
       final parsed = YamlParserService.parseLessonYaml('''
 ---

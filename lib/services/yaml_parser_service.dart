@@ -315,7 +315,8 @@ class YamlParserService {
       final frontMatterParts = _splitMarkdownFrontmatter(frontMatter);
       final markdownBody = frontMatterParts.$2;
       final vocabularySection = RegExp(
-        r'(?:^|\r?\n)## Vocabulary\r?\n[^]*?(?=\r?\n## |$)',
+        r'(?:^|\r?\n)## Vocabulary(?=\r?\n|$)[^]*?'
+        r'(?:\r?\n<!-- /Vocabulary -->(?=\r?\n|$)|(?=\r?\n## |$))',
       );
       markdownContent = markdownBody.replaceAll(vocabularySection, '').trim();
       final bodyLines = markdownContent
