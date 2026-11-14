@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lingua_srs/services/audio_service.dart';
@@ -307,6 +308,22 @@ void main() {
       expect(web.html, contains('<h1 id="lesson">Lesson</h1>'));
       expect(web.html, contains('<h2 id="past-tense">Past tense</h2>'));
       expect(web.html, contains('linguaStart(0.0, null)'));
+    });
+
+    testWidgets('Windows loads a packaged HTTPS host asset', (tester) async {
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+
+      await show(tester);
+
+      final web = platform.controller;
+      expect(web.flutterAsset, 'assets/webview_host.html');
+      expect(web.requested, isNull);
+      web.finish();
+      expect(
+        web.scripts.single,
+        contains('document.documentElement.innerHTML'),
+      );
     });
 
     testWidgets('a link to a heading scrolls the page to it', (tester) async {

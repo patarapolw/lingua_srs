@@ -161,8 +161,8 @@ class YouTubeEmbed extends StatefulWidget {
   }
 
   /// The page the WebView shows to play [embedUrl]: an iframe of the player
-  /// on youtube-nocookie.com, which must be loaded with [playerOrigin] as its
-  /// base URL so YouTube sees a real origin and referrer (else Error 153).
+  /// on youtube-nocookie.com, which needs a real HTTPS origin and referrer
+  /// (else Error 153).
   static String playerHtml(String embedUrl) =>
       '<!DOCTYPE html><html><head>'
       '<meta name="viewport" content="width=device-width, initial-scale=1">'
@@ -201,12 +201,9 @@ class _YouTubeEmbedState extends State<YouTubeEmbed> {
   int _generation = 0;
   late Future<String?> _titleFuture;
 
-  // On Windows the WebView ignores the base URL of an HTML string, so the
-  // player gets no real HTTPS origin and YouTube rejects it (Error 153).
-  // There, load a harmless youtube-nocookie.com page and inject the player.
-  // Elsewhere the page is loaded locally, so no extra site has to be
-  // reachable before the video plays.
-  static const _windowsHostPage = 'https://www.youtube-nocookie.com/robots.txt';
+  // On Windows, loadHtmlString's base URL does not give the document a real
+  // HTTPS origin. WebView2 serves this bundled asset from a local HTTPS origin.
+  static const _windowsHostAsset = 'assets/webview_host.html';
 
   @override
   void initState() {
@@ -259,7 +256,11 @@ document.documentElement.innerHTML =
   '<head><meta name="viewport" content="width=device-width, initial-scale=1"></head>' +
   '<body style="margin:0;height:100vh;background:#000"></body>';
 var f = document.createElement('iframe');
-f.src = ${jsonEncode(src)};
+var src = new URL(${jsonEncode(src)});
+if (location.origin !== 'null') {
+  src.searchParams.set('origin', location.origin);
+}
+f.src = src.toString();
 f.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen';
 f.referrerPolicy = 'strict-origin-when-cross-origin';
 f.allowFullscreen = true;
@@ -275,7 +276,7 @@ document.body.appendChild(f);
       _starting = true;
       _failed = false;
     });
-    final useHostPage =
+    final useWindowsHostAsset =
         !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
     var injected = false;
     try {
@@ -310,7 +311,7 @@ document.body.appendChild(f);
           onPageFinished: (_) {
             if (!mounted ||
                 generation != _generation ||
-                !useHostPage ||
+                !useWindowsHostAsset ||
                 injected) {
               return;
             }
@@ -320,8 +321,8 @@ document.body.appendChild(f);
         ),
       );
       if (!mounted || generation != _generation) return;
-      if (useHostPage) {
-        await controller.loadRequest(Uri.parse(_windowsHostPage));
+      if (useWindowsHostAsset) {
+        await controller.loadFlutterAsset(_windowsHostAsset);
       } else {
         await controller.loadHtmlString(
           YouTubeEmbed.playerHtml(widget.embedUrl),
