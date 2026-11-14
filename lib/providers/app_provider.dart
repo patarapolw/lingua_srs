@@ -1110,7 +1110,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
         mergeHistory: _mergeHistory,
         aiDiscussions: _aiDiscussions,
         typedQuestions: _typedQuestions,
-        lessonOrder: _lessonHierarchyOrder,
+        lessonOrder: _syncLessonHierarchyOrder(),
         settings: SyncSettings(
           maxReviews24h: _maxReviews24h,
           maxNewCards24h: _maxNewCards24h,
@@ -1124,6 +1124,31 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
         languageActivity: _languageActivity,
         deviceId: deviceId,
       );
+
+  Map<String, int> _syncLessonHierarchyOrder() {
+    final siblingsByParent = <String, List<String>>{};
+    final seenByParent = <String, Set<String>>{};
+    void addSibling(String parent, String key) {
+      if (seenByParent.putIfAbsent(parent, () => {}).add(key)) {
+        siblingsByParent.putIfAbsent(parent, () => []).add(key);
+      }
+    }
+
+    for (final lesson in _orderedLessons()) {
+      final path = <String>[];
+      for (final folder in lesson.folderPath) {
+        final parent = hierarchyFolderKey(path);
+        path.add(folder);
+        addSibling(parent, hierarchyFolderKey(path));
+      }
+      addSibling(hierarchyFolderKey(path), 'lesson:${lesson.id}');
+    }
+    return {
+      for (final siblings in siblingsByParent.values)
+        for (var index = 0; index < siblings.length; index++)
+          siblings[index]: index,
+    };
+  }
 
   List<AiDiscussionMessage> getAiDiscussion(String discussionId) =>
       List.unmodifiable(_aiDiscussions[discussionId] ?? const []);

@@ -193,25 +193,49 @@ abstract final class SyncApplier {
       changed.add(SyncAppPart.lessons);
     }
     final next = [...data.lessons];
+    final lessonIndexes = {
+      for (var index = 0; index < next.length; index++) next[index].id: index,
+    };
+    final removedLessons = <String>{};
+    final localLessonsByName = <(String, String), List<(Lesson, int)>>{};
+    if (firstSync) {
+      for (var index = 0; index < next.length; index++) {
+        final local = next[index];
+        if (lessons.containsKey(local.id)) continue;
+        localLessonsByName.putIfAbsent(_sameLessonKey(local), () => []).add((
+          local,
+          index,
+        ));
+      }
+    }
+    final matchedLocalLessons = <String>{};
     // Markdown of local lessons merged into a pulled one, by the pulled id.
     final mergedMarkdown = <String, String>{};
     for (final entry in lessons.entries) {
-      final index = next.indexWhere((lesson) => lesson.id == entry.key);
+      final index = lessonIndexes[entry.key] ?? -1;
       final json = entry.value;
       if (json == null) {
-        if (index >= 0) next.removeAt(index);
+        if (index >= 0) {
+          removedLessons.add(entry.key);
+          lessonIndexes.remove(entry.key);
+        }
         continue;
       }
       var previous = index >= 0 ? next[index] : null;
       var at = index;
       final lesson = Lesson.fromJson({...json, 'id': entry.key});
       if (previous == null && firstSync) {
-        at = next.indexWhere(
-          (local) =>
-              !lessons.containsKey(local.id) && _sameLesson(local, lesson),
-        );
+        for (final (local, localIndex)
+            in localLessonsByName[_sameLessonKey(lesson)] ?? const []) {
+          if (matchedLocalLessons.add(local.id)) {
+            at = localIndex;
+            break;
+          }
+        }
         if (at >= 0) {
           previous = next[at];
+          lessonIndexes.remove(previous.id);
+          lessonIndexes[entry.key] = at;
           final pulled = {for (final vocab in lesson.vocabularies) vocab.id};
           lesson.vocabularies.addAll(
             previous.vocabularies.where((vocab) => !pulled.contains(vocab.id)),
@@ -230,7 +254,9 @@ abstract final class SyncApplier {
       }
       if (at >= 0) {
         next[at] = lesson;
+        lessonIndexes[entry.key] = at;
       } else {
+        lessonIndexes[entry.key] = next.length;
         next.add(lesson);
       }
     }
@@ -245,7 +271,10 @@ abstract final class SyncApplier {
         }
       }
     }
-    data.lessons = next;
+    data.lessons = [
+      for (final lesson in next)
+        if (!removedLessons.contains(lesson.id)) lesson,
+    ];
 
     final sentences = ofKind(SyncKinds.sentence);
     if (sentences.isNotEmpty) {
@@ -381,11 +410,10 @@ abstract final class SyncApplier {
         '${own.endsWith('\n') ? '\n' : ''}';
   }
 
-  /// Two lessons with the same title in the same folder, ignoring case.
-  static bool _sameLesson(Lesson a, Lesson b) =>
-      a.displayTitle.trim().toLowerCase() ==
-          b.displayTitle.trim().toLowerCase() &&
-      isSameHierarchyPath(a.folderPath, b.folderPath);
+  static (String, String) _sameLessonKey(Lesson lesson) => (
+    hierarchyFolderKey(lesson.folderPath),
+    lesson.displayTitle.trim().toLowerCase(),
+  );
 
   /// [current] with every field from [json], or a new card when the ids
   /// differ. Changing the card in place keeps screens that hold it in step.

@@ -9,6 +9,7 @@ import 'package:lingua_srs/services/storage_service.dart';
 import 'package:lingua_srs/services/sync_pairing.dart';
 import 'package:lingua_srs/services/sync_record_cipher.dart';
 import 'package:lingua_srs/services/sync_records.dart';
+import 'package:lingua_srs/services/yaml_parser_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'debug_print_capture.dart';
@@ -88,6 +89,39 @@ void main() {
       DateTime.utc(2026, 11, 5, 13).millisecondsSinceEpoch,
     );
     expect(tracker.pending, containsAll([_settings, _lessonOrder]));
+  });
+
+  test('syncs the current imported lesson hierarchy order', () async {
+    final provider = await _loadedProvider();
+    final parsed = [
+      YamlParserService.parseLessonYaml(
+        '---\nvocabulary:\n---\n# Lesson A\n',
+        defaultUnitTitle: 'Unit 1',
+        sourcePath: 'unit-1/a.md',
+      ),
+      YamlParserService.parseLessonYaml(
+        '---\nvocabulary:\n---\n# Lesson B\n',
+        defaultUnitTitle: 'Unit 1',
+        sourcePath: 'unit-1/b.md',
+      ),
+      YamlParserService.parseLessonYaml(
+        '---\nvocabulary:\n---\n# Lesson Z\n',
+        defaultUnitTitle: 'Unit 2',
+        sourcePath: 'unit-2/z.md',
+      ),
+    ];
+    final imported = await provider.importParsedLessons(parsed);
+
+    final order =
+        provider.syncSnapshot('this-device')[_lessonOrder]!['order'] as Map;
+
+    expect(order, {
+      'folder:unit 1': 0,
+      'lesson:${imported[0].id}': 0,
+      'lesson:${imported[1].id}': 1,
+      'folder:unit 2': 1,
+      'lesson:${imported[2].id}': 0,
+    });
   });
 
   test('signing out forgets the records but keeps the device id', () async {

@@ -564,6 +564,34 @@ void main() {
       ]);
     });
 
+    testWidgets('a folder scan returns Markdown files in stable path order', (
+      tester,
+    ) async {
+      for (final path in [
+        'z.md',
+        'a-folder/lesson.md',
+        'm.md',
+        'a-folder/a.md',
+        'a.md',
+      ]) {
+        File('${folder.path}/$path')
+          ..createSync(recursive: true)
+          ..writeAsStringSync('# Lesson\n');
+      }
+
+      final found = await tester.runAsync(() => markdownFilesUnder(folder));
+
+      expect(
+        found!
+            .map(
+              (path) =>
+                  path.substring(folder.path.length + 1).replaceAll('\\', '/'),
+            )
+            .toList(),
+        ['a-folder/a.md', 'a-folder/lesson.md', 'a.md', 'm.md', 'z.md'],
+      );
+    });
+
     testWidgets('a folder scan finds files with Hangul or % in their '
         'names', (tester) async {
       final names = ['09-conjugate-이다.md', '23-ㅎ-irregulars.md', '100%.md'];
