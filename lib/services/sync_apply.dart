@@ -226,7 +226,8 @@ abstract final class SyncApplier {
       final lesson = Lesson.fromJson({...json, 'id': entry.key});
       if (previous == null && firstSync) {
         for (final (local, localIndex)
-            in localLessonsByName[_sameLessonKey(lesson)] ?? const []) {
+            in localLessonsByName[_sameLessonKey(lesson)] ??
+                const <(Lesson, int)>[]) {
           if (matchedLocalLessons.add(local.id)) {
             at = localIndex;
             break;
