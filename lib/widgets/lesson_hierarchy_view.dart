@@ -50,6 +50,7 @@ class LessonHierarchyView extends StatelessWidget {
   final Future<void> Function(String folderKey, bool expanded)
   onFolderExpansionChanged;
   final void Function(List<String> folderPath) onMoveFolder;
+  final void Function(List<String> folderPath)? onRenameFolder;
   final void Function(List<String> folderPath, int lessonCount) onResetFolder;
   final void Function(List<String> folderPath, int lessonCount) onDeleteFolder;
   final void Function(List<String> folderPath)? onExportFolder;
@@ -65,6 +66,7 @@ class LessonHierarchyView extends StatelessWidget {
     required this.onOrderChanged,
     required this.onFolderExpansionChanged,
     required this.onMoveFolder,
+    this.onRenameFolder,
     required this.onResetFolder,
     required this.onDeleteFolder,
     this.onExportFolder,
@@ -296,7 +298,9 @@ class LessonHierarchyView extends StatelessWidget {
               PopupMenuButton<String>(
                 tooltip: 'Manage ${formatHierarchyPath(row.folderPath!)}',
                 onSelected: (action) {
-                  if (action == 'move') {
+                  if (action == 'rename') {
+                    onRenameFolder?.call(row.folderPath!);
+                  } else if (action == 'move') {
                     onMoveFolder(row.folderPath!);
                   } else if (action == 'move_up') {
                     orderActions.moveUp();
@@ -346,6 +350,17 @@ class LessonHierarchyView extends StatelessWidget {
                       ),
                     ),
                   if (onExportFolder != null) const PopupMenuDivider(),
+                  if (onRenameFolder != null)
+                    const PopupMenuItem(
+                      value: 'rename',
+                      child: Row(
+                        children: [
+                          Icon(Icons.drive_file_rename_outline, size: 18),
+                          SizedBox(width: 8),
+                          Text('Rename folder'),
+                        ],
+                      ),
+                    ),
                   PopupMenuItem(
                     value: 'reset_srs',
                     child: Row(
