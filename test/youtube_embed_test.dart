@@ -68,6 +68,7 @@ void main() {
       expect(src.queryParameters['autoplay'], '1');
       expect(src.queryParameters['origin'], YouTubeEmbed.playerOrigin);
       expect(src.queryParameters['playsinline'], '1');
+      expect(src.queryParameters['enablejsapi'], '1');
     });
 
     test('player page holds the iframe without fetching a host page', () {

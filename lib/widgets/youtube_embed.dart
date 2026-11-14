@@ -175,7 +175,61 @@ class YouTubeEmbed extends StatefulWidget {
       'allow="accelerometer; autoplay; clipboard-write; encrypted-media; '
       'gyroscope; picture-in-picture; web-share; fullscreen" '
       'referrerpolicy="strict-origin-when-cross-origin" allowfullscreen>'
-      '</iframe></body></html>';
+      '</iframe><script>$fullscreenPlaybackScript'
+      'linguaTrackYouTubeFrame(document.querySelector("iframe"));'
+      '</script></body></html>';
+
+  /// Tracks YouTube playback across Android WebView fullscreen transitions.
+  static const fullscreenPlaybackScript = r'''
+if (!window.__linguaYouTubePlaybackBound) {
+  window.__linguaYouTubePlaybackBound = true;
+  var linguaPlayingVideos = new WeakMap();
+  var linguaBeforeHidden = new WeakMap();
+  var linguaNativeFullscreenFrame = null;
+  window.linguaYouTubeCommand = function (frame, command, args) {
+    frame.contentWindow.postMessage(
+      JSON.stringify({event: 'command', func: command, args: args || []}),
+      new URL(frame.src).origin
+    );
+  };
+  window.linguaTrackYouTubeFrame = function (frame) {
+    frame.addEventListener('load', function () {
+      frame.contentWindow.postMessage(JSON.stringify({event: 'listening', id: 'lingua'}), new URL(frame.src).origin);
+      window.linguaYouTubeCommand(frame, 'addEventListener', ['onStateChange']);
+    });
+  };
+  window.addEventListener('message', function (event) {
+    var frame = Array.prototype.find.call(document.querySelectorAll('iframe'), function (f) {
+      return f.contentWindow === event.source && new URL(f.src).origin === event.origin;
+    });
+    if (!frame) return;
+    var data;
+    try { data = JSON.parse(event.data); } catch (_) { return; }
+    if (!data || typeof data !== 'object') return;
+    var state = data.event === 'onStateChange' ? data.info :
+      data.event === 'initialDelivery' ? data.info && data.info.playerState : null;
+    if (typeof state !== 'number') return;
+    linguaPlayingVideos.set(frame, state === 1);
+    window.dispatchEvent(new CustomEvent('lingua-youtube-state', {detail: {frame: frame, state: state}}));
+  });
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) return;
+    linguaBeforeHidden = new WeakMap();
+    document.querySelectorAll('iframe').forEach(function (frame) {
+      linguaBeforeHidden.set(frame, linguaPlayingVideos.get(frame) === true);
+    });
+  });
+  // Android hides the WebView while switching native fullscreen views.
+  document.addEventListener('fullscreenchange', function () {
+    var frame = document.fullscreenElement || linguaNativeFullscreenFrame;
+    linguaNativeFullscreenFrame = document.fullscreenElement;
+    if (frame && linguaBeforeHidden.get(frame)) {
+      window.linguaYouTubeCommand(frame, 'playVideo');
+    }
+    linguaBeforeHidden = new WeakMap();
+  });
+}
+''';
 
   /// The origin the player page claims; see [playerHtml].
   static const playerOrigin = 'https://www.youtube-nocookie.com';
@@ -189,6 +243,7 @@ class YouTubeEmbed extends StatefulWidget {
           host: 'www.youtube-nocookie.com',
           queryParameters: {
             ...embed.queryParameters,
+            'enablejsapi': '1',
             'origin': playerOrigin,
             'playsinline': '1',
           },
@@ -270,6 +325,7 @@ document.documentElement.innerHTML =
   '<head><meta name="viewport" content="width=device-width, initial-scale=1"></head>' +
   '<body style="margin:0;height:100vh;background:#000"></body>';
 var f = document.createElement('iframe');
+${YouTubeEmbed.fullscreenPlaybackScript}
 var src = new URL(${jsonEncode(src)});
 if (location.origin !== 'null') {
   src.searchParams.set('origin', location.origin);
@@ -279,6 +335,7 @@ f.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope;
 f.referrerPolicy = 'strict-origin-when-cross-origin';
 f.allowFullscreen = true;
 f.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:0';
+linguaTrackYouTubeFrame(f);
 document.body.appendChild(f);
 ''';
   }
@@ -405,20 +462,22 @@ document.body.appendChild(f);
           _exitOrientationFullscreen();
         });
       }
-    } else if (previous == Orientation.portrait &&
-        _supportsOrientationFullscreen &&
+    } else if (_supportsOrientationFullscreen &&
         _controller != null &&
         !_landscapeFullscreenDismissed &&
         _customFullscreenRoute == null &&
         _orientationFullscreenRoute == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _enterOrientationFullscreen();
+        if (mounted &&
+            MediaQuery.orientationOf(context) == Orientation.landscape) {
+          _enterOrientationFullscreen();
+        }
       });
     }
   }
 
   Route<void> _fullscreenRoute(Widget child) => PageRouteBuilder<void>(
-    opaque: true,
+    opaque: false,
     pageBuilder: (context, _, _) =>
         Scaffold(backgroundColor: Colors.black, body: child),
     transitionDuration: Duration.zero,

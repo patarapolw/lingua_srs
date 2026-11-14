@@ -171,6 +171,7 @@ summary { cursor: pointer; font-weight: bold; }
 .yt-wrap .yt { margin: 0 0 4px; }
 .yt-open { font-size: 0.85em; }
 .yt iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.yt.yt-fullscreen { position: fixed; inset: 0; z-index: 2147483647; width: 100%; height: 100%; max-width: none; margin: 0; border-radius: 0; }
 .spoiler { filter: blur(5px); cursor: pointer; transition: filter .15s; }
 .spoiler:hover, .spoiler.show { filter: none; }
 button.audio, button.tts { font-size: 0.8em; padding: 2px 6px; margin: 0 2px; border: none; border-radius: 50%; cursor: pointer; background: ${hex(scheme.surfaceContainerHighest)}; color: ${hex(scheme.onSurface)}; }
@@ -180,10 +181,23 @@ button.audio, button.tts { font-size: 0.8em; padding: 2px 6px; margin: 0 2px; bo
   /// The page script: brings the components to life, reports taps and the
   /// scroll position to the app (the `Lingua` channel), and defines
   /// `linguaScrollTo(anchor, smooth)` and `linguaStart(y, anchor)`.
-  static const script = r'''
+  static const script =
+      YouTubeEmbed.fullscreenPlaybackScript +
+      r'''
 function linguaPost(message) {
   if (window.Lingua) window.Lingua.postMessage(JSON.stringify(message));
 }
+var linguaActiveVideo = null;
+var linguaVideoFullscreen = false;
+window.linguaSetYouTubeFullscreen = function (fullscreen) {
+  linguaVideoFullscreen = fullscreen;
+  document.querySelectorAll('.yt-fullscreen').forEach(function (el) {
+    el.classList.remove('yt-fullscreen');
+  });
+  if (fullscreen && linguaActiveVideo && linguaActiveVideo.querySelector('iframe')) {
+    linguaActiveVideo.classList.add('yt-fullscreen');
+  }
+};
 window.linguaScrollTo = function (anchor, smooth) {
   var headings = document.querySelectorAll('h1,h2,h3,h4,h5,h6');
   for (var i = 0; i < headings.length; i++) {
@@ -204,6 +218,16 @@ window.linguaStart = function (y, anchor) {
 };
 if (!window.__linguaBound) {
   window.__linguaBound = true;
+  window.addEventListener('lingua-youtube-state', function (event) {
+    if (event.detail.state === 1) {
+      var yt = event.detail.frame.closest('.yt');
+      if (yt && yt !== linguaActiveVideo) {
+        linguaActiveVideo = yt;
+        window.linguaSetYouTubeFullscreen(linguaVideoFullscreen);
+        linguaPost({type: 'youtube', watch: yt.dataset.watch || ''});
+      }
+    }
+  });
   var timer;
   ['wheel', 'touchstart', 'mousedown', 'keydown'].forEach(function (name) {
     window.addEventListener(name, function () { window.__linguaMoved = true; }, {passive: true});
@@ -218,6 +242,7 @@ if (!window.__linguaBound) {
     var yt = t.closest('.yt');
     if (yt && !yt.querySelector('iframe')) {
       var frame = document.createElement('iframe');
+      linguaActiveVideo = yt;
       linguaPost({type: 'youtube', watch: yt.dataset.watch || ''});
       var src = new URL(yt.dataset.src);
       if (location.origin !== 'null') {
@@ -227,6 +252,7 @@ if (!window.__linguaBound) {
       frame.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen';
       frame.referrerPolicy = 'strict-origin-when-cross-origin';
       frame.allowFullscreen = true;
+      linguaTrackYouTubeFrame(frame);
       yt.appendChild(frame);
       return;
     }

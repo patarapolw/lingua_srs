@@ -32,6 +32,7 @@ class _LessonReaderViewState extends State<LessonReaderView> {
   final LessonContentController _contentController = LessonContentController();
   String? _parsedMarkdown;
   LessonContent? _parsed;
+  bool _videoFullscreen = false;
 
   String get lessonId => widget.lessonId;
 
@@ -72,60 +73,77 @@ class _LessonReaderViewState extends State<LessonReaderView> {
       ),
     );
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(selectedLesson.displayTitle),
-        actions: [
-          if (headings.isNotEmpty)
-            IconButton(
-              tooltip: 'Table of contents',
-              icon: const Icon(Icons.toc),
-              onPressed: () => _showToc(context, headings),
-            ),
-          if (provider.showAi)
-            IconButton(
-              tooltip: 'Ask AI about lesson',
-              icon: const Icon(Icons.forum_outlined),
-              onPressed: () => _openAiDiscussion(context, selectedLesson),
-            ),
-          IconButton(
-            tooltip: 'Edit Markdown',
-            icon: const Icon(Icons.edit_outlined),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => _LessonMarkdownEditor(lesson: selectedLesson),
-                ),
-              );
-            },
-          ),
-          if (compact)
-            IconButton(
-              tooltip: 'View Vocabulary',
-              icon: const Icon(Icons.translate_outlined),
-              onPressed: openVocabulary,
-            )
-          else
-            TextButton.icon(
-              icon: const Icon(Icons.translate_outlined),
-              label: const Text('View Vocabulary'),
-              onPressed: openVocabulary,
-            ),
-          SizedBox(width: compact ? 4 : 12),
-        ],
+    return PopScope(
+      canPop: !_videoFullscreen,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _videoFullscreen) {
+          _contentController.exitVideoFullscreen();
+        }
+      },
+      child: Scaffold(
+        appBar: _videoFullscreen
+            ? null
+            : AppBar(
+                title: Text(selectedLesson.displayTitle),
+                actions: [
+                  if (headings.isNotEmpty)
+                    IconButton(
+                      tooltip: 'Table of contents',
+                      icon: const Icon(Icons.toc),
+                      onPressed: () => _showToc(context, headings),
+                    ),
+                  if (provider.showAi)
+                    IconButton(
+                      tooltip: 'Ask AI about lesson',
+                      icon: const Icon(Icons.forum_outlined),
+                      onPressed: () =>
+                          _openAiDiscussion(context, selectedLesson),
+                    ),
+                  IconButton(
+                    tooltip: 'Edit Markdown',
+                    icon: const Icon(Icons.edit_outlined),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              _LessonMarkdownEditor(lesson: selectedLesson),
+                        ),
+                      );
+                    },
+                  ),
+                  if (compact)
+                    IconButton(
+                      tooltip: 'View Vocabulary',
+                      icon: const Icon(Icons.translate_outlined),
+                      onPressed: openVocabulary,
+                    )
+                  else
+                    TextButton.icon(
+                      icon: const Icon(Icons.translate_outlined),
+                      label: const Text('View Vocabulary'),
+                      onPressed: openVocabulary,
+                    ),
+                  SizedBox(width: compact ? 4 : 12),
+                ],
+              ),
+        body: selectedLesson.markdownContent.trim().isEmpty
+            ? _emptyLessonContent(context, selectedLesson)
+            : LessonContentView(
+                markdown: selectedLesson.markdownContent,
+                content: content,
+                controller: _contentController,
+                onVideoFullscreenChanged: (fullscreen) {
+                  if (_videoFullscreen != fullscreen) {
+                    setState(() => _videoFullscreen = fullscreen);
+                  }
+                },
+                initialHeading: widget.initialHeading,
+                scrollKey: selectedLesson.id,
+                onLessonLink: (link) =>
+                    _openLessonLink(context, provider, selectedLesson, link),
+              ),
       ),
-      body: selectedLesson.markdownContent.trim().isEmpty
-          ? _emptyLessonContent(context, selectedLesson)
-          : LessonContentView(
-              markdown: selectedLesson.markdownContent,
-              content: content,
-              controller: _contentController,
-              initialHeading: widget.initialHeading,
-              scrollKey: selectedLesson.id,
-              onLessonLink: (link) =>
-                  _openLessonLink(context, provider, selectedLesson, link),
-            ),
     );
   }
 

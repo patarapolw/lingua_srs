@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -143,6 +144,37 @@ void main() {
     await tester.tap(find.byTooltip('View Vocabulary'));
     await tester.pumpAndSettle();
     expect(find.byType(LessonDetailView), findsOneWidget);
+  });
+
+  testWidgets('landscape video hides the app bar and back restores it', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    webview.android = true;
+    await openReader(tester, const Size(400, 800));
+    webview.controller.send({
+      'type': 'youtube',
+      'watch': 'https://www.youtube.com/watch?v=abc',
+    });
+    await tester.pumpAndSettle();
+
+    tester.view.physicalSize = const Size(800, 400);
+    await tester.pumpAndSettle();
+    expect(find.byType(AppBar), findsNothing);
+    expect(
+      webview.controller.scripts.last,
+      'linguaSetYouTubeFullscreen(true);',
+    );
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byType(AppBar), findsOneWidget);
+    expect(
+      webview.controller.scripts.last,
+      'linguaSetYouTubeFullscreen(false);',
+    );
+    expect(find.byType(LessonReaderView), findsOneWidget);
   });
 
   testWidgets('labels View Vocabulary on a wide screen', (tester) async {

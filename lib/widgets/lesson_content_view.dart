@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -313,6 +315,7 @@ class LessonContent {
 class LessonContentController {
   void Function(LessonHeading heading)? _scrollTo;
   bool Function(String target)? _scrollToNamed;
+  VoidCallback? _exitVideoFullscreen;
 
   void scrollToHeading(LessonHeading heading) => _scrollTo?.call(heading);
 
@@ -320,6 +323,8 @@ class LessonContentController {
   /// false if there is none.
   bool scrollToHeadingNamed(String target) =>
       _scrollToNamed?.call(target) ?? false;
+
+  void exitVideoFullscreen() => _exitVideoFullscreen?.call();
 }
 
 /// Where a lesson was scrolled to, in pixels, and a hash of its text.
@@ -343,6 +348,7 @@ class LessonContentView extends StatefulWidget {
   /// [markdown] already parsed, to avoid parsing it again here.
   final LessonContent? content;
   final LessonContentController? controller;
+  final ValueChanged<bool>? onVideoFullscreenChanged;
 
   /// Called for a tapped link to another lesson, such as
   /// `[[Lesson 1#Past tense]]`. Links to a heading in this lesson scroll to
@@ -362,6 +368,7 @@ class LessonContentView extends StatefulWidget {
     required this.markdown,
     this.content,
     this.controller,
+    this.onVideoFullscreenChanged,
     this.onLessonLink,
     this.initialHeading,
     this.scrollKey,
@@ -397,6 +404,13 @@ class _LessonContentViewState extends State<LessonContentView> {
   /// The regular YouTube link of the video last started, for a link out of
   /// its player that the WebView cannot follow (`intent:` on Android).
   String? _playingWatch;
+  bool _videoStarted = false;
+  bool _orientationFullscreen = false;
+  bool _landscapeFullscreenDismissed = false;
+  Orientation? _orientation;
+  Route<void>? _customFullscreenRoute;
+  NavigatorState? _fullscreenNavigator;
+  VoidCallback? _exitCustomFullscreen;
 
   /// The first page opens at this heading or, after it was left, at the
   /// saved place. Later reloads (a new theme) keep the current place.
@@ -429,11 +443,13 @@ class _LessonContentViewState extends State<LessonContentView> {
   void _attach(LessonContentController? controller) {
     controller?._scrollTo = _scrollTo;
     controller?._scrollToNamed = _scrollToNamed;
+    controller?._exitVideoFullscreen = _dismissOrientationFullscreen;
   }
 
   void _detach(LessonContentController? controller) {
     controller?._scrollTo = null;
     controller?._scrollToNamed = null;
+    controller?._exitVideoFullscreen = null;
   }
 
   Future<void> _configure() async {
@@ -444,6 +460,10 @@ class _LessonContentViewState extends State<LessonContentView> {
       try {
         await platform.setMediaPlaybackRequiresUserGesture(false);
       } catch (_) {}
+      await platform.setCustomWidgetCallbacks(
+        onShowCustomWidget: _showCustomFullscreenWidget,
+        onHideCustomWidget: _hideCustomFullscreenWidget,
+      );
     }
     await _web.setJavaScriptMode(JavaScriptMode.unrestricted);
     // Audio, text-to-speech, links and the scroll position go through the
@@ -490,6 +510,18 @@ class _LessonContentViewState extends State<LessonContentView> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    final orientation = MediaQuery.orientationOf(context);
+    if (_orientation != orientation) {
+      _orientation = orientation;
+      if (orientation == Orientation.portrait) {
+        _landscapeFullscreenDismissed = false;
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _orientation == orientation) {
+          _updateOrientationFullscreen();
+        }
+      });
+    }
     _show();
   }
 
@@ -502,6 +534,13 @@ class _LessonContentViewState extends State<LessonContentView> {
     }
     if (oldWidget.markdown != widget.markdown ||
         oldWidget.content != widget.content) {
+      _videoStarted = false;
+      _playingWatch = null;
+      if (_orientationFullscreen) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _setOrientationFullscreen(false);
+        });
+      }
       _parse();
       _show();
     }
@@ -509,6 +548,9 @@ class _LessonContentViewState extends State<LessonContentView> {
 
   @override
   void dispose() {
+    if (_orientationFullscreen || _customFullscreenRoute != null) {
+      unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
+    }
     _detach(widget.controller);
     super.dispose();
   }
@@ -521,6 +563,11 @@ class _LessonContentViewState extends State<LessonContentView> {
     final fontSize = MediaQuery.textScalerOf(context).scale(16);
     final css = LessonHtml.css(theme, fontSize: fontSize);
     if (css == _shownCss && _body == _shownBody) return;
+    if (_shownBody != null) {
+      _videoStarted = false;
+      _playingWatch = null;
+      _setOrientationFullscreen(false);
+    }
     _shownCss = css;
     _shownBody = _body;
     final start = LessonHtml.start(scrollY: _scrollY, anchor: _startAnchor);
@@ -557,6 +604,8 @@ class _LessonContentViewState extends State<LessonContentView> {
       case 'youtube':
         final watch = data['watch'];
         _playingWatch = watch is String && watch.isNotEmpty ? watch : null;
+        _videoStarted = true;
+        _updateOrientationFullscreen();
       case 'link':
         final href = data['href'];
         if (href is String) _onLink(href);
@@ -572,6 +621,87 @@ class _LessonContentViewState extends State<LessonContentView> {
     if (key != null) {
       LessonScrollMemory._saved[key] = (pixels: y, text: _textHash);
     }
+  }
+
+  bool get _supportsOrientationFullscreen =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
+
+  void _updateOrientationFullscreen() {
+    if (!_supportsOrientationFullscreen) return;
+    if (_orientation == Orientation.portrait) {
+      _exitCustomFullscreen?.call();
+      _setOrientationFullscreen(false);
+    } else if (_orientation == Orientation.landscape &&
+        _videoStarted &&
+        !_landscapeFullscreenDismissed &&
+        _customFullscreenRoute == null &&
+        (ModalRoute.of(context)?.isCurrent ?? true)) {
+      _setOrientationFullscreen(true);
+    }
+  }
+
+  void _dismissOrientationFullscreen() {
+    _landscapeFullscreenDismissed = true;
+    _setOrientationFullscreen(false);
+  }
+
+  void _setOrientationFullscreen(bool fullscreen) {
+    if (_orientationFullscreen == fullscreen) return;
+    _orientationFullscreen = fullscreen;
+    unawaited(_web.runJavaScript('linguaSetYouTubeFullscreen($fullscreen);'));
+    widget.onVideoFullscreenChanged?.call(fullscreen);
+    _updateFullscreenSystemUi();
+  }
+
+  void _updateFullscreenSystemUi() {
+    final fullscreen = _orientationFullscreen || _customFullscreenRoute != null;
+    unawaited(
+      SystemChrome.setEnabledSystemUIMode(
+        fullscreen ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
+      ),
+    );
+  }
+
+  void _showCustomFullscreenWidget(Widget child, VoidCallback onHidden) {
+    if (!mounted) {
+      onHidden();
+      return;
+    }
+    final navigator = Navigator.of(context);
+    final route = PageRouteBuilder<void>(
+      opaque: false,
+      pageBuilder: (context, _, _) =>
+          Scaffold(backgroundColor: Colors.black, body: child),
+      transitionDuration: Duration.zero,
+      reverseTransitionDuration: Duration.zero,
+    );
+    _customFullscreenRoute = route;
+    _fullscreenNavigator = navigator;
+    _exitCustomFullscreen = onHidden;
+    _updateFullscreenSystemUi();
+    unawaited(
+      navigator.push(route).whenComplete(() {
+        if (!identical(_customFullscreenRoute, route)) return;
+        _customFullscreenRoute = null;
+        _fullscreenNavigator = null;
+        _exitCustomFullscreen = null;
+        onHidden();
+        _updateFullscreenSystemUi();
+      }),
+    );
+  }
+
+  void _hideCustomFullscreenWidget() {
+    final route = _customFullscreenRoute;
+    _customFullscreenRoute = null;
+    _exitCustomFullscreen = null;
+    if (route != null && route.isActive) {
+      _fullscreenNavigator?.removeRoute(route);
+    }
+    _fullscreenNavigator = null;
+    _updateFullscreenSystemUi();
   }
 
   void _playAudio(Map<dynamic, dynamic> data) {

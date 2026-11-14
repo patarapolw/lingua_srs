@@ -84,6 +84,7 @@ void main() {
     await tester.tap(find.byIcon(Icons.play_circle_fill));
     await tester.pumpAndSettle();
     expect(find.byType(WebViewWidget), findsOneWidget);
+    final player = tester.element(find.byType(WebViewWidget));
 
     await tester.pumpWidget(app(const Size(800, 400)));
     await tester.pumpAndSettle();
@@ -92,6 +93,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.byType(WebViewWidget), findsOneWidget);
+    expect(tester.element(find.byType(WebViewWidget)), same(player));
 
     await tester.pumpWidget(app(const Size(400, 800)));
     await tester.pumpAndSettle();
@@ -100,6 +102,7 @@ void main() {
       findsNothing,
     );
     expect(find.byType(WebViewWidget), findsOneWidget);
+    expect(tester.element(find.byType(WebViewWidget)), same(player));
   });
 
   testWidgets('iframe fullscreen returns inline after rotating to portrait', (
@@ -141,6 +144,97 @@ void main() {
 
     expect(exited, isTrue);
     expect(find.text('native fullscreen video'), findsNothing);
+    expect(find.byType(WebViewWidget), findsOneWidget);
+  });
+
+  testWidgets('iframe fullscreen keeps the inline WebView visible', (
+    tester,
+  ) async {
+    platform.android = true;
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(body: YouTubeEmbed(embedUrl: playlist)),
+      ),
+    );
+    await tester.tap(find.byIcon(Icons.play_circle_fill));
+    await tester.pumpAndSettle();
+
+    final player = tester.element(find.byType(WebViewWidget));
+    var exited = false;
+    platform.onShowCustomWidget!(const Text('native fullscreen video'), () {
+      exited = true;
+      platform.onHideCustomWidget!();
+    });
+    await tester.pumpAndSettle();
+
+    expect(find.text('native fullscreen video'), findsOneWidget);
+    expect(find.byType(WebViewWidget), findsOneWidget);
+    expect(tester.element(find.byType(WebViewWidget)), same(player));
+    expect(exited, isFalse);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(exited, isTrue);
+    expect(tester.element(find.byType(WebViewWidget)), same(player));
+  });
+
+  testWidgets('device rotation exits iframe fullscreen in portrait', (
+    tester,
+  ) async {
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    platform.android = true;
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(400, 800);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(child: YouTubeEmbed(embedUrl: playlist)),
+        ),
+      ),
+    );
+    await tester.tap(find.byIcon(Icons.play_circle_fill));
+    await tester.pumpAndSettle();
+    var exited = false;
+    platform.onShowCustomWidget!(const Text('native fullscreen video'), () {
+      exited = true;
+      platform.onHideCustomWidget!();
+    });
+    await tester.pumpAndSettle();
+
+    tester.view.physicalSize = const Size(800, 400);
+    await tester.pumpAndSettle();
+    expect(find.text('native fullscreen video'), findsOneWidget);
+    tester.view.physicalSize = const Size(400, 800);
+    await tester.pumpAndSettle();
+    expect(exited, isTrue);
+    expect(find.text('native fullscreen video'), findsNothing);
+    expect(find.byType(WebViewWidget), findsOneWidget);
+  });
+
+  testWidgets('starting a player in landscape enters fullscreen', (
+    tester,
+  ) async {
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    platform.android = true;
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: MediaQuery(
+          data: MediaQueryData(size: Size(800, 400)),
+          child: Scaffold(body: YouTubeEmbed(embedUrl: playlist)),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byIcon(Icons.play_circle_fill));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('youtube-fullscreen-player')),
+      findsOneWidget,
+    );
     expect(find.byType(WebViewWidget), findsOneWidget);
   });
 
