@@ -314,9 +314,21 @@ class YamlParserService {
     if (isMarkdown) {
       final frontMatterParts = _splitMarkdownFrontmatter(frontMatter);
       final markdownBody = frontMatterParts.$2;
-      markdownContent = markdownBody
-          .replaceFirst(RegExp(r'\n## Vocabulary\r?\n[^]+?\r?\n## '), '\n## ')
-          .trim();
+      final vocabularySection = RegExp(
+        r'(?:^|\r?\n)## Vocabulary(?=\r?\n|$)[^]*?'
+        r'(?:\r?\n<!-- /Vocabulary -->(?=\r?\n|$)|(?=\r?\n## |$))',
+      );
+      markdownContent = markdownBody.replaceAll(vocabularySection, '').trim();
+      final bodyLines = markdownContent
+          .split(RegExp(r'\r?\n'))
+          .map((line) => line.trim())
+          .where((line) => line.isNotEmpty)
+          .toList();
+      if (vocabularySection.hasMatch(markdownBody) &&
+          bodyLines.length == 1 &&
+          RegExp(r'^#\s+.+$').hasMatch(bodyLines.single)) {
+        markdownContent = '';
+      }
       final headingTitle = RegExp(
         r'^#\s+(.+)$',
         multiLine: true,

@@ -102,7 +102,17 @@ Lesson notes go here.
 
 Frontmatter-only Markdown imports the same as equivalent plain YAML. The body is kept for reading from the lesson list and can be edited and saved at any time.
 
-A `## Vocabulary` section in the body is left out when the lesson is imported, from that heading up to the next `## ` heading: the words are in the frontmatter, and the app lists them under **View Vocabulary**. The section is not stored, so the reader does not show it and an export does not write it back. It is kept when it is the last `## ` section of the file, or when its heading is written any other way (`## Vocabulary list`, `### Vocabulary`).
+A `## Vocabulary` section in the body is left out when the lesson is imported, from that heading to the next `## ` heading, a `<!-- /Vocabulary -->` line, or the end of the file: the words are in the frontmatter, and the app lists them under **View Vocabulary**. The section and closing comment are not stored, so the reader does not show them and an export does not write them back. If it is the only section after the title, the lesson has no Markdown content. Other headings, such as `## Vocabulary list` or `### Vocabulary`, are not filtered.
+
+To keep a footer without adding a heading to the page or table of contents, put the closing comment on its own line:
+
+```markdown
+## Vocabulary
+Preview words here.
+<!-- /Vocabulary -->
+
+Footer text here.
+```
 
 The reader renders `<AudioButton src="...">` and `<TTS>...</TTS>` controls, and `<YouTube id="...">` embeds (also `list` or `src` attributes). Spoiler spans (`<span class="spoiler">...</span>`) are blurred until hovered on desktop or tapped on touch devices. Markdown inside a spoiler is rendered: `<span class="spoiler">my **brother**</span>`. Scripts and event attributes (`onclick="..."`), and capitalised tags the reader does not know (`<VocabQuiz />`), are left out.
 
