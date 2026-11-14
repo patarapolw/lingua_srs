@@ -5,6 +5,7 @@ import 'package:lingua_srs/services/audio_service.dart';
 import 'package:lingua_srs/services/lesson_links.dart';
 import 'package:lingua_srs/widgets/lesson_content_view.dart';
 import 'package:provider/provider.dart';
+import 'package:webview_all/webview_all.dart' show WebViewWidget;
 import 'package:webview_platform_interface/webview_platform_interface.dart';
 
 import 'fake_webview_platform.dart';
@@ -450,6 +451,115 @@ void main() {
         ),
         NavigationDecision.prevent,
       );
+    });
+
+    testWidgets(
+      'rotation expands the active video without replacing the page',
+      (tester) async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        addTearDown(() => debugDefaultTargetPlatformOverride = null);
+        platform.android = true;
+        tester.view.devicePixelRatio = 1;
+        tester.view.physicalSize = const Size(400, 800);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.view.resetPhysicalSize);
+        final fullscreen = <bool>[];
+        final controller = LessonContentController();
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: LessonContentView(
+                markdown: '<YouTube id="abc" />',
+                controller: controller,
+                onVideoFullscreenChanged: fullscreen.add,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final web = platform.controller;
+        final player = tester.element(find.byType(WebViewWidget));
+
+        tester.view.physicalSize = const Size(800, 400);
+        await tester.pumpAndSettle();
+        expect(fullscreen, isEmpty);
+        web.send({
+          'type': 'youtube',
+          'watch': 'https://youtube.com/watch?v=abc',
+        });
+        await tester.pumpAndSettle();
+        expect(fullscreen, [true]);
+        expect(web.scripts.last, 'linguaSetYouTubeFullscreen(true);');
+        expect(tester.element(find.byType(WebViewWidget)), same(player));
+
+        controller.exitVideoFullscreen();
+        await tester.pumpAndSettle();
+        expect(fullscreen, [true, false]);
+        expect(web.scripts.last, 'linguaSetYouTubeFullscreen(false);');
+
+        tester.view.physicalSize = const Size(400, 800);
+        await tester.pumpAndSettle();
+        tester.view.physicalSize = const Size(800, 400);
+        await tester.pumpAndSettle();
+        expect(fullscreen, [true, false, true]);
+        tester.view.physicalSize = const Size(400, 800);
+        await tester.pumpAndSettle();
+        expect(fullscreen, [true, false, true, false]);
+        expect(tester.element(find.byType(WebViewWidget)), same(player));
+      },
+    );
+
+    testWidgets('iframe fullscreen keeps the lesson WebView active', (
+      tester,
+    ) async {
+      platform.android = true;
+      await show(tester);
+      final web = platform.controller as FakeAndroidWebViewController;
+      final player = tester.element(find.byType(WebViewWidget));
+      var hidden = false;
+      web.onShowCustomWidget!(const Text('fullscreen video'), () {
+        hidden = true;
+        web.onHideCustomWidget!();
+      });
+      await tester.pumpAndSettle();
+      expect(find.text('fullscreen video'), findsOneWidget);
+      expect(tester.element(find.byType(WebViewWidget)), same(player));
+      expect(hidden, isFalse);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(hidden, isTrue);
+      expect(tester.element(find.byType(WebViewWidget)), same(player));
+    });
+
+    testWidgets('portrait rotation exits native iframe fullscreen', (
+      tester,
+    ) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      platform.android = true;
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(400, 800);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      await show(tester);
+      final web = platform.controller as FakeAndroidWebViewController;
+      web.send({'type': 'youtube', 'watch': 'https://youtube.com/watch?v=abc'});
+      var hidden = false;
+      web.onShowCustomWidget!(const Text('fullscreen video'), () {
+        hidden = true;
+        web.onHideCustomWidget!();
+      });
+      await tester.pumpAndSettle();
+
+      tester.view.physicalSize = const Size(800, 400);
+      await tester.pumpAndSettle();
+      expect(find.text('fullscreen video'), findsOneWidget);
+      tester.view.physicalSize = const Size(400, 800);
+      await tester.pumpAndSettle();
+      expect(hidden, isTrue);
+      expect(find.text('fullscreen video'), findsNothing);
+      expect(find.byType(WebViewWidget), findsOneWidget);
     });
 
     group('returning to a lesson', () {

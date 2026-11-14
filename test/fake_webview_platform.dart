@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:material_ui/material_ui.dart';
+import 'package:webview_all_android/webview_all_android.dart';
 import 'package:webview_platform_interface/webview_platform_interface.dart';
 
 /// A WebView platform that loads nothing: it records the page, the scripts
@@ -8,6 +9,7 @@ import 'package:webview_platform_interface/webview_platform_interface.dart';
 /// the page would (`controller.send`) or finish loading (`controller.finish`).
 class FakeWebViewPlatform extends WebViewPlatform {
   final controllers = <FakeWebViewController>[];
+  bool android = false;
 
   /// The controller of the most recently created WebView.
   FakeWebViewController get controller => controllers.last;
@@ -16,7 +18,9 @@ class FakeWebViewPlatform extends WebViewPlatform {
   PlatformWebViewController createPlatformWebViewController(
     PlatformWebViewControllerCreationParams params,
   ) {
-    final controller = FakeWebViewController(params);
+    final controller = android
+        ? FakeAndroidWebViewController(params)
+        : FakeWebViewController(params);
     controllers.add(controller);
     return controller;
   }
@@ -30,6 +34,33 @@ class FakeWebViewPlatform extends WebViewPlatform {
   PlatformWebViewWidget createPlatformWebViewWidget(
     PlatformWebViewWidgetCreationParams params,
   ) => _FakeWebViewWidget(params);
+}
+
+class FakeAndroidWebViewController extends FakeWebViewController
+    implements AndroidWebViewController {
+  FakeAndroidWebViewController(super.params);
+
+  OnShowCustomWidgetCallback? onShowCustomWidget;
+  OnHideCustomWidgetCallback? onHideCustomWidget;
+
+  @override
+  Future<void> setMediaPlaybackRequiresUserGesture(bool require) async {}
+
+  @override
+  Future<void> setCustomWidgetCallbacks({
+    required OnShowCustomWidgetCallback? onShowCustomWidget,
+    required OnHideCustomWidgetCallback? onHideCustomWidget,
+  }) async {
+    this.onShowCustomWidget = onShowCustomWidget;
+    this.onHideCustomWidget = onHideCustomWidget;
+  }
+
+  @override
+  Future<WebViewNavigationHistory> getNavigationHistory() =>
+      throw UnsupportedError('Navigation history is not used by this test');
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 class FakeWebViewController extends PlatformWebViewController {
