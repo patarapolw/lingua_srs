@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lingua_srs/widgets/youtube_embed.dart';
@@ -54,6 +55,22 @@ void main() {
     await tester.tap(find.byIcon(Icons.play_circle_fill));
     await tester.pump();
     expect(platform.events, ['javascript', 'delegate', 'html']);
+  });
+
+  testWidgets('Windows loads a packaged HTTPS host asset', (tester) async {
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(body: YouTubeEmbed(embedUrl: playlist)),
+      ),
+    );
+    await tester.tap(find.byIcon(Icons.play_circle_fill));
+    await tester.pump();
+
+    expect(platform.events, ['javascript', 'delegate', 'asset']);
+    expect(platform.asset, 'assets/webview_host.html');
   });
 
   testWidgets('a startup error offers retry and the YouTube link', (
@@ -114,6 +131,7 @@ class _TestWebViewPlatform extends WebViewPlatform {
   final events = <String>[];
   String? html;
   String? baseUrl;
+  String? asset;
 
   @override
   PlatformWebViewController createPlatformWebViewController(
@@ -155,6 +173,12 @@ class _TestController extends PlatformWebViewController {
     owner.events.add('html');
     owner.html = html;
     owner.baseUrl = baseUrl;
+  }
+
+  @override
+  Future<void> loadFlutterAsset(String key) async {
+    owner.events.add('asset');
+    owner.asset = key;
   }
 }
 

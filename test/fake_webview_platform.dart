@@ -37,6 +37,7 @@ class FakeWebViewController extends PlatformWebViewController {
 
   String? html;
   String? baseUrl;
+  String? flutterAsset;
   Uri? requested;
   final scripts = <String>[];
   final _channels = <String, void Function(JavaScriptMessage)>{};
@@ -67,6 +68,11 @@ class FakeWebViewController extends PlatformWebViewController {
   Future<void> loadHtmlString(String html, {String? baseUrl}) async {
     this.html = html;
     this.baseUrl = baseUrl;
+  }
+
+  @override
+  Future<void> loadFlutterAsset(String key) async {
+    flutterAsset = key;
   }
 
   @override

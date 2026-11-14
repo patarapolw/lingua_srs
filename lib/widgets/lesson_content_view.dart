@@ -372,13 +372,11 @@ class LessonContentView extends StatefulWidget {
 }
 
 class _LessonContentViewState extends State<LessonContentView> {
-  // On Windows the WebView ignores the base URL of an HTML string, so the
-  // page would have no real HTTPS origin and YouTube would reject its embeds
-  // (Error 153). There, load a harmless youtube-nocookie.com page and replace
-  // its document. Elsewhere the page is loaded locally with that base URL.
-  static const _windowsHostPage = 'https://www.youtube-nocookie.com/robots.txt';
+  // On Windows, loadHtmlString's base URL does not give the document a real
+  // HTTPS origin. WebView2 serves this bundled asset from a local HTTPS origin.
+  static const _windowsHostAsset = 'assets/webview_host.html';
 
-  static bool get _useHostPage =>
+  static bool get _useWindowsHostAsset =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
 
   final WebViewController _web = WebViewController();
@@ -531,9 +529,9 @@ class _LessonContentViewState extends State<LessonContentView> {
     try {
       await _web.setBackgroundColor(theme.colorScheme.surface);
     } catch (_) {}
-    if (_useHostPage) {
+    if (_useWindowsHostAsset) {
       _injection = LessonHtml.injection(css, _body, start: start);
-      await _web.loadRequest(Uri.parse(_windowsHostPage));
+      await _web.loadFlutterAsset(_windowsHostAsset);
     } else {
       _injection = null;
       await _web.loadHtmlString(

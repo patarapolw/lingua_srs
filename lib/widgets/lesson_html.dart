@@ -219,7 +219,11 @@ if (!window.__linguaBound) {
     if (yt && !yt.querySelector('iframe')) {
       var frame = document.createElement('iframe');
       linguaPost({type: 'youtube', watch: yt.dataset.watch || ''});
-      frame.src = yt.dataset.src;
+      var src = new URL(yt.dataset.src);
+      if (location.origin !== 'null') {
+        src.searchParams.set('origin', location.origin);
+      }
+      frame.src = src.toString();
       frame.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen';
       frame.referrerPolicy = 'strict-origin-when-cross-origin';
       frame.allowFullscreen = true;
