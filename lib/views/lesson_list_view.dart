@@ -131,31 +131,10 @@ class LessonListView extends StatelessWidget {
     required String title,
     required String currentName,
   }) async {
-    final controller = TextEditingController(text: currentName);
     final name = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(title),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          textCapitalization: TextCapitalization.sentences,
-          onSubmitted: (value) => Navigator.pop(dialogContext, value),
-          decoration: const InputDecoration(labelText: 'Name'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, controller.text),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
+      builder: (_) => _RenameDialog(title: title, currentName: currentName),
     );
-    controller.dispose();
     final trimmedName = name?.trim();
     return trimmedName == null || trimmedName.isEmpty ? null : trimmedName;
   }
@@ -1109,6 +1088,54 @@ class LessonListView extends StatelessWidget {
             ),
     );
   }
+}
+
+class _RenameDialog extends StatefulWidget {
+  final String title;
+  final String currentName;
+
+  const _RenameDialog({required this.title, required this.currentName});
+
+  @override
+  State<_RenameDialog> createState() => _RenameDialogState();
+}
+
+class _RenameDialogState extends State<_RenameDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.currentName);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text(widget.title),
+    content: TextField(
+      controller: _controller,
+      autofocus: true,
+      textCapitalization: TextCapitalization.sentences,
+      onSubmitted: (value) => Navigator.pop(context, value),
+      decoration: const InputDecoration(labelText: 'Name'),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(
+        onPressed: () => Navigator.pop(context, _controller.text),
+        child: const Text('Save'),
+      ),
+    ],
+  );
 }
 
 /// Says that saved lessons share a name or a file with another in their

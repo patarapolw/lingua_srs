@@ -122,6 +122,15 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Rename Lesson'));
     await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'Discarded');
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(provider.lessons.single.displayTitle, 'Lesson 1');
+
+    await tester.tap(lessonMenu);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Rename Lesson'));
+    await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'Renamed Lesson');
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
