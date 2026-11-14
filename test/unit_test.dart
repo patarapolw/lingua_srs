@@ -1439,6 +1439,74 @@ vocabulary:
       },
     );
 
+    test('Renaming a lesson folder preserves its hierarchy state', () async {
+      SharedPreferences.setMockInitialValues({
+        'lingua_srs_windows_legacy_migration_complete': true,
+        'lingua_srs_lessons': '[]',
+        'lingua_srs_sentences': '[]',
+      });
+      final provider = AppProvider();
+      while (provider.isLoading) {
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      final directLesson = await provider.importYaml(
+        'Lesson: Lesson A\nnouns: []',
+        defaultUnitTitle: 'Unit 1',
+      );
+      final nestedLesson = await provider.importYaml(
+        'Lesson: Lesson B\nnouns: []',
+        defaultUnitTitle: 'Unit 1::Grammar',
+      );
+      await provider.importYaml(
+        'Lesson: Lesson C\nnouns: []',
+        defaultUnitTitle: 'Unit 2',
+      );
+      await provider.setLessonFolderExpanded('folder:unit 1', false);
+      await provider.setLessonFolderExpanded('folder:unit 1::grammar', true);
+      await provider.saveLessonHierarchyOrder([
+        'folder:unit 1',
+        'folder:unit 1::grammar',
+        'lesson:${directLesson.id}',
+        'lesson:${nestedLesson.id}',
+      ]);
+
+      await expectLater(
+        provider.renameLessonGroup(['Unit 1'], 'Unit 2'),
+        throwsStateError,
+      );
+      await provider.renameLessonGroup(['Unit 1'], 'Custom Unit');
+
+      expect(directLesson.folderPath, ['Custom Unit']);
+      expect(nestedLesson.folderPath, ['Custom Unit', 'Grammar']);
+      expect(provider.lessonFolderExpansion['folder:custom unit'], isFalse);
+      expect(
+        provider.lessonFolderExpansion['folder:custom unit::grammar'],
+        isTrue,
+      );
+      expect(
+        provider.lessonHierarchyOrder.keys,
+        contains('folder:custom unit::grammar'),
+      );
+      expect(
+        provider.lessonHierarchyOrder.keys,
+        isNot(contains('folder:unit 1::grammar')),
+      );
+
+      final reloadedProvider = AppProvider();
+      while (reloadedProvider.isLoading) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(
+        reloadedProvider.lessons
+            .singleWhere((lesson) => lesson.id == nestedLesson.id)
+            .folderPath,
+        ['Custom Unit', 'Grammar'],
+      );
+      provider.dispose();
+      reloadedProvider.dispose();
+    });
+
     test(
       'Moving into a not-yet-existing folder creates it, nested or not',
       () async {

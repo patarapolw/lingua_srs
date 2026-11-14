@@ -1730,7 +1730,13 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     if (existingLesson != null) {
       // Only the file a lesson came from can have had its entries edited:
       // another file that takes the lesson's name brings other words.
-      final sameFile = _sameVirtualPath(existingLesson, parsed.lesson);
+      final sameFile =
+          _sameVirtualPath(existingLesson, parsed.lesson) ||
+          _sameSourcePath(existingLesson, parsed.lesson);
+      final sameFolder = isSameHierarchyPath(
+        existingLesson.folderPath,
+        parsed.lesson.folderPath,
+      );
       // Keep a name given to tell it from another lesson in its folder.
       final nameTaken = _lessons.any(
         (other) =>
@@ -1738,9 +1744,15 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
             isSameHierarchyPath(other.folderPath, parsed.lesson.folderPath) &&
             _sameName(other, parsed.lesson),
       );
-      if (!nameTaken) existingLesson.title = parsed.lesson.title;
-      existingLesson.unitTitle =
-          parsed.lesson.unitTitle ?? existingLesson.unitTitle;
+      if (!nameTaken) {
+        existingLesson.title = sameFolder
+            ? parsed.lesson.title
+            : parsed.lesson.displayTitle;
+      }
+      if (sameFolder) {
+        existingLesson.unitTitle =
+            parsed.lesson.unitTitle ?? existingLesson.unitTitle;
+      }
       existingLesson.targetLanguage = parsed.lesson.targetLanguage;
       existingLesson.nativeLanguage = parsed.lesson.nativeLanguage;
       if (parsed.lesson.markdownContent.isNotEmpty) {
@@ -1795,6 +1807,11 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   /// The saved lesson [incoming] would update, and whether that has to be
   /// asked (see [importParsedLessons]).
   (Lesson?, bool) _importTarget(Lesson incoming) {
+    final sourceMatches = _lessons
+        .where((lesson) => _sameSourcePath(lesson, incoming))
+        .toList();
+    if (sourceMatches.length == 1) return (sourceMatches.single, false);
+
     final inFolder = _lessons
         .where(
           (lesson) =>
@@ -1828,6 +1845,12 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   static bool _sameVirtualPath(Lesson a, Lesson b) =>
       isSameHierarchyPath(a.folderPath, b.folderPath) &&
       a.virtualFileName.toLowerCase() == b.virtualFileName.toLowerCase();
+
+  static bool _sameSourcePath(Lesson a, Lesson b) =>
+      a.fileName != null &&
+      b.fileName != null &&
+      a.fileName!.toLowerCase() == b.fileName!.toLowerCase() &&
+      (a.fileFolder ?? '').toLowerCase() == (b.fileFolder ?? '').toLowerCase();
 
   /// [lesson]'s name with the first ` (2)`, ` (3)`, … suffix no other lesson
   /// in [folder] has.
@@ -3096,6 +3119,101 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
 
     lesson.moveToFolder(folderPath);
     await saveState();
+  }
+
+  Future<void> renameLesson(String lessonId, String name) async {
+    final trimmedName = composeHangul(name.trim());
+    if (trimmedName.isEmpty) {
+      throw ArgumentError.value(name, 'name', 'Must not be empty.');
+    }
+    if (trimmedName.contains(hierarchySeparator)) {
+      throw ArgumentError.value(
+        name,
+        'name',
+        'Must not contain "$hierarchySeparator".',
+      );
+    }
+    final lesson = _lessons.firstWhere(
+      (candidate) => candidate.id == lessonId,
+      orElse: () => throw StateError('Cannot rename missing lesson $lessonId.'),
+    );
+    if (lesson.displayTitle == trimmedName) return;
+    if (activeLessons.any(
+      (other) =>
+          !identical(other, lesson) &&
+          isSameHierarchyPath(other.folderPath, lesson.folderPath) &&
+          other.displayTitle.trim().toLowerCase() == trimmedName.toLowerCase(),
+    )) {
+      throw StateError(
+        'A lesson named "$trimmedName" already exists in this folder.',
+      );
+    }
+
+    _rename(lesson, trimmedName);
+    await saveState();
+  }
+
+  Future<void> renameLessonGroup(List<String> folderPath, String name) async {
+    if (folderPath.isEmpty) {
+      throw ArgumentError.value(folderPath, 'folderPath', 'Must not be empty.');
+    }
+    final trimmedName = composeHangul(name.trim());
+    if (trimmedName.isEmpty) {
+      throw ArgumentError.value(name, 'name', 'Must not be empty.');
+    }
+    if (trimmedName.contains(hierarchySeparator)) {
+      throw ArgumentError.value(
+        name,
+        'name',
+        'Must not contain "$hierarchySeparator".',
+      );
+    }
+    if (folderPath.last == trimmedName) return;
+
+    final renamedPath = [
+      ...folderPath.take(folderPath.length - 1),
+      trimmedName,
+    ];
+    final affectedLessons = activeLessons
+        .where((lesson) => isHierarchyPathWithin(lesson.folderPath, folderPath))
+        .toList();
+    if (affectedLessons.isEmpty) {
+      throw StateError(
+        'Cannot rename missing lesson folder "${formatHierarchyPath(folderPath)}".',
+      );
+    }
+    if (activeLessons.any(
+      (lesson) =>
+          !affectedLessons.contains(lesson) &&
+          isHierarchyPathWithin(lesson.folderPath, renamedPath),
+    )) {
+      throw StateError(
+        'A folder already exists at "${formatHierarchyPath(renamedPath)}".',
+      );
+    }
+
+    for (final lesson in affectedLessons) {
+      final suffix = lesson.folderPath.skip(folderPath.length);
+      lesson.moveToFolder([...renamedPath, ...suffix]);
+    }
+
+    final oldKeyPrefix = hierarchyFolderKey(folderPath);
+    final newKeyPrefix = hierarchyFolderKey(renamedPath);
+    _lessonHierarchyOrder = _replaceFolderKeyPrefix(
+      _lessonHierarchyOrder,
+      oldKeyPrefix,
+      newKeyPrefix,
+    );
+    _lessonFolderExpansion = _replaceFolderKeyPrefix(
+      _lessonFolderExpansion,
+      oldKeyPrefix,
+      newKeyPrefix,
+    );
+
+    await StorageService.saveLessons(_lessons);
+    await StorageService.saveLessonHierarchyOrder(_lessonHierarchyOrder);
+    await StorageService.saveLessonFolderExpansion(_lessonFolderExpansion);
+    notifyListeners();
   }
 
   Future<void> moveLessonGroup(

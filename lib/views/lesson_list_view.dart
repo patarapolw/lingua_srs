@@ -126,6 +126,61 @@ class LessonListView extends StatelessWidget {
 
   static String _limitText(int limit) => limit > 0 ? '$limit' : 'unlimited';
 
+  Future<String?> _promptForName(
+    BuildContext context, {
+    required String title,
+    required String currentName,
+  }) async {
+    final name = await showDialog<String>(
+      context: context,
+      builder: (_) => _RenameDialog(title: title, currentName: currentName),
+    );
+    final trimmedName = name?.trim();
+    return trimmedName == null || trimmedName.isEmpty ? null : trimmedName;
+  }
+
+  Future<void> _renameLesson(
+    BuildContext context,
+    AppProvider provider,
+    Lesson lesson,
+  ) async {
+    final name = await _promptForName(
+      context,
+      title: 'Rename lesson',
+      currentName: lesson.displayTitle,
+    );
+    if (name == null || !context.mounted) return;
+    try {
+      await provider.renameLesson(lesson.id, name);
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not rename lesson: $error')),
+      );
+    }
+  }
+
+  Future<void> _renameLessonGroup(
+    BuildContext context,
+    AppProvider provider,
+    List<String> folderPath,
+  ) async {
+    final name = await _promptForName(
+      context,
+      title: 'Rename folder',
+      currentName: folderPath.last,
+    );
+    if (name == null || !context.mounted) return;
+    try {
+      await provider.renameLessonGroup(folderPath, name);
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not rename folder: $error')),
+      );
+    }
+  }
+
   void _showLimitReachedDialog(BuildContext context, AppProvider provider) {
     showDialog(
       context: context,
@@ -433,6 +488,8 @@ class LessonListView extends StatelessWidget {
                       orderActions.moveDown();
                     } else if (value == 'reset_srs') {
                       _confirmResetLesson(context, lesson);
+                    } else if (value == 'rename') {
+                      _renameLesson(context, provider, lesson);
                     } else if (value == 'move') {
                       _moveLessonToFolder(context, provider, lesson);
                     } else if (value == 'delete') {
@@ -511,6 +568,22 @@ class LessonListView extends StatelessWidget {
                       ),
                     ),
                     const PopupMenuDivider(),
+                    const PopupMenuItem(
+                      value: 'rename',
+                      child: Row(
+                        children: [
+                          Icon(Icons.drive_file_rename_outline, size: 18),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Rename Lesson',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                     PopupMenuItem(
                       value: 'reset_srs',
                       child: Row(
@@ -987,6 +1060,8 @@ class LessonListView extends StatelessWidget {
                               key,
                               expanded,
                             ),
+                        onRenameFolder: (path) =>
+                            _renameLessonGroup(context, provider, path),
                         onMoveFolder: (path) =>
                             _moveLessonGroup(context, provider, path),
                         onResetFolder: (path, count) =>
@@ -1013,6 +1088,54 @@ class LessonListView extends StatelessWidget {
             ),
     );
   }
+}
+
+class _RenameDialog extends StatefulWidget {
+  final String title;
+  final String currentName;
+
+  const _RenameDialog({required this.title, required this.currentName});
+
+  @override
+  State<_RenameDialog> createState() => _RenameDialogState();
+}
+
+class _RenameDialogState extends State<_RenameDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.currentName);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text(widget.title),
+    content: TextField(
+      controller: _controller,
+      autofocus: true,
+      textCapitalization: TextCapitalization.sentences,
+      onSubmitted: (value) => Navigator.pop(context, value),
+      decoration: const InputDecoration(labelText: 'Name'),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(
+        onPressed: () => Navigator.pop(context, _controller.text),
+        child: const Text('Save'),
+      ),
+    ],
+  );
 }
 
 /// Says that saved lessons share a name or a file with another in their

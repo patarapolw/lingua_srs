@@ -101,6 +101,72 @@ void main() {
       .where((lesson) => isSameHierarchyPath(lesson.folderPath, ['Unit 1']))
       .toList();
 
+  testWidgets('lessons and folders can be renamed from the lesson list', (
+    tester,
+  ) async {
+    final provider = await loadedProvider(tester);
+    await import(tester, provider, [file('a.md', 'Lesson 1')]);
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppProvider>.value(
+        value: provider,
+        child: const MaterialApp(home: LessonListView()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final lessonMenu = find.descendant(
+      of: find.widgetWithText(ListTile, 'Lesson 1'),
+      matching: find.byType(PopupMenuButton<String>),
+    );
+    await tester.tap(lessonMenu);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Rename Lesson'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'Discarded');
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(provider.lessons.single.displayTitle, 'Lesson 1');
+
+    await tester.tap(lessonMenu);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Rename Lesson'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'Renamed Lesson');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(provider.lessons.single.displayTitle, 'Renamed Lesson');
+
+    await tester.tap(find.byTooltip('Manage Unit 1'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Rename folder'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'Custom Unit');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(provider.lessons.single.folderPath, ['Custom Unit']);
+  });
+
+  testWidgets('renaming an imported folder keeps its source on re-import', (
+    tester,
+  ) async {
+    final provider = await loadedProvider(tester);
+    await import(tester, provider, [file('a.md', 'Lesson 1')]);
+    final lesson = provider.lessons.single;
+
+    await tester.runAsync(
+      () => provider.renameLessonGroup(['Unit 1'], 'Custom Unit'),
+    );
+    final asked = await import(tester, provider, [
+      file('a.md', 'Lesson 1 updated', word: '새 단어'),
+    ]);
+
+    expect(asked, 0);
+    expect(provider.lessons, hasLength(1));
+    expect(provider.lessons.single, same(lesson));
+    expect(lesson.folderPath, ['Custom Unit']);
+    expect(lesson.displayTitle, 'Lesson 1 updated');
+  });
+
   testWidgets('the same file imported again updates without asking', (
     tester,
   ) async {

@@ -223,6 +223,7 @@ void main() {
     (List<String>, int)? resetFolder;
     (List<String>, int)? deletedFolder;
     List<String>? exportedFolder;
+    List<String>? renamedFolder;
 
     await tester.pumpWidget(
       MaterialApp(
@@ -258,6 +259,9 @@ void main() {
               },
               onFolderExpansionChanged: (_, _) async {},
               onMoveFolder: (_) {},
+              onRenameFolder: (path) {
+                renamedFolder = path;
+              },
               onResetFolder: (path, count) {
                 resetFolder = (path, count);
               },
@@ -304,6 +308,12 @@ void main() {
     await tester.tap(find.text('Export as ZIP'));
     await tester.pumpAndSettle();
     expect(exportedFolder, ['Unit 2']);
+
+    await tester.tap(find.byTooltip('Manage Unit 2'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Rename folder'));
+    await tester.pumpAndSettle();
+    expect(renamedFolder, ['Unit 2']);
   });
 
   testWidgets('slash-separated lesson titles create nested folders', (
