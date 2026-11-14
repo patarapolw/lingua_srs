@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:lingua_srs/widgets/youtube_embed.dart';
+import 'package:webview_all/webview_all.dart' show WebViewWidget;
 import 'package:webview_all_android/webview_all_android.dart';
 import 'package:webview_platform_interface/webview_platform_interface.dart';
 
