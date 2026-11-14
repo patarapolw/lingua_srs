@@ -261,15 +261,14 @@ abstract final class SyncApplier {
       }
     }
     for (final entry in markdown.entries) {
-      for (final lesson in next) {
-        if (lesson.id == entry.key) {
-          final pulled = entry.value?['markdown'] as String? ?? '';
-          final own = mergedMarkdown[entry.key];
-          lesson.markdownContent = own == null
-              ? pulled
-              : _mergeMarkdown(pulled, own);
-        }
-      }
+      final index = lessonIndexes[entry.key];
+      if (index == null) continue;
+      final lesson = next[index];
+      final pulled = entry.value?['markdown'] as String? ?? '';
+      final own = mergedMarkdown[entry.key];
+      lesson.markdownContent = own == null
+          ? pulled
+          : _mergeMarkdown(pulled, own);
     }
     data.lessons = [
       for (final lesson in next)
