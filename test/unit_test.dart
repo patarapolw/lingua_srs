@@ -89,6 +89,59 @@ vocabulary:
       expect(parsed.lesson.vocabularies[1].notes, 'Single note.');
     });
 
+    test(
+      'an empty Vocabulary section after the title is no lesson content',
+      () {
+        final parsed = YamlParserService.parseLessonYaml('''
+---
+vocabulary:
+---
+# Title
+
+## Vocabulary
+''');
+
+        expect(parsed.lesson.title, 'Title');
+        expect(parsed.lesson.markdownContent, isEmpty);
+      },
+    );
+
+    test('filters a final Vocabulary section out of lesson content', () {
+      final parsed = YamlParserService.parseLessonYaml('''
+---
+vocabulary:
+---
+# Title
+
+## Vocabulary
+
+Preview text.
+''');
+
+      expect(parsed.lesson.markdownContent, isEmpty);
+    });
+
+    test('keeps lesson content after a Vocabulary section', () {
+      final parsed = YamlParserService.parseLessonYaml('''
+---
+vocabulary:
+---
+# Title
+
+## Vocabulary
+
+Preview text.
+
+## Notes
+
+Lesson text.
+''');
+
+      expect(parsed.lesson.markdownContent, isNot(contains('Preview text.')));
+      expect(parsed.lesson.markdownContent, contains('## Notes'));
+      expect(parsed.lesson.markdownContent, contains('Lesson text.'));
+    });
+
     test('tts is alternate TTS text for vocabulary and examples', () {
       final parsed = YamlParserService.parseLessonYaml('''
 ---

@@ -163,6 +163,43 @@ void main() {
     expect(find.byTooltip('Edit Markdown'), findsOneWidget);
   });
 
+  testWidgets('shows an empty lesson without starting a WebView', (
+    tester,
+  ) async {
+    final provider = await loadedProvider(tester);
+    final lesson = (await tester.runAsync(
+      () => provider.importYaml('''
+---
+vocabulary:
+---
+# Title
+
+## Vocabulary
+
+Preview text.
+'''),
+    ))!;
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<AppProvider>.value(value: provider),
+          ChangeNotifierProvider<AudioService>(
+            create: (_) => _SilentAudioService(),
+          ),
+        ],
+        child: MaterialApp(home: LessonReaderView(lessonId: lesson.id)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('This lesson has no imported Markdown content.'),
+      findsOneWidget,
+    );
+    expect(webview.controllers, isEmpty);
+  });
+
   testWidgets('shows the virtual path while editing Markdown', (tester) async {
     await openReader(tester, const Size(1200, 800));
 
