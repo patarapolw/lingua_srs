@@ -4,7 +4,6 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:crypto/crypto.dart';
-import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:file_picker/file_picker.dart';
@@ -766,9 +765,7 @@ class _YamlImportViewState extends State<YamlImportView>
             if (_supportsFolderImport)
               IconButton(
                 icon: const Icon(Icons.folder_open_outlined),
-                tooltip: Platform.isMacOS
-                    ? 'Select Folders'
-                    : 'Select Folder',
+                tooltip: Platform.isMacOS ? 'Select Folders' : 'Select Folder',
                 onPressed: _isParsing ? null : _pickDirectory,
               ),
           ] else ...[
@@ -1346,7 +1343,6 @@ class _YamlImportViewState extends State<YamlImportView>
   /// Folder import is for VitePress-compatible folders, so desktop only.
   bool get _supportsFolderImport =>
       YamlImportView.debugSupportsFolderImport ?? _supportsDesktopFileDrop;
-
 }
 
 class MarkdownImportFile {
