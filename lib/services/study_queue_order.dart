@@ -60,3 +60,24 @@ List<T> mixNewCardsIntoReviews<T>({
   result.addAll(reviews.skip(nextReview));
   return result;
 }
+
+/// Rotates [ordered] lessons to start at the one whose new cards were started
+/// most recently ([lastIntroducedAt]), so new cards continue where the user
+/// left off, then go on down the order and wrap around to the top. With no
+/// lesson ever started, the order is unchanged and the topmost comes first.
+List<T> lessonsFromMostRecentlyStarted<T>(
+  List<T> ordered,
+  DateTime? Function(T lesson) lastIntroducedAt,
+) {
+  var best = -1;
+  DateTime? bestAt;
+  for (var i = 0; i < ordered.length; i++) {
+    final at = lastIntroducedAt(ordered[i]);
+    if (at != null && (bestAt == null || at.isAfter(bestAt))) {
+      best = i;
+      bestAt = at;
+    }
+  }
+  if (best <= 0) return List.of(ordered);
+  return [...ordered.skip(best), ...ordered.take(best)];
+}

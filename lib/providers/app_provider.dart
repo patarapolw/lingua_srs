@@ -3440,24 +3440,34 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       for (final item in queue) {
         (item.card.isNewCard ? newCards : due).add(item);
       }
-      final newCardsInPriorityOrder = <StudyCardItem>[];
-      final otherNewCards = <StudyCardItem>[];
       final newCardsByLesson = <String, List<StudyCardItem>>{};
       for (final item in newCards) {
         newCardsByLesson.putIfAbsent(item.lesson.id, () => []).add(item);
       }
-      for (final lesson in _orderedLessons()) {
-        final lessonCards = newCardsByLesson.remove(lesson.id);
-        if (lessonCards == null) continue;
-        final hasStarted = lesson.vocabularies.any(
-          (vocab) =>
-              vocab.cardTargetToNative.introducedAt != null ||
-              vocab.cardNativeToTarget.introducedAt != null,
-        );
-        (hasStarted ? newCardsInPriorityOrder : otherNewCards).addAll(
-          lessonCards,
-        );
-      }
+      // Continue from the lesson whose new cards were started most recently,
+      // not necessarily the topmost one.
+      final prioritizedLessons = lessonsFromMostRecentlyStarted(
+        _orderedLessons(),
+        (lesson) {
+          DateTime? latest;
+          for (final vocab in lesson.vocabularies) {
+            for (final card in [
+              vocab.cardTargetToNative,
+              vocab.cardNativeToTarget,
+            ]) {
+              final at = card.introducedAt;
+              if (at != null && (latest == null || at.isAfter(latest))) {
+                latest = at;
+              }
+            }
+          }
+          return latest;
+        },
+      );
+      final newCardsInPriorityOrder = <StudyCardItem>[
+        for (final lesson in prioritizedLessons)
+          ...?newCardsByLesson.remove(lesson.id),
+      ];
       // Sub-24h intervals (1 h / 12 h) ignore the review limit and do not use
       // up any of its quota.
       var reviewBudget = remainingReviews24hOf(language);
@@ -3470,10 +3480,9 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
           reviewBudget--;
         }
       }
-      final prioritizedNewCards = [
-        ...newCardsInPriorityOrder,
-        ...otherNewCards,
-      ].take(remainingNewCards24hOf(language)).toList();
+      final prioritizedNewCards = newCardsInPriorityOrder
+          .take(remainingNewCards24hOf(language))
+          .toList();
       return mixNewCardsIntoReviews(
         reviews: reviews,
         newCards: prioritizedNewCards,

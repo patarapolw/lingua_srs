@@ -118,4 +118,33 @@ void main() {
       }
     });
   });
+
+  group('lessonsFromMostRecentlyStarted', () {
+    final t = DateTime(2026, 1, 1);
+    final starts = <String, DateTime?>{};
+    List<String> order() => lessonsFromMostRecentlyStarted<String>([
+      'a',
+      'b',
+      'c',
+      'd',
+    ], (lesson) => starts[lesson]);
+
+    setUp(starts.clear);
+
+    test('never started: topmost first', () {
+      expect(order(), ['a', 'b', 'c', 'd']);
+    });
+
+    test('starts at the most recently started lesson, then continues', () {
+      starts['a'] = t;
+      starts['c'] = t.add(const Duration(days: 1));
+      expect(order(), ['c', 'd', 'a', 'b']);
+    });
+
+    test('starting the topmost lesson makes it first again', () {
+      starts['c'] = t;
+      starts['a'] = t.add(const Duration(days: 1));
+      expect(order(), ['a', 'b', 'c', 'd']);
+    });
+  });
 }
