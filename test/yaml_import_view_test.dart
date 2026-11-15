@@ -21,6 +21,24 @@ void main() {
     expect(find.text('Pick ZIP'), findsNothing);
   });
 
+  testWidgets('hides folder import where there are no desktop folders', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() {
+      YamlImportView.debugSupportsFolderImport = null;
+      tester.binding.setSurfaceSize(null);
+    });
+    YamlImportView.debugSupportsFolderImport = false;
+
+    await tester.pumpWidget(const MaterialApp(home: YamlImportView()));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Files'), findsOneWidget);
+    expect(find.text('Folder'), findsNothing);
+    expect(find.byIcon(Icons.folder_open_outlined), findsNothing);
+  });
+
   testWidgets('starts with empty Markdown input and import disabled', (
     tester,
   ) async {
