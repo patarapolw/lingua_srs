@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:file_picker/file_picker.dart';
@@ -19,6 +20,10 @@ import '../services/yaml_parser_service.dart';
 import '../widgets/lesson_clash_dialog.dart';
 
 class YamlImportView extends StatefulWidget {
+  /// Overrides the platform check for folder import in tests.
+  @visibleForTesting
+  static bool? debugSupportsFolderImport;
+
   /// Prefills the lesson name. Using an existing lesson's name adds the YAML's
   /// vocabulary to that lesson.
   final String? initialLessonName;
@@ -756,11 +761,16 @@ class _YamlImportViewState extends State<YamlImportView>
               tooltip: 'Import Markdown, YAML, or ZIP files',
               onPressed: _isParsing ? null : _pickFiles,
             ),
-            IconButton(
-              icon: const Icon(Icons.folder_open_outlined),
-              tooltip: Platform.isMacOS ? 'Select Folders' : 'Select Folder',
-              onPressed: _isParsing ? null : _pickDirectory,
-            ),
+            // Folders are for VitePress-compatible lesson folders, which
+            // only exist on desktop.
+            if (_supportsFolderImport)
+              IconButton(
+                icon: const Icon(Icons.folder_open_outlined),
+                tooltip: Platform.isMacOS
+                    ? 'Select Folders'
+                    : 'Select Folder',
+                onPressed: _isParsing ? null : _pickDirectory,
+              ),
           ] else ...[
             Tooltip(
               message: 'Import Markdown, YAML, or ZIP files',
@@ -770,11 +780,12 @@ class _YamlImportViewState extends State<YamlImportView>
                 onPressed: _isParsing ? null : _pickFiles,
               ),
             ),
-            TextButton.icon(
-              icon: const Icon(Icons.folder_open_outlined),
-              label: Text(Platform.isMacOS ? 'Folders' : 'Folder'),
-              onPressed: _isParsing ? null : _pickDirectory,
-            ),
+            if (_supportsFolderImport)
+              TextButton.icon(
+                icon: const Icon(Icons.folder_open_outlined),
+                label: Text(Platform.isMacOS ? 'Folders' : 'Folder'),
+                onPressed: _isParsing ? null : _pickDirectory,
+              ),
           ],
           const SizedBox(width: 8),
           FilledButton.icon(
@@ -1331,6 +1342,11 @@ class _YamlImportViewState extends State<YamlImportView>
 
   bool get _supportsDesktopFileDrop =>
       Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+
+  /// Folder import is for VitePress-compatible folders, so desktop only.
+  bool get _supportsFolderImport =>
+      YamlImportView.debugSupportsFolderImport ?? _supportsDesktopFileDrop;
+
 }
 
 class MarkdownImportFile {
