@@ -2065,4 +2065,56 @@ void main() {
       expect(find.textContaining('Add example'), findsNothing);
     });
   });
+
+  group('Reopened discussion', () {
+    testWidgets('scrolls down to the latest message', (tester) async {
+      final (provider, _) = await loadedProvider(
+        tester,
+        discussions: {
+          'v-apple:no-sentence': [
+            for (var i = 0; i < 30; i++) ...[
+              _msg('user', 'Question number $i', i * 2),
+              _msg('assistant', 'Answer number $i', i * 2 + 1),
+            ],
+          ],
+        },
+      );
+      await pumpWith(
+        tester,
+        provider,
+        Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) => const AiDiscussionDialog(
+                  discussionId: 'v-apple:no-sentence',
+                  targetWord: '사과',
+                  translation: 'apple',
+                  targetLanguage: 'ko',
+                  nativeLanguage: 'en',
+                ),
+              ),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+        size: const Size(800, 600),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      final list = tester.state<ScrollableState>(
+        find
+            .descendant(
+              of: find.byType(AiDiscussionDialog),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      expect(list.position.maxScrollExtent, greaterThan(0));
+      expect(list.position.pixels, list.position.maxScrollExtent);
+      expect(find.text('Answer number 29'), findsOneWidget);
+    });
+  });
 }

@@ -120,6 +120,24 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
       final position = _messagesController.position;
       _wasAtBottom = position.maxScrollExtent - position.pixels < 80;
     });
+    if (provider.getAiDiscussion(widget.discussionId).isNotEmpty) {
+      _scrollToBottomOnOpen();
+    }
+  }
+
+  /// Shows the latest message of a chat that is reopened. Messages are built
+  /// lazily, so the scroll extent is only an estimate at first: jump again
+  /// over a few frames until the end holds.
+  void _scrollToBottomOnOpen([int attempts = 3]) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_messagesController.hasClients) return;
+      final position = _messagesController.position;
+      if (position.pixels < position.maxScrollExtent) {
+        _messagesController.jumpTo(position.maxScrollExtent);
+        _wasAtBottom = true;
+      }
+      if (attempts > 1) _scrollToBottomOnOpen(attempts - 1);
+    });
   }
 
   @override
