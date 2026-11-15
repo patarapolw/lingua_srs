@@ -423,19 +423,26 @@ const wrapUpReviewCount = 5;
 /// mistakes can still be cleared, and the next [reviewCount] unseen reviews
 /// (cards that are not new). It drops the other unseen cards, new cards
 /// included. A card in [againCardIds] with no copy left ahead gets one at
-/// the end from [makeDuplicate], when given. Mutates [queue].
+/// the end from [makeDuplicate], when given. The [keep] item, the card on
+/// screen with its back already shown, is never dropped, new or not; it
+/// counts toward [reviewCount] when it is a review. Mutates [queue].
 List<RemovedQueueItem> wrapUpQueue({
   required List<StudyCardItem> queue,
   required int fromIndex,
   required Set<String> againCardIds,
   int reviewCount = wrapUpReviewCount,
+  StudyCardItem? keep,
   StudyCardItem Function(String cardId)? makeDuplicate,
 }) {
   final from = max(fromIndex, 0);
   final keptReviews = <String>{};
+  if (keep != null && keep.card.status != SrsStatus.isNew) {
+    keptReviews.add(keep.card.id);
+  }
   for (var i = from; i < queue.length; i++) {
     final card = queue[i].card;
     if (keptReviews.length >= reviewCount) break;
+    if (identical(queue[i], keep)) continue;
     if (againCardIds.contains(card.id) || card.status == SrsStatus.isNew) {
       continue;
     }
@@ -445,7 +452,9 @@ List<RemovedQueueItem> wrapUpQueue({
     queue,
     from,
     (i) =>
-        !againCardIds.contains(i.card.id) && !keptReviews.contains(i.card.id),
+        !identical(i, keep) &&
+        !againCardIds.contains(i.card.id) &&
+        !keptReviews.contains(i.card.id),
   );
   if (makeDuplicate != null) {
     final ahead = {for (final i in queue.skip(from)) i.card.id};
@@ -1335,6 +1344,7 @@ class _StudyViewState extends State<StudyView> {
         queue: _queue,
         fromIndex: from,
         againCardIds: _againCardIds,
+        keep: _isAnswerRevealed ? onScreen : null,
         makeDuplicate: (cardId) {
           final source = _queue.lastWhere((i) => i.card.id == cardId);
           return StudyCardItem(

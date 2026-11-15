@@ -201,6 +201,20 @@ void main() {
       expect(words([for (final r in removed) r.item]), ['c', 'd', 'e']);
     });
 
+    test('keeps the on-screen new card when its back is shown', () {
+      final queue = [itemFor('a'), itemFor('n'), itemFor('m')];
+
+      final removed = wrapUpQueue(
+        queue: queue,
+        fromIndex: 1,
+        againCardIds: {},
+        keep: queue[1],
+      );
+
+      expect(words(queue), ['a', 'n']);
+      expect(words([for (final r in removed) r.item]), ['m']);
+    });
+
     test('leaves nothing ahead when no Again card is pending', () {
       final queue = [itemFor('a'), itemFor('b'), itemFor('c')];
 
