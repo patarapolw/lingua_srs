@@ -14,6 +14,7 @@ import '../widgets/audio_button.dart';
 import '../widgets/audio_edit_fields.dart';
 import '../widgets/emphasis_field.dart';
 import '../widgets/emphasis_text.dart';
+import '../widgets/markdown_content.dart';
 import '../widgets/markdown_notes_field.dart';
 import 'similar_meanings_dialog.dart';
 import 'similar_search_dialog.dart';
@@ -21,6 +22,10 @@ import 'vocab_merge_dialogs.dart';
 
 const _needsEmphasis =
     'Wrap the word being studied in ** **, e.g. 저는 **배**를 먹어요';
+
+/// The fields of a pool sentence that belong to the sentence itself, not to
+/// the word linking it. Edited from the word editor and applied on Save.
+typedef _SentenceFields = ({String? audioUrl, String? ttsText, String notes});
 
 class VocabEditDialog extends StatefulWidget {
   final VocabItem vocab;
@@ -99,6 +104,10 @@ class _VocabEditDialogState extends State<VocabEditDialog>
   /// Recording-or-TTS choices for pool sentences, applied on Save like
   /// [_pendingEmphasis]. Sentences without an entry keep their own setting.
   final Map<String, bool> _pendingUseAudio = {};
+
+  /// Audio URL, TTS text and notes edited for pool sentences, applied on Save
+  /// like [_pendingEmphasis]. They belong to the shared sentence.
+  final Map<String, _SentenceFields> _pendingSentenceFields = {};
 
   String? _targetError;
   String? _translationError;
@@ -486,6 +495,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                                   EmphasisText(
                                     _markedFor(sentence).translation,
                                   ),
+                                  _notesView(_fieldsFor(sentence).notes, theme),
                                   SentenceAudioChoice(
                                     hasRecording: sentence.hasAudioUrl,
                                     useAudio: usesRecording,
@@ -659,6 +669,32 @@ class _VocabEditDialogState extends State<VocabEditDialog>
         translation: widget.vocab.translationTextFor(sentence),
       );
 
+  /// The sentence's own fields as this form shows them: pending edits, else
+  /// what the pool has.
+  _SentenceFields _fieldsFor(Sentence sentence) =>
+      _pendingSentenceFields[sentence.id] ??
+      (
+        audioUrl: sentence.audioUrl,
+        ttsText: sentence.ttsText,
+        notes: sentence.notes,
+      );
+
+  /// Sentence notes under an example; nothing when there are none.
+  Widget _notesView(String notes, ThemeData theme) {
+    if (notes.trim().isEmpty) return const SizedBox.shrink();
+    return Container(
+      key: const ValueKey('example-notes'),
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 6),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: MarkdownContent(content: notes),
+    );
+  }
+
   /// How many other words list [sentenceId] as an example.
   int _otherUsers(AppProvider provider, String sentenceId) => provider.lessons
       .expand((lesson) => lesson.vocabularies)
@@ -681,6 +717,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
       translation: sentence.translationText,
       otherUsers: _otherUsers(this.context.read<AppProvider>(), sentence.id),
       fromPool: true,
+      sentence: sentence,
     );
     if (edited == null || !mounted) return;
 
@@ -704,8 +741,18 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     required String translation,
     int otherUsers = 0,
     bool fromPool = false,
+    Sentence? sentence,
   }) async {
     var textEditable = !fromPool;
+    // The sentence's own fields, offered when [sentence] is given. A draft
+    // takes them at once; a pool sentence's wait for Save.
+    final fields = sentence == null ? null : _fieldsFor(sentence);
+    final audioCtrl = TextEditingController(text: fields?.audioUrl ?? '');
+    final ttsCtrl = TextEditingController(text: fields?.ttsText ?? '');
+    final notesCtrl = TextEditingController(text: fields?.notes ?? '');
+    var useAudio = sentence == null
+        ? true
+        : _pendingUseAudio[sentence.id] ?? sentence.useAudio;
     final targetCtrl = TextEditingController(
       text: Sentence.suggestEmphasis(
         target,
@@ -798,6 +845,39 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                         border: OutlineInputBorder(),
                       ),
                     ),
+                    if (sentence != null) ...[
+                      const SizedBox(height: 16),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          otherUsers > 0
+                              ? 'Audio, TTS and notes belong to the sentence, '
+                                    'shared with $otherUsers other '
+                                    '${otherUsers == 1 ? 'word' : 'words'}. '
+                                    'Changing them changes it for all of them.'
+                              : 'Audio, TTS and notes belong to the sentence, '
+                                    'not to this word.',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      AudioEditFields(
+                        audioUrl: audioCtrl,
+                        audioUrlLabel: 'Audio URL (Optional)',
+                        useAudio: useAudio,
+                        onUseAudioChanged: (value) =>
+                            setDialogState(() => useAudio = value),
+                        ttsText: ttsCtrl,
+                        spokenFallback: targetCtrl,
+                      ),
+                      const SizedBox(height: 8),
+                      MarkdownNotesField(
+                        key: const ValueKey('example-notes-field'),
+                        label: 'Sentence notes',
+                        addLabel: 'Add sentence note',
+                        controller: notesCtrl,
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -821,7 +901,31 @@ class _VocabEditDialogState extends State<VocabEditDialog>
         },
       ),
     );
-    _disposeAfterRouteExit([targetCtrl, translationCtrl]);
+    if (result != null && sentence != null) {
+      final audioUrl = audioCtrl.text.trim();
+      final edited = (
+        audioUrl: audioUrl.isEmpty ? null : audioUrl,
+        ttsText: TtsText.clean(ttsCtrl.text),
+        notes: notesCtrl.text.trim(),
+      );
+      if (_draftSentences.contains(sentence)) {
+        sentence
+          ..audioUrl = edited.audioUrl
+          ..ttsText = edited.ttsText
+          ..notes = edited.notes
+          ..useAudio = useAudio;
+      } else {
+        _pendingSentenceFields[sentence.id] = edited;
+        _pendingUseAudio[sentence.id] = useAudio;
+      }
+    }
+    _disposeAfterRouteExit([
+      targetCtrl,
+      translationCtrl,
+      audioCtrl,
+      ttsCtrl,
+      notesCtrl,
+    ]);
     return result;
   }
 
@@ -832,6 +936,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
       translation: current.translation,
       otherUsers: _otherUsers(context.read<AppProvider>(), sentence.id),
       fromPool: true,
+      sentence: sentence,
     );
     if (edited == null || !mounted) return;
     setState(() => _pendingEmphasis[sentence.id] = edited);
@@ -842,6 +947,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     final edited = await _editEmphasis(
       target: sentence.targetText,
       translation: sentence.translationText,
+      sentence: sentence,
     );
     if (edited == null || !mounted) return;
     setState(() {
@@ -1011,6 +1117,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             EmphasisText(sentence.translationText),
+            _notesView(sentence.notes, theme),
             SentenceAudioChoice(
               hasRecording: sentence.hasAudioUrl,
               useAudio: sentence.useAudio,
@@ -1470,6 +1577,22 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     final sentencePool = context.read<AppProvider>();
     // Before the emphasis edits: one of those may merge the sentence into a
     // duplicate, which keeps the choice made here.
+    for (final entry in _pendingSentenceFields.entries) {
+      if (!_sentenceIds.contains(entry.key)) continue;
+      final sentence = sentencePool.getSentenceById(entry.key);
+      if (sentence == null) continue;
+      final fields = entry.value;
+      if (sentence.audioUrl == fields.audioUrl &&
+          sentence.ttsText == fields.ttsText &&
+          sentence.notes == fields.notes) {
+        continue;
+      }
+      sentence
+        ..audioUrl = fields.audioUrl
+        ..ttsText = fields.ttsText
+        ..notes = fields.notes;
+      await sentencePool.updateSentenceInPool(sentence);
+    }
     for (final entry in _pendingUseAudio.entries) {
       if (!_sentenceIds.contains(entry.key)) continue;
       final sentence = sentencePool.getSentenceById(entry.key);

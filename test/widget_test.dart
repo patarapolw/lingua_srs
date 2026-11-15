@@ -2780,6 +2780,57 @@ vocabulary:
       await tester.pumpAndSettle();
     }
 
+    /// A saved word with one linked pool sentence that has notes.
+    Future<(AppProvider, Lesson, Sentence)> seedLinked(
+      WidgetTester tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      final lesson = await seed(tester, provider, 'L1', 'nouns', '사과', 'apple');
+      final sentence = Sentence(
+        targetText: '사과를 먹어요',
+        translationText: 'I eat an apple',
+        notes: 'Suggested by AI',
+      );
+      await tester.runAsync(() => provider.addSentenceToPool(sentence));
+      only(lesson).sentenceIds = [sentence.id];
+      return (provider, lesson, sentence);
+    }
+
+    testWidgets('the word editor shows each example\'s sentence notes', (
+      tester,
+    ) async {
+      final (provider, lesson, _) = await seedLinked(tester);
+      await openEdit(tester, provider, lesson);
+
+      expect(find.byKey(const ValueKey('example-notes')), findsOneWidget);
+      expect(find.text('Suggested by AI'), findsOneWidget);
+    });
+
+    testWidgets('example audio and notes are edited from the word editor and '
+        'saved with the word', (tester) async {
+      final (provider, lesson, sentence) = await seedLinked(tester);
+      await openEdit(tester, provider, lesson);
+
+      await tester.tap(exampleTile());
+      await tester.pumpAndSettle();
+      expect(find.text('Edit Example'), findsOneWidget);
+      expect(find.text('Sentence notes'), findsOneWidget);
+      await tester.enterText(
+        inSentenceDialog('Audio URL (Optional)'),
+        'https://example.com/a.mp3',
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Apply'));
+      await tester.pumpAndSettle();
+      expect(sentence.audioUrl, isNull, reason: 'applied on Save');
+
+      await saveAndWait(tester);
+      expect(sentence.audioUrl, 'https://example.com/a.mp3');
+      expect(sentence.notes, 'Suggested by AI');
+
+      // _disposeAfterRouteExit keeps a 1s timer for the closed dialog.
+      await tester.pump(const Duration(seconds: 1));
+    });
+
     testWidgets('editing keeps the Audio URL and TTS sections together', (
       tester,
     ) async {
