@@ -1302,6 +1302,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                         'Japanese grammar, and with Mandarin and Cantonese '
                         'readings.',
                     alignLabelWithHint: true,
+                    floatingLabelBehavior: FloatingLabelBehavior.always,
                   ),
                 ),
                 const SizedBox(height: 10),
