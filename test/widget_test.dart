@@ -2042,9 +2042,7 @@ vocabulary:
 
     /// The row of an example (linked or picked from the pool). Other tiles in
     /// the dialog, such as the collapsed TTS one, are ListTiles too.
-    Finder exampleTile() => find
-        .byWidgetPredicate((w) => w is ListTile && w.title is EmphasisText)
-        .first;
+    Finder exampleTile() => find.byKey(const ValueKey('example-card')).first;
 
     /// The TTS text is collapsed; opens the tile (inside the sentence dialog
     /// when [inDialog] is set).
@@ -2804,6 +2802,11 @@ vocabulary:
 
       expect(find.byKey(const ValueKey('example-notes')), findsOneWidget);
       expect(find.text('Suggested by AI'), findsOneWidget);
+
+      // The notes get the card's width, not what is left beside the buttons.
+      final notes = tester.getSize(find.byKey(const ValueKey('example-notes')));
+      final card = tester.getSize(find.byKey(const ValueKey('example-card')));
+      expect(notes.width, greaterThan(card.width * 0.8));
     });
 
     testWidgets('example audio and notes are edited from the word editor and '

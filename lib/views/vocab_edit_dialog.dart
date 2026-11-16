@@ -484,53 +484,40 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                               _pendingUseAudio[sentence.id] ??
                               sentence.useAudio;
 
-                          return Card(
-                            margin: const EdgeInsets.symmetric(vertical: 4),
-                            child: ListTile(
-                              onTap: () => _editLinkedSentence(sentence),
-                              title: EmphasisText(_markedFor(sentence).target),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  EmphasisText(
-                                    _markedFor(sentence).translation,
-                                  ),
-                                  _notesView(_fieldsFor(sentence).notes, theme),
-                                  SentenceAudioChoice(
-                                    hasRecording: sentence.hasAudioUrl,
-                                    useAudio: usesRecording,
-                                    onChanged: (value) => setState(
-                                      () =>
-                                          _pendingUseAudio[sentence.id] = value,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  AudioButton(
-                                    audioUrl: usesRecording
-                                        ? sentence.audioUrl
-                                        : null,
-                                    fallbackText: sentence.speechText,
-                                    compact: true,
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(
-                                      Icons.delete_outline,
-                                      color: Colors.red,
-                                    ),
-                                    tooltip: 'Unlink from word',
-                                    onPressed: () {
-                                      setState(() {
-                                        _sentenceIds.removeAt(i);
-                                      });
-                                    },
-                                  ),
-                                ],
+                          return _exampleCard(
+                            onTap: () => _editLinkedSentence(sentence),
+                            target: _markedFor(sentence).target,
+                            translation: _markedFor(sentence).translation,
+                            notes: _fieldsFor(sentence).notes,
+                            theme: theme,
+                            audioChoice: SentenceAudioChoice(
+                              hasRecording: sentence.hasAudioUrl,
+                              useAudio: usesRecording,
+                              onChanged: (value) => setState(
+                                () => _pendingUseAudio[sentence.id] = value,
                               ),
                             ),
+                            actions: [
+                              AudioButton(
+                                audioUrl: usesRecording
+                                    ? sentence.audioUrl
+                                    : null,
+                                fallbackText: sentence.speechText,
+                                compact: true,
+                              ),
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.delete_outline,
+                                  color: Colors.red,
+                                ),
+                                tooltip: 'Unlink from word',
+                                onPressed: () {
+                                  setState(() {
+                                    _sentenceIds.removeAt(i);
+                                  });
+                                },
+                              ),
+                            ],
                           );
                         },
                       ),
@@ -1108,37 +1095,82 @@ class _VocabEditDialogState extends State<VocabEditDialog>
 
   Widget _draftSentenceCard(int index, ThemeData theme) {
     final sentence = _draftSentences[index];
+    return _exampleCard(
+      onTap: () => _editDraftSentence(index),
+      target: sentence.targetText,
+      translation: sentence.translationText,
+      notes: sentence.notes,
+      theme: theme,
+      audioChoice: SentenceAudioChoice(
+        hasRecording: sentence.hasAudioUrl,
+        useAudio: sentence.useAudio,
+        onChanged: (value) => setState(() => sentence.useAudio = value),
+      ),
+      actions: [
+        AudioButton(
+          audioUrl: sentence.playableAudioUrl,
+          fallbackText: sentence.speechText,
+          compact: true,
+        ),
+        IconButton(
+          icon: const Icon(Icons.delete_outline, color: Colors.red),
+          tooltip: 'Remove example',
+          onPressed: () => setState(() => _draftSentences.removeAt(index)),
+        ),
+      ],
+    );
+  }
+
+  /// An example in the form. The text and the buttons share the first row;
+  /// the notes and the audio choice sit below at the card's full width, so a
+  /// narrow phone screen doesn't squeeze them beside the buttons.
+  Widget _exampleCard({
+    required VoidCallback onTap,
+    required String target,
+    required String translation,
+    required String notes,
+    required ThemeData theme,
+    required Widget audioChoice,
+    required List<Widget> actions,
+  }) {
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4),
-      child: ListTile(
-        onTap: () => _editDraftSentence(index),
-        title: EmphasisText(sentence.targetText),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            EmphasisText(sentence.translationText),
-            _notesView(sentence.notes, theme),
-            SentenceAudioChoice(
-              hasRecording: sentence.hasAudioUrl,
-              useAudio: sentence.useAudio,
-              onChanged: (value) => setState(() => sentence.useAudio = value),
-            ),
-          ],
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AudioButton(
-              audioUrl: sentence.playableAudioUrl,
-              fallbackText: sentence.speechText,
-              compact: true,
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete_outline, color: Colors.red),
-              tooltip: 'Remove example',
-              onPressed: () => setState(() => _draftSentences.removeAt(index)),
-            ),
-          ],
+      child: InkWell(
+        key: const ValueKey('example-card'),
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          EmphasisText(target),
+                          EmphasisText(translation),
+                        ],
+                      ),
+                    ),
+                  ),
+                  ...actions,
+                ],
+              ),
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [_notesView(notes, theme), audioChoice],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
