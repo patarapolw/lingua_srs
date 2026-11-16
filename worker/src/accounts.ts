@@ -249,6 +249,109 @@ export async function setRecovery(
   return json({ status: 'ok', createdAt: now });
 }
 
+/** The one answer for every failed recovery, so it says nothing about the account. */
+function recoveryFailed(): HttpError {
+  return new HttpError(400, 'invalid_recovery');
+}
+
+/**
+ * Checks a recovery key against the account's stored hash, taking the same
+ * work whether or not the email has an account, a code, or is confirmed.
+ * Returns the stored hash and the recovery-wrapped data key, or throws the
+ * one failure answer.
+ */
+async function checkRecovery(
+  env: Env,
+  body: Record<string, unknown>,
+): Promise<{ email: string; hash: string; wrappedDataKey: string }> {
+  const email = normalizeEmail(body.email);
+  const recoveryKey = isAuthKey(body.recoveryKey) ? body.recoveryKey : '';
+  const row = email
+    ? await env.DB.prepare(
+        'SELECT recovery_hash, recovery_wrapped_data_key, verified_at FROM accounts WHERE email = ?1',
+      )
+        .bind(email)
+        .first<{
+          recovery_hash: string | null;
+          recovery_wrapped_data_key: string | null;
+          verified_at: number | null;
+        }>()
+    : null;
+  // Always hash and compare, so an unknown email or a missing code takes the
+  // same time as a wrong code.
+  const matches = timingSafeEqual(await sha256Hex(recoveryKey), row?.recovery_hash ?? UNKNOWN_HASH);
+  if (
+    !email ||
+    !recoveryKey ||
+    !row ||
+    !matches ||
+    row.verified_at === null ||
+    row.recovery_hash === null ||
+    row.recovery_wrapped_data_key === null
+  ) {
+    throw recoveryFailed();
+  }
+  return { email, hash: row.recovery_hash, wrappedDataKey: row.recovery_wrapped_data_key };
+}
+
+/**
+ * First step of recovering an account: proves possession of the recovery
+ * code (through the recovery key derived from it) and returns the data key
+ * wrapped by the code, which only the code can unwrap. Every failure is the
+ * same answer. No authentication: the code is the credential.
+ */
+export async function startRecovery(request: Request, env: Env): Promise<Response> {
+  let body: Record<string, unknown>;
+  try {
+    body = await readJson(request, 4 * 1024);
+  } catch {
+    throw recoveryFailed();
+  }
+  const recovery = await checkRecovery(env, body);
+  return json({ wrappedDataKey: recovery.wrappedDataKey });
+}
+
+/**
+ * Second step: with the recovery key again, replaces the auth key and the
+ * password-wrapped data key, as a password change does, in one statement that
+ * only applies while the code is still the one checked. The code is used up:
+ * the account has no recovery code afterwards, and the device makes a new
+ * one. Other devices' sign-ins stop working, as after a password change, and
+ * pairing invites are dropped.
+ */
+export async function completeRecovery(request: Request, env: Env): Promise<Response> {
+  let body: Record<string, unknown>;
+  try {
+    body = await readJson(request, 8 * 1024);
+  } catch {
+    throw recoveryFailed();
+  }
+  if (!isAuthKey(body.authKey) || !validWrappedKey(body.wrappedDataKey) || !validKdf(body.kdf)) {
+    throw recoveryFailed();
+  }
+  const recovery = await checkRecovery(env, body);
+  const [update] = await env.DB.batch([
+    env.DB.prepare(
+      'UPDATE accounts SET auth_hash = ?2, wrapped_data_key = ?3, kdf = ?4, ' +
+        'recovery_hash = NULL, recovery_wrapped_data_key = NULL, recovery_created_at = NULL ' +
+        'WHERE email = ?1 AND recovery_hash = ?5 AND verified_at IS NOT NULL',
+    ).bind(
+      recovery.email,
+      await sha256Hex(body.authKey),
+      body.wrappedDataKey,
+      JSON.stringify(body.kdf),
+      recovery.hash,
+    ),
+    env.DB.prepare(
+      'DELETE FROM pairing_invites WHERE email = ?1 AND NOT EXISTS ' +
+        '(SELECT 1 FROM accounts WHERE email = ?1 AND recovery_hash IS NOT NULL)',
+    ).bind(recovery.email),
+  ]);
+  // Another recovery with the same code got there first.
+  if (update.meta.changes !== 1) throw recoveryFailed();
+  return json({ status: 'ok' });
+}
+
 export async function createPairingInvite(
   request: Request,
   email: string,

@@ -67,6 +67,7 @@ class _SettingsDialogState extends State<_SettingsDialogBody> {
   final _syncPasswordController = TextEditingController();
   final _syncConfirmPasswordController = TextEditingController();
   final _syncConfirmationCodeController = TextEditingController();
+  final _syncRecoveryCodeController = TextEditingController();
   final _newSyncPasswordController = TextEditingController();
   final _newSyncConfirmPasswordController = TextEditingController();
   late bool _darkMode = widget.isDarkMode;
@@ -77,6 +78,7 @@ class _SettingsDialogState extends State<_SettingsDialogBody> {
   bool _obscureNewSyncConfirmPassword = true;
   bool _creatingSyncAccount = false;
   bool _awaitingSyncConfirmation = false;
+  bool _recoveringSyncAccount = false;
   bool _changingSyncPassword = false;
   bool _saving = false;
   String? _maxReviewsError;
@@ -91,6 +93,14 @@ class _SettingsDialogState extends State<_SettingsDialogBody> {
   bool get _canCreateAccount =>
       _newAccountPasswordError == null &&
       _syncPasswordController.text == _syncConfirmPasswordController.text;
+
+  /// Whether the signed-out form asks for a new password, with its
+  /// confirmation and rules: creating an account, or recovering one.
+  bool get _choosingNewPassword =>
+      (_creatingSyncAccount && !_awaitingSyncConfirmation) ||
+      _recoveringSyncAccount;
+  bool get _canRecoverAccount =>
+      _canCreateAccount && _syncRecoveryCodeController.text.trim().isNotEmpty;
   bool get _hasConfirmationCode =>
       _syncConfirmationCodeController.text.length == 8;
   bool get _canChangePassword =>
@@ -130,6 +140,7 @@ class _SettingsDialogState extends State<_SettingsDialogBody> {
     _syncPasswordController.dispose();
     _syncConfirmPasswordController.dispose();
     _syncConfirmationCodeController.dispose();
+    _syncRecoveryCodeController.dispose();
     _newSyncPasswordController.dispose();
     _newSyncConfirmPasswordController.dispose();
     super.dispose();
@@ -339,6 +350,81 @@ class _SettingsDialogState extends State<_SettingsDialogBody> {
     }
   }
 
+  /// Recovers the account with its recovery code and a new password, signs
+  /// this device in, and shows a new recovery code: the old one is used up.
+  Future<void> _recoverSyncAccount() async {
+    final SyncPairing pairing;
+    try {
+      pairing = SyncPairing(
+        email: _syncEmailController.text,
+        password: _syncPasswordController.text,
+      );
+    } on FormatException catch (error) {
+      setState(() => _syncError = error.message);
+      return;
+    }
+    if (_syncPasswordController.text != _syncConfirmPasswordController.text) {
+      setState(() => _syncError = 'Passwords do not match.');
+      return;
+    }
+    // Taken before the awaits: once the server has taken the new password,
+    // the sign-in has to be saved even if this dialog was closed meanwhile.
+    final provider = context.read<AppProvider>();
+    setState(() {
+      _syncError = null;
+      _saving = true;
+    });
+    try {
+      final recovered = await _syncAccounts.recoverAccount(
+        pairing,
+        _syncRecoveryCodeController.text,
+      );
+      // The old code is used up. Make the new one while the keys derived for
+      // the new password are still at hand, as at signup.
+      String? recoveryCode;
+      var recoveryFailed = false;
+      if (mounted) {
+        try {
+          recoveryCode = await _syncAccounts.createRecoveryCode(recovered);
+        } catch (_) {
+          recoveryFailed = true;
+        }
+      }
+      await provider.setSyncPairing(recovered);
+      if (mounted) {
+        TextInput.finishAutofillContext();
+        _syncEmailController.clear();
+        _syncPasswordController.clear();
+        _syncConfirmPasswordController.clear();
+        _syncRecoveryCodeController.clear();
+        setState(() {
+          _recoveringSyncAccount = false;
+          _saving = false;
+          if (recoveryFailed) {
+            _syncError =
+                'Account recovered and signed in. The old recovery code has '
+                'been used, and a new one could not be created. Choose '
+                'Recovery code to create one.';
+          }
+        });
+        if (recoveryCode != null) {
+          await showRecoveryCode(
+            context,
+            recoveryCode,
+            reason:
+                'Your account is recovered and this device is signed in with '
+                'the new password. The old recovery code has been used and '
+                'no longer works, so here is a new one.',
+          );
+        }
+      }
+    } catch (error) {
+      if (mounted) setState(() => _syncError = describeSyncError(error));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   Future<void> _deleteUnconfirmedAccount() async {
     final pairing = SyncPairing(
       email: _syncEmailController.text,
@@ -492,10 +578,12 @@ class _SettingsDialogState extends State<_SettingsDialogBody> {
         _syncPasswordController.clear();
         _syncConfirmPasswordController.clear();
         _syncConfirmationCodeController.clear();
+        _syncRecoveryCodeController.clear();
         _newSyncPasswordController.clear();
         _newSyncConfirmPasswordController.clear();
         _creatingSyncAccount = false;
         _awaitingSyncConfirmation = false;
+        _recoveringSyncAccount = false;
         _changingSyncPassword = false;
         _syncError = null;
       }
@@ -920,7 +1008,12 @@ class _SettingsDialogState extends State<_SettingsDialogBody> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _creatingSyncAccount
+                          _recoveringSyncAccount
+                              ? 'Forgot your password? Enter your email, the '
+                                    'recovery code you saved, and a new '
+                                    'password. Your other devices will need '
+                                    'the new password to sign in again.'
+                              : _creatingSyncAccount
                               ? _awaitingSyncConfirmation
                                     ? 'Enter the confirmation code sent by '
                                           'email. If the address can be '
@@ -947,6 +1040,24 @@ class _SettingsDialogState extends State<_SettingsDialogBody> {
                             border: OutlineInputBorder(),
                           ),
                         ),
+                        if (_recoveringSyncAccount) ...[
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: _syncRecoveryCodeController,
+                            autocorrect: false,
+                            enableSuggestions: false,
+                            enableIMEPersonalizedLearning: false,
+                            textCapitalization: TextCapitalization.characters,
+                            onChanged: (_) => setState(() => _syncError = null),
+                            decoration: const InputDecoration(
+                              labelText: 'Recovery code',
+                              helperText:
+                                  '32 letters and digits, such as '
+                                  'XXXX-XXXX-…',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 12),
                         TextField(
                           controller: _syncPasswordController,
@@ -955,13 +1066,14 @@ class _SettingsDialogState extends State<_SettingsDialogBody> {
                           autocorrect: false,
                           enableSuggestions: false,
                           autofillHints: [
-                            _creatingSyncAccount
+                            _creatingSyncAccount || _recoveringSyncAccount
                                 ? AutofillHints.newPassword
                                 : AutofillHints.password,
                           ],
                           onChanged: (_) => setState(() => _syncError = null),
                           decoration: InputDecoration(
-                            labelText: _creatingSyncAccount
+                            labelText:
+                                _creatingSyncAccount || _recoveringSyncAccount
                                 ? 'New sync password'
                                 : 'Sync password',
                             border: const OutlineInputBorder(),
@@ -974,8 +1086,7 @@ class _SettingsDialogState extends State<_SettingsDialogBody> {
                             ),
                           ),
                         ),
-                        if (_creatingSyncAccount &&
-                            !_awaitingSyncConfirmation) ...[
+                        if (_choosingNewPassword) ...[
                           const SizedBox(height: 12),
                           TextField(
                             controller: _syncConfirmPasswordController,
@@ -1082,7 +1193,14 @@ class _SettingsDialogState extends State<_SettingsDialogBody> {
                         Wrap(
                           spacing: 8,
                           children: [
-                            if (_creatingSyncAccount)
+                            if (_recoveringSyncAccount)
+                              FilledButton(
+                                onPressed: _saving || !_canRecoverAccount
+                                    ? null
+                                    : _recoverSyncAccount,
+                                child: const Text('Recover account'),
+                              )
+                            else if (_creatingSyncAccount)
                               FilledButton(
                                 onPressed: _saving
                                     ? null
@@ -1114,7 +1232,8 @@ class _SettingsDialogState extends State<_SettingsDialogBody> {
                             ],
                           ],
                         ),
-                        if (!_awaitingSyncConfirmation)
+                        if (!_awaitingSyncConfirmation &&
+                            !_recoveringSyncAccount)
                           TextButton(
                             onPressed: _saving
                                 ? null
@@ -1129,6 +1248,24 @@ class _SettingsDialogState extends State<_SettingsDialogBody> {
                               _creatingSyncAccount
                                   ? 'Already have an account? Sign in'
                                   : 'Create a sync account',
+                            ),
+                          ),
+                        if (!_creatingSyncAccount)
+                          TextButton(
+                            onPressed: _saving
+                                ? null
+                                : () => setState(() {
+                                    _recoveringSyncAccount =
+                                        !_recoveringSyncAccount;
+                                    _syncError = null;
+                                    _syncPasswordController.clear();
+                                    _syncConfirmPasswordController.clear();
+                                    _syncRecoveryCodeController.clear();
+                                  }),
+                            child: Text(
+                              _recoveringSyncAccount
+                                  ? 'Back to sign in'
+                                  : 'Forgot password? Use recovery code',
                             ),
                           ),
                       ],

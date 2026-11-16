@@ -224,6 +224,46 @@ class SyncClient {
     );
   }
 
+  /// First step of recovering the account for [email] with its recovery
+  /// code: sends the [recoveryKey] derived from the code and returns the data
+  /// key wrapped by the code. Not signed in. The server gives one answer,
+  /// `400 invalid_recovery`, for every failure.
+  Future<String> startRecovery({required String recoveryKey}) async {
+    final json = _object(
+      await _send(
+        'POST',
+        ['accounts', 'recovery'],
+        body: {'email': email, 'recoveryKey': recoveryKey},
+        authenticated: false,
+      ),
+    );
+    final wrappedDataKey = json['wrappedDataKey'];
+    if (wrappedDataKey is! String) throw _invalid();
+    return wrappedDataKey;
+  }
+
+  /// Second step: replaces the account's auth key and password-wrapped data
+  /// key, proving the code again with [recoveryKey]. The code is used up.
+  Future<void> completeRecovery({
+    required String recoveryKey,
+    required String authKey,
+    required String wrappedDataKey,
+    required Map<String, Object?> kdf,
+  }) async {
+    await _send(
+      'POST',
+      ['accounts', 'recovery', 'complete'],
+      body: {
+        'email': email,
+        'recoveryKey': recoveryKey,
+        'authKey': authKey,
+        'wrappedDataKey': wrappedDataKey,
+        'kdf': kdf,
+      },
+      authenticated: false,
+    );
+  }
+
   Future<String> createPairingInvite(String payload) async {
     final json = _object(
       await _send('POST', ['account', 'pairing'], body: {'payload': payload}),

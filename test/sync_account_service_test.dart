@@ -7,6 +7,7 @@ import 'package:lingua_srs/services/sync_account_crypto.dart';
 import 'package:lingua_srs/services/sync_account_service.dart';
 import 'package:lingua_srs/services/sync_client.dart';
 import 'package:lingua_srs/services/sync_pairing.dart';
+import 'package:lingua_srs/services/sync_password_policy.dart';
 import 'package:lingua_srs/services/sync_recovery_code.dart';
 
 const _email = 'reader@example.com';
@@ -659,6 +660,186 @@ void main() {
           isA<SyncException>().having((e) => e.statusCode, 'status', 429),
         ),
       );
+    });
+  });
+  group('recovering an account', () {
+    const newPassword = 'test-only-recovered-account-passphrase';
+    final secret = List<int>.generate(20, (i) => 100 + i);
+    final code = SyncRecoveryCode.format(secret);
+    final dataKey = List<int>.generate(32, (i) => i * 7 % 256);
+    final newWrapKey = List<int>.generate(32, (i) => 31 - i);
+    final derived = <String>[];
+
+    setUp(derived.clear);
+
+    SyncAccountService serviceFor(
+      List<http.Request> requests, {
+      int startStatus = 200,
+      int completeStatus = 200,
+      List<int>? recoveryWrapKey,
+    }) => SyncAccountService(
+      deriveKeys: ({required email, required password}) async {
+        derived.add(password);
+        return SyncAccountKeys(authKey: 'N' * 43, wrapKey: newWrapKey);
+      },
+      clientFactory: () => MockClient((request) async {
+        requests.add(request);
+        if (request.url.host == 'api.pwnedpasswords.com') {
+          return http.Response('0000000000000000000000000000000000:0\n', 200);
+        }
+        if (request.url.path == '/v1/accounts/recovery') {
+          if (startStatus != 200) {
+            return _json({'error': 'invalid_recovery'}, startStatus);
+          }
+          final keys = await SyncAccountCrypto.deriveRecoveryKeys(secret);
+          return _json({
+            'wrappedDataKey': await SyncAccountCrypto.wrapDataKey(
+              dataKey: dataKey,
+              wrapKey: recoveryWrapKey ?? keys.wrapKey,
+            ),
+          });
+        }
+        if (request.url.path == '/v1/accounts/recovery/complete') {
+          return completeStatus == 200
+              ? _json({'status': 'ok'})
+              : _json({'error': 'invalid_recovery'}, completeStatus);
+        }
+        return _json({
+          'wrappedDataKey': await SyncAccountCrypto.wrapDataKey(
+            dataKey: dataKey,
+            wrapKey: newWrapKey,
+          ),
+          'kdf': SyncAccountCrypto.kdf,
+          'createdAt': 1762171200000,
+        });
+      }),
+    );
+
+    List<http.Request> server(List<http.Request> requests) => requests
+        .where((request) => request.url.host != 'api.pwnedpasswords.com')
+        .toList();
+
+    test('proves the code, then re-wraps the data key with the new '
+        'password', () async {
+      final requests = <http.Request>[];
+      final pairing = SyncPairing(email: _email, password: newPassword);
+
+      final recovered = await serviceFor(requests)
+          .recoverAccount(pairing, code.toLowerCase().replaceAll('-', ' '));
+
+      expect(recovered, pairing);
+      final calls = server(requests);
+      expect(calls.map((request) => request.url.path), [
+        '/v1/accounts/recovery',
+        '/v1/accounts/recovery/complete',
+      ]);
+      final keys = await SyncAccountCrypto.deriveRecoveryKeys(secret);
+      for (final request in calls) {
+        expect(request.method, 'POST');
+        expect(request.headers['authorization'], isNull);
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        expect(body['email'], _email);
+        expect(body['recoveryKey'], keys.authKey);
+        // The code itself never leaves the device.
+        expect(request.body, isNot(contains(code)));
+        expect(request.body, isNot(contains(code.replaceAll('-', ''))));
+      }
+      final complete = jsonDecode(calls.last.body) as Map<String, dynamic>;
+      expect(complete['authKey'], 'N' * 43);
+      expect(complete['kdf'], SyncAccountCrypto.kdf);
+      expect(
+        await SyncAccountCrypto.unwrapDataKey(
+          wrappedDataKey: complete['wrappedDataKey'] as String,
+          wrapKey: newWrapKey,
+        ),
+        dataKey,
+      );
+      expect(complete.containsKey('password'), isFalse);
+    });
+
+    test('the first sync reuses the new keys', () async {
+      final service = serviceFor(<http.Request>[]);
+      final pairing = SyncPairing(email: _email, password: newPassword);
+
+      await service.recoverAccount(pairing, code);
+      final unlocked = await serviceFor(<http.Request>[])
+          .unlockDataKey(pairing);
+
+      expect(unlocked.key, dataKey);
+      expect(derived, [newPassword]);
+    });
+
+    test('a code that cannot be read sends nothing', () async {
+      final requests = <http.Request>[];
+
+      await expectLater(
+        serviceFor(requests).recoverAccount(
+          SyncPairing(email: _email, password: newPassword),
+          code.substring(1),
+        ),
+        throwsFormatException,
+      );
+      expect(requests, isEmpty);
+    });
+
+    test('a new password that breaks the rules sends nothing to the sync '
+        'server', () async {
+      final requests = <http.Request>[];
+
+      await expectLater(
+        serviceFor(
+          requests,
+        ).recoverAccount(SyncPairing(email: _email, password: 'short'), code),
+        throwsA(isA<SyncPasswordPolicyException>()),
+      );
+      expect(server(requests), isEmpty);
+    });
+
+    test('a refused code changes nothing', () async {
+      final requests = <http.Request>[];
+
+      await expectLater(
+        serviceFor(requests, startStatus: 400).recoverAccount(
+          SyncPairing(email: _email, password: newPassword),
+          code,
+        ),
+        throwsA(
+          isA<SyncException>()
+              .having((e) => e.statusCode, 'status', 400)
+              .having((e) => e.message, 'message', isNot(contains(code))),
+        ),
+      );
+      expect(server(requests), hasLength(1));
+      expect(derived, isEmpty);
+    });
+
+    test('a wrapped key the code does not unlock changes nothing', () async {
+      final requests = <http.Request>[];
+
+      await expectLater(
+        serviceFor(
+          requests,
+          recoveryWrapKey: List<int>.filled(32, 3),
+        ).recoverAccount(
+          SyncPairing(email: _email, password: newPassword),
+          code,
+        ),
+        throwsFormatException,
+      );
+      expect(server(requests), hasLength(1));
+    });
+
+    test('a refused change does not keep the new keys', () async {
+      final service = serviceFor(<http.Request>[], completeStatus: 400);
+      final pairing = SyncPairing(email: _email, password: newPassword);
+
+      await expectLater(
+        service.recoverAccount(pairing, code),
+        throwsA(isA<SyncException>()),
+      );
+      await serviceFor(<http.Request>[]).validateCredentials(pairing);
+
+      expect(derived, [newPassword, newPassword]);
     });
   });
 }

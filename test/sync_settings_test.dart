@@ -30,6 +30,7 @@ class _FakeSyncAccountService extends SyncAccountService {
     this.confirmError,
     this.redeemedPairing,
     this.recoveryError,
+    this.recoverError,
   });
 
   final String? pairingLink;
@@ -38,6 +39,9 @@ class _FakeSyncAccountService extends SyncAccountService {
   final SyncException? confirmError;
   final SyncPairing? redeemedPairing;
   final SyncException? recoveryError;
+  final SyncException? recoverError;
+  String? recoveredWithCode;
+  SyncPairing? recoveredPairing;
   int recoveryCodesCreated = 0;
   bool accountDeleted = false;
   bool credentialsValidated = false;
@@ -85,6 +89,15 @@ class _FakeSyncAccountService extends SyncAccountService {
   @override
   Future<void> deleteAccount(SyncPairing pairing) async {
     accountDeleted = true;
+  }
+
+  @override
+  Future<SyncPairing> recoverAccount(SyncPairing pairing, String code) async {
+    final refused = recoverError;
+    if (refused != null) throw refused;
+    recoveredWithCode = code;
+    recoveredPairing = pairing;
+    return pairing;
   }
 
   @override
@@ -773,6 +786,138 @@ void main() {
         expect(find.text('Your recovery code'), findsNothing);
         expect(
           find.textContaining('no longer accepts this sign-in'),
+          findsOneWidget,
+        );
+      });
+    });
+
+    group('recovering an account', () {
+      const usedCode = 'ABCD-EFGH-JKMN-PQRS-TVWX-YZ01-2345-6789';
+      final codeField = find.widgetWithText(TextField, 'Recovery code');
+      final newPasswordField = find.widgetWithText(
+        TextField,
+        'New sync password',
+      );
+      final confirmField = find.widgetWithText(
+        TextField,
+        'Confirm sync password',
+      );
+      Finder recoverButton() =>
+          find.widgetWithText(FilledButton, 'Recover account');
+
+      Future<void> fillRecovery(WidgetTester tester) async {
+        await tapText(tester, 'Forgot password? Use recovery code');
+        await tester.enterText(emailField, _email);
+        await tester.enterText(codeField, usedCode);
+        await tester.enterText(newPasswordField, _password);
+        await tester.enterText(confirmField, _password);
+        await tester.pumpAndSettle();
+      }
+
+      testWidgets('a signed-out device recovers with the code and a new '
+          'password, then gets a new code', (tester) async {
+        final provider = await loadedProvider(tester);
+        final service = _FakeSyncAccountService();
+        await openSettings(tester, provider, syncAccountService: service);
+
+        await fillRecovery(tester);
+        await tester.ensureVisible(recoverButton());
+        await tester.tap(recoverButton());
+        await tester.pumpAndSettle();
+
+        expect(service.recoveredWithCode, usedCode);
+        expect(service.recoveredPairing, pairing);
+        expect(provider.syncPairing, pairing);
+        // The old code is used up, so a new one is shown at once.
+        expect(service.recoveryCodesCreated, 1);
+        expect(find.text('Your recovery code'), findsOneWidget);
+        expect(find.text(_recoveryCodes[0]), findsOneWidget);
+        expect(find.textContaining('has been used'), findsOneWidget);
+        // The typed code is not kept in the form.
+        expect(find.text(usedCode), findsNothing);
+      });
+
+      testWidgets('Recover account waits for a code and matching new '
+          'passwords', (tester) async {
+        final provider = await loadedProvider(tester);
+        await openSettings(tester, provider);
+        await tapText(tester, 'Forgot password? Use recovery code');
+
+        expect(find.text('Sign in'), findsNothing);
+        expect(find.text('Create a sync account'), findsNothing);
+        expect(tester.widget<FilledButton>(recoverButton()).onPressed, isNull);
+
+        await tester.enterText(emailField, _email);
+        await tester.enterText(newPasswordField, _password);
+        await tester.enterText(confirmField, _password);
+        await tester.pumpAndSettle();
+        expect(tester.widget<FilledButton>(recoverButton()).onPressed, isNull);
+
+        await tester.enterText(codeField, usedCode);
+        await tester.enterText(confirmField, '${_password}x');
+        await tester.pumpAndSettle();
+        expect(tester.widget<FilledButton>(recoverButton()).onPressed, isNull);
+        expect(find.text('Passwords do not match.'), findsOneWidget);
+
+        await tester.enterText(confirmField, _password);
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<FilledButton>(recoverButton()).onPressed,
+          isNotNull,
+        );
+
+        await tapText(tester, 'Back to sign in');
+        expect(codeField, findsNothing);
+        expect(find.text('Sign in'), findsOneWidget);
+      });
+
+      testWidgets('a refused code is explained and signs nobody in', (
+        tester,
+      ) async {
+        final provider = await loadedProvider(tester);
+        final service = _FakeSyncAccountService(
+          recoverError: const SyncException(
+            'Sync request failed (400): {"error":"invalid_recovery"}',
+            statusCode: 400,
+          ),
+        );
+        await openSettings(tester, provider, syncAccountService: service);
+
+        await fillRecovery(tester);
+        await tester.ensureVisible(recoverButton());
+        await tester.tap(recoverButton());
+        await tester.pumpAndSettle();
+
+        expect(provider.syncPairing, isNull);
+        expect(service.recoveryCodesCreated, 0);
+        expect(
+          find.textContaining("recovery code didn't work"),
+          findsOneWidget,
+        );
+        expect(find.textContaining('invalid_recovery'), findsNothing);
+      });
+
+      testWidgets('a failed new code still signs in and says what to do', (
+        tester,
+      ) async {
+        final provider = await loadedProvider(tester);
+        final service = _FakeSyncAccountService(
+          recoveryError: const SyncException(
+            'Sync request failed (500): {"error":"internal_error"}',
+            statusCode: 500,
+          ),
+        );
+        await openSettings(tester, provider, syncAccountService: service);
+
+        await fillRecovery(tester);
+        await tester.ensureVisible(recoverButton());
+        await tester.tap(recoverButton());
+        await tester.pumpAndSettle();
+
+        expect(provider.syncPairing, pairing);
+        expect(find.text('Your recovery code'), findsNothing);
+        expect(
+          find.textContaining('a new one could not be created'),
           findsOneWidget,
         );
       });

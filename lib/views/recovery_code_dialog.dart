@@ -10,14 +10,21 @@ import '../widgets/dialog_messenger.dart';
 /// the dialog closes, the code is gone from the app, and only a new code can
 /// replace it. The dialog cannot be dismissed by tapping outside it, so the
 /// code is not lost by accident before it was written down.
-Future<void> showRecoveryCode(BuildContext context, String code) {
+///
+/// [reason] says why a code is shown, above the usual explanation: after a
+/// recovery, that the old code has been used.
+Future<void> showRecoveryCode(
+  BuildContext context,
+  String code, {
+  String? reason,
+}) {
   return showDialog<void>(
     context: context,
     barrierDismissible: false,
     // Its own messenger, so "Recovery code copied" shows on top (#246).
     builder: (context) => DialogMessenger(
       dismissible: false,
-      child: _RecoveryCodeDialog(code: code),
+      child: _RecoveryCodeDialog(code: code, reason: reason),
     ),
   );
 }
@@ -50,8 +57,9 @@ Future<bool> confirmNewRecoveryCode(BuildContext context) async {
 
 class _RecoveryCodeDialog extends StatefulWidget {
   final String code;
+  final String? reason;
 
-  const _RecoveryCodeDialog({required this.code});
+  const _RecoveryCodeDialog({required this.code, this.reason});
 
   @override
   State<_RecoveryCodeDialog> createState() => _RecoveryCodeDialogState();
@@ -83,6 +91,10 @@ class _RecoveryCodeDialogState extends State<_RecoveryCodeDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (widget.reason != null) ...[
+              Text(widget.reason!),
+              const SizedBox(height: 12),
+            ],
             const Text(
               'Write this code down or keep it in a password manager. If you '
               'forget your password while no device is signed in, it is the '
