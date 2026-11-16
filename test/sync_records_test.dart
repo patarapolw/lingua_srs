@@ -212,6 +212,8 @@ void main() {
         'maxNewCards24h': 10,
         'autoplayAudio': true,
         'pronunciationOptions': ['sentence_romanization', 'vocabulary_ipa'],
+        'showAi': true,
+        'aiInstructions': '',
       });
     });
 

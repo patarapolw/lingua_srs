@@ -141,8 +141,8 @@ What the app stores on the server, one record per piece of data. Building the re
 
 Everything a backup contains syncs, except what only makes sense on one device:
 
-- **Syncs:** lessons and their Markdown, vocabulary entries, word details and SRS progress, the Sentence Pool, merge history, saved AI discussions, questions typed in AI chats, the lesson tree's order, study activity, and the study settings listed below.
-- **Stays on the device:** the DeepSeek key and the sync sign-in (secrets), whether AI features are shown, which folders are expanded, the fingerprints of imported Markdown files (they are keyed by a path on this device), the audio and image caches, and one-off migration flags.
+- **Syncs:** lessons and their Markdown, vocabulary entries, word details and SRS progress, the Sentence Pool, merge history, saved AI discussions, questions typed in AI chats, the lesson tree's order, study activity, and the settings listed below.
+- **Stays on the device:** the DeepSeek key and the sync sign-in (secrets), which folders are expanded, the fingerprints of imported Markdown files (they are keyed by a path on this device), the audio and image caches, and one-off migration flags.
 
 Times inside records (a card's due date, last review and first review, a message's or merge's time) are saved in UTC (`saved_time.dart`), so a record names the same instant on devices in different time zones, and after a device changes zone. Times saved by older versions have no zone and are read as the device's local time. The first sync after updating to UTC times pushes every card once, since each card's saved text, and so its hash, changes.
 
@@ -160,7 +160,7 @@ Times inside records (a card's due date, last review and first review, a message
 | `question` | question typed in an AI chat | `TypedQuestion.toJson()`: the language, whether it was a word or lesson chat, the question with the word or lesson title as a placeholder, how often it was sent and when last (#80). | Newest wins. |
 | `activity` | device and day | That device's review count for the day, the same reviews counted per rating (`ratings`, such as `{"good": 3, "again": 1}`), how many of them started a new card (`newCards`), and its review times while they still count toward the rolling 24-hour limits. Days counted before ratings and new cards were recorded, and records from older app versions, have no `ratings` or `newCards`, so a day's ratings can add up to less than its count. | None: only that device writes it. |
 | `lesson_order` | account (one record) | The lesson tree's manual order. | Newest wins. |
-| `settings` | account (one record) | Review limits per 24 hours, autoplay, and the pronunciation lines shown. | Newest wins. |
+| `settings` | account (one record) | Review limits per 24 hours, autoplay, the pronunciation lines shown, whether AI features are shown, and the custom AI instructions. | Newest wins. |
 | `pack` | large push | Many records of the kinds above, each with its own `updatedAt` (see Packs). | Never changed after it is written. |
 
 Why it is split this way:

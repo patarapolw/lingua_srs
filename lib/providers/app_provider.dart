@@ -89,6 +89,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
 
   /// Whether AI features are shown. A device-only preference, not synced.
   bool _showAi = true;
+  String _aiInstructions = '';
 
   /// The language picked to be shown, as a [Lesson.languageKey]. See
   /// [activeLanguage] for the one in effect.
@@ -259,6 +260,9 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   /// False when the learner turned AI features off in Settings: the
   /// Discussions tab, Ask AI and the AI buttons are hidden.
   bool get showAi => _showAi;
+
+  /// The learner's own instructions added to every AI chat's system prompt.
+  String get aiInstructions => _aiInstructions;
   bool showRomanization(PronunciationTarget target) =>
       _pronunciationOptions.contains('${target.name}_romanization');
   bool showIpa(PronunciationTarget target) =>
@@ -609,6 +613,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     _maxNewCards24h = results.$9;
     // Records only have `.wait` up to nine fields, so this loads on its own.
     _showAi = await StorageService.loadShowAi();
+    _aiInstructions = await StorageService.loadAiInstructions();
     _pickedLanguage = await StorageService.loadActiveLanguage();
     _typedQuestions = await StorageService.loadTypedQuestions();
     _dailyReviewCounts = await StorageService.loadDailyReviewCounts();
@@ -817,6 +822,14 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     notifyListeners();
   }
 
+  Future<void> setAiInstructions(String value) async {
+    final text = value.trim();
+    if (_aiInstructions == text) return;
+    _aiInstructions = text;
+    await StorageService.saveAiInstructions(text);
+    notifyListeners();
+  }
+
   Future<void> setShowAi(bool value) async {
     if (_showAi == value) return;
     _showAi = value;
@@ -1019,6 +1032,8 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       maxNewCards24h: _maxNewCards24h,
       autoplayAudio: _autoplayAudio,
       pronunciationOptions: _pronunciationOptions,
+      showAi: _showAi,
+      aiInstructions: _aiInstructions,
       remoteActivity: {..._remoteActivity},
     );
     final changed = {...SyncApplier.apply(data, changes, firstSync: firstSync)};
@@ -1033,6 +1048,8 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     _maxNewCards24h = data.maxNewCards24h;
     _autoplayAudio = data.autoplayAudio;
     _pronunciationOptions = data.pronunciationOptions;
+    _showAi = data.showAi;
+    _aiInstructions = data.aiInstructions;
     _remoteActivity = data.remoteActivity;
     // A pulled sentence's text may have been edited on another device, while
     // its words' emphasis came in an older lesson record (one edited here won
@@ -1094,6 +1111,8 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       await StorageService.saveMaxNewCards24h(_maxNewCards24h);
       await StorageService.saveAutoplay(_autoplayAudio);
       await StorageService.savePronunciationOptions(_pronunciationOptions);
+      await StorageService.saveShowAi(_showAi);
+      await StorageService.saveAiInstructions(_aiInstructions);
     }
     if (changed.contains(SyncAppPart.remoteActivity)) {
       await StorageService.saveSyncRemoteActivity(_remoteActivity);
@@ -1116,6 +1135,8 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
           maxNewCards24h: _maxNewCards24h,
           autoplayAudio: _autoplayAudio,
           pronunciationOptions: _pronunciationOptions,
+          showAi: _showAi,
+          aiInstructions: _aiInstructions,
         ),
         dailyReviewCounts: _dailyReviewCounts,
         dailyRatingCounts: _dailyRatingCounts,

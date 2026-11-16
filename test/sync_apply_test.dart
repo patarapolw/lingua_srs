@@ -35,6 +35,8 @@ Map<SyncRecordKey, Map<String, dynamic>> _snapshot(
     maxNewCards24h: data.maxNewCards24h,
     autoplayAudio: data.autoplayAudio,
     pronunciationOptions: data.pronunciationOptions,
+    showAi: data.showAi,
+    aiInstructions: data.aiInstructions,
   ),
   dailyReviewCounts: dailyReviewCounts,
   reviewTimestamps: const [],
@@ -108,6 +110,8 @@ SyncAppData _filled() {
   data.maxNewCards24h = 5;
   data.autoplayAudio = false;
   data.pronunciationOptions = {'vocabulary_ipa'};
+  data.showAi = false;
+  data.aiInstructions = 'Explain for an ESL learner.';
   return data;
 }
 
@@ -134,6 +138,8 @@ void main() {
     );
     expect(target.lessons.first.markdownContent, '# Food');
     expect(target.autoplayAudio, isFalse);
+    expect(target.showAi, isFalse);
+    expect(target.aiInstructions, 'Explain for an ESL learner.');
     expect(target.pronunciationOptions, {'vocabulary_ipa'});
   });
 

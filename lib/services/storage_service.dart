@@ -39,6 +39,7 @@ class StorageService {
   static const String _keyTypedQuestions = 'lingua_srs_typed_questions';
   static const String _keyAutoplay = 'lingua_srs_autoplay';
   static const String _keyShowAi = 'lingua_srs_show_ai';
+  static const String _keyAiInstructions = 'lingua_srs_ai_instructions';
   static const String _keyActiveLanguage = 'lingua_srs_active_language';
   static const String _keyPronunciation = 'lingua_srs_pronunciation';
   static const String _keyLessonHierarchyOrder =
@@ -380,6 +381,22 @@ class StorageService {
   static Future<void> saveShowAi(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyShowAi, value);
+  }
+
+  /// The learner's own instructions for the AI tutor (this device only).
+  static Future<String> loadAiInstructions() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyAiInstructions) ?? '';
+  }
+
+  static Future<void> saveAiInstructions(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    final text = value.trim();
+    if (text.isEmpty) {
+      await prefs.remove(_keyAiInstructions);
+    } else {
+      await prefs.setString(_keyAiInstructions, text);
+    }
   }
 
   /// The language whose lessons are shown on this device, as a

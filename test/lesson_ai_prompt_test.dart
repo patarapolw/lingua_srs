@@ -2,6 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lingua_srs/models/lesson.dart';
 import 'package:lingua_srs/models/vocab_item.dart';
 import 'package:lingua_srs/services/lesson_ai_prompt.dart';
+import 'package:lingua_srs/services/storage_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:lingua_srs/services/yaml_parser_service.dart';
 
 Lesson buildLesson({String markdown = '## Grammar\n\n-아요 endings'}) => Lesson(
@@ -13,6 +15,7 @@ Lesson buildLesson({String markdown = '## Grammar\n\n-아요 endings'}) => Lesso
 );
 
 void main() {
+  customInstructionsTests();
   group('LessonAiPrompt', () {
     test('discussion ids round-trip and do not clash with vocab ids', () {
       final id = LessonAiPrompt.discussionId('abc:1');
@@ -209,6 +212,43 @@ vocabulary:
       expect(
         LessonAiPrompt.suggestedQuestions(false),
         isNot(equals(LessonAiPrompt.suggestedQuestions(true))),
+      );
+    });
+  });
+}
+
+void customInstructionsTests() {
+  group('LessonAiPrompt.withInstructions', () {
+    test('leaves the prompt alone without instructions', () {
+      expect(LessonAiPrompt.withInstructions('base', null), 'base');
+      expect(LessonAiPrompt.withInstructions('base', '  \n '), 'base');
+    });
+
+    test('adds trimmed instructions after the prompt', () {
+      final out = LessonAiPrompt.withInstructions('base', '  Explain as ESL ');
+      expect(out, startsWith('base\n\n'));
+      expect(out, contains('Explain as ESL'));
+    });
+
+    test('persists instructions and clears them when empty', () async {
+      SharedPreferences.setMockInitialValues({});
+      await StorageService.saveAiInstructions('  Compare with Japanese ');
+      expect(
+        await StorageService.loadAiInstructions(),
+        'Compare with Japanese',
+      );
+      await StorageService.saveAiInstructions('   ');
+      expect(await StorageService.loadAiInstructions(), '');
+    });
+
+    test('clips very long instructions', () {
+      final out = LessonAiPrompt.withInstructions(
+        'base',
+        'x' * (LessonAiPrompt.maxInstructionsChars + 50),
+      );
+      expect(
+        out,
+        isNot(contains('x' * (LessonAiPrompt.maxInstructionsChars + 1))),
       );
     });
   });

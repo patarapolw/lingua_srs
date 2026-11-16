@@ -38,6 +38,24 @@ class LessonAiPrompt {
     ].join('\n\n');
   }
 
+  /// Longest custom instruction text the learner can save.
+  static const maxInstructionsChars = 2000;
+
+  /// [prompt] with the learner's own [instructions] (for example "explain as
+  /// for an ESL learner") added at the end. Returns [prompt] as it is when
+  /// there are none. They never override the answer formats above them.
+  static String withInstructions(String prompt, String? instructions) {
+    final text = instructions?.trim() ?? '';
+    if (text.isEmpty) return prompt;
+    final clipped = text.length > maxInstructionsChars
+        ? text.substring(0, maxInstructionsChars)
+        : text;
+    return '$prompt\n\n'
+        'The learner gave these instructions for how to teach them. Follow '
+        'them when they fit the question, but keep the Markdown and YAML '
+        'formats above:\n"""\n$clipped\n"""';
+  }
+
   static String systemPrompt(Lesson lesson) {
     final body = clipMarkdown(lesson.markdownContent);
     final vocabulary = lesson.vocabularies

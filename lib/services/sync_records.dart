@@ -74,13 +74,15 @@ abstract final class SyncKinds {
   static const editsBeatDeletion = {sentence};
 }
 
-/// Study settings that sync. Device-only preferences are not in here.
+/// Settings that sync. Device-only preferences are not in here.
 class SyncSettings {
   const SyncSettings({
     required this.maxReviews24h,
     required this.maxNewCards24h,
     required this.autoplayAudio,
     required this.pronunciationOptions,
+    this.showAi = true,
+    this.aiInstructions = '',
   });
 
   final int maxReviews24h;
@@ -88,11 +90,18 @@ class SyncSettings {
   final bool autoplayAudio;
   final Set<String> pronunciationOptions;
 
+  /// Whether AI features are shown, and the learner's own instructions added
+  /// to every AI chat. The DeepSeek key is a secret and never syncs.
+  final bool showAi;
+  final String aiInstructions;
+
   Map<String, dynamic> toJson() => {
     'maxReviews24h': maxReviews24h,
     'maxNewCards24h': maxNewCards24h,
     'autoplayAudio': autoplayAudio,
     'pronunciationOptions': pronunciationOptions.toList()..sort(),
+    'showAi': showAi,
+    'aiInstructions': aiInstructions,
   };
 }
 
