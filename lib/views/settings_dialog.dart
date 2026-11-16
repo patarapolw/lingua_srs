@@ -14,11 +14,12 @@ import '../services/sync_client.dart';
 import '../services/sync_error_text.dart';
 import '../services/sync_pairing.dart';
 import '../services/sync_password_policy.dart';
+import '../widgets/dialog_messenger.dart';
 import '../widgets/icon_switch.dart';
 import 'pairing_confirmation.dart';
 import 'recovery_code_dialog.dart';
 
-class SettingsDialog extends StatefulWidget {
+class SettingsDialog extends StatelessWidget {
   final bool isDarkMode;
   final VoidCallback? onToggleTheme;
   final SyncAccountService? syncAccountService;
@@ -30,11 +31,34 @@ class SettingsDialog extends StatefulWidget {
     this.syncAccountService,
   });
 
+  /// The settings live below their own messenger, so that their snackbars
+  /// show on top of the dialog (#246).
   @override
-  State<SettingsDialog> createState() => _SettingsDialogState();
+  Widget build(BuildContext context) => DialogMessenger(
+    child: _SettingsDialogBody(
+      isDarkMode: isDarkMode,
+      onToggleTheme: onToggleTheme,
+      syncAccountService: syncAccountService,
+    ),
+  );
 }
 
-class _SettingsDialogState extends State<SettingsDialog> {
+class _SettingsDialogBody extends StatefulWidget {
+  final bool isDarkMode;
+  final VoidCallback? onToggleTheme;
+  final SyncAccountService? syncAccountService;
+
+  const _SettingsDialogBody({
+    required this.isDarkMode,
+    required this.onToggleTheme,
+    required this.syncAccountService,
+  });
+
+  @override
+  State<_SettingsDialogBody> createState() => _SettingsDialogState();
+}
+
+class _SettingsDialogState extends State<_SettingsDialogBody> {
   late final TextEditingController _apiKeyController;
   late final TextEditingController _aiInstructionsController;
   late final TextEditingController _maxReviewsController;
@@ -486,11 +510,17 @@ class _SettingsDialogState extends State<SettingsDialog> {
     }
   }
 
-  Future<void> _copyToClipboard(String text, String message) async {
+  /// Copies [text] and says so with [message], in the messenger of
+  /// [context]: a dialog opened from Settings passes its own context, so the
+  /// message shows on top of that dialog.
+  Future<void> _copyToClipboard(
+    BuildContext context,
+    String text,
+    String message,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
     await Clipboard.setData(ClipboardData(text: text));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    messenger.showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _signOut() async {
@@ -529,42 +559,47 @@ class _SettingsDialogState extends State<SettingsDialog> {
       setState(() => _saving = false);
       await showDialog<void>(
         context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Pair another device'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox.square(
-                dimension: 240,
-                child: QrImageView(
-                  data: link,
-                  size: 240,
-                  backgroundColor: Colors.white,
+        builder: (context) => DialogMessenger(
+          child: Builder(
+            builder: (context) => AlertDialog(
+              title: const Text('Pair another device'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox.square(
+                    dimension: 240,
+                    child: QrImageView(
+                      data: link,
+                      size: 240,
+                      backgroundColor: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Scan on mobile to open the app and sign in, or copy '
+                    'the one-time link and choose “Use copied link” on '
+                    'desktop. It expires in 10 minutes and grants access to '
+                    'this account. Only share it with a device you control.',
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Close'),
                 ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Scan on mobile to open the app and sign in, or copy the '
-                'one-time link and choose “Use copied link” on desktop. '
-                'It expires in 10 minutes and grants access to this account. '
-                'Only share it with a device you control.',
-              ),
-            ],
+                FilledButton.icon(
+                  onPressed: () => _copyToClipboard(
+                    context,
+                    link,
+                    'One-time pairing link copied. It expires in 10 minutes.',
+                  ),
+                  icon: const Icon(Icons.copy),
+                  label: const Text('Copy one-time link'),
+                ),
+              ],
+            ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Close'),
-            ),
-            FilledButton.icon(
-              onPressed: () => _copyToClipboard(
-                link,
-                'One-time pairing link copied. It expires in 10 minutes.',
-              ),
-              icon: const Icon(Icons.copy),
-              label: const Text('Copy one-time link'),
-            ),
-          ],
         ),
       );
     } catch (error) {
@@ -734,7 +769,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
       await BackupService.restoreBackup(utf8.decode(bytes));
       await provider.init();
       if (mounted) {
-        ScaffoldMessenger.of(context)
+        // Settings closes, so the message goes to the page it was opened on.
+        DialogMessenger.parentOf(context)
             .showSnackBar(const SnackBar(content: Text('Backup restored.')));
         Navigator.of(context).pop();
       }

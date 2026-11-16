@@ -1,6 +1,8 @@
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../widgets/dialog_messenger.dart';
+
 /// Shows a new recovery code once and waits until the person says they saved
 /// it.
 ///
@@ -12,7 +14,11 @@ Future<void> showRecoveryCode(BuildContext context, String code) {
   return showDialog<void>(
     context: context,
     barrierDismissible: false,
-    builder: (context) => _RecoveryCodeDialog(code: code),
+    // Its own messenger, so "Recovery code copied" shows on top (#246).
+    builder: (context) => DialogMessenger(
+      dismissible: false,
+      child: _RecoveryCodeDialog(code: code),
+    ),
   );
 }
 
@@ -57,7 +63,7 @@ class _RecoveryCodeDialogState extends State<_RecoveryCodeDialog> {
   Future<void> _copy() async {
     await Clipboard.setData(ClipboardData(text: widget.code));
     if (!mounted) return;
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+    ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text(
           'Recovery code copied. Save it somewhere safe, then clear it from '
