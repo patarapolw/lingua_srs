@@ -1264,6 +1264,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                   decoration: InputDecoration(
                     labelText: 'DeepSeek API key',
                     hintText: 'sk-...',
+                    floatingLabelBehavior: FloatingLabelBehavior.always,
                     suffixIcon: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -1297,10 +1298,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                   maxLength: LessonAiPrompt.maxInstructionsChars,
                   decoration: const InputDecoration(
                     labelText: 'Custom AI instructions',
-                    hintText:
-                        'e.g. Explain for an ESL learner, compare with '
-                        'Japanese grammar, and with Mandarin and Cantonese '
-                        'readings.',
+                    hintText: 'e.g. Explain for an ESL learner',
                     alignLabelWithHint: true,
                     floatingLabelBehavior: FloatingLabelBehavior.always,
                   ),
