@@ -861,6 +861,8 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
 
   Future<void> setSyncPairing(SyncPairing? pairing) async {
     final previous = _syncPairing;
+    // Signing out forgets any keys derived for the account.
+    if (pairing == null) SyncAccountService.clearKeyCache();
     await StorageService.saveSyncPairing(pairing);
     // Unlocked again for the new sign-in, so a key never outlives its account.
     try {
