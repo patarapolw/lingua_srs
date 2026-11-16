@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'sync_account_crypto.dart';
 import 'sync_client.dart';
 import 'sync_pairing.dart';
+import 'sync_recovery_code.dart';
 import 'sync_password_policy.dart';
 import 'sync_record_cipher.dart';
 
@@ -217,6 +218,42 @@ class SyncAccountService {
     } catch (_) {
       clearKeyCache();
       rethrow;
+    } finally {
+      client.close();
+    }
+  }
+
+  /// Creates a recovery code for the account and uploads what the server
+  /// needs to check it later: a hash of the auth key derived from it, and the
+  /// data key wrapped by the key derived from it. Replaces any earlier code.
+  /// Returns the code, formatted for writing down.
+  ///
+  /// The code and its keys stay in memory: the caller shows the code once and
+  /// lets it go. Nothing here logs it or puts it in an error message.
+  Future<String> createRecoveryCode(SyncPairing pairing) async {
+    final keys = await _keys(pairing.email, pairing.password);
+    final client = _client(pairing, keys.authKey);
+    try {
+      final account = await client.getAccount();
+      if (!_supportsKdf(account.kdf)) {
+        throw const FormatException(
+          'This account uses an unsupported key derivation format.',
+        );
+      }
+      final dataKey = await SyncAccountCrypto.unwrapDataKey(
+        wrappedDataKey: account.wrappedDataKey,
+        wrapKey: keys.wrapKey,
+      );
+      final secret = SyncRecoveryCode.newSecret();
+      final recoveryKeys = await SyncAccountCrypto.deriveRecoveryKeys(secret);
+      await client.setRecovery(
+        recoveryKey: recoveryKeys.authKey,
+        wrappedDataKey: await SyncAccountCrypto.wrapDataKey(
+          dataKey: dataKey,
+          wrapKey: recoveryKeys.wrapKey,
+        ),
+      );
+      return SyncRecoveryCode.format(secret);
     } finally {
       client.close();
     }

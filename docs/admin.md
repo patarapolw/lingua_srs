@@ -30,7 +30,26 @@ Users can also delete their own account in the app (Settings, Sync, Delete accou
 
 ## Let a user start over
 
-If someone cannot sign in because the password is forgotten, the synced data is encrypted and cannot be recovered without it. Delete the account as above; they can then create a new one with the same email.
+If someone cannot sign in because the password is forgotten, the synced data is encrypted and cannot be recovered without the password or the account's recovery code. Recovering with the code from the app is not implemented yet (#127). Until it is, delete the account as above; they can then create a new one with the same email.
+
+To see whether an account has a recovery code, and when it was made:
+
+```
+npx wrangler d1 execute lingua-srs-sync --remote --command "SELECT recovery_created_at FROM accounts WHERE email='user@example.com'"
+```
+
+`null` means the account has no code. The server keeps only a hash of a key derived from the code and the data key wrapped by the code, so an admin cannot see or reset the code either.
+
+## Update the Worker
+
+Apply new database migrations before deploying Worker code that uses them:
+
+```
+npm run migrate        # applies migrations/ to the remote database
+npm run deploy
+```
+
+`0003_recovery_codes.sql` adds the recovery code columns to `accounts`. Until it is applied, creating a recovery code fails with a server error, and the app says to try again from Settings.
 
 ## Check and repair the database
 

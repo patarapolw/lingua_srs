@@ -5,7 +5,9 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:lingua_srs/services/sync_account_crypto.dart';
 import 'package:lingua_srs/services/sync_account_service.dart';
+import 'package:lingua_srs/services/sync_client.dart';
 import 'package:lingua_srs/services/sync_pairing.dart';
+import 'package:lingua_srs/services/sync_recovery_code.dart';
 
 const _email = 'reader@example.com';
 const _password = 'test-only-account-passphrase';
@@ -555,6 +557,108 @@ void main() {
       await serviceFor().validateCredentials(pairing);
 
       expect(derived, hasLength(2));
+    });
+  });
+  group('recovery code', () {
+    final wrapKey = List<int>.generate(32, (i) => i + 9);
+    final dataKey = List<int>.generate(32, (i) => 200 - i);
+
+    SyncAccountService serviceFor(
+      List<http.Request> requests, {
+      int putStatus = 200,
+      List<int>? accountWrapKey,
+    }) => SyncAccountService(
+      deriveKeys: ({required email, required password}) async =>
+          SyncAccountKeys(authKey: 'A' * 43, wrapKey: wrapKey),
+      clientFactory: () => MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'GET') {
+          return _json({
+            'wrappedDataKey': await SyncAccountCrypto.wrapDataKey(
+              dataKey: dataKey,
+              wrapKey: accountWrapKey ?? wrapKey,
+            ),
+            'kdf': SyncAccountCrypto.kdf,
+            'createdAt': 1762171200000,
+          });
+        }
+        return putStatus == 200
+            ? _json({'status': 'ok', 'createdAt': 1762171200000})
+            : _json({'error': 'quota_exceeded'}, putStatus);
+      }),
+    );
+
+    test('uploads the recovery key and the data key wrapped by the code, '
+        'and returns the code', () async {
+      final requests = <http.Request>[];
+
+      final code = await serviceFor(requests)
+          .createRecoveryCode(SyncPairing(email: _email, password: _password));
+
+      expect(
+        RegExp(r'^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){7}$')
+            .hasMatch(code),
+        isTrue,
+      );
+      final put = requests.singleWhere((request) => request.method == 'PUT');
+      expect(put.url.path, '/v1/account/recovery');
+      expect(put.headers['authorization'], startsWith('Basic '));
+      final body = jsonDecode(put.body) as Map<String, dynamic>;
+      expect(body.keys, unorderedEquals(['recoveryKey', 'wrappedDataKey']));
+
+      final keys = await SyncAccountCrypto.deriveRecoveryKeys(
+        SyncRecoveryCode.parse(code),
+      );
+      expect(body['recoveryKey'], keys.authKey);
+      expect(
+        await SyncAccountCrypto.unwrapDataKey(
+          wrappedDataKey: body['wrappedDataKey'] as String,
+          wrapKey: keys.wrapKey,
+        ),
+        dataKey,
+      );
+      // The code itself never leaves the device.
+      for (final request in requests) {
+        expect(request.body, isNot(contains(code)));
+        expect(request.body, isNot(contains(code.replaceAll('-', ''))));
+        expect(request.url.toString(), isNot(contains(code)));
+      }
+    });
+
+    test('makes a new code each time', () async {
+      final service = serviceFor(<http.Request>[]);
+      final pairing = SyncPairing(email: _email, password: _password);
+
+      final first = await service.createRecoveryCode(pairing);
+      final second = await service.createRecoveryCode(pairing);
+
+      expect(second, isNot(first));
+    });
+
+    test('fails without uploading when the password does not unlock the '
+        'data key', () async {
+      final requests = <http.Request>[];
+
+      await expectLater(
+        serviceFor(
+          requests,
+          accountWrapKey: List<int>.filled(32, 1),
+        ).createRecoveryCode(SyncPairing(email: _email, password: _password)),
+        throwsFormatException,
+      );
+      expect(requests.where((request) => request.method == 'PUT'), isEmpty);
+    });
+
+    test('reports a refused upload', () async {
+      await expectLater(
+        serviceFor(
+          <http.Request>[],
+          putStatus: 429,
+        ).createRecoveryCode(SyncPairing(email: _email, password: _password)),
+        throwsA(
+          isA<SyncException>().having((e) => e.statusCode, 'status', 429),
+        ),
+      );
     });
   });
 }

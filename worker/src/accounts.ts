@@ -1,5 +1,6 @@
 import { Deps, Env, HttpError } from './types';
 import { confirmationMail } from './mail';
+import { checkWriteQuota, writeUsageStatements } from './quota';
 import {
   intSetting,
   isAuthKey,
@@ -92,7 +93,9 @@ export async function createAccount(request: Request, env: Env, deps: Deps): Pro
   const statements = [
     existing
       ? env.DB.prepare(
-          'UPDATE accounts SET auth_hash = ?2, wrapped_data_key = ?3, kdf = ?4, created_at = ?5 WHERE email = ?1',
+          'UPDATE accounts SET auth_hash = ?2, wrapped_data_key = ?3, kdf = ?4, created_at = ?5, ' +
+            'recovery_hash = NULL, recovery_wrapped_data_key = NULL, recovery_created_at = NULL ' +
+            'WHERE email = ?1',
         ).bind(email, authHash, body.wrappedDataKey, kdf, now)
       : env.DB.prepare(
           'INSERT INTO accounts (email, auth_hash, wrapped_data_key, kdf, created_at) VALUES (?1, ?2, ?3, ?4, ?5)',
@@ -215,6 +218,35 @@ export async function changePassword(request: Request, email: string, env: Env):
     env.DB.prepare('DELETE FROM pairing_invites WHERE email = ?1').bind(email),
   ]);
   return json({ status: 'ok' });
+}
+
+/**
+ * Sets or replaces the account's recovery material: a recovery auth key, of
+ * which only a hash is stored, and the data key wrapped by a key derived from
+ * the same recovery code. The code itself never reaches the server. A new code
+ * replaces the old one, so only the newest code works. The data and the
+ * password are untouched. It counts as one write against the daily limit.
+ */
+export async function setRecovery(
+  request: Request,
+  email: string,
+  env: Env,
+  deps: Deps,
+): Promise<Response> {
+  const body = await readJson(request, 4 * 1024);
+  if (!isAuthKey(body.recoveryKey) || !validWrappedKey(body.wrappedDataKey)) {
+    throw new HttpError(400, 'invalid_recovery');
+  }
+  const now = deps.now();
+  await checkWriteQuota(env, email, 1, intSetting(env.MAX_WRITES_PER_DAY, 2000), now);
+  await env.DB.batch([
+    env.DB.prepare(
+      'UPDATE accounts SET recovery_hash = ?2, recovery_wrapped_data_key = ?3, ' +
+        'recovery_created_at = ?4 WHERE email = ?1',
+    ).bind(email, await sha256Hex(body.recoveryKey), body.wrappedDataKey, now),
+    ...writeUsageStatements(env, email, 1, now),
+  ]);
+  return json({ status: 'ok', createdAt: now });
 }
 
 export async function createPairingInvite(

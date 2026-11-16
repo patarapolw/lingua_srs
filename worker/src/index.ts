@@ -6,6 +6,7 @@ import {
   deleteAccount,
   getAccount,
   redeemPairingInvite,
+  setRecovery,
 } from './accounts';
 import { authenticate } from './auth';
 import { pullChanges, pushChanges } from './changes';
@@ -43,6 +44,8 @@ async function route(request: Request, env: Env, deps: Deps): Promise<Response> 
     allow(request, 'GET', 'PUT', 'DELETE');
   } else if (path === '/v1/account/pairing') {
     allow(request, 'POST');
+  } else if (path === '/v1/account/recovery') {
+    allow(request, 'PUT');
   } else if (path === '/v1/changes') {
     allow(request, 'GET', 'POST');
   } else if (path === '/v1/inbox') {
@@ -63,6 +66,8 @@ async function route(request: Request, env: Env, deps: Deps): Promise<Response> 
       return deleteAccount(email, env);
     case '/v1/account/pairing':
       return createPairingInvite(request, email, env, deps);
+    case '/v1/account/recovery':
+      return setRecovery(request, email, env, deps);
     case '/v1/changes':
       return request.method === 'GET' ? pullChanges(url, email, env) : pushChanges(request, email, env, deps);
     case '/v1/inbox':
