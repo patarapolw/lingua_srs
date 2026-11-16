@@ -96,7 +96,7 @@ void main() {
     });
 
     test('asks to reuse the lesson\'s own sentences as examples', () {
-      final prompt = LessonAiPrompt.vocabularyYamlInstructions(lesson);
+      final prompt = LessonAiPrompt.vocabularyYamlInstructions(buildLesson());
       expect(prompt, contains('look in the lesson content for sentences'));
       expect(prompt, contains('reuse them as its examples'));
       expect(
