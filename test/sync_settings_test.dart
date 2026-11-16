@@ -584,6 +584,11 @@ void main() {
       expect(find.byType(QrImageView), findsOneWidget);
       await tapText(tester, 'Copy one-time link');
       expect(copied, service.pairingLink);
+      // Shown on top of the pairing dialog, not under its barrier (#246).
+      expect(
+        find.textContaining('One-time pairing link copied').hitTestable(),
+        findsOneWidget,
+      );
     });
 
     testWidgets('deleting the account requires confirmation and signs out', (
@@ -679,6 +684,11 @@ void main() {
 
         await tapText(tester, 'Copy code');
         expect(copied, _recoveryCodes[0]);
+        // Shown on top of the code's dialog, not under its barrier (#246).
+        expect(
+          find.textContaining('Recovery code copied').hitTestable(),
+          findsOneWidget,
+        );
 
         await tapText(tester, 'I have saved my recovery code');
         await tester.tap(doneButton());
@@ -801,7 +811,11 @@ void main() {
       await tapText(tester, 'Check sign-in');
 
       expect(service.credentialsValidated, isTrue);
-      expect(find.text('The server accepts this sign-in.'), findsOneWidget);
+      // Shown on top of Settings, not under its barrier (#246).
+      expect(
+        find.text('The server accepts this sign-in.').hitTestable(),
+        findsOneWidget,
+      );
     });
 
     testWidgets('a sign-in the server rejects is explained, not removed', (
