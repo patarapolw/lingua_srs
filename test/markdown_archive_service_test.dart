@@ -85,4 +85,69 @@ void main() {
       throwsFormatException,
     );
   });
+
+  group('comparePaths', () {
+    List<String> sorted(List<String> paths) =>
+        [...paths]..sort(MarkdownArchiveService.comparePaths);
+
+    test('puts lesson-10 after lesson-2 and lesson-9', () {
+      expect(
+        sorted(['lesson-10.md', 'lesson-2.md', 'lesson-9.md', 'lesson-1.md']),
+        ['lesson-1.md', 'lesson-2.md', 'lesson-9.md', 'lesson-10.md'],
+      );
+    });
+
+    test('ignores case', () {
+      expect(sorted(['b.md', 'A.md', 'c.md']), ['A.md', 'b.md', 'c.md']);
+      expect(sorted(['Lesson-10.md', 'lesson-2.md']), [
+        'lesson-2.md',
+        'Lesson-10.md',
+      ]);
+    });
+
+    test('orders folder by folder, mixing folders and files by name', () {
+      expect(
+        sorted([
+          'unit-10/a.md',
+          'unit-2/b.md',
+          'unit-2/a.md',
+          'intro.md',
+          'unit-1/z.md',
+        ]),
+        [
+          'intro.md',
+          'unit-1/z.md',
+          'unit-2/a.md',
+          'unit-2/b.md',
+          'unit-10/a.md',
+        ],
+      );
+      expect(sorted(['unit-2\\b.md', 'unit-10/a.md', 'unit-2/a.md']), [
+        'unit-2/a.md',
+        'unit-2\\b.md',
+        'unit-10/a.md',
+      ]);
+    });
+
+    test('compares numbers by value, whatever the leading zeros', () {
+      expect(sorted(['lesson-10.md', 'lesson-02.md', 'lesson-3.md']), [
+        'lesson-02.md',
+        'lesson-3.md',
+        'lesson-10.md',
+      ]);
+    });
+
+    test('is stable for names that only differ by case or zeros', () {
+      final expected = ['a-01.md', 'A-1.md', 'a-1.md'];
+      expect(sorted(['A-1.md', 'a-1.md', 'a-01.md']), expected);
+      expect(sorted(['a-01.md', 'A-1.md', 'a-1.md']), expected);
+    });
+
+    test('puts a name before the longer name it starts', () {
+      expect(sorted(['lesson-1b.md', 'lesson-1.md']), [
+        'lesson-1.md',
+        'lesson-1b.md',
+      ]);
+    });
+  });
 }

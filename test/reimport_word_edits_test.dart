@@ -592,6 +592,38 @@ void main() {
       );
     });
 
+    testWidgets('a folder scan orders lesson numbers naturally', (
+      tester,
+    ) async {
+      for (final path in [
+        'unit-10/lesson-1.md',
+        'unit-2/lesson-10.md',
+        'unit-2/lesson-9.md',
+        'unit-2/Lesson-2.md',
+      ]) {
+        File('${folder.path}/$path')
+          ..createSync(recursive: true)
+          ..writeAsStringSync('# Lesson\n');
+      }
+
+      final found = await tester.runAsync(() => markdownFilesUnder(folder));
+
+      expect(
+        found!
+            .map(
+              (path) =>
+                  path.substring(folder.path.length + 1).replaceAll('\\', '/'),
+            )
+            .toList(),
+        [
+          'unit-2/Lesson-2.md',
+          'unit-2/lesson-9.md',
+          'unit-2/lesson-10.md',
+          'unit-10/lesson-1.md',
+        ],
+      );
+    });
+
     testWidgets('a folder scan finds files with Hangul or % in their '
         'names', (tester) async {
       final names = ['09-conjugate-이다.md', '23-ㅎ-irregulars.md', '100%.md'];
