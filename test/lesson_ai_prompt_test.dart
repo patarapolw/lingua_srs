@@ -95,6 +95,16 @@ void main() {
       expect(prompt, contains('leave the translation without bold'));
     });
 
+    test('asks to reuse the lesson\'s own sentences as examples', () {
+      final prompt = LessonAiPrompt.vocabularyYamlInstructions(lesson);
+      expect(prompt, contains('look in the lesson content for sentences'));
+      expect(prompt, contains('reuse them as its examples'));
+      expect(
+        prompt,
+        contains('only write a new example when the lesson has none'),
+      );
+    });
+
     test('finds the vocabulary YAML in an answer', () {
       const answer = '''Here are some words:
 
