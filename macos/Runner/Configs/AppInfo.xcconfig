@@ -11,4 +11,4 @@ PRODUCT_NAME = lingua_srs
 PRODUCT_BUNDLE_IDENTIFIER = cc.polv.lingua.srs
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2026 com.example. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright © 2026 cc.polv. All rights reserved.
