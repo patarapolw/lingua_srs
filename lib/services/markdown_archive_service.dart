@@ -38,6 +38,63 @@ class MarkdownArchiveService {
       .where((segment) => segment.isNotEmpty)
       .any(isIgnoredName);
 
+  /// Orders two paths of a folder or ZIP import "naturally": folder by folder
+  /// (`/` or `\\`), each name case-insensitively, with runs of digits
+  /// compared as numbers, so `lesson-2` < `lesson-9` < `lesson-10`, and
+  /// `lesson-02` sorts with `lesson-2`. Names that only differ in case or
+  /// in leading zeros are still ordered (leading zeros first, then plain
+  /// text), so the result does not depend on the order files were read in.
+  ///
+  /// Folders and files are not separated: `intro.md` sorts among the unit
+  /// folders by its name. VitePress has no sort of its own (its sidebar is
+  /// what the lesson folder's config lists), so this matches the usual
+  /// natural file-name order, not a VitePress rule.
+  static int comparePaths(String first, String second) {
+    List<String> parts(String path) => path
+        .split(RegExp(r'[/\\]'))
+        .where((segment) => segment.isNotEmpty)
+        .toList();
+    final a = parts(first);
+    final b = parts(second);
+    for (var i = 0; i < a.length && i < b.length; i++) {
+      final result = _compareNames(a[i], b[i]);
+      if (result != 0) return result;
+    }
+    final byDepth = a.length.compareTo(b.length);
+    return byDepth != 0 ? byDepth : first.compareTo(second);
+  }
+
+  static final _digitsOrText = RegExp(r'\d+|\D+');
+
+  static int _compareNames(String first, String second) {
+    final a = _digitsOrText.allMatches(first).map((m) => m[0]!).toList();
+    final b = _digitsOrText.allMatches(second).map((m) => m[0]!).toList();
+    for (var i = 0; i < a.length && i < b.length; i++) {
+      final left = a[i];
+      final right = b[i];
+      final bothDigits =
+          left.codeUnitAt(0) >= 48 &&
+          left.codeUnitAt(0) <= 57 &&
+          right.codeUnitAt(0) >= 48 &&
+          right.codeUnitAt(0) <= 57;
+      int result;
+      if (bothDigits) {
+        final x = left.replaceFirst(RegExp(r'^0+'), '');
+        final y = right.replaceFirst(RegExp(r'^0+'), '');
+        result = x.length != y.length
+            ? x.length.compareTo(y.length)
+            : x.compareTo(y);
+        // Equal numbers: more leading zeros first (`01` before `1`).
+        if (result == 0) result = right.length.compareTo(left.length);
+      } else {
+        result = left.toLowerCase().compareTo(right.toLowerCase());
+      }
+      if (result != 0) return result;
+    }
+    final byParts = a.length.compareTo(b.length);
+    return byParts != 0 ? byParts : first.compareTo(second);
+  }
+
   /// The Markdown entries of a ZIP, without the ones in ignored folders
   /// ([isIgnoredPath]). An entry that cannot be read comes back with its
   /// [MarkdownArchiveFile.error] and does not stop the rest.

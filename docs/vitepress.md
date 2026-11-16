@@ -38,4 +38,5 @@ Words edited in the app can be written back into the files' frontmatter when the
 - **Speech** uses the voices the browser has, in Korean unless the tag has `lang="..."`. It sounds different from the app, and is silent in a browser with no voice for the language.
 - **YouTube** is the regular embedded player. The app shows a thumbnail with the video's title first, and offers **Open on YouTube**.
 - **`<details>`** needs a blank line after `<summary>...</summary>` and before `</details>` for VitePress to render the Markdown inside. The app renders it either way.
+- **Lesson order.** VitePress shows lessons in the order its sidebar config lists them; the app orders an imported folder or ZIP naturally by path (`lesson-10` after `lesson-9`); see [Importing](lesson-format.md#importing). A sidebar written or generated in natural name order matches the app.
 - **`[[...]]` links** (and the old `<!-- chunk -->` comments) are for the app only; see [Editing lessons outside the app](lesson-format.md#editing-lessons-outside-the-app).

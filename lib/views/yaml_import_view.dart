@@ -256,7 +256,8 @@ class _YamlImportViewState extends State<YamlImportView>
         );
       }
       parseResult.imports.sort(
-        (first, second) => _compareMarkdownPaths(first.path, second.path),
+        (first, second) =>
+            MarkdownArchiveService.comparePaths(first.path, second.path),
       );
 
       if (!mounted) return;
@@ -501,7 +502,8 @@ class _YamlImportViewState extends State<YamlImportView>
     final lessonless = _lessonlessFiles(context.read<AppProvider>(), result);
     if (lessonless.isNotEmpty) result = await read(lessonless);
     result.imports.sort(
-      (first, second) => _compareMarkdownPaths(first.path, second.path),
+      (first, second) =>
+          MarkdownArchiveService.comparePaths(first.path, second.path),
     );
 
     if (!mounted) return;
@@ -1395,13 +1397,8 @@ Future<List<String>> markdownFilesUnder(Directory root) async {
       paths.add(entity.path);
     }
   }
-  paths.sort(_compareMarkdownPaths);
+  paths.sort(MarkdownArchiveService.comparePaths);
   return paths;
-}
-
-int _compareMarkdownPaths(String first, String second) {
-  final folded = first.toLowerCase().compareTo(second.toLowerCase());
-  return folded != 0 ? folded : first.compareTo(second);
 }
 
 /// A lesson file in a picked folder, as it was when the folder was scanned.
