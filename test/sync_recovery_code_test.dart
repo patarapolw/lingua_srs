@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -141,7 +142,12 @@ void main() {
 
       final keys = await SyncAccountCrypto.deriveRecoveryKeys(secret);
 
-      expect(keys.authKey, 'XL2wpLc77Iip4tyZxNUT73WU4F7sdFBb0-oZtxhGCdk');
+      // Compared as bytes: the auth key is sent as unpadded base64url.
+      expect(base64Url.decode(base64Url.normalize(keys.authKey)), [
+        92, 189, 176, 164, 183, 59, 236, 136, 169, 226, 220, 153, 196, 213, //
+        19, 239, 117, 148, 224, 94, 236, 116, 80, 91, 211, 234, 25, 183, 24, //
+        70, 9, 217,
+      ]);
       expect(keys.wrapKey, [
         160, 206, 21, 226, 68, 47, 127, 41, 103, 127, 194, 31, 63, 168, 96, //
         146, 229, 52, 82, 199, 192, 35, 254, 180, 197, 117, 211, 63, 206, //
