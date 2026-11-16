@@ -723,7 +723,11 @@ void main() {
         await tapText(tester, 'Recovery code');
         expect(find.text('Create a new recovery code?'), findsOneWidget);
         expect(find.textContaining('stops working'), findsOneWidget);
-        await tapText(tester, 'Cancel');
+        // Settings has a Cancel button too; the warning's is the last, on
+        // top of it.
+        await tester.tap(find.text('Cancel').last);
+        await tester.pumpAndSettle();
+        expect(find.text('Create a new recovery code?'), findsNothing);
         expect(service.recoveryCodesCreated, 0);
 
         await tapText(tester, 'Recovery code');
