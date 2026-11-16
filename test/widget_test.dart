@@ -20,7 +20,6 @@ import 'package:lingua_srs/views/vocab_edit_dialog.dart';
 import 'package:lingua_srs/views/vocab_merge_dialogs.dart';
 import 'package:lingua_srs/views/yaml_import_view.dart';
 import 'package:lingua_srs/widgets/emphasis_field.dart';
-import 'package:lingua_srs/widgets/emphasis_text.dart';
 import 'package:lingua_srs/widgets/markdown_content.dart';
 import 'package:lingua_srs/widgets/markdown_notes_field.dart';
 
