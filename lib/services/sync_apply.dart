@@ -23,6 +23,8 @@ class SyncAppData {
     required this.autoplayAudio,
     required this.pronunciationOptions,
     required this.remoteActivity,
+    this.showAi = true,
+    this.aiInstructions = '',
   });
 
   final String deviceId;
@@ -38,6 +40,8 @@ class SyncAppData {
   int maxNewCards24h;
   bool autoplayAudio;
   Set<String> pronunciationOptions;
+  bool showAi;
+  String aiInstructions;
 
   /// Other devices' `activity` records, by local id (`<device id>:<day>`).
   Map<String, Map<String, dynamic>> remoteActivity;
@@ -374,7 +378,10 @@ abstract final class SyncApplier {
           for (final option
               in settings['pronunciationOptions'] as List? ?? const [])
             option as String,
-        };
+        }
+        ..showAi = settings['showAi'] as bool? ?? data.showAi
+        ..aiInstructions =
+            settings['aiInstructions'] as String? ?? data.aiInstructions;
     }
     return changed;
   }

@@ -1032,6 +1032,8 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       maxNewCards24h: _maxNewCards24h,
       autoplayAudio: _autoplayAudio,
       pronunciationOptions: _pronunciationOptions,
+      showAi: _showAi,
+      aiInstructions: _aiInstructions,
       remoteActivity: {..._remoteActivity},
     );
     final changed = {...SyncApplier.apply(data, changes, firstSync: firstSync)};
@@ -1046,6 +1048,8 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     _maxNewCards24h = data.maxNewCards24h;
     _autoplayAudio = data.autoplayAudio;
     _pronunciationOptions = data.pronunciationOptions;
+    _showAi = data.showAi;
+    _aiInstructions = data.aiInstructions;
     _remoteActivity = data.remoteActivity;
     // A pulled sentence's text may have been edited on another device, while
     // its words' emphasis came in an older lesson record (one edited here won
@@ -1107,6 +1111,8 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       await StorageService.saveMaxNewCards24h(_maxNewCards24h);
       await StorageService.saveAutoplay(_autoplayAudio);
       await StorageService.savePronunciationOptions(_pronunciationOptions);
+      await StorageService.saveShowAi(_showAi);
+      await StorageService.saveAiInstructions(_aiInstructions);
     }
     if (changed.contains(SyncAppPart.remoteActivity)) {
       await StorageService.saveSyncRemoteActivity(_remoteActivity);
@@ -1129,6 +1135,8 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
           maxNewCards24h: _maxNewCards24h,
           autoplayAudio: _autoplayAudio,
           pronunciationOptions: _pronunciationOptions,
+          showAi: _showAi,
+          aiInstructions: _aiInstructions,
         ),
         dailyReviewCounts: _dailyReviewCounts,
         dailyRatingCounts: _dailyRatingCounts,
