@@ -63,6 +63,8 @@ wrapKey = HKDF(master, "wrap")      never leaves the device
 
 The app computes Argon2id with the pure Dart implementation off the UI isolate, so key derivation does not depend on loading a platform-native library.
 
+Argon2id is slow on purpose, so the app derives these keys **once per sign-in**, not once per step. It keeps the last derived keys in memory only (never on disk, in preferences or in logs), matched on email and password, and reuses them for creating and confirming an account, the sign-in check and the first sync that unlocks the data key. The keys are dropped when that sync has unlocked the data key, after a failed sign-in or password change, on sign-out and account deletion, and after five minutes at the latest. Changing the password replaces them with the keys of the new password. The derived bytes are unchanged, so existing accounts keep working.
+
 The server stores only `SHA-256(authKey)`, not the auth key itself.
 
 Records are encrypted with a random 256-bit **data key** created with the account. The server keeps it wrapped: `AES-256-GCM(wrapKey, dataKey)`. A new device signs in, downloads the wrapped key and unwraps it. Because the password only wraps the data key, **changing the password re-wraps one key and re-encrypts nothing**. Each record is `AES-256-GCM(dataKey, data)` with a random nonce and the record's `kind` and `id` as associated data, so a record cannot be swapped for another.

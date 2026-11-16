@@ -18,8 +18,15 @@ http.Response _json(Object body, [int status = 200]) => http.Response(
 );
 
 void main() {
-  setUp(() => SyncPairing.defaultEndpoint = _endpoint);
-  tearDown(() => SyncPairing.defaultEndpoint = null);
+  setUp(() {
+    SyncPairing.defaultEndpoint = _endpoint;
+    SyncAccountService.clearKeyCache();
+  });
+  tearDown(() {
+    SyncPairing.defaultEndpoint = null;
+    SyncAccountService.clearKeyCache();
+    SyncAccountService.now = DateTime.now;
+  });
 
   test(
     'creates an account and confirms it before returning to sign-in',
@@ -332,6 +339,222 @@ void main() {
         ).redeemPairingLink(link),
         pairing,
       );
+    });
+  });
+
+  group('derives the password key once per sign-in', () {
+    final wrapKey = List<int>.generate(32, (i) => i + 1);
+    final dataKey = List<int>.generate(32, (i) => i * 5);
+    final derived = <String>[];
+
+    // A fast stand-in for Argon2id that records every derivation.
+    Future<SyncAccountKeys> fakeDerive({
+      required String email,
+      required String password,
+    }) async {
+      derived.add('$email|$password');
+      await Future<void>.delayed(Duration.zero);
+      return SyncAccountKeys(authKey: 'auth-$password', wrapKey: wrapKey);
+    }
+
+    setUp(derived.clear);
+
+    SyncAccountService serviceFor({
+      bool failAccount = false,
+      List<http.Request>? requests,
+    }) => SyncAccountService(
+      deriveKeys: fakeDerive,
+      clientFactory: () => MockClient((request) async {
+        requests?.add(request);
+        if (request.url.host == 'api.pwnedpasswords.com') {
+          return http.Response('0000000000000000000000000000000000:0\n', 200);
+        }
+        if (request.method == 'GET') {
+          if (failAccount) return _json({'error': 'unauthorized'}, 401);
+          return _json({
+            'wrappedDataKey': await SyncAccountCrypto.wrapDataKey(
+              dataKey: dataKey,
+              wrapKey: wrapKey,
+            ),
+            'kdf': SyncAccountCrypto.kdf,
+            'createdAt': 1762171200000,
+          });
+        }
+        return _json({'status': 'ok'});
+      }),
+    );
+
+    late final pairing = SyncPairing(email: _email, password: _password);
+
+    test(
+      'sign-up derives once for create, confirm and the first sync',
+      () async {
+        final service = serviceFor();
+
+        await service.createAccount(pairing);
+        await service.confirmAccount(pairing, '12345678');
+        // Each screen makes its own service; the first sync does too.
+        final unlocked = await serviceFor().unlockDataKey(pairing);
+
+        expect(unlocked.key, dataKey);
+        expect(derived, ['$_email|$_password']);
+      },
+    );
+
+    test('sign-in derives once for the check and the first sync', () async {
+      await serviceFor().validateCredentials(pairing);
+      await serviceFor().unlockDataKey(pairing);
+
+      expect(derived, hasLength(1));
+    });
+
+    test('the first sync clears the keys, so the next one derives', () async {
+      await serviceFor().unlockDataKey(pairing);
+      await serviceFor().unlockDataKey(pairing);
+
+      expect(derived, hasLength(2));
+    });
+
+    test('concurrent steps share one derivation', () async {
+      final service = serviceFor();
+
+      await Future.wait([
+        service.validateCredentials(pairing),
+        service.validateCredentials(pairing),
+        service.confirmAccount(pairing, '12345678'),
+      ]);
+
+      expect(derived, hasLength(1));
+    });
+
+    test('a different email or password derives again', () async {
+      final service = serviceFor();
+
+      await service.confirmAccount(pairing, '12345678');
+      await service.confirmAccount(
+        SyncPairing(email: 'other@example.com', password: _password),
+        '12345678',
+      );
+      await service.confirmAccount(
+        SyncPairing(
+          email: 'other@example.com',
+          password: 'another-test-only-password',
+        ),
+        '12345678',
+      );
+
+      expect(derived, [
+        '$_email|$_password',
+        'other@example.com|$_password',
+        'other@example.com|another-test-only-password',
+      ]);
+    });
+
+    test('an equivalent spelling of the password reuses the keys', () async {
+      final service = serviceFor();
+
+      await service.confirmAccount(
+        SyncPairing(email: _email, password: 'test-only-pass\u00e9-passphrase'),
+        '12345678',
+      );
+      await service.confirmAccount(
+        SyncPairing(
+          email: _email,
+          password: 'test-only-passe\u0301-passphrase',
+        ),
+        '12345678',
+      );
+
+      expect(derived, hasLength(1));
+    });
+
+    test('a failed sign-in clears the keys', () async {
+      await expectLater(
+        serviceFor(failAccount: true).validateCredentials(pairing),
+        throwsA(anything),
+      );
+      await serviceFor().validateCredentials(pairing);
+
+      expect(derived, hasLength(2));
+    });
+
+    test('a failed derivation is not kept', () async {
+      var calls = 0;
+      final service = SyncAccountService(
+        deriveKeys: ({required email, required password}) async {
+          calls++;
+          if (calls == 1) throw StateError('derivation failed');
+          return SyncAccountKeys(authKey: 'auth', wrapKey: wrapKey);
+        },
+        clientFactory: () => MockClient((_) async => _json({'status': 'ok'})),
+      );
+
+      await expectLater(
+        service.confirmAccount(pairing, '12345678'),
+        throwsStateError,
+      );
+      await service.confirmAccount(pairing, '12345678');
+
+      expect(calls, 2);
+    });
+
+    test(
+      'clearKeyCache, as signing out does, makes the next step derive',
+      () async {
+        final service = serviceFor();
+
+        await service.confirmAccount(pairing, '12345678');
+        SyncAccountService.clearKeyCache();
+        await service.confirmAccount(pairing, '12345678');
+
+        expect(derived, hasLength(2));
+      },
+    );
+
+    test('deleting the account clears the keys', () async {
+      final service = serviceFor();
+
+      await service.deleteAccount(pairing);
+      await service.confirmAccount(pairing, '12345678');
+
+      expect(derived, hasLength(2));
+    });
+
+    test('the keys expire if no sync follows', () async {
+      var clock = DateTime(2026, 11, 16, 9);
+      SyncAccountService.now = () => clock;
+      final service = serviceFor();
+
+      await service.validateCredentials(pairing);
+      clock = clock.add(const Duration(minutes: 4));
+      await service.validateCredentials(pairing);
+      expect(derived, hasLength(1));
+
+      clock = clock.add(const Duration(minutes: 2));
+      await service.validateCredentials(pairing);
+      expect(derived, hasLength(2));
+    });
+
+    test('changing the password derives once per password, then the '
+        'first sync reuses the new keys', () async {
+      const newPassword = 'test-only-new-password-for-account';
+      final service = serviceFor();
+
+      final updated = await service.changePassword(pairing, newPassword);
+      await serviceFor().unlockDataKey(updated);
+
+      expect(derived, ['$_email|$_password', '$_email|$newPassword']);
+    });
+
+    test('a refused password change clears the keys', () async {
+      await expectLater(
+        serviceFor(failAccount: true)
+            .changePassword(pairing, 'test-only-new-password-for-account'),
+        throwsA(anything),
+      );
+      await serviceFor().validateCredentials(pairing);
+
+      expect(derived, hasLength(2));
     });
   });
 }

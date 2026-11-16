@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:cryptography_plus/cryptography_plus.dart';
-import 'package:flutter/foundation.dart' show kReleaseMode;
+import 'package:flutter/foundation.dart' show kReleaseMode, visibleForTesting;
 import 'package:http/http.dart' as http;
 
 import 'sync_account_crypto.dart';
@@ -11,10 +11,39 @@ import 'sync_pairing.dart';
 import 'sync_password_policy.dart';
 import 'sync_record_cipher.dart';
 
+typedef SyncKeyDeriver = Future<SyncAccountKeys> Function({
+  required String email,
+  required String password,
+});
+
 class SyncAccountService {
   final http.Client Function() _clientFactory;
   final bool _allowCustomServer;
+  final SyncKeyDeriver _deriveKeys;
   static final _pairingCipher = AesGcm.with256bits();
+
+  /// The keys derived for the last email and password, so that the steps of one
+  /// sign-up, sign-in or password change derive them once, not once per step.
+  ///
+  /// Argon2id is slow on purpose (64 MiB, 3 passes). Every screen makes its own
+  /// [SyncAccountService], so the cache is static. It is in memory only: it is
+  /// never written to disk, preferences, logs or error messages. It holds the
+  /// derived keys, which the app also keeps for the session, and the
+  /// normalized password for matching, which [SyncPairing] already holds.
+  ///
+  /// Lifetime: it is dropped as soon as it has done its job (the first sync
+  /// unlocking the data key), after a failed sign-in, on sign-out and account
+  /// deletion ([clearKeyCache]), and after [_keyCacheLifetime] at the latest,
+  /// so a sign-in check that no sync follows does not leave keys behind. A
+  /// password change replaces it with the keys of the new password.
+  static _CachedKeys? _cache;
+  static const _keyCacheLifetime = Duration(minutes: 5);
+
+  @visibleForTesting
+  static DateTime Function() now = DateTime.now;
+
+  /// Forgets the cached keys. Call it when signing out.
+  static void clearKeyCache() => _cache = null;
 
   /// A pairing link names the server it belongs to. Release builds only follow
   /// links to the built-in server, because a link from anywhere could
@@ -23,8 +52,40 @@ class SyncAccountService {
   SyncAccountService({
     http.Client Function()? clientFactory,
     bool? allowCustomServer,
+    @visibleForTesting SyncKeyDeriver? deriveKeys,
   }) : _clientFactory = clientFactory ?? http.Client.new,
-       _allowCustomServer = allowCustomServer ?? !kReleaseMode;
+       _allowCustomServer = allowCustomServer ?? !kReleaseMode,
+       _deriveKeys = deriveKeys ?? SyncAccountCrypto.deriveKeys;
+
+  /// The keys for [email] and [password]: the cached ones when they were
+  /// derived for the same email and password, otherwise derived now. Calls made
+  /// while a derivation is running share it instead of starting another.
+  Future<SyncAccountKeys> _keys(String email, String password) {
+    final normalized = SyncAccountCrypto.normalizePassword(password);
+    final cached = _cache;
+    if (cached != null &&
+        cached.email == email &&
+        cached.password == normalized &&
+        now().isBefore(cached.expires)) {
+      return cached.keys;
+    }
+    final entry = _CachedKeys(
+      email,
+      normalized,
+      _deriveKeys(email: email, password: password),
+      now().add(_keyCacheLifetime),
+    );
+    _cache = entry;
+    // A failed derivation must not be kept. Only remove this entry: a clear or
+    // a newer sign-in may have replaced it.
+    entry.keys.then<void>(
+      (_) {},
+      onError: (_) {
+        if (identical(_cache, entry)) _cache = null;
+      },
+    );
+    return entry.keys;
+  }
 
   Future<String> generatePassphrase() async {
     final client = _clientFactory();
@@ -37,10 +98,7 @@ class SyncAccountService {
 
   Future<void> createAccount(SyncPairing pairing) async {
     await _checkPassword(pairing.password);
-    final keys = await SyncAccountCrypto.deriveKeys(
-      email: pairing.email,
-      password: pairing.password,
-    );
+    final keys = await _keys(pairing.email, pairing.password);
     final wrappedDataKey = await SyncAccountCrypto.createWrappedDataKey(
       keys.wrapKey,
     );
@@ -57,10 +115,7 @@ class SyncAccountService {
   }
 
   Future<void> confirmAccount(SyncPairing pairing, String code) async {
-    final keys = await SyncAccountCrypto.deriveKeys(
-      email: pairing.email,
-      password: pairing.password,
-    );
+    final keys = await _keys(pairing.email, pairing.password);
     final client = _client(pairing, keys.authKey);
     try {
       await client.confirmAccount(authKey: keys.authKey, code: code);
@@ -70,13 +125,14 @@ class SyncAccountService {
   }
 
   Future<void> validateCredentials(SyncPairing pairing) async {
-    final keys = await SyncAccountCrypto.deriveKeys(
-      email: pairing.email,
-      password: pairing.password,
-    );
+    final keys = await _keys(pairing.email, pairing.password);
     final client = _client(pairing, keys.authKey);
     try {
       await client.getAccount();
+    } catch (_) {
+      // A failed sign-in must not leave its keys behind.
+      clearKeyCache();
+      rethrow;
     } finally {
       client.close();
     }
@@ -86,10 +142,7 @@ class SyncAccountService {
   /// password, for encrypting records. Also returns the account's `createdAt`,
   /// which identifies it.
   Future<SyncDataKey> unlockDataKey(SyncPairing pairing) async {
-    final keys = await SyncAccountCrypto.deriveKeys(
-      email: pairing.email,
-      password: pairing.password,
-    );
+    final keys = await _keys(pairing.email, pairing.password);
     final client = _client(pairing, keys.authKey);
     try {
       final account = await client.getAccount();
@@ -109,6 +162,9 @@ class SyncAccountService {
         authKey: keys.authKey,
       );
     } finally {
+      // The sign-in is complete (the key is stored, or it failed): the keys
+      // have done their job.
+      clearKeyCache();
       client.close();
     }
   }
@@ -118,10 +174,7 @@ class SyncAccountService {
     String newPassword,
   ) async {
     await _checkPassword(newPassword);
-    final currentKeys = await SyncAccountCrypto.deriveKeys(
-      email: current.email,
-      password: current.password,
-    );
+    final currentKeys = await _keys(current.email, current.password);
     final client = _client(current, currentKeys.authKey);
     try {
       final account = await client.getAccount();
@@ -134,7 +187,8 @@ class SyncAccountService {
         wrappedDataKey: account.wrappedDataKey,
         wrapKey: currentKeys.wrapKey,
       );
-      final newKeys = await SyncAccountCrypto.deriveKeys(
+      // Not cached yet: the server may still refuse the change.
+      final newKeys = await _deriveKeys(
         email: current.email,
         password: newPassword,
       );
@@ -147,21 +201,29 @@ class SyncAccountService {
         wrappedDataKey: wrappedDataKey,
         kdf: SyncAccountCrypto.kdf,
       );
+      // The next sync unlocks the data key with the new password; it reuses
+      // these keys instead of deriving them again.
+      _cache = _CachedKeys(
+        current.email,
+        SyncAccountCrypto.normalizePassword(newPassword),
+        Future.value(newKeys),
+        now().add(_keyCacheLifetime),
+      );
       return SyncPairing(
         endpoint: current.endpoint,
         email: current.email,
         password: newPassword,
       );
+    } catch (_) {
+      clearKeyCache();
+      rethrow;
     } finally {
       client.close();
     }
   }
 
   Future<String> createPairingLink(SyncPairing pairing) async {
-    final keys = await SyncAccountCrypto.deriveKeys(
-      email: pairing.email,
-      password: pairing.password,
-    );
+    final keys = await _keys(pairing.email, pairing.password);
     final random = Random.secure();
     final key = List<int>.generate(32, (_) => random.nextInt(256));
     final encrypted = await _pairingCipher.encrypt(
@@ -264,14 +326,12 @@ class SyncAccountService {
   }
 
   Future<void> deleteAccount(SyncPairing pairing) async {
-    final keys = await SyncAccountCrypto.deriveKeys(
-      email: pairing.email,
-      password: pairing.password,
-    );
+    final keys = await _keys(pairing.email, pairing.password);
     final client = _client(pairing, keys.authKey);
     try {
       await client.deleteAccount();
     } finally {
+      clearKeyCache();
       client.close();
     }
   }
@@ -305,4 +365,16 @@ class SyncAccountService {
       kdf['memoryKiB'] == SyncAccountCrypto.kdf['memoryKiB'] &&
       kdf['passes'] == SyncAccountCrypto.kdf['passes'] &&
       kdf['lanes'] == SyncAccountCrypto.kdf['lanes'];
+}
+
+class _CachedKeys {
+  final String email;
+
+  /// The password in the form key derivation sees it (NFKC), so equivalent
+  /// spellings of one password share keys, as they do when derived.
+  final String password;
+  final Future<SyncAccountKeys> keys;
+  final DateTime expires;
+
+  const _CachedKeys(this.email, this.password, this.keys, this.expires);
 }
