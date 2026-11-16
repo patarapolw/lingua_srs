@@ -384,7 +384,7 @@ void main() {
       }),
     );
 
-    final pairing = SyncPairing(email: _email, password: _password);
+    late final pairing = SyncPairing(email: _email, password: _password);
 
     test(
       'sign-up derives once for create, confirm and the first sync',
