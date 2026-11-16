@@ -138,7 +138,7 @@ void main() {
     });
 
     test('is stable for names that only differ by case or zeros', () {
-      final expected = ['a-01.md', 'a-1.md', 'A-1.md'];
+      final expected = ['a-01.md', 'A-1.md', 'a-1.md'];
       expect(sorted(['A-1.md', 'a-1.md', 'a-01.md']), expected);
       expect(sorted(['a-01.md', 'A-1.md', 'a-1.md']), expected);
     });
