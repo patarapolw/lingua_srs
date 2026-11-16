@@ -57,6 +57,20 @@ class SyncAccountCrypto {
     );
   }
 
+  /// The keys derived from a recovery code's secret (see
+  /// `SyncRecoveryCode`): an auth key, of which the server keeps only a hash,
+  /// and a key that wraps the data key. The secret is 160 random bits, so it
+  /// needs no slow key derivation; HKDF with labels of their own keeps these
+  /// keys apart from the password's.
+  static Future<SyncAccountKeys> deriveRecoveryKeys(List<int> secret) async {
+    final authKey = await _deriveKey(secret, 'recovery-auth');
+    final wrapKey = await _deriveKey(secret, 'recovery-wrap');
+    return SyncAccountKeys(
+      authKey: base64Url.encode(authKey).replaceAll('=', ''),
+      wrapKey: wrapKey,
+    );
+  }
+
   static Future<String> createWrappedDataKey(List<int> wrapKey) async {
     final dataKey = await _cipher.newSecretKey();
     final wrapped = await _cipher.encrypt(

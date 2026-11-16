@@ -40,7 +40,8 @@ lingua_srs/
 │   │   ├── sync_client.dart           # Cloudflare Worker sync and dictionary inbox client
 │   │   ├── sync_error_text.dart       # Plain messages for failed sync requests
 │   │   ├── sync_account_crypto.dart   # Password-derived sync keys and wrapped data key
-│   │   ├── sync_account_service.dart  # Sync account creation, confirmation and password changes
+│   │   ├── sync_account_service.dart  # Sync account creation, confirmation, password changes and recovery codes
+│   │   ├── sync_recovery_code.dart    # Recovery code secret and its Crockford base32 form
 │   │   ├── sync_password_policy.dart  # New-account and password-change validation
 │   │   ├── sync_records.dart          # The records that sync, built from the app's state
 │   │   ├── sync_change_tracker.dart   # Notices changed records; pending pushes and pull cursor
@@ -85,6 +86,7 @@ lingua_srs/
 │   │   ├── similar_search_dialog.dart # Search similar English meanings to write a front hint
 │   │   ├── vocab_merge_dialogs.dart   # Manual and AI merge flows, merge history and undo
 │   │   ├── pairing_confirmation.dart  # Asks before a pairing link signs this device in
+│   │   ├── recovery_code_dialog.dart  # Shows a new recovery code once; asks before replacing one
 │   │   └── settings_dialog.dart       # Theme, autoplay, review limits, backup, AI key and sync
 │   └── widgets/
 │       ├── adaptive_scaffold.dart     # Responsive layout (Rail vs BottomNav)

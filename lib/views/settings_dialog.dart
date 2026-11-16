@@ -16,6 +16,7 @@ import '../services/sync_pairing.dart';
 import '../services/sync_password_policy.dart';
 import '../widgets/icon_switch.dart';
 import 'pairing_confirmation.dart';
+import 'recovery_code_dialog.dart';
 
 class SettingsDialog extends StatefulWidget {
   final bool isDarkMode;
@@ -273,6 +274,21 @@ class _SettingsDialogState extends State<SettingsDialog> {
           throw error; // still not confirmed: report the code
         }
       }
+      // A new account gets a recovery code. It is made before the sign-in is
+      // saved, while the keys derived for the signup are still at hand, and
+      // only while this dialog is open to show it. Not getting one does not
+      // stop the sign-in: Settings can make one later.
+      String? recoveryCode;
+      var recoveryFailed = false;
+      if (mounted) {
+        try {
+          recoveryCode = await _syncAccounts.createRecoveryCode(pairing);
+        } catch (_) {
+          // Deliberately not shown in detail: the error never holds the code,
+          // but the person only needs to know to try again from Settings.
+          recoveryFailed = true;
+        }
+      }
       await provider.setSyncPairing(pairing);
       if (mounted) {
         TextInput.finishAutofillContext();
@@ -283,7 +299,14 @@ class _SettingsDialogState extends State<SettingsDialog> {
         setState(() {
           _creatingSyncAccount = false;
           _awaitingSyncConfirmation = false;
+          _saving = false;
+          if (recoveryFailed) {
+            _syncError =
+                'Signed in, but a recovery code could not be created. Choose '
+                'Recovery code to try again.';
+          }
         });
+        if (recoveryCode != null) await showRecoveryCode(context, recoveryCode);
       }
     } catch (error) {
       if (mounted) setState(() => _syncError = describeSyncError(error));
@@ -544,6 +567,26 @@ class _SettingsDialogState extends State<SettingsDialog> {
           ],
         ),
       );
+    } catch (error) {
+      if (mounted) {
+        setState(() => _syncError = describeSyncError(error, signedIn: true));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _createRecoveryCode(SyncPairing pairing) async {
+    if (!await confirmNewRecoveryCode(context) || !mounted) return;
+    setState(() {
+      _syncError = null;
+      _saving = true;
+    });
+    try {
+      final code = await _syncAccounts.createRecoveryCode(pairing);
+      if (!mounted) return;
+      setState(() => _saving = false);
+      await showRecoveryCode(context, code);
     } catch (error) {
       if (mounted) {
         setState(() => _syncError = describeSyncError(error, signedIn: true));
@@ -1216,6 +1259,13 @@ class _SettingsDialogState extends State<SettingsDialog> {
                               }),
                         icon: const Icon(Icons.password),
                         label: const Text('Change password'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _saving
+                            ? null
+                            : () => _createRecoveryCode(syncPairing),
+                        icon: const Icon(Icons.key_outlined),
+                        label: const Text('Recovery code'),
                       ),
                       OutlinedButton.icon(
                         onPressed: _saving ? null : _signOut,

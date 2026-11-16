@@ -2,7 +2,7 @@
 
 How devices sync, and how a separately developed dictionary app sends content to LinguaSRS. For how to use it, see [Using sync](sync-guide.md). Every account lives on one hosted Cloudflare Worker backed by D1, and data is end-to-end encrypted: the server only stores ciphertext. See issue #2. This also covers the content-import half of #45.
 
-Implemented so far: the Worker (`worker/`), account creation and email confirmation, sign-in, password changes, one-time device pairing, account deletion, and password-derived account keys. Records describes what will sync; building, encrypting, pulling, pushing and applying records is implemented (`SyncEngine`, `SyncApplier`), and the app syncs on its own while signed in (see When the app syncs). A device that already has data merges it with the account's on its first sync (see Joining an account with data).
+Implemented so far: the Worker (`worker/`), account creation and email confirmation, sign-in, password changes, one-time device pairing, account deletion, password-derived account keys, and creating a recovery code (using it to recover an account comes next, #127). Records describes what will sync; building, encrypting, pulling, pushing and applying records is implemented (`SyncEngine`, `SyncApplier`), and the app syncs on its own while signed in (see When the app syncs). A device that already has data merges it with the account's on its first sync (see Joining an account with data).
 
 ## Server address
 
@@ -71,7 +71,29 @@ Records are encrypted with a random 256-bit **data key** created with the accoun
 
 The server can still see the email, each record's `kind` and `id`, `updatedAt`, whether it is deleted, and sizes. A record's `id` is a keyed hash, so it does not reveal the word or lesson behind it (see Record ids). Everything inside `data` is hidden.
 
-If the password is forgotten and no device is signed in, the data cannot be recovered. A recovery code (the data key) shown at account creation, planned in #2, would allow it. The email can be used to reset the account, but not to bring the data back.
+If the password is forgotten and no device is signed in, only a recovery code (below) can unlock the data. The email can be used to reset the account, but not to bring the data back.
+
+### Recovery code
+
+A recovery code is a second way to unwrap the data key, for when the password is forgotten and no device is signed in (#127). The device makes it and the server never sees it:
+
+```
+secret       = 160 random bits                 the code, shown once
+recoveryAuth = HKDF(secret, "recovery-auth")   sent; the server stores SHA-256(recoveryAuth)
+recoveryWrap = HKDF(secret, "recovery-wrap")   never leaves the device
+```
+
+The server gets `recoveryAuth` and `AES-256-GCM(recoveryWrap, dataKey)`. Both are derived with a zero salt, as the password keys are.
+
+HKDF and AES-256-GCM are the same primitives as the password keys (`SyncAccountCrypto`), with labels of their own. The secret is random rather than chosen, so it needs no Argon2id: 160 bits cannot be guessed, unlike a password. The issue's first idea was to show the data key itself; a separate secret that wraps it keeps the data key off paper, lets a new code replace an old one without re-encrypting anything, and lets the server check a code (through `recoveryAuth`) without learning it.
+
+The code is the secret in [Crockford base32](https://www.crockford.com/base32.html), 32 characters in 8 groups of 4, such as `7K3M-0QWE-…`. It uses digits and capital letters without I, L, O and U, so nothing can be read as something else. Reading it back ignores case, spaces and hyphens, and takes `O` as zero and `I` or `L` as one. It has no check character: a mistyped code is refused by the server when it is used.
+
+- **When.** An account gets a code as soon as its email is confirmed, while the keys derived for the signup are still in memory: the app unwraps the data key, makes the code, uploads it with `PUT /account/recovery` and shows it. A signed-in device can make a new one from *Settings → Sync → Recovery code*, which is also how accounts from before recovery codes get one. If making it fails at signup, the device is signed in anyway and says to try again from Settings.
+- **Only the newest works.** A new code replaces the old one on the server; the app says so before making one and on the code's dialog.
+- **Shown once.** The code is shown in one dialog, which closes only after the person ticks that they saved it, and not by tapping outside. It can be copied. The code and its keys are kept in memory only, for as long as that dialog is open: never on disk, in preferences, logs, error messages or backups.
+- **Password changes keep it.** A password change re-wraps the same data key, so the recovery-wrapped copy still matches and the code keeps working.
+- **Using it** (email, code and a new password on a device that is not signed in) is the next step of #127 and is not implemented yet.
 
 ## Password rules
 
@@ -117,6 +139,7 @@ Routes live under `/v1`. Except for the first two, they need `Authorization: Bas
 | `GET /account` | Returns `{wrappedDataKey, kdf, createdAt}`. `createdAt` (milliseconds) identifies the account, see below. |
 | `PUT /account` | Changes the password with `{authKey, wrappedDataKey, kdf?}`; the data is untouched. |
 | `DELETE /account` | Deletes the account and everything in it. Also available to an unconfirmed account with the correct credentials. |
+| `PUT /account/recovery` | Sets or replaces the recovery code with `{recoveryKey, wrappedDataKey}`: the auth key derived from the code, of which only a hash is stored, and the data key wrapped by the code. Returns `{status: "ok", createdAt}`. Counts as one write against the daily limit (`429 quota_exceeded`); `400 invalid_recovery`. |
 | `POST /account/pairing` | Creates a short-lived one-time pairing invite and returns its token. The body contains only the encrypted pairing payload. |
 | `GET /pairings/{token}` | Redeems and consumes an invite, returning its encrypted payload. No authentication: the 256 bit token is the secret. |
 | `GET /changes?since=N&limit=M` | Records changed after cursor `N` (default 0), oldest change first, at most 500. Returns `{records, cursor, hasMore}`. |
@@ -291,7 +314,7 @@ A review writes one `card` record. The engine merges repeated changes to a recor
 Cloudflare's free plans have no bill: past their daily limits requests simply fail, so the worst case is that sync pauses until the next UTC day while every app keeps working offline. The Worker adds its own limits so one account, or a flood of signups, cannot use everything up. They are settings in `wrangler.jsonc`:
 
 - `MAX_EMAILS_PER_DAY` (default 50): confirmation emails sent across all accounts. Keep it under your email provider's free limit (Resend's free plan allows 100 a day). When it is reached, signups answer `429 signups_paused` until the next UTC day.
-- `MAX_WRITES_PER_DAY` (default 2000): records and inbox items one account can write per UTC day, answered with `429 quota_exceeded` and a `Retry-After`. Reading is not limited.
+- `MAX_WRITES_PER_DAY` (default 2000): records, inbox items and recovery codes one account can write per UTC day, answered with `429 quota_exceeded` and a `Retry-After`. Reading is not limited.
 - A record is at most 32 KB, a push 100 records and 1 MB, an inbox item 64 KB.
 
 A changed record costs about three D1 row writes (the row and its two indexes), so the free plan's 100,000 writes a day is roughly 30,000 record changes. The app should merge repeated changes to one card into a single record and push in batches.
@@ -312,7 +335,7 @@ npm run deploy
 
 Set `MAIL_FROM` in `wrangler.jsonc` to an address on the domain you verified with Resend. The example config sets `workers_dev` and `preview_urls` so that `wrangler deploy` does not warn: the Worker is served on its `workers.dev` address, and preview URLs, which would expose every uploaded version with the production database attached, are off. Then build the app with `SYNC_ENDPOINT` set to the Worker's address (see Server address). `wrangler.jsonc` and `.dev.vars` are git-ignored, so your database id and address never reach git.
 
-Apply database migrations to the configured D1 database before deploying Worker code that depends on them. If a pairing request fails with a server error after an update, check `npx wrangler d1 migrations list DB --remote` and apply pending migrations with `npm run migrate`; the Worker needs the `pairing_invites` table created by migration `0002_pairing_invites.sql`.
+Apply database migrations to the configured D1 database before deploying Worker code that depends on them. If a pairing request fails with a server error after an update, check `npx wrangler d1 migrations list DB --remote` and apply pending migrations with `npm run migrate`; the Worker needs the `pairing_invites` table created by migration `0002_pairing_invites.sql`. Recovery codes need the columns added by `0003_recovery_codes.sql`; without them, making a code fails with a server error.
 
 For local development, `cp .dev.vars.example .dev.vars`, run `npm run migrate:local` and `npm run dev`. Confirmation codes are printed to the console instead of being emailed. `npm test` runs the tests against a local D1.
 
@@ -320,7 +343,7 @@ For local development, `cp .dev.vars.example .dev.vars`, run `npm run migrate:lo
 
 The ordered migrations in `worker/migrations/` define the schema. In short:
 
-- `accounts`: `email` (key), `auth_hash` (SHA-256 of the auth key), `wrapped_data_key`, `kdf`, `verified_at`, `created_at`.
+- `accounts`: `email` (key), `auth_hash` (SHA-256 of the auth key), `wrapped_data_key`, `kdf`, `verified_at`, `created_at`, and the recovery code's `recovery_hash` (SHA-256 of the recovery auth key), `recovery_wrapped_data_key` and `recovery_created_at`, all null until a code is made (migration `0003_recovery_codes.sql`).
 - `email_codes`: one pending code per email, stored as a hash, with its attempts and expiry.
 - `records`: `(email, kind, id)` is the key; `seq`, `updated_at`, `deleted` and the encrypted `data`; indexed by `(email, seq)` for pulling.
 - `inbox`: encrypted items waiting to be imported.
@@ -331,5 +354,6 @@ A stored record is changed by an upsert that only applies when the incoming `upd
 
 ## Not covered yet
 
+- Recovering an account with its recovery code (the second step of #127).
 - Resetting a forgotten password (confirmed by email, which starts a fresh account because the data cannot be decrypted without the old password), and an authenticator-app second factor.
 - Limiting failed sign-ins per address, see above.

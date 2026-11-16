@@ -210,6 +210,20 @@ class SyncClient {
     );
   }
 
+  /// Sets or replaces the account's recovery code: the auth key derived from
+  /// it, of which the server keeps a hash, and the data key wrapped by the
+  /// key derived from it. Only the newest code works.
+  Future<void> setRecovery({
+    required String recoveryKey,
+    required String wrappedDataKey,
+  }) async {
+    await _send(
+      'PUT',
+      ['account', 'recovery'],
+      body: {'recoveryKey': recoveryKey, 'wrappedDataKey': wrappedDataKey},
+    );
+  }
+
   Future<String> createPairingInvite(String payload) async {
     final json = _object(
       await _send('POST', ['account', 'pairing'], body: {'payload': payload}),

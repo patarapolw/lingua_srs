@@ -22,7 +22,15 @@ flutter build apk --dart-define-from-file=env.json
 
 A code works for 30 minutes, only on the device that signed up last, and stops working after five wrong tries. If it's refused, check the newest email. Creating the account again sends a new code once 10 minutes have passed since the last one; before that, the same code is used.
 
-Keep the password safe. Your data is encrypted with it on your devices, and nobody, the server included, can reset it or read your data without it. If you forget it while no device is signed in, the data on the server is lost. The lessons on your devices stay.
+Keep the password safe. Your data is encrypted with it on your devices, and nobody, the server included, can reset it or read your data without it.
+
+Once the email is confirmed, the app shows your **recovery code**: 32 letters and digits in groups of four. Write it down or keep it in a password manager, tick **I have saved my recovery code**, and choose **Done**. It is shown only this once. If you forget the password while no device is signed in, the recovery code is the only way to get the synced data back; without it, the data on the server is lost (the lessons on your devices stay). Using the code to recover an account is coming in a later version.
+
+## Recovery code
+
+On a signed-in device, **Settings → Sync → Recovery code** makes a new code. Use it if you lost the old one, if you think someone else saw it, or if your account is older than recovery codes. Only the newest code works: making a new one stops the old one from working, on every device. Changing the password does not change the code.
+
+If you copy the code, clear it from the clipboard once it is saved somewhere safe.
 
 ## Add another device
 
