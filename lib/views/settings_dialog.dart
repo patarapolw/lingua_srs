@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import '../providers/app_provider.dart';
 import '../services/backup_service.dart';
+import '../services/lesson_ai_prompt.dart';
 import '../services/sync_account_service.dart';
 import '../services/sync_client.dart';
 import '../services/sync_error_text.dart';
@@ -34,6 +35,7 @@ class SettingsDialog extends StatefulWidget {
 
 class _SettingsDialogState extends State<SettingsDialog> {
   late final TextEditingController _apiKeyController;
+  late final TextEditingController _aiInstructionsController;
   late final TextEditingController _maxReviewsController;
   late final TextEditingController _maxNewCardsController;
   final _syncEmailController = TextEditingController();
@@ -82,6 +84,9 @@ class _SettingsDialogState extends State<SettingsDialog> {
     super.initState();
     final provider = context.read<AppProvider>();
     _apiKeyController = TextEditingController(text: provider.deepSeekApiKey);
+    _aiInstructionsController = TextEditingController(
+      text: provider.aiInstructions,
+    );
     _maxReviewsController = TextEditingController(
       text: '${provider.maxReviews24h > 0 ? provider.maxReviews24h : 0}',
     );
@@ -93,6 +98,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
   @override
   void dispose() {
     _apiKeyController.dispose();
+    _aiInstructionsController.dispose();
     _maxReviewsController.dispose();
     _maxNewCardsController.dispose();
     _syncEmailController.dispose();
@@ -132,6 +138,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
       await provider.setMaxReviews24h(maxReviews);
       await provider.setMaxNewCards24h(maxNewCards);
       await provider.setDeepSeekApiKey(_apiKeyController.text);
+      await provider.setAiInstructions(_aiInstructionsController.text);
       if (mounted) Navigator.of(context).pop();
     } catch (error) {
       if (mounted) {
@@ -1280,6 +1287,21 @@ class _SettingsDialogState extends State<SettingsDialog> {
                         ),
                       ],
                     ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _aiInstructionsController,
+                  minLines: 2,
+                  maxLines: 6,
+                  maxLength: LessonAiPrompt.maxInstructionsChars,
+                  decoration: const InputDecoration(
+                    labelText: 'Custom AI instructions',
+                    hintText:
+                        'e.g. Explain for an ESL learner, compare with '
+                        'Japanese grammar, and with Mandarin and Cantonese '
+                        'readings.',
+                    alignLabelWithHint: true,
                   ),
                 ),
                 const SizedBox(height: 10),

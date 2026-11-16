@@ -461,7 +461,12 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
     );
   }
 
-  String _systemPrompt() {
+  String _systemPrompt() => LessonAiPrompt.withInstructions(
+    _basePrompt(),
+    context.read<AppProvider>().aiInstructions,
+  );
+
+  String _basePrompt() {
     if (widget.lesson case final lesson?) {
       return LessonAiPrompt.systemPrompt(lesson);
     }
