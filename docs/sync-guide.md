@@ -24,13 +24,26 @@ A code works for 30 minutes, only on the device that signed up last, and stops w
 
 Keep the password safe. Your data is encrypted with it on your devices, and nobody, the server included, can reset it or read your data without it.
 
-Once the email is confirmed, the app shows your **recovery code**: 32 letters and digits in groups of four. Write it down or keep it in a password manager, tick **I have saved my recovery code**, and choose **Done**. It is shown only this once. If you forget the password while no device is signed in, the recovery code is the only way to get the synced data back; without it, the data on the server is lost (the lessons on your devices stay). Using the code to recover an account is coming in a later version.
+Once the email is confirmed, the app shows your **recovery code**: 32 letters and digits in groups of four. Write it down or keep it in a password manager, tick **I have saved my recovery code**, and choose **Done**. It is shown only this once. If you forget the password while no device is signed in, the recovery code is the only way to get the synced data back; without it, the data on the server is lost (the lessons on your devices stay).
 
 ## Recovery code
 
 On a signed-in device, **Settings → Sync → Recovery code** makes a new code. Use it if you lost the old one, if you think someone else saw it, or if your account is older than recovery codes. Only the newest code works: making a new one stops the old one from working, on every device. Changing the password does not change the code.
 
 If you copy the code, clear it from the clipboard once it is saved somewhere safe.
+
+## Forgot your password
+
+On a device that is not signed in:
+
+1. Open **Settings → Sync** and choose **Forgot password? Use recovery code**.
+2. Enter your email, your recovery code (capitals, spaces and dashes don't matter) and a new password, twice. **Generate passphrase** works here too.
+3. Choose **Recover account**. This device signs in with the new password.
+4. The code you used stops working, so the app shows a new one straight away. Save it as before.
+
+Your other devices report that the server no longer accepts their sign-in, as after a password change. Sign them out and in again with the new password. Nothing is lost: the synced data is unlocked with the code, not replaced.
+
+If the code is refused, check the email and the code. Only the newest code works, and a code that was already used to recover the account works no more.
 
 ## Add another device
 

@@ -1,5 +1,6 @@
 import {
   changePassword,
+  completeRecovery,
   confirmAccount,
   createAccount,
   createPairingInvite,
@@ -7,6 +8,7 @@ import {
   getAccount,
   redeemPairingInvite,
   setRecovery,
+  startRecovery,
 } from './accounts';
 import { authenticate } from './auth';
 import { pullChanges, pushChanges } from './changes';
@@ -32,6 +34,14 @@ async function route(request: Request, env: Env, deps: Deps): Promise<Response> 
   if (path === '/v1/accounts/confirm') {
     allow(request, 'POST');
     return confirmAccount(request, env, deps);
+  }
+  if (path === '/v1/accounts/recovery') {
+    allow(request, 'POST');
+    return startRecovery(request, env);
+  }
+  if (path === '/v1/accounts/recovery/complete') {
+    allow(request, 'POST');
+    return completeRecovery(request, env);
   }
   const pairingInvite = /^\/v1\/pairings\/([a-f0-9]{64})$/.exec(path);
   if (pairingInvite) {

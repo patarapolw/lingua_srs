@@ -74,6 +74,18 @@ void main() {
       expect(text, isNot(contains('wrong or has expired')));
     });
 
+    test('a refused recovery code names every reason the server hides', () {
+      final text = describeSyncError(
+        _error(400, '{"error":"invalid_recovery"}'),
+      );
+
+      expect(text, contains('recovery code'));
+      expect(text, contains('email'));
+      expect(text, contains('newest code'));
+      expect(text, contains('used'));
+      expect(text, isNot(contains('invalid_recovery')));
+    });
+
     test('other errors keep the message from the client', () {
       const error = SyncException('Sync request failed (500): oops');
 

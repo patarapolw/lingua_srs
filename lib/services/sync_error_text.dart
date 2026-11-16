@@ -24,6 +24,11 @@ String describeSyncError(Object error, {bool signedIn = false}) {
             'Check the newest email. If its code fails too, create the '
             'account again: a new code is sent once 10 minutes have passed '
             'since the last one.';
+      case 400 when error.message.contains('invalid_recovery'):
+        // The server gives one answer for every reason, so name them all.
+        return "That recovery code didn't work for this email. Check the "
+            'email and the code. Only the newest code works, and a code '
+            'stops working once it has been used to recover the account.';
       case 401:
         return signedIn
             ? 'The server no longer accepts this sign-in. The account may '

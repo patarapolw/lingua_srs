@@ -2,7 +2,7 @@
 
 How devices sync, and how a separately developed dictionary app sends content to LinguaSRS. For how to use it, see [Using sync](sync-guide.md). Every account lives on one hosted Cloudflare Worker backed by D1, and data is end-to-end encrypted: the server only stores ciphertext. See issue #2. This also covers the content-import half of #45.
 
-Implemented so far: the Worker (`worker/`), account creation and email confirmation, sign-in, password changes, one-time device pairing, account deletion, password-derived account keys, and creating a recovery code (using it to recover an account comes next, #127). Records describes what will sync; building, encrypting, pulling, pushing and applying records is implemented (`SyncEngine`, `SyncApplier`), and the app syncs on its own while signed in (see When the app syncs). A device that already has data merges it with the account's on its first sync (see Joining an account with data).
+Implemented so far: the Worker (`worker/`), account creation and email confirmation, sign-in, password changes, one-time device pairing, account deletion, password-derived account keys, and recovery codes: creating one and recovering an account with it (#127). Records describes what will sync; building, encrypting, pulling, pushing and applying records is implemented (`SyncEngine`, `SyncApplier`), and the app syncs on its own while signed in (see When the app syncs). A device that already has data merges it with the account's on its first sync (see Joining an account with data).
 
 ## Server address
 
@@ -93,7 +93,14 @@ The code is the secret in [Crockford base32](https://www.crockford.com/base32.ht
 - **Only the newest works.** A new code replaces the old one on the server; the app says so before making one and on the code's dialog.
 - **Shown once.** The code is shown in one dialog, which closes only after the person ticks that they saved it, and not by tapping outside. It can be copied. The code and its keys are kept in memory only, for as long as that dialog is open: never on disk, in preferences, logs, error messages or backups.
 - **Password changes keep it.** A password change re-wraps the same data key, so the recovery-wrapped copy still matches and the code keeps working.
-- **Using it** (email, code and a new password on a device that is not signed in) is the next step of #127 and is not implemented yet.
+- **Using it.** On a device that is not signed in, *Settings → Sync → Forgot password? Use recovery code* takes the email, the code and a new password (checked against the password rules, as for a new account). Then:
+  1. The device reads the code (a code it cannot read is refused before anything is sent), derives `recoveryAuth` and `recoveryWrap`, and sends `{email, recoveryKey: recoveryAuth}` to `POST /accounts/recovery`.
+  2. The Worker hashes the key and compares it with `recovery_hash` in constant time, doing the same work for an unknown email, an account without a code and an unconfirmed account. It answers with the recovery-wrapped data key, or `400 invalid_recovery` for every failure.
+  3. The device unwraps the data key with `recoveryWrap`, derives the keys of the new password (Argon2id, as at sign-in), wraps the data key with the new `wrapKey`, and sends `{email, recoveryKey, authKey, wrappedDataKey, kdf}` to `POST /accounts/recovery/complete`.
+  4. The Worker checks the code again and, in one statement that only applies while the code is still the one it checked, replaces `auth_hash`, `wrapped_data_key` and `kdf`, and clears the recovery columns. Pairing invites are dropped, as after a password change. No record is re-encrypted, and `createdAt` is kept, so the account is the same one to other devices.
+  5. The device saves the sign-in and, while the new keys are in memory, makes and shows a new recovery code, since the old one is used up. If that fails, it says to make one from Settings.
+- **Other devices** are refused at their next sync, exactly as after a password change (see below): they sign out and sign in with the new password.
+- **Guessing.** Every failure is the same answer, and a code has 160 random bits, so it cannot be guessed. The Worker does not count failed attempts, for the same reason as sign-ins (it would cost D1 writes); the Cloudflare rate limiting rule for `/v1/*` (#130, see Staying inside the free plans) covers these routes too. A successful recovery writes one row and uses the code up, so it is not counted against `MAX_WRITES_PER_DAY`.
 
 ## Password rules
 
@@ -122,20 +129,22 @@ To change a password, a signed-in device checks the new password policy, downloa
 
 To delete an account, choose *Delete account* in Settings and confirm. This permanently deletes the server account, its encrypted records, inbox, and outstanding pairing invites. Local lessons and progress on that device are not deleted.
 
-### Other devices after a deletion or a password change
+### Other devices after a deletion, a password change or a recovery
 
-A device that was signed in to the account finds out at its next sync, or when *Check sign-in* is used: the server answers `401`. It gives the same answer for an account that was deleted and for a password that was changed on another device, because it never says whether an email has an account, so the app cannot tell which happened. It says that the server no longer accepts this sign-in and that the lessons are still on the device. *Check sign-in* in Settings asks on demand. The app never signs a device out by itself: the person chooses to sign out and sign in again with the new password, or to create a new account.
+A device that was signed in to the account finds out at its next sync, or when *Check sign-in* is used: the server answers `401`. It gives the same answer for an account that was deleted and for a password that was changed (or reset with a recovery code) on another device, because it never says whether an email has an account, so the app cannot tell which happened. It says that the server no longer accepts this sign-in and that the lessons are still on the device. *Check sign-in* in Settings asks on demand. The app never signs a device out by itself: the person chooses to sign out and sign in again with the new password, or to create a new account.
 
 When the sync engine exists it must handle a rejected sign-in the same way: stop syncing, keep the local data, and say so. It must also notice an account that was **re-created**. Signing in is deterministic (the keys come from the email and password), so if an account is deleted and a new one is created with the same email and password, a device that was signed in to the old one would be accepted by the new one. The new account has a different data key and its own change numbers. The engine therefore has to compare an identity of the account every time it connects, and when it differs, stop and ask instead of carrying on with the old data key and pull cursor. That identity is `createdAt` from `GET /account`: the time the signup started, fixed once the email is confirmed, kept through password changes, and different for a re-created account. `SyncClient.getAccount` returns it, as `null` from an older Worker that does not send it.
 
 ## Worker API
 
-Routes live under `/v1`. Except for the first two, they need `Authorization: Basic base64(email:authKey)`; a wrong email or key is always `401 invalid_credentials`. An unconfirmed account gets `403 email_not_confirmed` on normal account operations, but can use `DELETE /account` with its correct credentials to delete the pending account and code. Bodies are JSON, errors are `{"error": "<code>"}`, and nothing is cached.
+Routes live under `/v1`. Except for the first two and the two recovery routes, they need `Authorization: Basic base64(email:authKey)`; a wrong email or key is always `401 invalid_credentials`. An unconfirmed account gets `403 email_not_confirmed` on normal account operations, but can use `DELETE /account` with its correct credentials to delete the pending account and code. Bodies are JSON, errors are `{"error": "<code>"}`, and nothing is cached.
 
 | Route | Purpose |
 | --- | --- |
 | `POST /accounts` | Starts an account, see above. `400 invalid_account`, `429 signups_paused`, `502 email_failed`. |
 | `POST /accounts/confirm` | Body `{email, authKey, code}`. Returns `{status: "verified"}`; every failure is `400 invalid_code`. |
+| `POST /accounts/recovery` | Body `{email, recoveryKey}`. Returns `{wrappedDataKey}`, the data key wrapped by the recovery code. No authentication: the code is the credential. Every failure is `400 invalid_recovery`. |
+| `POST /accounts/recovery/complete` | Body `{email, recoveryKey, authKey, wrappedDataKey, kdf}`. Replaces the password as `PUT /account` does and uses up the code. Returns `{status: "ok"}`; every failure is `400 invalid_recovery`. |
 | `GET /account` | Returns `{wrappedDataKey, kdf, createdAt}`. `createdAt` (milliseconds) identifies the account, see below. |
 | `PUT /account` | Changes the password with `{authKey, wrappedDataKey, kdf?}`; the data is untouched. |
 | `DELETE /account` | Deletes the account and everything in it. Also available to an unconfirmed account with the correct credentials. |
@@ -319,7 +328,7 @@ Cloudflare's free plans have no bill: past their daily limits requests simply fa
 
 A changed record costs about three D1 row writes (the row and its two indexes), so the free plan's 100,000 writes a day is roughly 30,000 record changes. The app should merge repeated changes to one card into a single record and push in batches.
 
-Not done yet: limiting failed sign-ins per address. Add a Cloudflare rate limiting rule for `/v1/*` in the dashboard (check what your plan includes), because the Worker itself cannot count attempts without spending D1 writes on them. Rules on your own domain apply to traffic through that domain and not to the `workers.dev` address, so serve the Worker from a custom domain and set `workers_dev` to `false` when you add one.
+Not done yet: limiting failed sign-ins and recovery attempts per address (#130). Add a Cloudflare rate limiting rule for `/v1/*` in the dashboard (check what your plan includes), because the Worker itself cannot count attempts without spending D1 writes on them. Rules on your own domain apply to traffic through that domain and not to the `workers.dev` address, so serve the Worker from a custom domain and set `workers_dev` to `false` when you add one.
 
 ## Running your own
 
@@ -354,6 +363,5 @@ A stored record is changed by an upsert that only applies when the incoming `upd
 
 ## Not covered yet
 
-- Recovering an account with its recovery code (the second step of #127).
 - Resetting a forgotten password (confirmed by email, which starts a fresh account because the data cannot be decrypted without the old password), and an authenticator-app second factor.
 - Limiting failed sign-ins per address, see above.

@@ -259,6 +259,72 @@ class SyncAccountService {
     }
   }
 
+  /// Recovers the account of [pairing] with its recovery [code], giving it
+  /// the new password in [pairing]. Returns the sign-in to save.
+  ///
+  /// The device proves the code to the server with the key derived from it,
+  /// gets the data key wrapped by the code, unwraps it, wraps it with the new
+  /// password and replaces the account's auth key and wrapped key. Nothing is
+  /// re-encrypted. The code is used up: the account has no recovery code
+  /// afterwards, so the caller makes a new one. Other devices are refused at
+  /// their next sync, as after a password change.
+  ///
+  /// The code and the keys derived from it stay in memory, and no error
+  /// message repeats them. A code that cannot be read throws
+  /// [FormatException] before anything is sent; one the server refuses
+  /// throws [SyncException] with status 400.
+  Future<SyncPairing> recoverAccount(SyncPairing pairing, String code) async {
+    final secret = SyncRecoveryCode.parse(code);
+    await _checkPassword(pairing.password);
+    final recoveryKeys = await SyncAccountCrypto.deriveRecoveryKeys(secret);
+    final client = SyncClient(
+      endpoint: pairing.endpoint,
+      email: pairing.email,
+      authKey: '',
+      client: _clientFactory(),
+    );
+    try {
+      final recoveryWrapped = await client.startRecovery(
+        recoveryKey: recoveryKeys.authKey,
+      );
+      final List<int> dataKey;
+      try {
+        dataKey = await SyncAccountCrypto.unwrapDataKey(
+          wrappedDataKey: recoveryWrapped,
+          wrapKey: recoveryKeys.wrapKey,
+        );
+      } on FormatException {
+        throw const FormatException(
+          'The recovery code does not unlock this account.',
+        );
+      }
+      // Not cached yet: the server may still refuse the change.
+      final newKeys = await _deriveKeys(
+        email: pairing.email,
+        password: pairing.password,
+      );
+      await client.completeRecovery(
+        recoveryKey: recoveryKeys.authKey,
+        authKey: newKeys.authKey,
+        wrappedDataKey: await SyncAccountCrypto.wrapDataKey(
+          dataKey: dataKey,
+          wrapKey: newKeys.wrapKey,
+        ),
+        kdf: SyncAccountCrypto.kdf,
+      );
+      // The first sync and the new recovery code reuse these keys.
+      _cache = _CachedKeys(
+        pairing.email,
+        SyncAccountCrypto.normalizePassword(pairing.password),
+        Future.value(newKeys),
+        now().add(_keyCacheLifetime),
+      );
+      return pairing;
+    } finally {
+      client.close();
+    }
+  }
+
   Future<String> createPairingLink(SyncPairing pairing) async {
     final keys = await _keys(pairing.email, pairing.password);
     final random = Random.secure();

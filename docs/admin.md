@@ -30,7 +30,7 @@ Users can also delete their own account in the app (Settings, Sync, Delete accou
 
 ## Let a user start over
 
-If someone cannot sign in because the password is forgotten, the synced data is encrypted and cannot be recovered without the password or the account's recovery code. Recovering with the code from the app is not implemented yet (#127). Until it is, delete the account as above; they can then create a new one with the same email.
+If someone cannot sign in because the password is forgotten, the synced data is encrypted and cannot be recovered without the password or the account's recovery code. If they have the code, they can recover the account themselves: **Settings → Sync → Forgot password? Use recovery code** in the app (see [sync-guide.md](sync-guide.md#forgot-your-password)). Without it, delete the account as above; they can then create a new one with the same email.
 
 To see whether an account has a recovery code, and when it was made:
 
@@ -38,7 +38,7 @@ To see whether an account has a recovery code, and when it was made:
 npx wrangler d1 execute lingua-srs-sync --remote --command "SELECT recovery_created_at FROM accounts WHERE email='user@example.com'"
 ```
 
-`null` means the account has no code. The server keeps only a hash of a key derived from the code and the data key wrapped by the code, so an admin cannot see or reset the code either.
+`null` means the account has no code: none was made, or the last one was used to recover the account and no new one was saved. The server keeps only a hash of a key derived from the code and the data key wrapped by the code, so an admin cannot see or reset the code either.
 
 ## Update the Worker
 
@@ -49,7 +49,7 @@ npm run migrate        # applies migrations/ to the remote database
 npm run deploy
 ```
 
-`0003_recovery_codes.sql` adds the recovery code columns to `accounts`. Until it is applied, creating a recovery code fails with a server error, and the app says to try again from Settings.
+`0003_recovery_codes.sql` adds the recovery code columns to `accounts`. Until it is applied, creating a recovery code fails with a server error, and the app says to try again from Settings. Recovering an account with a code uses the same columns and needs no further migration.
 
 ## Check and repair the database
 
