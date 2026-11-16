@@ -16,7 +16,7 @@ constexpr const wchar_t kSingleInstanceMutexName[] =
 // Brings the window of the copy that is already running to the front. If it
 // is still starting and has no window yet, there is nothing to show.
 void ShowRunningInstance() {
-  HWND window = ::FindWindow(L"FLUTTER_RUNNER_WIN32_WINDOW", L"lingua_srs");
+  HWND window = ::FindWindow(L"FLUTTER_RUNNER_WIN32_WINDOW", L"LinguaSRS");
   if (window == nullptr) {
     return;
   }
@@ -59,7 +59,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);
-  if (!window.Create(L"lingua_srs", origin, size)) {
+  if (!window.Create(L"LinguaSRS", origin, size)) {
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);
