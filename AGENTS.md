@@ -39,6 +39,14 @@ Flutter app (Dart, `provider` state management). See [README.md](README.md) for 
 - If the person has a Flutter debug session running and the Dart MCP server is connected to it, hot reload after your change passes `flutter analyze` (hot restart after changing state or `main`). Don't start a second session for an app that is already running; if you start one, end it before you finish.
 - A Dart MCP server that is missing or fails to start is expected, not a failure to report. Don't write it into commit messages or PR descriptions (for example "The Dart MCP server failed to start, so hot restart was never done"), and don't list hot restart as unverified. Verify with `flutter analyze` and `flutter test`; checking the running app is left to the person.
 
+## Local sessions
+
+- Before starting work on an issue or PR, say in a line or two whether it can or should be done in a cloud session instead, and let the person choose.
+  - **Fits a cloud session:** anything whose checks CI covers. A cloud session pushes a PR, and CI runs on it: `ci.yml`, plus `desktop.yml` when platform code changes. So not having Flutter doesn't rule a task out.
+  - **Needs a local session:** the running app, profiling, a device, the person's data, or problems with the local SDK or pub cache.
+  - When a task is mixed, say which part fits where.
+- Don't commit and push on every turn. Each one costs time, and each push starts CI again. Run the whole `flutter analyze` and `flutter test` once, when the change is done, not after every step. They are slow, but they catch before a push what CI would otherwise report after one. Then commit, and push only when the person asks. Before a push, check `git status -sb` to see where it goes.
+
 ## Flutter in a cloud session (optional, not yet confirmed end to end)
 
 A cloud session can download the full Flutter SDK from the same host as the Dart SDK. This has only been checked up to the download; extracting, `flutter pub get`, `flutter analyze` and `flutter test` have not been run this way yet. Update this section once they have.
