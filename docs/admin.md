@@ -51,6 +51,89 @@ npm run deploy
 
 `0003_recovery_codes.sql` adds the recovery code columns to `accounts`. Until it is applied, creating a recovery code fails with a server error, and the app says to try again from Settings. Recovering an account with a code uses the same columns and needs no further migration.
 
+## Serve sync from your own domain
+
+The Worker does not count failed sign-ins or recovery attempts: counting them would spend D1 writes (see "Staying inside the free plans" in [sync.md](sync.md#staying-inside-the-free-plans)). A Cloudflare rate limiting rule does it instead (#130). Such rules only apply to traffic through a domain on your Cloudflare account, not to the `workers.dev` address, so the Worker has to move to your own domain first, and the `workers.dev` address has to be turned off. Do the steps in this order. `sync.example.com` stands for your hostname; it goes in the git-ignored `wrangler.jsonc` and `env.json`, never in git.
+
+Every request with credentials checks the password, so a guess can be made on any authenticated path, not only `GET /v1/account` (signing in). The paths an attacker can guess on are:
+
+- `/v1/account`, `/v1/account/pairing`, `/v1/account/recovery`, `/v1/changes`, `/v1/inbox` and `/v1/inbox/<id>`: the password-derived key, in the `Authorization` header.
+- `/v1/accounts/recovery` and `/v1/accounts/recovery/complete`: a recovery code.
+- `/v1/accounts` and `/v1/accounts/confirm`: signups and the emailed confirmation code.
+- `/v1/pairings/<token>`: a pairing token.
+
+That is every path the Worker answers, so the rule covers all of `/v1/`.
+
+### 1. Add the custom domain
+
+The domain's DNS must be on Cloudflare, in the same account as the Worker. Pick a hostname one level below the domain, such as `sync.example.com`. Cloudflare's free Universal SSL certificate covers the domain and one level of subdomain only, so `a.b.example.com` is not covered by it and would need a paid certificate.
+
+Either add it in the dashboard (**Workers & Pages** → the Worker → **Settings** → **Domains & Routes** → **Add** → **Custom domain**), or uncomment `routes` in `wrangler.jsonc` and put your hostname in:
+
+```jsonc
+"routes": [
+  { "pattern": "sync.example.com", "custom_domain": true }
+],
+```
+
+and run `npm run deploy`. Keep `workers_dev` set to `true` for now. Cloudflare creates the DNS record and requests the certificate. Wait until the dashboard shows the certificate as active (**SSL/TLS** → **Edge Certificates** for the domain, where the certificate lists the hostname, or its wildcard, with status Active) before going on. This can take a few minutes. Then check that the Worker answers there:
+
+```
+curl -s https://sync.example.com/v1/account
+```
+
+It should print `{"error":"invalid_credentials"}`.
+
+### 2. Add a rate limiting rule
+
+In the dashboard, open the domain, then **Security** → **WAF** → **Rate limiting rules** → **Create rule**:
+
+- **If incoming requests match:** Hostname equals `sync.example.com` and URI Path starts with `/v1/`. The Worker answers nothing else, so if your plan does not offer that path operator, matching the hostname alone does the same.
+- **With the same characteristics:** IP.
+- **When rate exceeds:** a number of requests in a period (below).
+- **Then take action:** Block, for a mitigation timeout (below).
+
+What a plan includes (how many rules, which periods, timeouts and matching operators) differs between plans and changes; check Cloudflare's [rate limiting rules documentation](https://developers.cloudflare.com/waf/rate-limiting-rules/) for yours. As a starting point only, these values are suggestions, not tested limits:
+
+- One rule on all of `/v1/`: 20 requests per 10 seconds per IP, blocked for 10 seconds (or the shortest timeout offered). A sync usually makes a few requests. A first sync of a large library makes more: it pulls 500 records a request and pushes up to 100 records or packs a request (see [sync.md](sync.md#packs)). The limit slows guessing to about two a second per address; raise it if first syncs get blocked.
+- If your plan allows a second rule: a stricter one on the paths that have no regular use, 5 requests per 10 seconds per IP on URI Path starting with `/v1/accounts` (signup, confirmation and both recovery steps; it does not match `/v1/account`, which syncing uses) and on `/v1/pairings/`.
+
+People behind one shared address (an office, a school, mobile carrier NAT) count as one IP. A blocked request gets HTTP 429 from Cloudflare instead of the Worker's answer; the app reports that sync failed and tries again at its next sync. If legitimate users are blocked, look at **Security** → **Events** and raise the numbers.
+
+The rule only sees requests to `sync.example.com`. Until step 4, anyone can still reach the Worker on its `workers.dev` address without a limit.
+
+### 3. Rebuild the app with the new address, and update every device
+
+Set `SYNC_ENDPOINT` in `env.json` to `https://sync.example.com` and build every platform again (see [sync.md](sync.md#server-address)). Ship the new builds and update every device you care about before step 4: both addresses reach the same Worker and database until then, so updated and not yet updated devices keep syncing with each other.
+
+What happens on a device that is already signed in:
+
+- **Updated build:** the saved sign-in does not store the server address when it is the build's own, so the device uses the new address on its own. It stays signed in, unlocks its keys once more with the saved password on the next sync, and carries on where it left off. Nothing to do.
+- **Old build, after step 4:** it still uses the `workers.dev` address, so every sync fails. Its data stays on the device, and it syncs again once the app is updated.
+- **Pairing links** name the server. A link made on an old build names the `workers.dev` address, and an updated build refuses it ("This pairing link is for a different sync server"). Make new pairing links on an updated device. Pairing links expire 10 minutes after they are made anyway.
+
+### 4. Turn off the workers.dev address
+
+Set `"workers_dev": false` in `wrangler.jsonc` and run `npm run deploy`. Keep `"preview_urls": false`.
+
+### 5. Check that it works
+
+From a computer you can afford to have blocked for a moment, send more requests than the limit allows:
+
+```
+for i in $(seq 1 30); do curl -s -o /dev/null -w "%{http_code}\n" https://sync.example.com/v1/account; done
+```
+
+The first ones answer `401` (no credentials); once the limit is passed they answer `429`. The blocked requests show up under **Security** → **Events**.
+
+Then check that the old address no longer reaches the Worker (use your Worker's name and `workers.dev` subdomain, as `wrangler deploy` printed it before step 4):
+
+```
+curl -s https://lingua-srs-sync.<your-subdomain>.workers.dev/v1/account
+```
+
+It should no longer print `{"error":"invalid_credentials"}`. Last, sync from an updated device and check that Settings shows a recent sync.
+
 ## Check and repair the database
 
 `scripts/d1-repair.ts` checks the sync database and reports what it finds. It needs Node 22.18 or later, which runs TypeScript as it is. Run it from `worker/`:

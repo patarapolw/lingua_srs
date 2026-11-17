@@ -4,8 +4,18 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
   // Serve on <name>.<your subdomain>.workers.dev. Set to false once the Worker
-  // is served from your own domain.
+  // is served from your own domain and every build of the app uses that
+  // address: builds that still use the workers.dev address stop syncing then.
+  // Rate limiting rules only see traffic to your own domain. See "Serve sync
+  // from your own domain" in docs/admin.md.
   "workers_dev": true,
+  // To serve the Worker from your own domain, whose DNS is on Cloudflare,
+  // uncomment this and put in your hostname. Use one level below the domain
+  // (sync.example.com, not a.b.example.com): Cloudflare's free Universal SSL
+  // certificate covers only that level.
+  // "routes": [
+  //   { "pattern": "sync.example.com", "custom_domain": true }
+  // ],
   // Preview URLs would give every uploaded version of this Worker its own
   // public address, with the production database attached. They are not needed.
   "preview_urls": false,

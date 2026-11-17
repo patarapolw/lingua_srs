@@ -100,7 +100,7 @@ The code is the secret in [Crockford base32](https://www.crockford.com/base32.ht
   4. The Worker checks the code again and, in one statement that only applies while the code is still the one it checked, replaces `auth_hash`, `wrapped_data_key` and `kdf`, and clears the recovery columns. Pairing invites are dropped, as after a password change. No record is re-encrypted, and `createdAt` is kept, so the account is the same one to other devices.
   5. The device saves the sign-in and, while the new keys are in memory, makes and shows a new recovery code, since the old one is used up. If that fails, it says to make one from Settings.
 - **Other devices** are refused at their next sync, exactly as after a password change (see below): they sign out and sign in with the new password.
-- **Guessing.** Every failure is the same answer, and a code has 160 random bits, so it cannot be guessed. The Worker does not count failed attempts, for the same reason as sign-ins (it would cost D1 writes); the Cloudflare rate limiting rule for `/v1/*` (#130, see Staying inside the free plans) covers these routes too. A successful recovery writes one row and uses the code up, so it is not counted against `MAX_WRITES_PER_DAY`.
+- **Guessing.** Every failure is the same answer, and a code has 160 random bits, so it cannot be guessed. The Worker does not count failed attempts, for the same reason as sign-ins (it would cost D1 writes); a Cloudflare rate limiting rule for `/v1/*`, which each operator sets up (#130, see Staying inside the free plans), covers these routes too. A successful recovery writes one row and uses the code up, so it is not counted against `MAX_WRITES_PER_DAY`.
 
 ## Password rules
 
@@ -328,7 +328,7 @@ Cloudflare's free plans have no bill: past their daily limits requests simply fa
 
 A changed record costs about three D1 row writes (the row and its two indexes), so the free plan's 100,000 writes a day is roughly 30,000 record changes. The app should merge repeated changes to one card into a single record and push in batches.
 
-Not done yet: limiting failed sign-ins and recovery attempts per address (#130). Add a Cloudflare rate limiting rule for `/v1/*` in the dashboard (check what your plan includes), because the Worker itself cannot count attempts without spending D1 writes on them. Rules on your own domain apply to traffic through that domain and not to the `workers.dev` address, so serve the Worker from a custom domain and set `workers_dev` to `false` when you add one.
+Failed sign-ins and recovery attempts per address are not limited by the Worker, which cannot count attempts without spending D1 writes on them. Each operator sets up the limit in Cloudflare (#130): serve the Worker from a custom domain, add a rate limiting rule for `/v1/*` there (check what your plan includes), rebuild the app with the new `SYNC_ENDPOINT`, and only then set `workers_dev` to `false`, because rules apply to traffic through your own domain and not to the `workers.dev` address. The steps, in order, are in [Serve sync from your own domain](admin.md#serve-sync-from-your-own-domain). Whether a given server has the rule depends on its operator having done them.
 
 ## Running your own
 
@@ -342,7 +342,7 @@ npx wrangler secret put RESEND_API_KEY      # a Resend key, for a domain you ver
 npm run deploy
 ```
 
-Set `MAIL_FROM` in `wrangler.jsonc` to an address on the domain you verified with Resend. The example config sets `workers_dev` and `preview_urls` so that `wrangler deploy` does not warn: the Worker is served on its `workers.dev` address, and preview URLs, which would expose every uploaded version with the production database attached, are off. Then build the app with `SYNC_ENDPOINT` set to the Worker's address (see Server address). `wrangler.jsonc` and `.dev.vars` are git-ignored, so your database id and address never reach git.
+Set `MAIL_FROM` in `wrangler.jsonc` to an address on the domain you verified with Resend. The example config sets `workers_dev` and `preview_urls` so that `wrangler deploy` does not warn: the Worker is served on its `workers.dev` address until you move it to your own domain (see [admin.md](admin.md#serve-sync-from-your-own-domain)), and preview URLs, which would expose every uploaded version with the production database attached, are off. Then build the app with `SYNC_ENDPOINT` set to the Worker's address (see Server address). `wrangler.jsonc` and `.dev.vars` are git-ignored, so your database id and address never reach git.
 
 Apply database migrations to the configured D1 database before deploying Worker code that depends on them. If a pairing request fails with a server error after an update, check `npx wrangler d1 migrations list DB --remote` and apply pending migrations with `npm run migrate`; the Worker needs the `pairing_invites` table created by migration `0002_pairing_invites.sql`. Recovery codes need the columns added by `0003_recovery_codes.sql`; without them, making a code fails with a server error.
 
@@ -364,4 +364,4 @@ A stored record is changed by an upsert that only applies when the incoming `upd
 ## Not covered yet
 
 - Resetting a forgotten password (confirmed by email, which starts a fresh account because the data cannot be decrypted without the old password), and an authenticator-app second factor.
-- Limiting failed sign-ins per address, see above.
+- Limiting failed sign-ins per address in the Worker itself. A Cloudflare rate limiting rule does it instead, set up by each operator (see Staying inside the free plans).
