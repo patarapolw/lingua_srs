@@ -181,6 +181,67 @@ void main() {
     });
   });
 
+  group('AppProvider.nextSentenceForVocab', () {
+    test('steps through the linked sentences and wraps around', () async {
+      final provider = await newProvider();
+      final a = poolSentence(provider, 'first');
+      final b = poolSentence(provider, 'second');
+      final c = poolSentence(provider, 'third');
+      final vocab = vocabWith([a, b, c]);
+
+      expect(provider.sentenceChoiceCountForVocab(vocab), 3);
+      expect(provider.nextSentenceForVocab(vocab, a), same(b));
+      expect(provider.nextSentenceForVocab(vocab, b), same(c));
+      expect(provider.nextSentenceForVocab(vocab, c), same(a));
+    });
+
+    test('starts from the first when the card shows none', () async {
+      final provider = await newProvider();
+      final a = poolSentence(provider, 'first');
+      final b = poolSentence(provider, 'second');
+      final vocab = vocabWith([a, b]);
+
+      expect(provider.nextSentenceForVocab(vocab, null), same(a));
+    });
+
+    test('starts from the first when the shown one is unlinked', () async {
+      final provider = await newProvider();
+      final a = poolSentence(provider, 'first');
+      final b = poolSentence(provider, 'second');
+      final c = poolSentence(provider, 'third');
+      final vocab = vocabWith([a, b, c]);
+
+      vocab.sentenceIds = [b.id, c.id];
+
+      expect(provider.nextSentenceForVocab(vocab, a), same(b));
+    });
+
+    test('keeps the only sentence and is null with none', () async {
+      final provider = await newProvider();
+      final a = poolSentence(provider, 'first');
+      final vocab = vocabWith([a]);
+
+      expect(provider.sentenceChoiceCountForVocab(vocab), 1);
+      expect(provider.nextSentenceForVocab(vocab, a), same(a));
+
+      vocab.sentenceIds = [];
+      expect(provider.sentenceChoiceCountForVocab(vocab), 0);
+      expect(provider.nextSentenceForVocab(vocab, a), isNull);
+    });
+
+    test('steps through pool sentences containing the word', () async {
+      final provider = await newProvider();
+      final a = poolSentence(provider, 'an apple');
+      final b = poolSentence(provider, 'two apples');
+      poolSentence(provider, 'a pear');
+      final vocab = vocabWith([]);
+
+      expect(provider.sentenceChoiceCountForVocab(vocab), 2);
+      expect(provider.nextSentenceForVocab(vocab, a), same(b));
+      expect(provider.nextSentenceForVocab(vocab, b), same(a));
+    });
+  });
+
   group('refreshStaleSentences', () {
     test('replaces the deselected sentence from the current card', () async {
       final provider = await newProvider();
@@ -298,6 +359,71 @@ void main() {
       }
       await tester.pumpAndSettle();
     }
+
+    testWidgets('changing the sentence shows the word\'s other one', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      const yaml =
+          '---\nvocabulary:\n  nouns:\n    - ko: 한라봉\n      en: hallabong\n'
+          '      examples:\n'
+          '        - ko: "**한라봉** 하나"\n          en: "One hallabong"\n'
+          '        - ko: "**한라봉** 둘"\n          en: "Two hallabongs"\n'
+          '---\n# Lesson\n';
+      final lesson = (await tester.runAsync(() => provider.importYaml(yaml)))!;
+      final vocab = lesson.vocabularies.single;
+      final sentences = [
+        for (final id in vocab.sentenceIds) provider.getSentenceById(id)!,
+      ];
+      expect(sentences, hasLength(2));
+
+      tester.view.physicalSize = const Size(1200, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AppProvider>.value(value: provider),
+            ChangeNotifierProvider<AudioService>(
+              create: (_) => _FakeAudioService(),
+            ),
+          ],
+          child: MaterialApp(home: StudyView(lessonId: lesson.id)),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(find.textContaining('Show Answer'));
+      await tester.pumpAndSettle();
+
+      Finder showing(Sentence s) =>
+          find.textContaining(s.targetText, findRichText: true);
+      final onScreen = sentences.singleWhere(
+        (s) => showing(s).evaluate().isNotEmpty,
+      );
+      final other = sentences.singleWhere((s) => !identical(s, onScreen));
+
+      Finder changeButton() => find.byWidgetPredicate(
+        (w) =>
+            w is IconButton &&
+            (w.tooltip?.startsWith('Change sentence') ?? false),
+      );
+      expect(changeButton(), findsOneWidget);
+      await tester.tap(changeButton());
+      await tester.pumpAndSettle();
+
+      expect(showing(onScreen), findsNothing);
+      expect(showing(other), findsWidgets);
+      // The word keeps both sentences.
+      expect(vocab.sentenceIds, hasLength(2));
+
+      // Changing again wraps back to the first.
+      await tester.tap(changeButton());
+      await tester.pumpAndSettle();
+      expect(showing(onScreen), findsWidgets);
+      expect(showing(other), findsNothing);
+    });
 
     testWidgets('deselecting the sentence on screen shows the other one', (
       tester,

@@ -1503,6 +1503,8 @@ class _StudyViewState extends State<StudyView> {
       _confirmSuspendCurrentCard();
     } else if (event.logicalKey == LogicalKeyboardKey.keyW) {
       _toggleWrapUp();
+    } else if (event.logicalKey == LogicalKeyboardKey.keyN) {
+      _changeSentence();
     }
 
     // Audio replay shortcuts
@@ -1540,6 +1542,48 @@ class _StudyViewState extends State<StudyView> {
       _openEditCurrentCard();
     }
   }
+
+  /// Whether the card on screen has another sentence to change to.
+  bool get _canChangeSentence =>
+      _currentIndex < _queue.length &&
+      context.read<AppProvider>().sentenceChoiceCountForVocab(
+            _queue[_currentIndex].vocab,
+          ) >
+          1;
+
+  /// Shows the next of the word's sentences on the card on screen, for a
+  /// context that suits better than the one picked at random.
+  void _changeSentence() {
+    if (!_canChangeSentence) return;
+    final item = _queue[_currentIndex];
+    final provider = context.read<AppProvider>();
+    final next = provider.nextSentenceForVocab(item.vocab, item.sentence);
+    if (identical(next, item.sentence)) return;
+    final audioService = context.read<AudioService>();
+    audioService.stop();
+    setState(() => item.sentence = next);
+    _triggerPreload(_currentIndex);
+    if (_isAnswerRevealed && provider.autoplayAudio && next != null) {
+      final sentenceAudio = next.playableAudioUrl;
+      if (sentenceAudio != null) {
+        audioService.playAudio(sentenceAudio);
+      } else {
+        audioService.speak(
+          next.speechText,
+          language: item.lesson.targetLanguage,
+        );
+      }
+    }
+  }
+
+  /// The button on a sentence that changes it to the word's next sentence.
+  Widget _changeSentenceButton() => IconButton(
+    icon: const Icon(Icons.swap_horiz),
+    tooltip: _showKeyHints ? 'Change sentence (N)' : 'Change sentence',
+    visualDensity: VisualDensity.compact,
+    iconSize: 20,
+    onPressed: _changeSentence,
+  );
 
   void _openEditCurrentCard() {
     if (_currentIndex >= _queue.length) return;
@@ -1824,6 +1868,7 @@ class _StudyViewState extends State<StudyView> {
     final canGoBack = _currentIndex > 0;
     final canGoForward = _currentIndex < _answeredCount;
     final canUndo = _undoStack.isNotEmpty;
+    final canChangeSentence = _canChangeSentence;
 
     const overflowWidthCutoff = 700;
     final isNarrow = MediaQuery.sizeOf(context).width < overflowWidthCutoff;
@@ -1988,6 +2033,8 @@ class _StudyViewState extends State<StudyView> {
                     _confirmSuspendCurrentCard();
                   case 'wrapup':
                     _toggleWrapUp();
+                  case 'sentence':
+                    _changeSentence();
                 }
               },
               itemBuilder: (context) => [
@@ -2021,6 +2068,12 @@ class _StudyViewState extends State<StudyView> {
                     'Ask AI',
                     enabled: _isAnswerRevealed,
                   ),
+                moreItem(
+                  'sentence',
+                  Icons.swap_horiz,
+                  _showKeyHints ? 'Change sentence (N)' : 'Change sentence',
+                  enabled: _canChangeSentence,
+                ),
                 const PopupMenuDivider(),
                 moreItem(
                   'back',
@@ -2295,6 +2348,12 @@ class _StudyViewState extends State<StudyView> {
                                               style: theme.textTheme.titleMedium
                                                   ?.copyWith(height: 1.4),
                                             ),
+                                            if (canChangeSentence)
+                                              Align(
+                                                alignment:
+                                                    Alignment.centerRight,
+                                                child: _changeSentenceButton(),
+                                              ),
                                           ],
                                         ),
                                       ),
@@ -2351,6 +2410,12 @@ class _StudyViewState extends State<StudyView> {
                                                     fontWeight: FontWeight.w600,
                                                   ),
                                             ),
+                                            if (canChangeSentence)
+                                              Align(
+                                                alignment:
+                                                    Alignment.centerRight,
+                                                child: _changeSentenceButton(),
+                                              ),
                                           ],
                                         ),
                                       ),
@@ -2470,6 +2535,8 @@ class _StudyViewState extends State<StudyView> {
                                                     item.lesson.targetLanguage,
                                                 compact: true,
                                               ),
+                                              if (canChangeSentence)
+                                                _changeSentenceButton(),
                                             ],
                                           ),
                                           PronunciationLine(
@@ -2799,8 +2866,8 @@ class _StudyViewState extends State<StudyView> {
                               children: [
                                 Text(
                                   _offersOnlyAgainAndGood
-                                      ? 'Shortcuts: [Space] Flip • [1 / ⌫] Again • [3 / Enter] Good • [← / →] Back/Fwd • [Z] Undo'
-                                      : 'Shortcuts: [Space] Flip • [1] Again • [2] Hard • [3 / Enter] Good • [4] Easy • [⌫] Again • [← / →] Back/Fwd • [Z] Undo',
+                                      ? 'Shortcuts: [Space] Flip • [1 / ⌫] Again • [3 / Enter] Good • [← / →] Back/Fwd • [N] Sentence • [Z] Undo'
+                                      : 'Shortcuts: [Space] Flip • [1] Again • [2] Hard • [3 / Enter] Good • [4] Easy • [⌫] Again • [← / →] Back/Fwd • [N] Sentence • [Z] Undo',
                                   style: theme.textTheme.bodySmall?.copyWith(
                                     color: theme.colorScheme.outline,
                                   ),

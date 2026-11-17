@@ -13,6 +13,7 @@ Anki-style hotkeys for the study view.
 | `Z` / `Ctrl+Z` | **Undo** the last card rating and restore its exact previous SRS state, or the last send to back, suspend or reset to New (not wrap up) |
 | `R` / `S` | Replay vocabulary / sentence audio |
 | `E` | Edit the current card |
+| `N` | **Change sentence**: show the word's next example sentence on the card on screen |
 | `B` | **Send to back**: move the card on screen to the end of the session without rating it |
 | `P` | **Suspend** the card on screen (asks first) |
 | `W` | **Wrap up** the session, or cancel wrap up: while on, no more new cards, only the *Again* cards still to clear and the next 5 reviews |

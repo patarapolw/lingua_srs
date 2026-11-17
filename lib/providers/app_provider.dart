@@ -3378,6 +3378,23 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     return candidates[Random().nextInt(candidates.length)];
   }
 
+  /// How many sentences a review of [vocab] can choose from.
+  int sentenceChoiceCountForVocab(VocabItem vocab) =>
+      _sentenceCandidatesForVocab(vocab).length;
+
+  /// The sentence after [current] among those a review of [vocab] may show,
+  /// wrapping around, so changing the sentence in review steps through them
+  /// all. The first one when [current] is null or no longer among them; null
+  /// when there are none.
+  Sentence? nextSentenceForVocab(VocabItem vocab, Sentence? current) {
+    final candidates = _sentenceCandidatesForVocab(vocab);
+    if (candidates.isEmpty) return null;
+    final at = current == null
+        ? -1
+        : candidates.indexWhere((s) => s.id == current.id);
+    return candidates[(at + 1) % candidates.length];
+  }
+
   /// The sentence a review card for [vocab] should show after the vocab was
   /// edited: [current] while it is still one of the vocab's sentences, else a
   /// new random pick, so deselecting the sentence on screen swaps it out.
