@@ -18,6 +18,7 @@ Flutter app (Dart, `provider` state management). See [README.md](README.md) for 
 - SRS scheduling lives in `lib/services/srs_service.dart`.
 - Make commits using a conventional commit message with a scope and a detailed body, e.g. `feat(study): …` or `fix(sync): …`. The scope is the area of the app; `git log` shows the ones in use.
 - Name branches `<type>-<issue>-<what-it-does>`: the conventional commit type, the issue number when there is one, and a few lowercase hyphenated words, e.g. `fix-92-undo-review-count` or `docs-agents-branch-naming`. Claude agents prefix the name with `claude/` (`claude/fix-92-undo-review-count`). A session may start on, or be told to push to, a generated name such as `ccr-…`: rename the branch to a meaningful one (`git branch -m <name>`) before the first push to `origin` and before opening a PR. A PR can't change its branch later. Use one branch per PR; after a merge, start a new branch. The person may merge or close a PR without telling you, so before pushing to a PR's branch or editing its description, check the PR's state: if it was merged, start a new branch from the latest `main` for the follow-up; if it was closed, ask before going on.
+- Start a branch from the latest `main` with `git fetch origin` and `git switch --no-track -c <name> origin/main`. Without `--no-track` the branch tracks `origin/main`, so a plain `git push` from it goes to `main` instead of a new branch. Push the first time with `git push -u origin <name>`.
 
 ## Rules
 
@@ -27,6 +28,7 @@ Flutter app (Dart, `provider` state management). See [README.md](README.md) for 
 - When you add, rename or delete a Dart file under `lib/`, update its line in `docs/architecture.md`. `test/docs_test.dart` fails if a file is missing from it or listed after it is gone.
 - Keep `README.md` short; put detail in `docs/`.
 - Don't commit machine-specific paths or personal study data.
+- Never edit files in the pub cache (`~/.pub-cache`, or `%LOCALAPPDATA%\Pub\Cache` on Windows). Nothing in git shows the edit, CI and other machines don't have it, and it can break builds in ways that are hard to trace. For example, a `[lib] name` added to super_native_extensions' `Cargo.toml` misnamed its Android library (#255). Fix dependency problems in `pubspec.yaml` instead (a version constraint or `dependency_overrides`, with a comment saying why), and restore an edited cache with `dart pub cache repair`.
 - Don't commit secrets. Real values go in the git-ignored `env.json`, `worker/.dev.vars` and `worker/wrangler.jsonc`, or in `wrangler secret put`; commit only the `*.example*` files. GitGuardian scans every PR as a GitHub App, outside `ci.yml`. If it flags a real secret, revoke the secret at its provider; removing it from the branch is not enough.
 - Track bugs and planned work in GitHub Issues, not in the repo. Reference the issue in PRs (e.g. "Fixes #12")
 - In a PR description, when a manual check of a UI change can come out differently on desktop and on mobile (layout at narrow widths, touch targets, hover, keyboard shortcuts, the ⋮ menu that holds toolbar buttons on narrow screens), give desktop and mobile separate unticked boxes, each saying what to try there; one box is enough when the platform makes no difference.
@@ -36,6 +38,14 @@ Flutter app (Dart, `provider` state management). See [README.md](README.md) for 
 
 - If the person has a Flutter debug session running and the Dart MCP server is connected to it, hot reload after your change passes `flutter analyze` (hot restart after changing state or `main`). Don't start a second session for an app that is already running; if you start one, end it before you finish.
 - A Dart MCP server that is missing or fails to start is expected, not a failure to report. Don't write it into commit messages or PR descriptions (for example "The Dart MCP server failed to start, so hot restart was never done"), and don't list hot restart as unverified. Verify with `flutter analyze` and `flutter test`; checking the running app is left to the person.
+
+## Local sessions
+
+- Before starting work on an issue or PR, say in a line or two whether it can or should be done in a cloud session instead, and let the person choose.
+  - **Fits a cloud session:** anything whose checks CI covers. A cloud session pushes a PR, and CI runs on it: `ci.yml`, plus `desktop.yml` when platform code changes. So not having Flutter doesn't rule a task out.
+  - **Needs a local session:** the running app, profiling, a device, the person's data, or problems with the local SDK or pub cache.
+  - When a task is mixed, say which part fits where.
+- Don't commit and push on every turn. Each one costs time, and each push starts CI again. Run the whole `flutter analyze` and `flutter test` once, when the change is done, not after every step. They are slow, but they catch before a push what CI would otherwise report after one. Then commit, and push only when the person asks. Before a push, check `git status -sb` to see where it goes.
 
 ## Flutter in a cloud session (optional, not yet confirmed end to end)
 
