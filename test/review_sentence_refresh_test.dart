@@ -400,8 +400,8 @@ void main() {
             w is IconButton &&
             (w.tooltip?.startsWith('Change sentence') ?? false),
       );
-      // On the front the button sits on the sentence box's top border, at
-      // its right corner, and the box keeps the card's full width.
+      // On the front the button is centred on the sentence box's top-left
+      // corner, and the box keeps the card's full width.
       expect(changeButton(), findsOneWidget);
       Rect boxRect() => tester.getRect(
         find
@@ -411,15 +411,27 @@ void main() {
             )
             .first,
       );
-      void expectOnTopBorder() {
+      void expectOnCorner() {
         final button = tester.getRect(changeButton());
         final box = boxRect();
         expect(button.center.dy, closeTo(box.top, 1));
-        expect(button.right, lessThan(box.right));
-        expect(button.left, greaterThan(box.center.dx));
+        expect(button.center.dx, closeTo(box.left, 1));
+        // A full 48 px tap area, all of it hit-testable, even the part
+        // outside the box.
+        expect(button.size, const Size.square(48));
+        for (final corner in [button.topLeft, button.bottomRight]) {
+          final at = Offset.lerp(button.center, corner, 0.9)!;
+          expect(
+            tester
+                .hitTestOnBinding(at)
+                .path
+                .any((e) => e.target == tester.renderObject(changeButton())),
+            isTrue,
+          );
+        }
       }
 
-      expectOnTopBorder();
+      expectOnCorner();
       expect(
         boxRect().width,
         greaterThan(tester.getSize(find.byType(Card).first).width / 2),
@@ -436,7 +448,7 @@ void main() {
       final other = sentences.singleWhere((s) => !identical(s, onScreen));
 
       expect(changeButton(), findsOneWidget);
-      expectOnTopBorder();
+      expectOnCorner();
       await tester.tap(changeButton());
       await tester.pumpAndSettle();
 

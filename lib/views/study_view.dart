@@ -1577,12 +1577,17 @@ class _StudyViewState extends State<StudyView> {
   }
 
   /// The button on a sentence that changes it to the word's next sentence.
+  /// Small and muted on purpose: changing the sentence is an occasional
+  /// action, so it should not draw the eye from the sentence or invite a tap
+  /// by accident. *Change sentence* in the ⋮ menu names it in full. Its tap
+  /// area is the full 48 px on every platform, around the 24 px circle.
   Widget _changeSentenceButton(Color borderColor, double borderWidth) {
     final theme = Theme.of(context);
     return IconButton(
       icon: const Icon(Icons.swap_horiz),
       tooltip: _showKeyHints ? 'Change sentence (N)' : 'Change sentence',
-      iconSize: 18,
+      iconSize: 14,
+      color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints.tightFor(
         width: _changeSentenceButtonSize,
@@ -1593,64 +1598,49 @@ class _StudyViewState extends State<StudyView> {
         backgroundColor:
             theme.cardTheme.color ?? theme.colorScheme.surfaceContainerLow,
         side: BorderSide(color: borderColor, width: borderWidth),
+        // Desktop shrink-wraps tap targets by default; keep 48 px there too.
+        tapTargetSize: MaterialTapTargetSize.padded,
       ),
       onPressed: _changeSentence,
     );
   }
 
-  /// [box], a sentence box on the card, with room above it for the
-  /// change-sentence button, which sits on its top border at the right corner
-  /// when there is another sentence. The room is there with or without the
-  /// button, and [_gapAboveSentence] gives it back, so the box is in the same
-  /// place either way; inside the stack, all of the button can be tapped.
-  Widget _withChangeSentenceButton({
-    required bool canChange,
-    required Color borderColor,
-    required double borderWidth,
-    required Widget box,
-  }) {
-    return Stack(
-      key: const ValueKey('sentence-box'),
-      clipBehavior: Clip.none,
-      // The box keeps the full width it has without the button.
-      fit: StackFit.passthrough,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(top: _changeSentenceButtonSize / 2),
-          child: box,
+  /// [box], a sentence box on the card, marked as the place the
+  /// change-sentence button follows (see [_changeSentenceOverlay]).
+  Widget _withChangeSentenceButton(Widget box) => CompositedTransformTarget(
+    key: const ValueKey('sentence-box'),
+    link: _sentenceBoxLink,
+    child: box,
+  );
+
+  /// The change-sentence button, centred on the top-left corner of the
+  /// sentence box. It is laid over the whole card rather than inside the box,
+  /// so its 48 px tap area, which reaches past the box's top and left edges,
+  /// takes taps all round; the box itself does not move for it.
+  Widget _changeSentenceOverlay(StudyCardItem item, ThemeData theme) {
+    // The front of a native-to-target card has the cloze box, outlined in
+    // the primary colour.
+    final cloze = !_isAnswerRevealed && !item.isTargetToNative;
+    return Positioned(
+      left: 0,
+      top: 0,
+      child: CompositedTransformFollower(
+        link: _sentenceBoxLink,
+        showWhenUnlinked: false,
+        targetAnchor: Alignment.topLeft,
+        followerAnchor: Alignment.center,
+        child: _changeSentenceButton(
+          cloze
+              ? theme.colorScheme.primary.withValues(alpha: 0.35)
+              : theme.colorScheme.outlineVariant,
+          cloze ? 1.5 : 1.0,
         ),
-        if (canChange)
-          Positioned(
-            // Touch platforms pad the button's tap area beyond the circle
-            // ([MaterialTapTargetSize.padded]); offset by that padding so the
-            // circle, not the tap area, is centred on the border. The top of
-            // the padding sticks out above the stack, where it takes no taps.
-            top: -_changeSentenceTapPadding(context),
-            right: 16 - _changeSentenceTapPadding(context),
-            child: _changeSentenceButton(borderColor, borderWidth),
-          ),
-      ],
+      ),
     );
   }
 
-  /// The space above a card's sentence box: 20 px to the box's border, less
-  /// the room [_withChangeSentenceButton] leaves above the box.
-  Widget _gapAboveSentence(StudyCardItem item) => SizedBox(
-    height: item.sentence == null
-        ? _gapAboveSentenceBox
-        : _gapAboveSentenceBox - _changeSentenceButtonSize / 2,
-  );
-
-  static const _gapAboveSentenceBox = 20.0;
-  static const _changeSentenceButtonSize = 32.0;
-
-  /// How far the change-sentence button's tap area reaches past its circle on
-  /// each side: none where tap targets shrink-wrap (desktop), and up to the
-  /// minimum interactive size where they are padded (touch).
-  static double _changeSentenceTapPadding(BuildContext context) =>
-      Theme.of(context).materialTapTargetSize == MaterialTapTargetSize.padded
-      ? (kMinInteractiveDimension - _changeSentenceButtonSize) / 2
-      : 0;
+  final _sentenceBoxLink = LayerLink();
+  static const _changeSentenceButtonSize = 24.0;
 
   void _openEditCurrentCard() {
     if (_currentIndex >= _queue.length) return;
@@ -2247,371 +2237,304 @@ class _StudyViewState extends State<StudyView> {
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(20),
                           ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(28),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                // Top Badges Row
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 4,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
+                          child: Stack(
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.all(28),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
                                   children: [
-                                    // Same colour as the New badge in the
-                                    // lesson list; explains the two buttons.
-                                    if (_unscheduledChip case (
-                                      :final label,
-                                      :final tooltip,
-                                    ))
-                                      Tooltip(
-                                        message: tooltip,
-                                        child: Chip(
-                                          visualDensity: VisualDensity.compact,
-                                          side: BorderSide.none,
-                                          avatar: Icon(
-                                            Icons.event_busy_outlined,
-                                            size: 16,
-                                            color: theme
-                                                .colorScheme
-                                                .onSecondaryContainer,
+                                    // Top Badges Row
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 4,
+                                      crossAxisAlignment:
+                                          WrapCrossAlignment.center,
+                                      children: [
+                                        // Same colour as the New badge in the
+                                        // lesson list; explains the two buttons.
+                                        if (_unscheduledChip case (
+                                          :final label,
+                                          :final tooltip,
+                                        ))
+                                          Tooltip(
+                                            message: tooltip,
+                                            child: Chip(
+                                              visualDensity:
+                                                  VisualDensity.compact,
+                                              side: BorderSide.none,
+                                              avatar: Icon(
+                                                Icons.event_busy_outlined,
+                                                size: 16,
+                                                color: theme
+                                                    .colorScheme
+                                                    .onSecondaryContainer,
+                                              ),
+                                              label: Text(label),
+                                              backgroundColor: theme
+                                                  .colorScheme
+                                                  .secondaryContainer,
+                                              labelStyle: TextStyle(
+                                                color: theme
+                                                    .colorScheme
+                                                    .onSecondaryContainer,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
                                           ),
-                                          label: Text(label),
+                                        if (_isFreshCard)
+                                          Chip(
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                            side: BorderSide.none,
+                                            label: const Text('NEW'),
+                                            backgroundColor:
+                                                theme.colorScheme.tertiary,
+                                            labelStyle: TextStyle(
+                                              color:
+                                                  theme.colorScheme.onTertiary,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        Chip(
+                                          visualDensity: VisualDensity.compact,
+                                          avatar: Icon(
+                                            isTargetToNative
+                                                ? Icons.translate
+                                                : Icons.format_paint,
+                                            size: 16,
+                                          ),
+                                          label: Text(
+                                            isTargetToNative
+                                                ? '${item.lesson.targetLanguage.toUpperCase()} ➔ ${item.lesson.nativeLanguage.toUpperCase()}'
+                                                : '${item.lesson.nativeLanguage.toUpperCase()} ➔ ${item.lesson.targetLanguage.toUpperCase()}',
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
                                           backgroundColor: theme
                                               .colorScheme
-                                              .secondaryContainer,
+                                              .primaryContainer,
                                           labelStyle: TextStyle(
                                             color: theme
                                                 .colorScheme
-                                                .onSecondaryContainer,
-                                            fontWeight: FontWeight.bold,
+                                                .onPrimaryContainer,
                                           ),
                                         ),
-                                      ),
-                                    if (_isFreshCard)
-                                      Chip(
-                                        visualDensity: VisualDensity.compact,
-                                        side: BorderSide.none,
-                                        label: const Text('NEW'),
-                                        backgroundColor:
-                                            theme.colorScheme.tertiary,
-                                        labelStyle: TextStyle(
-                                          color: theme.colorScheme.onTertiary,
-                                          fontWeight: FontWeight.bold,
+                                        Chip(
+                                          visualDensity: VisualDensity.compact,
+                                          label: Text(
+                                            item.vocab.pos
+                                                .replaceAll('_', ' ')
+                                                .toUpperCase(),
+                                          ),
+                                          backgroundColor: theme
+                                              .colorScheme
+                                              .surfaceContainerHighest,
                                         ),
-                                      ),
-                                    Chip(
-                                      visualDensity: VisualDensity.compact,
-                                      avatar: Icon(
-                                        isTargetToNative
-                                            ? Icons.translate
-                                            : Icons.format_paint,
-                                        size: 16,
-                                      ),
-                                      label: Text(
-                                        isTargetToNative
-                                            ? '${item.lesson.targetLanguage.toUpperCase()} ➔ ${item.lesson.nativeLanguage.toUpperCase()}'
-                                            : '${item.lesson.nativeLanguage.toUpperCase()} ➔ ${item.lesson.targetLanguage.toUpperCase()}',
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      backgroundColor:
-                                          theme.colorScheme.primaryContainer,
-                                      labelStyle: TextStyle(
-                                        color: theme
-                                            .colorScheme
-                                            .onPrimaryContainer,
-                                      ),
-                                    ),
-                                    Chip(
-                                      visualDensity: VisualDensity.compact,
-                                      label: Text(
-                                        item.vocab.pos
-                                            .replaceAll('_', ' ')
-                                            .toUpperCase(),
-                                      ),
-                                      backgroundColor: theme
-                                          .colorScheme
-                                          .surfaceContainerHighest,
-                                    ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: _isAnswerRevealed
-                                            ? Colors.green.withValues(
-                                                alpha: 0.15,
-                                              )
-                                            : Colors.blue.withValues(
-                                                alpha: 0.15,
-                                              ),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Text(
-                                        _isAnswerRevealed ? 'BACK' : 'FRONT',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                          color: _isAnswerRevealed
-                                              ? Colors.green.shade800
-                                              : Colors.blue.shade800,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 24),
-
-                                // ---------------- FRONT VIEW ----------------
-                                if (!_isAnswerRevealed) ...[
-                                  if (isTargetToNative) ...[
-                                    // KO -> EN: Target Word on Front
-                                    Center(
-                                      child: Text(
-                                        item.vocab.targetWord,
-                                        style: theme.textTheme.displaySmall
-                                            ?.copyWith(
-                                              fontWeight: FontWeight.bold,
-                                              color: theme.colorScheme.primary,
-                                            ),
-                                      ),
-                                    ),
-                                    _disambiguationCue(
-                                      context,
-                                      item.vocab.frontHintFor(
-                                        CardDirection.targetToNative,
-                                      ),
-                                    ),
-                                    _gapAboveSentence(item),
-                                    // One Random Sentence always on front
-                                    if (item.sentence != null)
-                                      _withChangeSentenceButton(
-                                        canChange: canChangeSentence,
-                                        borderColor:
-                                            theme.colorScheme.outlineVariant,
-                                        borderWidth: 1.0,
-                                        box: Container(
-                                          padding: const EdgeInsets.all(16),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 4,
+                                          ),
                                           decoration: BoxDecoration(
-                                            color: theme
-                                                .colorScheme
-                                                .surfaceContainerHighest
-                                                .withValues(alpha: 0.4),
+                                            color: _isAnswerRevealed
+                                                ? Colors.green.withValues(
+                                                    alpha: 0.15,
+                                                  )
+                                                : Colors.blue.withValues(
+                                                    alpha: 0.15,
+                                                  ),
                                             borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                            border: Border.all(
-                                              color: theme
-                                                  .colorScheme
-                                                  .outlineVariant,
+                                              8,
                                             ),
                                           ),
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.center,
-                                            children: [
-                                              EmphasisText(
-                                                item.vocab.targetTextFor(
-                                                  item.sentence!,
-                                                ),
-                                                style: theme
-                                                    .textTheme
-                                                    .titleMedium
-                                                    ?.copyWith(height: 1.4),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                  ] else ...[
-                                    // EN -> KO: Native prompt + One Random Sentence with CLOZE DELETION on Front
-                                    Center(
-                                      child: Text(
-                                        item.vocab.translation,
-                                        style: theme.textTheme.headlineMedium
-                                            ?.copyWith(
+                                          child: Text(
+                                            _isAnswerRevealed
+                                                ? 'BACK'
+                                                : 'FRONT',
+                                            style: TextStyle(
+                                              fontSize: 11,
                                               fontWeight: FontWeight.bold,
-                                              color: theme.colorScheme.primary,
-                                            ),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                    ),
-                                    _disambiguationCue(
-                                      context,
-                                      item.vocab.frontHintFor(
-                                        CardDirection.nativeToTarget,
-                                      ),
-                                    ),
-                                    _gapAboveSentence(item),
-                                    // One Random Sentence with Cloze Deletion
-                                    if (item.sentence != null)
-                                      _withChangeSentenceButton(
-                                        canChange: canChangeSentence,
-                                        borderColor: theme.colorScheme.primary
-                                            .withValues(alpha: 0.35),
-                                        borderWidth: 1.5,
-                                        box: Container(
-                                          padding: const EdgeInsets.all(16),
-                                          decoration: BoxDecoration(
-                                            color: theme
-                                                .colorScheme
-                                                .surfaceContainerHighest
-                                                .withValues(alpha: 0.5),
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                            border: Border.all(
-                                              color: theme.colorScheme.primary
-                                                  .withValues(alpha: 0.35),
-                                              width: 1.5,
+                                              color: _isAnswerRevealed
+                                                  ? Colors.green.shade800
+                                                  : Colors.blue.shade800,
                                             ),
                                           ),
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.center,
-                                            children: [
-                                              const SizedBox(height: 10),
-                                              EmphasisText(
-                                                item.vocab.clozeFor(
-                                                  item.sentence!,
-                                                ),
-                                                style: theme
-                                                    .textTheme
-                                                    .titleLarge
-                                                    ?.copyWith(
-                                                      height: 1.4,
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                    ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-
-                                  const SizedBox(height: 12),
-                                  AnswerWorkspace(
-                                    key: ValueKey(
-                                      'answer-$_currentIndex-${item.card.id}',
-                                    ),
-                                    onSubmit: _submitAnswerWorkspace,
-                                  ),
-                                ]
-                                // ---------------- BACK VIEW ----------------
-                                else ...[
-                                  // Back Header: Target Word & Translation
-                                  Center(
-                                    child: Column(
-                                      children: [
-                                        Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Flexible(
-                                              child: CharacterZoom.tappable(
-                                                context: context,
-                                                vocab: item.vocab,
-                                                child: Text(
-                                                  item.vocab.targetWord,
-                                                  style: theme
-                                                      .textTheme
-                                                      .headlineMedium
-                                                      ?.copyWith(
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                        color: theme
-                                                            .colorScheme
-                                                            .primary,
-                                                      ),
-                                                  textAlign: TextAlign.center,
-                                                ),
-                                              ),
-                                            ),
-                                            AudioButton(
-                                              audioUrl:
-                                                  item.vocab.playableAudioUrl,
-                                              fallbackText:
-                                                  item.vocab.speechText,
-                                              language:
-                                                  item.lesson.targetLanguage,
-                                              compact: true,
-                                            ),
-                                          ],
-                                        ),
-                                        VocabForms(vocab: item.vocab),
-                                        PronunciationLine(
-                                          text: item.vocab.targetWord,
-                                          languageCode:
-                                              item.lesson.targetLanguage,
-                                          target:
-                                              PronunciationTarget.vocabulary,
-                                        ),
-                                        const SizedBox(height: 6),
-                                        Text(
-                                          item.vocab.translation,
-                                          style: theme.textTheme.titleLarge,
-                                          textAlign: TextAlign.center,
                                         ),
                                       ],
                                     ),
-                                  ),
-                                  _gapAboveSentence(item),
+                                    const SizedBox(height: 24),
 
-                                  // Full Example Sentence
-                                  if (item.sentence != null) ...[
-                                    _withChangeSentenceButton(
-                                      canChange: canChangeSentence,
-                                      borderColor:
-                                          theme.colorScheme.outlineVariant,
-                                      borderWidth: 1.0,
-                                      box: Container(
-                                        padding: const EdgeInsets.all(16),
-                                        decoration: BoxDecoration(
-                                          color: theme
-                                              .colorScheme
-                                              .surfaceContainerHighest
-                                              .withValues(alpha: 0.3),
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                          border: Border.all(
-                                            color: theme
-                                                .colorScheme
-                                                .outlineVariant,
+                                    // ---------------- FRONT VIEW ----------------
+                                    if (!_isAnswerRevealed) ...[
+                                      if (isTargetToNative) ...[
+                                        // KO -> EN: Target Word on Front
+                                        Center(
+                                          child: Text(
+                                            item.vocab.targetWord,
+                                            style: theme.textTheme.displaySmall
+                                                ?.copyWith(
+                                                  fontWeight: FontWeight.bold,
+                                                  color:
+                                                      theme.colorScheme.primary,
+                                                ),
                                           ),
                                         ),
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Row(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment
-                                                      .spaceBetween,
-                                              children: [
-                                                Expanded(
-                                                  child: EmphasisText(
+                                        _disambiguationCue(
+                                          context,
+                                          item.vocab.frontHintFor(
+                                            CardDirection.targetToNative,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 20),
+                                        // One Random Sentence always on front
+                                        if (item.sentence != null)
+                                          _withChangeSentenceButton(
+                                            Container(
+                                              padding: const EdgeInsets.all(16),
+                                              decoration: BoxDecoration(
+                                                color: theme
+                                                    .colorScheme
+                                                    .surfaceContainerHighest
+                                                    .withValues(alpha: 0.4),
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                                border: Border.all(
+                                                  color: theme
+                                                      .colorScheme
+                                                      .outlineVariant,
+                                                ),
+                                              ),
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.center,
+                                                children: [
+                                                  EmphasisText(
                                                     item.vocab.targetTextFor(
                                                       item.sentence!,
                                                     ),
                                                     style: theme
                                                         .textTheme
                                                         .titleMedium
+                                                        ?.copyWith(height: 1.4),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                      ] else ...[
+                                        // EN -> KO: Native prompt + One Random Sentence with CLOZE DELETION on Front
+                                        Center(
+                                          child: Text(
+                                            item.vocab.translation,
+                                            style: theme
+                                                .textTheme
+                                                .headlineMedium
+                                                ?.copyWith(
+                                                  fontWeight: FontWeight.bold,
+                                                  color:
+                                                      theme.colorScheme.primary,
+                                                ),
+                                            textAlign: TextAlign.center,
+                                          ),
+                                        ),
+                                        _disambiguationCue(
+                                          context,
+                                          item.vocab.frontHintFor(
+                                            CardDirection.nativeToTarget,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 20),
+                                        // One Random Sentence with Cloze Deletion
+                                        if (item.sentence != null)
+                                          _withChangeSentenceButton(
+                                            Container(
+                                              padding: const EdgeInsets.all(16),
+                                              decoration: BoxDecoration(
+                                                color: theme
+                                                    .colorScheme
+                                                    .surfaceContainerHighest
+                                                    .withValues(alpha: 0.5),
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                                border: Border.all(
+                                                  color: theme
+                                                      .colorScheme
+                                                      .primary
+                                                      .withValues(alpha: 0.35),
+                                                  width: 1.5,
+                                                ),
+                                              ),
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.center,
+                                                children: [
+                                                  const SizedBox(height: 10),
+                                                  EmphasisText(
+                                                    item.vocab.clozeFor(
+                                                      item.sentence!,
+                                                    ),
+                                                    style: theme
+                                                        .textTheme
+                                                        .titleLarge
                                                         ?.copyWith(
+                                                          height: 1.4,
                                                           fontWeight:
                                                               FontWeight.w600,
                                                         ),
                                                   ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+
+                                      const SizedBox(height: 12),
+                                      AnswerWorkspace(
+                                        key: ValueKey(
+                                          'answer-$_currentIndex-${item.card.id}',
+                                        ),
+                                        onSubmit: _submitAnswerWorkspace,
+                                      ),
+                                    ]
+                                    // ---------------- BACK VIEW ----------------
+                                    else ...[
+                                      // Back Header: Target Word & Translation
+                                      Center(
+                                        child: Column(
+                                          children: [
+                                            Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Flexible(
+                                                  child: CharacterZoom.tappable(
+                                                    context: context,
+                                                    vocab: item.vocab,
+                                                    child: Text(
+                                                      item.vocab.targetWord,
+                                                      style: theme
+                                                          .textTheme
+                                                          .headlineMedium
+                                                          ?.copyWith(
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                            color: theme
+                                                                .colorScheme
+                                                                .primary,
+                                                          ),
+                                                      textAlign:
+                                                          TextAlign.center,
+                                                    ),
+                                                  ),
                                                 ),
                                                 AudioButton(
                                                   audioUrl: item
-                                                      .sentence!
+                                                      .vocab
                                                       .playableAudioUrl,
                                                   fallbackText:
-                                                      item.sentence!.speechText,
+                                                      item.vocab.speechText,
                                                   language: item
                                                       .lesson
                                                       .targetLanguage,
@@ -2619,144 +2542,232 @@ class _StudyViewState extends State<StudyView> {
                                                 ),
                                               ],
                                             ),
+                                            VocabForms(vocab: item.vocab),
                                             PronunciationLine(
-                                              text: item.sentence!.targetText,
+                                              text: item.vocab.targetWord,
                                               languageCode:
                                                   item.lesson.targetLanguage,
-                                              centered: false,
-                                              target:
-                                                  PronunciationTarget.sentence,
+                                              target: PronunciationTarget
+                                                  .vocabulary,
                                             ),
                                             const SizedBox(height: 6),
-                                            SpoilerBlock(
-                                              key: ValueKey(
-                                                '$_currentIndex-${item.sentence!.id}',
-                                              ),
-                                              child: EmphasisText(
-                                                item.vocab.translationTextFor(
-                                                  item.sentence!,
-                                                ),
-                                                style: theme
-                                                    .textTheme
-                                                    .bodyMedium
-                                                    ?.copyWith(
-                                                      color: theme
-                                                          .colorScheme
-                                                          .onSurfaceVariant,
-                                                    ),
-                                              ),
+                                            Text(
+                                              item.vocab.translation,
+                                              style: theme.textTheme.titleLarge,
+                                              textAlign: TextAlign.center,
                                             ),
                                           ],
                                         ),
                                       ),
-                                    ),
-                                    const SizedBox(height: 16),
-                                  ],
-                                  AnswerWorkspace(
-                                    key: ValueKey(
-                                      'answer-$_currentIndex-${item.card.id}',
-                                    ),
-                                    onSubmit: _submitAnswerWorkspace,
-                                  ),
+                                      const SizedBox(height: 20),
 
-                                  ReviewNotesEditor(
-                                    key: ValueKey(
-                                      'review-notes-$_currentIndex-${item.card.id}',
-                                    ),
-                                    card: item.card,
-                                    onSave: (text) {
-                                      item.card.backNotes = text;
-                                      context.read<AppProvider>().saveState();
-                                      setState(() {});
-                                    },
-                                  ),
-                                  if (item.sentence != null)
-                                    _notePanel(
-                                      context,
-                                      'Sentence notes',
-                                      item.sentence!.notes,
-                                    ),
-
-                                  // Notes (Markdown)
-                                  if (item.vocab.notes.isNotEmpty) ...[
-                                    Container(
-                                      width: double.infinity,
-                                      padding: const EdgeInsets.all(14),
-                                      decoration: BoxDecoration(
-                                        color: theme
-                                            .colorScheme
-                                            .secondaryContainer
-                                            .withValues(alpha: 0.3),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            children: [
-                                              const Icon(
-                                                Icons.info_outline,
-                                                size: 16,
+                                      // Full Example Sentence
+                                      if (item.sentence != null) ...[
+                                        _withChangeSentenceButton(
+                                          Container(
+                                            padding: const EdgeInsets.all(16),
+                                            decoration: BoxDecoration(
+                                              color: theme
+                                                  .colorScheme
+                                                  .surfaceContainerHighest
+                                                  .withValues(alpha: 0.3),
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                              border: Border.all(
+                                                color: theme
+                                                    .colorScheme
+                                                    .outlineVariant,
                                               ),
-                                              const SizedBox(width: 6),
-                                              Text(
-                                                'Notes & Nuances:',
-                                                style:
-                                                    theme.textTheme.labelMedium,
+                                            ),
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Row(
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment
+                                                          .spaceBetween,
+                                                  children: [
+                                                    Expanded(
+                                                      child: EmphasisText(
+                                                        item.vocab
+                                                            .targetTextFor(
+                                                              item.sentence!,
+                                                            ),
+                                                        style: theme
+                                                            .textTheme
+                                                            .titleMedium
+                                                            ?.copyWith(
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w600,
+                                                            ),
+                                                      ),
+                                                    ),
+                                                    AudioButton(
+                                                      audioUrl: item
+                                                          .sentence!
+                                                          .playableAudioUrl,
+                                                      fallbackText: item
+                                                          .sentence!
+                                                          .speechText,
+                                                      language: item
+                                                          .lesson
+                                                          .targetLanguage,
+                                                      compact: true,
+                                                    ),
+                                                  ],
+                                                ),
+                                                PronunciationLine(
+                                                  text:
+                                                      item.sentence!.targetText,
+                                                  languageCode: item
+                                                      .lesson
+                                                      .targetLanguage,
+                                                  centered: false,
+                                                  target: PronunciationTarget
+                                                      .sentence,
+                                                ),
+                                                const SizedBox(height: 6),
+                                                SpoilerBlock(
+                                                  key: ValueKey(
+                                                    '$_currentIndex-${item.sentence!.id}',
+                                                  ),
+                                                  child: EmphasisText(
+                                                    item.vocab
+                                                        .translationTextFor(
+                                                          item.sentence!,
+                                                        ),
+                                                    style: theme
+                                                        .textTheme
+                                                        .bodyMedium
+                                                        ?.copyWith(
+                                                          color: theme
+                                                              .colorScheme
+                                                              .onSurfaceVariant,
+                                                        ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 16),
+                                      ],
+                                      AnswerWorkspace(
+                                        key: ValueKey(
+                                          'answer-$_currentIndex-${item.card.id}',
+                                        ),
+                                        onSubmit: _submitAnswerWorkspace,
+                                      ),
+
+                                      ReviewNotesEditor(
+                                        key: ValueKey(
+                                          'review-notes-$_currentIndex-${item.card.id}',
+                                        ),
+                                        card: item.card,
+                                        onSave: (text) {
+                                          item.card.backNotes = text;
+                                          context
+                                              .read<AppProvider>()
+                                              .saveState();
+                                          setState(() {});
+                                        },
+                                      ),
+                                      if (item.sentence != null)
+                                        _notePanel(
+                                          context,
+                                          'Sentence notes',
+                                          item.sentence!.notes,
+                                        ),
+
+                                      // Notes (Markdown)
+                                      if (item.vocab.notes.isNotEmpty) ...[
+                                        Container(
+                                          width: double.infinity,
+                                          padding: const EdgeInsets.all(14),
+                                          decoration: BoxDecoration(
+                                            color: theme
+                                                .colorScheme
+                                                .secondaryContainer
+                                                .withValues(alpha: 0.3),
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                          ),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Row(
+                                                children: [
+                                                  const Icon(
+                                                    Icons.info_outline,
+                                                    size: 16,
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  Text(
+                                                    'Notes & Nuances:',
+                                                    style: theme
+                                                        .textTheme
+                                                        .labelMedium,
+                                                  ),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 6),
+                                              MarkdownContent(
+                                                content: item.vocab.notes,
+                                                selectable: true,
                                               ),
                                             ],
                                           ),
-                                          const SizedBox(height: 6),
-                                          MarkdownContent(
-                                            content: item.vocab.notes,
-                                            selectable: true,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(height: 16),
-                                  ],
+                                        ),
+                                        const SizedBox(height: 16),
+                                      ],
 
-                                  // Flip back button
-                                  Center(
-                                    child: OutlinedButton.icon(
-                                      icon: const Icon(Icons.flip_to_front),
-                                      label: Text(
-                                        _showKeyHints
-                                            ? 'Flip back to Front (Space)'
-                                            : 'Flip back to Front',
-                                      ),
-                                      onPressed: _toggleFlip,
-                                    ),
-                                  ),
-                                ],
-                                if (!_isAnswerRevealed) ...[
-                                  const SizedBox(height: 16),
-                                  Center(
-                                    child: FilledButton.icon(
-                                      style: FilledButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 36,
-                                          vertical: 16,
-                                        ),
-                                        textStyle: const TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
+                                      // Flip back button
+                                      Center(
+                                        child: OutlinedButton.icon(
+                                          icon: const Icon(Icons.flip_to_front),
+                                          label: Text(
+                                            _showKeyHints
+                                                ? 'Flip back to Front (Space)'
+                                                : 'Flip back to Front',
+                                          ),
+                                          onPressed: _toggleFlip,
                                         ),
                                       ),
-                                      icon: const Icon(Icons.touch_app),
-                                      label: Text(
-                                        _showKeyHints
-                                            ? 'Show Answer (Space / Enter)'
-                                            : 'Show Answer',
+                                    ],
+                                    if (!_isAnswerRevealed) ...[
+                                      const SizedBox(height: 16),
+                                      Center(
+                                        child: FilledButton.icon(
+                                          style: FilledButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 36,
+                                              vertical: 16,
+                                            ),
+                                            textStyle: const TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          icon: const Icon(Icons.touch_app),
+                                          label: Text(
+                                            _showKeyHints
+                                                ? 'Show Answer (Space / Enter)'
+                                                : 'Show Answer',
+                                          ),
+                                          onPressed: _revealAnswer,
+                                        ),
                                       ),
-                                      onPressed: _revealAnswer,
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                              if (canChangeSentence && item.sentence != null)
+                                _changeSentenceOverlay(item, theme),
+                            ],
                           ),
                         ),
                       ),
