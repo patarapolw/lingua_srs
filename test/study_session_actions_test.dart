@@ -835,7 +835,7 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('Enter on a focused rating button rates one card, not two', (
+    testWidgets('Enter presses the rating button focused with Tab, once', (
       tester,
     ) async {
       final provider = await loadedProvider(tester);
@@ -848,11 +848,49 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
 
-      // Enter rated 사과 Good; it did not also press Again on 바나나.
-      expect(seeded.due.repetitions, 3);
+      // Enter pressed Again on 사과, not the Good shortcut, and it did not
+      // also rate 바나나.
+      expect(seeded.due.lastRating, SrsRating.again);
       expect(seeded.fresh.status, SrsStatus.isNew);
       expect(find.text('NEW'), findsOneWidget);
       expect(find.textContaining('Show Answer'), findsOneWidget);
+
+      // The pressed button is gone; the shortcuts still work.
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Show Answer'), findsNothing);
+    });
+
+    testWidgets('after a click on Show Answer, Enter still rates Good', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      final seeded = await seed(tester, provider);
+      await openStudy(tester, provider, seeded.lesson);
+      await reveal(tester);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+
+      expect(seeded.due.repetitions, 3);
+      expect(find.text('NEW'), findsOneWidget);
+    });
+
+    testWidgets('Space presses the focused button instead of flipping', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      final seeded = await seed(tester, provider);
+      await openStudy(tester, provider, seeded.lesson);
+      await reveal(tester);
+
+      Focus.of(tester.element(find.text('Good'))).requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.pumpAndSettle();
+
+      expect(seeded.due.repetitions, 3);
+      expect(find.text('NEW'), findsOneWidget);
     });
 
     testWidgets('a shortcut letter with Ctrl or Cmd does nothing', (

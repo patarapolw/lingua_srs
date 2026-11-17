@@ -1433,11 +1433,32 @@ class _StudyViewState extends State<StudyView> {
     if (event is KeyUpEvent) return KeyEventResult.ignored;
     // Typing a review note must not trigger flip/rate/audio shortcuts.
     if (isEditingText()) return KeyEventResult.ignored;
+    // A button reached with Tab takes Enter and Space itself: Enter on a
+    // focused Again presses Again, not the Good shortcut.
+    if (FocusManager.instance.primaryFocus != _keyboardFocusNode &&
+        (event.logicalKey == LogicalKeyboardKey.enter ||
+            event.logicalKey == LogicalKeyboardKey.numpadEnter ||
+            event.logicalKey == LogicalKeyboardKey.space)) {
+      return KeyEventResult.ignored;
+    }
     final shortcut = _shortcutFor(event.logicalKey);
     if (shortcut == null) return KeyEventResult.ignored;
     // A key held down acts once, but its repeats are handled too.
     if (event is KeyDownEvent) shortcut();
     return KeyEventResult.handled;
+  }
+
+  /// Takes focus back when it left the study screen for its route's scope,
+  /// as when a focused rating button goes away with the card it rated.
+  /// Otherwise no key would reach [_handleKeyEvent]. A dialog or menu on top
+  /// keeps its focus.
+  void _reclaimKeyboardFocus(bool hasFocus) {
+    if (hasFocus) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _keyboardFocusNode.hasFocus) return;
+      if (ModalRoute.of(context)?.isCurrent == false) return;
+      _keyboardFocusNode.requestFocus();
+    });
   }
 
   /// What [key] does with the modifiers held now, or null when it is not a
@@ -1933,6 +1954,7 @@ class _StudyViewState extends State<StudyView> {
     return Focus(
       focusNode: _keyboardFocusNode,
       autofocus: true,
+      onFocusChange: _reclaimKeyboardFocus,
       onKeyEvent: (_, event) => _handleKeyEvent(event),
       child: Scaffold(
         appBar: AppBar(
