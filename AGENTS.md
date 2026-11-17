@@ -29,6 +29,7 @@ Flutter app (Dart, `provider` state management). See [README.md](README.md) for 
 - Don't commit machine-specific paths or personal study data.
 - Don't commit secrets. Real values go in the git-ignored `env.json`, `worker/.dev.vars` and `worker/wrangler.jsonc`, or in `wrangler secret put`; commit only the `*.example*` files. GitGuardian scans every PR as a GitHub App, outside `ci.yml`. If it flags a real secret, revoke the secret at its provider; removing it from the branch is not enough.
 - Track bugs and planned work in GitHub Issues, not in the repo. Reference the issue in PRs (e.g. "Fixes #12")
+- In a PR description, when a manual check of a UI change can come out differently on desktop and on mobile (layout at narrow widths, touch targets, hover, keyboard shortcuts, the ⋮ menu that holds toolbar buttons on narrow screens), give desktop and mobile separate unticked boxes, each saying what to try there; one box is enough when the platform makes no difference.
 - In `testWidgets`, wrap real async work (`Future.delayed`, timers, storage I/O) in `tester.runAsync`; the fake-async zone otherwise hangs the test.
 
 ## Debug sessions and hot restart
@@ -60,4 +61,4 @@ If `flutter` or `dart` isn't available, you can't run tests or `flutter analyze`
 - Open the PR anyway. It's fine for CI to fail on format, analyze or tests; a local agent with Flutter will fix it on the same PR.
 - CI runs on your pushes, `flutter test` before the format check. You may fix a failure from here only when the log names its cause: an analyzer warning at a file and line, or a failing test whose expected/actual or stack trace points into the changed code. Push at most one fix per failure. If CI still fails, or finding the cause needs the app or a debugger, stop and leave it for a local session.
 - Never push for formatting alone. The next local commit formats.
-- In the PR description, list any step that needs a manual check outside CI (for example deploying the Worker, applying a migration, or trying a change in the running app) as unticked boxes too, or say that none does. When a UI change can look or behave differently on desktop and on mobile (layout at narrow widths, touch targets, hover, keyboard shortcuts, the ⋮ menu that holds toolbar buttons on narrow screens), give desktop and mobile separate boxes, each saying what to try there; one box is enough when the platform makes no difference.
+- In the PR description, list any step that needs a manual check outside CI (for example deploying the Worker, applying a migration, or trying a change in the running app) as unticked boxes too, or say that none does.
