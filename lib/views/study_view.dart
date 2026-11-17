@@ -1598,18 +1598,19 @@ class _StudyViewState extends State<StudyView> {
     );
   }
 
-  /// [box], a sentence box on the card, with the change-sentence button on
-  /// its top border at the right corner when there is another sentence. The
-  /// room above the box keeps the button inside the stack, where it can be
-  /// tapped.
+  /// [box], a sentence box on the card, with room above it for the
+  /// change-sentence button, which sits on its top border at the right corner
+  /// when there is another sentence. The room is there with or without the
+  /// button, and [_gapAboveSentence] gives it back, so the box is in the same
+  /// place either way; inside the stack, all of the button can be tapped.
   Widget _withChangeSentenceButton({
     required bool canChange,
     required Color borderColor,
     required double borderWidth,
     required Widget box,
   }) {
-    if (!canChange) return box;
     return Stack(
+      key: const ValueKey('sentence-box'),
       // The box keeps the full width it has without the button.
       fit: StackFit.passthrough,
       children: [
@@ -1617,15 +1618,25 @@ class _StudyViewState extends State<StudyView> {
           padding: const EdgeInsets.only(top: _changeSentenceButtonSize / 2),
           child: box,
         ),
-        Positioned(
-          top: 0,
-          right: 16,
-          child: _changeSentenceButton(borderColor, borderWidth),
-        ),
+        if (canChange)
+          Positioned(
+            top: 0,
+            right: 16,
+            child: _changeSentenceButton(borderColor, borderWidth),
+          ),
       ],
     );
   }
 
+  /// The space above a card's sentence box: 20 px to the box's border, less
+  /// the room [_withChangeSentenceButton] leaves above the box.
+  Widget _gapAboveSentence(StudyCardItem item) => SizedBox(
+    height: item.sentence == null
+        ? _gapAboveSentenceBox
+        : _gapAboveSentenceBox - _changeSentenceButtonSize / 2,
+  );
+
+  static const _gapAboveSentenceBox = 20.0;
   static const _changeSentenceButtonSize = 32.0;
 
   void _openEditCurrentCard() {
@@ -2361,7 +2372,7 @@ class _StudyViewState extends State<StudyView> {
                                         CardDirection.targetToNative,
                                       ),
                                     ),
-                                    const SizedBox(height: 20),
+                                    _gapAboveSentence(item),
                                     // One Random Sentence always on front
                                     if (item.sentence != null)
                                       _withChangeSentenceButton(
@@ -2421,7 +2432,7 @@ class _StudyViewState extends State<StudyView> {
                                         CardDirection.nativeToTarget,
                                       ),
                                     ),
-                                    const SizedBox(height: 20),
+                                    _gapAboveSentence(item),
                                     // One Random Sentence with Cloze Deletion
                                     if (item.sentence != null)
                                       _withChangeSentenceButton(
@@ -2534,7 +2545,7 @@ class _StudyViewState extends State<StudyView> {
                                       ],
                                     ),
                                   ),
-                                  const SizedBox(height: 20),
+                                  _gapAboveSentence(item),
 
                                   // Full Example Sentence
                                   if (item.sentence != null) ...[

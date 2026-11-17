@@ -406,9 +406,7 @@ void main() {
       Rect boxRect() => tester.getRect(
         find
             .descendant(
-              of: find
-                  .ancestor(of: changeButton(), matching: find.byType(Stack))
-                  .first,
+              of: find.byKey(const ValueKey('sentence-box')),
               matching: find.byType(Container),
             )
             .first,
@@ -452,6 +450,84 @@ void main() {
       await tester.pumpAndSettle();
       expect(showing(onScreen), findsWidgets);
       expect(showing(other), findsNothing);
+    });
+
+    testWidgets('the sentence box is in the same place with one sentence', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      // Two words, each with a sentence on the front in the same direction:
+      // one word with two sentences, one with a single sentence.
+      const yaml =
+          '---\nvocabulary:\n  nouns:\n'
+          '    - ko: 사과\n      en: apple\n'
+          '      examples:\n'
+          '        - ko: "**사과** 하나"\n          en: "One apple"\n'
+          '        - ko: "**사과** 둘"\n          en: "Two apples"\n'
+          '    - ko: 배\n      en: pear\n'
+          '      examples:\n'
+          '        - ko: "**배** 하나"\n          en: "One pear"\n'
+          '---\n# Lesson\n';
+      final lesson = (await tester.runAsync(() => provider.importYaml(yaml)))!;
+      final apple = lesson.vocabularies.firstWhere((v) => v.targetWord == '사과');
+      final pear = lesson.vocabularies.firstWhere((v) => v.targetWord == '배');
+      Sentence first(VocabItem v) =>
+          provider.getSentenceById(v.sentenceIds.first)!;
+
+      tester.view.physicalSize = const Size(1200, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final boxFinder = find.descendant(
+        of: find.byKey(const ValueKey('sentence-box')),
+        matching: find.byType(Container),
+      );
+      Finder changeButton() => find.byWidgetPredicate(
+        (w) =>
+            w is IconButton &&
+            (w.tooltip?.startsWith('Change sentence') ?? false),
+      );
+
+      /// The sentence box's place on [vocab]'s target-to-native front.
+      Future<Rect> frontBox(VocabItem vocab) async {
+        await tester.pumpWidget(
+          MultiProvider(
+            key: ValueKey(vocab.id),
+            providers: [
+              ChangeNotifierProvider<AppProvider>.value(value: provider),
+              ChangeNotifierProvider<AudioService>(
+                create: (_) => _FakeAudioService(),
+              ),
+            ],
+            child: MaterialApp(
+              home: StudyView(
+                lessonId: lesson.id,
+                // A preview shows exactly these cards.
+                previewCards: [
+                  StudyCardItem(
+                    vocab: vocab,
+                    card: vocab.cardTargetToNative,
+                    lesson: lesson,
+                    sentence: first(vocab),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump();
+        return tester.getRect(boxFinder.first);
+      }
+
+      final withButton = await frontBox(apple);
+      expect(changeButton(), findsOneWidget);
+      final withoutButton = await frontBox(pear);
+      expect(changeButton(), findsNothing);
+
+      expect(withoutButton.top, withButton.top);
+      expect(withoutButton.height, withButton.height);
     });
 
     testWidgets('deselecting the sentence on screen shows the other one', (
