@@ -1433,9 +1433,15 @@ class _StudyViewState extends State<StudyView> {
     if (event is KeyUpEvent) return KeyEventResult.ignored;
     // Typing a review note must not trigger flip/rate/audio shortcuts.
     if (isEditingText()) return KeyEventResult.ignored;
+    final onButton = FocusManager.instance.primaryFocus != _keyboardFocusNode;
+    // Esc takes focus off a button reached with Tab, back to the shortcuts.
+    if (onButton && event.logicalKey == LogicalKeyboardKey.escape) {
+      if (event is KeyDownEvent) _keyboardFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
     // A button reached with Tab takes Enter and Space itself: Enter on a
     // focused Again presses Again, not the Good shortcut.
-    if (FocusManager.instance.primaryFocus != _keyboardFocusNode &&
+    if (onButton &&
         (event.logicalKey == LogicalKeyboardKey.enter ||
             event.logicalKey == LogicalKeyboardKey.numpadEnter ||
             event.logicalKey == LogicalKeyboardKey.space)) {
@@ -1456,6 +1462,27 @@ class _StudyViewState extends State<StudyView> {
     if (hasFocus) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _keyboardFocusNode.hasFocus) return;
+      if (ModalRoute.of(context)?.isCurrent == false) return;
+      _keyboardFocusNode.requestFocus();
+    });
+  }
+
+  /// The card and side on screen at the last build, to notice a change.
+  (int, bool)? _shownCard;
+
+  /// Takes focus off a button once the card or its side changes, so every
+  /// card starts with the shortcuts. Otherwise, when a pressed button goes
+  /// away, focus returns to the one focused before it, such as More, and
+  /// Enter would open that.
+  void _focusShortcutsOnNewCard() {
+    final shown = (_currentIndex, _isAnswerRevealed);
+    if (shown == _shownCard) return;
+    _shownCard = shown;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || isEditingText() || _keyboardFocusNode.hasPrimaryFocus) {
+        return;
+      }
+      // A dialog or menu on top keeps its focus.
       if (ModalRoute.of(context)?.isCurrent == false) return;
       _keyboardFocusNode.requestFocus();
     });
@@ -1951,6 +1978,7 @@ class _StudyViewState extends State<StudyView> {
       ),
     );
 
+    _focusShortcutsOnNewCard();
     return Focus(
       focusNode: _keyboardFocusNode,
       autofocus: true,

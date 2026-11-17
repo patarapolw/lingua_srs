@@ -861,6 +861,62 @@ void main() {
       expect(find.textContaining('Show Answer'), findsNothing);
     });
 
+    testWidgets('the next card does not keep focus on a button Tab passed', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      final seeded = await seed(tester, provider);
+      await openStudy(tester, provider, seeded.lesson);
+      await reveal(tester);
+
+      // Tab went past More on its way to Again.
+      Focus.of(
+        tester.element(
+          find.descendant(
+            of: find.byTooltip('More'),
+            matching: find.byType(Icon),
+          ),
+        ),
+      ).requestFocus();
+      await tester.pump();
+      Focus.of(tester.element(find.text('Again'))).requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(seeded.due.lastRating, SrsRating.again);
+
+      // Enter reveals the next card instead of opening More.
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(find.byType(PopupMenuItem<String>), findsNothing);
+      expect(find.textContaining('Show Answer'), findsNothing);
+    });
+
+    testWidgets('Esc takes focus off a button, back to the shortcuts', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      final seeded = await seed(tester, provider);
+      await openStudy(tester, provider, seeded.lesson);
+
+      Focus.of(
+        tester.element(
+          find.descendant(
+            of: find.byTooltip('More'),
+            matching: find.byType(Icon),
+          ),
+        ),
+      ).requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PopupMenuItem<String>), findsNothing);
+      expect(find.textContaining('Show Answer'), findsNothing);
+    });
+
     testWidgets('after a click on Show Answer, Enter still rates Good', (
       tester,
     ) async {
