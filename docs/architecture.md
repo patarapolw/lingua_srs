@@ -36,6 +36,7 @@ lingua_srs/
 │   │   ├── image_cache_service.dart   # Disk cache for online images in Markdown
 │   │   ├── deepseek_service.dart      # DeepSeek chat client for quiz discussions
 │   │   ├── backup_service.dart        # Versioned local data backup and restore
+│   │   ├── coalescing_preferences_store.dart # Windows/Linux preferences file: one background write per burst of saves
 │   │   ├── sync_pairing.dart          # Sync account (email and password) and its `linguasrs://sync` sign-in link
 │   │   ├── sync_client.dart           # Cloudflare Worker sync and dictionary inbox client
 │   │   ├── sync_error_text.dart       # Plain messages for failed sync requests

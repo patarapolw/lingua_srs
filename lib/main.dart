@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import 'providers/app_provider.dart';
 import 'services/audio_service.dart';
+import 'services/coalescing_preferences_store.dart';
 import 'services/sync_account_service.dart';
 import 'services/sync_pairing.dart';
 import 'views/pairing_confirmation.dart';
@@ -14,6 +15,8 @@ import 'widgets/sync_scheduler.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  // Before anything reads preferences.
+  CoalescingPreferencesStore.install();
   runApp(
     MultiProvider(
       providers: [
