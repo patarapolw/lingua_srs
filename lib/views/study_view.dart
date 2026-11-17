@@ -1426,120 +1426,104 @@ class _StudyViewState extends State<StudyView> {
     }
   }
 
-  void _handleKeyEvent(KeyEvent event) {
-    if (event is! KeyDownEvent) return;
+  /// Runs the study shortcut for [event] and marks the key as handled, so it
+  /// does not also reach a focused button (Enter or Space would press it) or
+  /// the app's own shortcuts.
+  KeyEventResult _handleKeyEvent(KeyEvent event) {
+    if (event is KeyUpEvent) return KeyEventResult.ignored;
     // Typing a review note must not trigger flip/rate/audio shortcuts.
-    if (isEditingText()) return;
+    if (isEditingText()) return KeyEventResult.ignored;
+    final shortcut = _shortcutFor(event.logicalKey);
+    if (shortcut == null) return KeyEventResult.ignored;
+    // A key held down acts once, but its repeats are handled too.
+    if (event is KeyDownEvent) shortcut();
+    return KeyEventResult.handled;
+  }
 
-    if (HardwareKeyboard.instance.isControlPressed &&
-        (event.logicalKey == LogicalKeyboardKey.enter ||
-            event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
-      if (_isAnswerRevealed) {
-        _rateCard(SrsRating.good);
-      } else {
-        _revealAnswer();
-      }
-      return;
+  /// What [key] does with the modifiers held now, or null when it is not a
+  /// study shortcut. With Ctrl or Cmd, only Enter and Z are: Ctrl+W must not
+  /// toggle wrap up, nor Ctrl+P ask to suspend. Alt leaves every key alone.
+  VoidCallback? _shortcutFor(LogicalKeyboardKey key) {
+    final keyboard = HardwareKeyboard.instance;
+    if (keyboard.isAltPressed) return null;
+    final command = keyboard.isControlPressed || keyboard.isMetaPressed;
+
+    void rate(SrsRating rating) {
+      if (_isAnswerRevealed) _rateCard(rating);
     }
 
-    // Space: Flip between Front and Back
-    if (event.logicalKey == LogicalKeyboardKey.space) {
-      _toggleFlip();
-      return;
+    // Enter, or Ctrl/Cmd+Enter: reveals the answer, then rates Good.
+    if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter) {
+      return () =>
+          _isAnswerRevealed ? _rateCard(SrsRating.good) : _revealAnswer();
     }
+    // Undo: Z, or Ctrl/Cmd+Z.
+    if (key == LogicalKeyboardKey.keyZ) return _undo;
+    if (command) return null;
 
-    // Enter key: If on front, reveals answer. If on back, presses GOOD (Rating 3)!
-    if (event.logicalKey == LogicalKeyboardKey.enter ||
-        event.logicalKey == LogicalKeyboardKey.numpadEnter) {
-      if (!_isAnswerRevealed) {
-        _revealAnswer();
-      } else {
-        _rateCard(SrsRating.good);
-      }
-      return;
-    }
-
-    // Backspace key: Presses AGAIN (Rating 1) when answer is revealed
-    if (event.logicalKey == LogicalKeyboardKey.backspace) {
-      if (_isAnswerRevealed) {
-        _rateCard(SrsRating.again);
-      }
-      return;
-    }
-
-    // Number keys 1-4 for SRS ratings
-    if (_isAnswerRevealed) {
-      if (event.logicalKey == LogicalKeyboardKey.digit1 ||
-          event.logicalKey == LogicalKeyboardKey.numpad1) {
-        _rateCard(SrsRating.again);
-      } else if (event.logicalKey == LogicalKeyboardKey.digit2 ||
-          event.logicalKey == LogicalKeyboardKey.numpad2) {
-        _rateCard(SrsRating.hard);
-      } else if (event.logicalKey == LogicalKeyboardKey.digit3 ||
-          event.logicalKey == LogicalKeyboardKey.numpad3) {
-        _rateCard(SrsRating.good);
-      } else if (event.logicalKey == LogicalKeyboardKey.digit4 ||
-          event.logicalKey == LogicalKeyboardKey.numpad4) {
-        _rateCard(SrsRating.easy);
-      }
-    }
-
-    // Navigation arrows (Back / Forward)
-    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-      _navigateBack();
-    } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-      _navigateForward();
-    }
-
-    // Undo (Z or Ctrl+Z)
-    if (event.logicalKey == LogicalKeyboardKey.keyZ) {
-      _undo();
-    }
-
-    // Send to back (B), suspend (P, asks first) and wrap up (W)
-    if (event.logicalKey == LogicalKeyboardKey.keyB) {
-      _sendCurrentCardToBack();
-    } else if (event.logicalKey == LogicalKeyboardKey.keyP) {
-      _confirmSuspendCurrentCard();
-    } else if (event.logicalKey == LogicalKeyboardKey.keyW) {
-      _toggleWrapUp();
-    } else if (event.logicalKey == LogicalKeyboardKey.keyN) {
-      _changeSentence();
-    }
-
-    // Audio replay shortcuts
-    if (event.logicalKey == LogicalKeyboardKey.keyR &&
-        _currentIndex < _queue.length) {
-      final item = _queue[_currentIndex];
-      final audioService = context.read<AudioService>();
-      final vocabAudio = item.vocab.playableAudioUrl;
-      if (vocabAudio != null) {
-        audioService.playAudio(vocabAudio);
-      } else {
-        audioService.speak(
-          item.vocab.speechText,
-          language: item.lesson.targetLanguage,
-        );
-      }
-    } else if (event.logicalKey == LogicalKeyboardKey.keyS &&
-        _currentIndex < _queue.length) {
-      final item = _queue[_currentIndex];
-      if (item.sentence != null) {
-        final audioService = context.read<AudioService>();
-        final sentenceAudio = item.sentence!.playableAudioUrl;
-        if (sentenceAudio != null) {
-          audioService.playAudio(sentenceAudio);
-        } else {
-          audioService.speak(
-            item.sentence!.speechText,
-            language: item.lesson.targetLanguage,
-          );
+    return switch (key) {
+      // Space: flip between front and back.
+      LogicalKeyboardKey.space => _toggleFlip,
+      // Backspace and 1-4 rate once the answer shows.
+      LogicalKeyboardKey.backspace => () => rate(SrsRating.again),
+      LogicalKeyboardKey.digit1 ||
+      LogicalKeyboardKey.numpad1 => () => rate(SrsRating.again),
+      LogicalKeyboardKey.digit2 ||
+      LogicalKeyboardKey.numpad2 => () => rate(SrsRating.hard),
+      LogicalKeyboardKey.digit3 ||
+      LogicalKeyboardKey.numpad3 => () => rate(SrsRating.good),
+      LogicalKeyboardKey.digit4 ||
+      LogicalKeyboardKey.numpad4 => () => rate(SrsRating.easy),
+      LogicalKeyboardKey.arrowLeft => _navigateBack,
+      LogicalKeyboardKey.arrowRight => _navigateForward,
+      // Send to back (B), suspend (P, asks first), wrap up (W) and change
+      // the sentence (N).
+      LogicalKeyboardKey.keyB => _sendCurrentCardToBack,
+      LogicalKeyboardKey.keyP => _confirmSuspendCurrentCard,
+      LogicalKeyboardKey.keyW => _toggleWrapUp,
+      LogicalKeyboardKey.keyN => _changeSentence,
+      // Replay the word (R) or the sentence (S); edit the card (E).
+      LogicalKeyboardKey.keyR => _replayWordAudio,
+      LogicalKeyboardKey.keyS => _replaySentenceAudio,
+      LogicalKeyboardKey.keyE => () {
+        if (_currentIndex < _queue.length && _isAnswerRevealed) {
+          _openEditCurrentCard();
         }
-      }
-    } else if (event.logicalKey == LogicalKeyboardKey.keyE &&
-        _currentIndex < _queue.length &&
-        _isAnswerRevealed) {
-      _openEditCurrentCard();
+      },
+      _ => null,
+    };
+  }
+
+  void _replayWordAudio() {
+    if (_currentIndex >= _queue.length) return;
+    final item = _queue[_currentIndex];
+    final audioService = context.read<AudioService>();
+    final vocabAudio = item.vocab.playableAudioUrl;
+    if (vocabAudio != null) {
+      audioService.playAudio(vocabAudio);
+    } else {
+      audioService.speak(
+        item.vocab.speechText,
+        language: item.lesson.targetLanguage,
+      );
+    }
+  }
+
+  void _replaySentenceAudio() {
+    if (_currentIndex >= _queue.length) return;
+    final item = _queue[_currentIndex];
+    final sentence = item.sentence;
+    if (sentence == null) return;
+    final audioService = context.read<AudioService>();
+    final sentenceAudio = sentence.playableAudioUrl;
+    if (sentenceAudio != null) {
+      audioService.playAudio(sentenceAudio);
+    } else {
+      audioService.speak(
+        sentence.speechText,
+        language: item.lesson.targetLanguage,
+      );
     }
   }
 
@@ -1946,10 +1930,10 @@ class _StudyViewState extends State<StudyView> {
       ),
     );
 
-    return KeyboardListener(
+    return Focus(
       focusNode: _keyboardFocusNode,
       autofocus: true,
-      onKeyEvent: _handleKeyEvent,
+      onKeyEvent: (_, event) => _handleKeyEvent(event),
       child: Scaffold(
         appBar: AppBar(
           title: Row(

@@ -823,5 +823,90 @@ void main() {
       await chooseFromMenu(tester, 'Cancel wrap up');
       expect(await menuState(), (Icons.sports_score, 'Wrap up session'));
     });
+
+    Future<void> pressWith(
+      WidgetTester tester,
+      LogicalKeyboardKey modifier,
+      LogicalKeyboardKey key,
+    ) async {
+      await tester.sendKeyDownEvent(modifier);
+      await tester.sendKeyEvent(key);
+      await tester.sendKeyUpEvent(modifier);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('Enter on a focused rating button rates one card, not two', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      final seeded = await seed(tester, provider);
+      await openStudy(tester, provider, seeded.lesson);
+      await reveal(tester);
+
+      Focus.of(tester.element(find.text('Again'))).requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+
+      // Enter rated 사과 Good; it did not also press Again on 바나나.
+      expect(seeded.due.repetitions, 3);
+      expect(seeded.fresh.status, SrsStatus.isNew);
+      expect(find.text('NEW'), findsOneWidget);
+      expect(find.textContaining('Show Answer'), findsOneWidget);
+    });
+
+    testWidgets('a shortcut letter with Ctrl or Cmd does nothing', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      final seeded = await seed(tester, provider);
+      await openStudy(tester, provider, seeded.lesson);
+      final suspendDialog = find.textContaining('Suspend this card');
+
+      await pressWith(
+        tester,
+        LogicalKeyboardKey.controlLeft,
+        LogicalKeyboardKey.keyP,
+      );
+      expect(suspendDialog, findsNothing);
+      await pressWith(
+        tester,
+        LogicalKeyboardKey.metaLeft,
+        LogicalKeyboardKey.keyP,
+      );
+      expect(suspendDialog, findsNothing);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyP);
+      await tester.pumpAndSettle();
+      expect(suspendDialog, findsOneWidget);
+    });
+
+    testWidgets('Ctrl+Enter and Ctrl+Z still work', (tester) async {
+      final provider = await loadedProvider(tester);
+      final seeded = await seed(tester, provider);
+      await openStudy(tester, provider, seeded.lesson);
+
+      await pressWith(
+        tester,
+        LogicalKeyboardKey.controlLeft,
+        LogicalKeyboardKey.enter,
+      );
+      expect(find.textContaining('Show Answer'), findsNothing);
+      await pressWith(
+        tester,
+        LogicalKeyboardKey.controlLeft,
+        LogicalKeyboardKey.enter,
+      );
+      expect(seeded.due.repetitions, 3);
+      expect(find.text('NEW'), findsOneWidget);
+
+      await pressWith(
+        tester,
+        LogicalKeyboardKey.controlLeft,
+        LogicalKeyboardKey.keyZ,
+      );
+      expect(seeded.due.repetitions, 2);
+      expect(find.text('NEW'), findsNothing);
+    });
   });
 }
