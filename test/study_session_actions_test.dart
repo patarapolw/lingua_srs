@@ -823,5 +823,184 @@ void main() {
       await chooseFromMenu(tester, 'Cancel wrap up');
       expect(await menuState(), (Icons.sports_score, 'Wrap up session'));
     });
+
+    Future<void> pressWith(
+      WidgetTester tester,
+      LogicalKeyboardKey modifier,
+      LogicalKeyboardKey key,
+    ) async {
+      await tester.sendKeyDownEvent(modifier);
+      await tester.sendKeyEvent(key);
+      await tester.sendKeyUpEvent(modifier);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('Enter presses the rating button focused with Tab, once', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      final seeded = await seed(tester, provider);
+      await openStudy(tester, provider, seeded.lesson);
+      await reveal(tester);
+
+      Focus.of(tester.element(find.text('Again'))).requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+
+      // Enter pressed Again on 사과, not the Good shortcut, and it did not
+      // also rate 바나나.
+      expect(seeded.due.lastRating, SrsRating.again);
+      expect(seeded.fresh.status, SrsStatus.isNew);
+      expect(find.text('NEW'), findsOneWidget);
+      expect(find.textContaining('Show Answer'), findsOneWidget);
+
+      // The pressed button is gone; the shortcuts still work.
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Show Answer'), findsNothing);
+    });
+
+    testWidgets('the next card does not keep focus on a button Tab passed', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      final seeded = await seed(tester, provider);
+      await openStudy(tester, provider, seeded.lesson);
+      await reveal(tester);
+
+      // Tab went past More on its way to Again.
+      Focus.of(
+        tester.element(
+          find.descendant(
+            of: find.byTooltip('More'),
+            matching: find.byType(Icon),
+          ),
+        ),
+      ).requestFocus();
+      await tester.pump();
+      Focus.of(tester.element(find.text('Again'))).requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(seeded.due.lastRating, SrsRating.again);
+
+      // Enter reveals the next card instead of opening More.
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(find.byType(PopupMenuItem<String>), findsNothing);
+      expect(find.textContaining('Show Answer'), findsNothing);
+    });
+
+    testWidgets('Esc takes focus off a button, back to the shortcuts', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      final seeded = await seed(tester, provider);
+      await openStudy(tester, provider, seeded.lesson);
+
+      Focus.of(
+        tester.element(
+          find.descendant(
+            of: find.byTooltip('More'),
+            matching: find.byType(Icon),
+          ),
+        ),
+      ).requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PopupMenuItem<String>), findsNothing);
+      expect(find.textContaining('Show Answer'), findsNothing);
+    });
+
+    testWidgets('after a click on Show Answer, Enter still rates Good', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      final seeded = await seed(tester, provider);
+      await openStudy(tester, provider, seeded.lesson);
+      await reveal(tester);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+
+      expect(seeded.due.repetitions, 3);
+      expect(find.text('NEW'), findsOneWidget);
+    });
+
+    testWidgets('Space presses the focused button instead of flipping', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      final seeded = await seed(tester, provider);
+      await openStudy(tester, provider, seeded.lesson);
+      await reveal(tester);
+
+      Focus.of(tester.element(find.text('Good'))).requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.pumpAndSettle();
+
+      expect(seeded.due.repetitions, 3);
+      expect(find.text('NEW'), findsOneWidget);
+    });
+
+    testWidgets('a shortcut letter with Ctrl or Cmd does nothing', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      final seeded = await seed(tester, provider);
+      await openStudy(tester, provider, seeded.lesson);
+      final suspendDialog = find.textContaining('Suspend this card');
+
+      await pressWith(
+        tester,
+        LogicalKeyboardKey.controlLeft,
+        LogicalKeyboardKey.keyP,
+      );
+      expect(suspendDialog, findsNothing);
+      await pressWith(
+        tester,
+        LogicalKeyboardKey.metaLeft,
+        LogicalKeyboardKey.keyP,
+      );
+      expect(suspendDialog, findsNothing);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyP);
+      await tester.pumpAndSettle();
+      expect(suspendDialog, findsOneWidget);
+    });
+
+    testWidgets('Ctrl+Enter and Ctrl+Z still work', (tester) async {
+      final provider = await loadedProvider(tester);
+      final seeded = await seed(tester, provider);
+      await openStudy(tester, provider, seeded.lesson);
+
+      await pressWith(
+        tester,
+        LogicalKeyboardKey.controlLeft,
+        LogicalKeyboardKey.enter,
+      );
+      expect(find.textContaining('Show Answer'), findsNothing);
+      await pressWith(
+        tester,
+        LogicalKeyboardKey.controlLeft,
+        LogicalKeyboardKey.enter,
+      );
+      expect(seeded.due.repetitions, 3);
+      expect(find.text('NEW'), findsOneWidget);
+
+      await pressWith(
+        tester,
+        LogicalKeyboardKey.controlLeft,
+        LogicalKeyboardKey.keyZ,
+      );
+      expect(seeded.due.repetitions, 2);
+      expect(find.text('NEW'), findsNothing);
+    });
   });
 }
