@@ -1585,6 +1585,26 @@ class _StudyViewState extends State<StudyView> {
     onPressed: _changeSentence,
   );
 
+  /// The sentence on a card's front, centred, with the change-sentence button
+  /// on the same line when there is another sentence. A space as wide as the
+  /// button on the other side keeps the sentence centred, and the box keeps
+  /// the height it has without the button.
+  Widget _frontSentenceLine(Widget sentence, {required bool canChange}) {
+    if (!canChange) return Center(child: sentence);
+    return Row(
+      children: [
+        const SizedBox(width: _changeSentenceButtonWidth),
+        Expanded(child: Center(child: sentence)),
+        SizedBox(
+          width: _changeSentenceButtonWidth,
+          child: _changeSentenceButton(),
+        ),
+      ],
+    );
+  }
+
+  static const _changeSentenceButtonWidth = 40.0;
+
   void _openEditCurrentCard() {
     if (_currentIndex >= _queue.length) return;
     final item = _queue[_currentIndex];
@@ -2341,19 +2361,18 @@ class _StudyViewState extends State<StudyView> {
                                           crossAxisAlignment:
                                               CrossAxisAlignment.center,
                                           children: [
-                                            EmphasisText(
-                                              item.vocab.targetTextFor(
-                                                item.sentence!,
+                                            _frontSentenceLine(
+                                              EmphasisText(
+                                                item.vocab.targetTextFor(
+                                                  item.sentence!,
+                                                ),
+                                                style: theme
+                                                    .textTheme
+                                                    .titleMedium
+                                                    ?.copyWith(height: 1.4),
                                               ),
-                                              style: theme.textTheme.titleMedium
-                                                  ?.copyWith(height: 1.4),
+                                              canChange: canChangeSentence,
                                             ),
-                                            if (canChangeSentence)
-                                              Align(
-                                                alignment:
-                                                    Alignment.centerRight,
-                                                child: _changeSentenceButton(),
-                                              ),
                                           ],
                                         ),
                                       ),
@@ -2400,22 +2419,22 @@ class _StudyViewState extends State<StudyView> {
                                               CrossAxisAlignment.center,
                                           children: [
                                             const SizedBox(height: 10),
-                                            EmphasisText(
-                                              item.vocab.clozeFor(
-                                                item.sentence!,
+                                            _frontSentenceLine(
+                                              EmphasisText(
+                                                item.vocab.clozeFor(
+                                                  item.sentence!,
+                                                ),
+                                                style: theme
+                                                    .textTheme
+                                                    .titleLarge
+                                                    ?.copyWith(
+                                                      height: 1.4,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
                                               ),
-                                              style: theme.textTheme.titleLarge
-                                                  ?.copyWith(
-                                                    height: 1.4,
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
+                                              canChange: canChangeSentence,
                                             ),
-                                            if (canChangeSentence)
-                                              Align(
-                                                alignment:
-                                                    Alignment.centerRight,
-                                                child: _changeSentenceButton(),
-                                              ),
                                           ],
                                         ),
                                       ),

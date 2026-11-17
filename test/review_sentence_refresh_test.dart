@@ -12,6 +12,7 @@ import 'package:lingua_srs/services/audio_service.dart';
 import 'package:lingua_srs/services/tts_voice.dart';
 import 'package:lingua_srs/views/study_view.dart';
 import 'package:lingua_srs/views/vocab_edit_dialog.dart';
+import 'package:lingua_srs/widgets/emphasis_text.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -394,6 +395,26 @@ void main() {
       );
       await tester.pump();
       await tester.pump();
+
+      Finder changeButton() => find.byWidgetPredicate(
+        (w) =>
+            w is IconButton &&
+            (w.tooltip?.startsWith('Change sentence') ?? false),
+      );
+      // On the front the button sits on the sentence's line, not under it.
+      expect(changeButton(), findsOneWidget);
+      final sentenceRow = find.ancestor(
+        of: changeButton(),
+        matching: find.byType(Row),
+      );
+      expect(
+        find.descendant(
+          of: sentenceRow.first,
+          matching: find.byType(EmphasisText),
+        ),
+        findsOneWidget,
+      );
+
       await tester.tap(find.textContaining('Show Answer'));
       await tester.pumpAndSettle();
 
@@ -404,11 +425,6 @@ void main() {
       );
       final other = sentences.singleWhere((s) => !identical(s, onScreen));
 
-      Finder changeButton() => find.byWidgetPredicate(
-        (w) =>
-            w is IconButton &&
-            (w.tooltip?.startsWith('Change sentence') ?? false),
-      );
       expect(changeButton(), findsOneWidget);
       await tester.tap(changeButton());
       await tester.pumpAndSettle();
