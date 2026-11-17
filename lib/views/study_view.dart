@@ -1577,33 +1577,56 @@ class _StudyViewState extends State<StudyView> {
   }
 
   /// The button on a sentence that changes it to the word's next sentence.
-  Widget _changeSentenceButton() => IconButton(
-    icon: const Icon(Icons.swap_horiz),
-    tooltip: _showKeyHints ? 'Change sentence (N)' : 'Change sentence',
-    visualDensity: VisualDensity.compact,
-    iconSize: 20,
-    onPressed: _changeSentence,
-  );
+  Widget _changeSentenceButton(Color borderColor, double borderWidth) {
+    final theme = Theme.of(context);
+    return IconButton(
+      icon: const Icon(Icons.swap_horiz),
+      tooltip: _showKeyHints ? 'Change sentence (N)' : 'Change sentence',
+      iconSize: 18,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints.tightFor(
+        width: _changeSentenceButtonSize,
+        height: _changeSentenceButtonSize,
+      ),
+      style: IconButton.styleFrom(
+        // The card's colour, so the border does not show through.
+        backgroundColor:
+            theme.cardTheme.color ?? theme.colorScheme.surfaceContainerLow,
+        side: BorderSide(color: borderColor, width: borderWidth),
+      ),
+      onPressed: _changeSentence,
+    );
+  }
 
-  /// The sentence on a card's front, centred, with the change-sentence button
-  /// on the same line when there is another sentence. A space as wide as the
-  /// button on the other side keeps the sentence centred, and the box keeps
-  /// the height it has without the button.
-  Widget _frontSentenceLine(Widget sentence, {required bool canChange}) {
-    if (!canChange) return Center(child: sentence);
-    return Row(
+  /// [box], a sentence box on the card, with the change-sentence button on
+  /// its top border at the right corner when there is another sentence. The
+  /// room above the box keeps the button inside the stack, where it can be
+  /// tapped.
+  Widget _withChangeSentenceButton({
+    required bool canChange,
+    required Color borderColor,
+    required double borderWidth,
+    required Widget box,
+  }) {
+    if (!canChange) return box;
+    return Stack(
+      // The box keeps the full width it has without the button.
+      fit: StackFit.passthrough,
       children: [
-        const SizedBox(width: _changeSentenceButtonWidth),
-        Expanded(child: Center(child: sentence)),
-        SizedBox(
-          width: _changeSentenceButtonWidth,
-          child: _changeSentenceButton(),
+        Padding(
+          padding: const EdgeInsets.only(top: _changeSentenceButtonSize / 2),
+          child: box,
+        ),
+        Positioned(
+          top: 0,
+          right: 16,
+          child: _changeSentenceButton(borderColor, borderWidth),
         ),
       ],
     );
   }
 
-  static const _changeSentenceButtonWidth = 40.0;
+  static const _changeSentenceButtonSize = 32.0;
 
   void _openEditCurrentCard() {
     if (_currentIndex >= _queue.length) return;
@@ -2341,27 +2364,31 @@ class _StudyViewState extends State<StudyView> {
                                     const SizedBox(height: 20),
                                     // One Random Sentence always on front
                                     if (item.sentence != null)
-                                      Container(
-                                        padding: const EdgeInsets.all(16),
-                                        decoration: BoxDecoration(
-                                          color: theme
-                                              .colorScheme
-                                              .surfaceContainerHighest
-                                              .withValues(alpha: 0.4),
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                          border: Border.all(
+                                      _withChangeSentenceButton(
+                                        canChange: canChangeSentence,
+                                        borderColor:
+                                            theme.colorScheme.outlineVariant,
+                                        borderWidth: 1.0,
+                                        box: Container(
+                                          padding: const EdgeInsets.all(16),
+                                          decoration: BoxDecoration(
                                             color: theme
                                                 .colorScheme
-                                                .outlineVariant,
+                                                .surfaceContainerHighest
+                                                .withValues(alpha: 0.4),
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                            border: Border.all(
+                                              color: theme
+                                                  .colorScheme
+                                                  .outlineVariant,
+                                            ),
                                           ),
-                                        ),
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.center,
-                                          children: [
-                                            _frontSentenceLine(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.center,
+                                            children: [
                                               EmphasisText(
                                                 item.vocab.targetTextFor(
                                                   item.sentence!,
@@ -2371,9 +2398,8 @@ class _StudyViewState extends State<StudyView> {
                                                     .titleMedium
                                                     ?.copyWith(height: 1.4),
                                               ),
-                                              canChange: canChangeSentence,
-                                            ),
-                                          ],
+                                            ],
+                                          ),
                                         ),
                                       ),
                                   ] else ...[
@@ -2398,28 +2424,32 @@ class _StudyViewState extends State<StudyView> {
                                     const SizedBox(height: 20),
                                     // One Random Sentence with Cloze Deletion
                                     if (item.sentence != null)
-                                      Container(
-                                        padding: const EdgeInsets.all(16),
-                                        decoration: BoxDecoration(
-                                          color: theme
-                                              .colorScheme
-                                              .surfaceContainerHighest
-                                              .withValues(alpha: 0.5),
-                                          borderRadius: BorderRadius.circular(
-                                            12,
+                                      _withChangeSentenceButton(
+                                        canChange: canChangeSentence,
+                                        borderColor: theme.colorScheme.primary
+                                            .withValues(alpha: 0.35),
+                                        borderWidth: 1.5,
+                                        box: Container(
+                                          padding: const EdgeInsets.all(16),
+                                          decoration: BoxDecoration(
+                                            color: theme
+                                                .colorScheme
+                                                .surfaceContainerHighest
+                                                .withValues(alpha: 0.5),
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                            border: Border.all(
+                                              color: theme.colorScheme.primary
+                                                  .withValues(alpha: 0.35),
+                                              width: 1.5,
+                                            ),
                                           ),
-                                          border: Border.all(
-                                            color: theme.colorScheme.primary
-                                                .withValues(alpha: 0.35),
-                                            width: 1.5,
-                                          ),
-                                        ),
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.center,
-                                          children: [
-                                            const SizedBox(height: 10),
-                                            _frontSentenceLine(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.center,
+                                            children: [
+                                              const SizedBox(height: 10),
                                               EmphasisText(
                                                 item.vocab.clozeFor(
                                                   item.sentence!,
@@ -2433,9 +2463,8 @@ class _StudyViewState extends State<StudyView> {
                                                           FontWeight.w600,
                                                     ),
                                               ),
-                                              canChange: canChangeSentence,
-                                            ),
-                                          ],
+                                            ],
+                                          ),
                                         ),
                                       ),
                                   ],
@@ -2509,81 +2538,92 @@ class _StudyViewState extends State<StudyView> {
 
                                   // Full Example Sentence
                                   if (item.sentence != null) ...[
-                                    Container(
-                                      padding: const EdgeInsets.all(16),
-                                      decoration: BoxDecoration(
-                                        color: theme
-                                            .colorScheme
-                                            .surfaceContainerHighest
-                                            .withValues(alpha: 0.3),
-                                        borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(
-                                          color:
-                                              theme.colorScheme.outlineVariant,
+                                    _withChangeSentenceButton(
+                                      canChange: canChangeSentence,
+                                      borderColor:
+                                          theme.colorScheme.outlineVariant,
+                                      borderWidth: 1.0,
+                                      box: Container(
+                                        padding: const EdgeInsets.all(16),
+                                        decoration: BoxDecoration(
+                                          color: theme
+                                              .colorScheme
+                                              .surfaceContainerHighest
+                                              .withValues(alpha: 0.3),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                          border: Border.all(
+                                            color: theme
+                                                .colorScheme
+                                                .outlineVariant,
+                                          ),
                                         ),
-                                      ),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              Expanded(
-                                                child: EmphasisText(
-                                                  item.vocab.targetTextFor(
-                                                    item.sentence!,
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment
+                                                      .spaceBetween,
+                                              children: [
+                                                Expanded(
+                                                  child: EmphasisText(
+                                                    item.vocab.targetTextFor(
+                                                      item.sentence!,
+                                                    ),
+                                                    style: theme
+                                                        .textTheme
+                                                        .titleMedium
+                                                        ?.copyWith(
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                        ),
                                                   ),
-                                                  style: theme
-                                                      .textTheme
-                                                      .titleMedium
-                                                      ?.copyWith(
-                                                        fontWeight:
-                                                            FontWeight.w600,
-                                                      ),
                                                 ),
-                                              ),
-                                              AudioButton(
-                                                audioUrl: item
-                                                    .sentence!
-                                                    .playableAudioUrl,
-                                                fallbackText:
-                                                    item.sentence!.speechText,
-                                                language:
-                                                    item.lesson.targetLanguage,
-                                                compact: true,
-                                              ),
-                                              if (canChangeSentence)
-                                                _changeSentenceButton(),
-                                            ],
-                                          ),
-                                          PronunciationLine(
-                                            text: item.sentence!.targetText,
-                                            languageCode:
-                                                item.lesson.targetLanguage,
-                                            centered: false,
-                                            target:
-                                                PronunciationTarget.sentence,
-                                          ),
-                                          const SizedBox(height: 6),
-                                          SpoilerBlock(
-                                            key: ValueKey(
-                                              '$_currentIndex-${item.sentence!.id}',
+                                                AudioButton(
+                                                  audioUrl: item
+                                                      .sentence!
+                                                      .playableAudioUrl,
+                                                  fallbackText:
+                                                      item.sentence!.speechText,
+                                                  language: item
+                                                      .lesson
+                                                      .targetLanguage,
+                                                  compact: true,
+                                                ),
+                                              ],
                                             ),
-                                            child: EmphasisText(
-                                              item.vocab.translationTextFor(
-                                                item.sentence!,
-                                              ),
-                                              style: theme.textTheme.bodyMedium
-                                                  ?.copyWith(
-                                                    color: theme
-                                                        .colorScheme
-                                                        .onSurfaceVariant,
-                                                  ),
+                                            PronunciationLine(
+                                              text: item.sentence!.targetText,
+                                              languageCode:
+                                                  item.lesson.targetLanguage,
+                                              centered: false,
+                                              target:
+                                                  PronunciationTarget.sentence,
                                             ),
-                                          ),
-                                        ],
+                                            const SizedBox(height: 6),
+                                            SpoilerBlock(
+                                              key: ValueKey(
+                                                '$_currentIndex-${item.sentence!.id}',
+                                              ),
+                                              child: EmphasisText(
+                                                item.vocab.translationTextFor(
+                                                  item.sentence!,
+                                                ),
+                                                style: theme
+                                                    .textTheme
+                                                    .bodyMedium
+                                                    ?.copyWith(
+                                                      color: theme
+                                                          .colorScheme
+                                                          .onSurfaceVariant,
+                                                    ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     ),
                                     const SizedBox(height: 16),

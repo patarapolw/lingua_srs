@@ -12,7 +12,6 @@ import 'package:lingua_srs/services/audio_service.dart';
 import 'package:lingua_srs/services/tts_voice.dart';
 import 'package:lingua_srs/views/study_view.dart';
 import 'package:lingua_srs/views/vocab_edit_dialog.dart';
-import 'package:lingua_srs/widgets/emphasis_text.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -401,18 +400,31 @@ void main() {
             w is IconButton &&
             (w.tooltip?.startsWith('Change sentence') ?? false),
       );
-      // On the front the button sits on the sentence's line, not under it.
+      // On the front the button sits on the sentence box's top border, at
+      // its right corner, and the box keeps the card's full width.
       expect(changeButton(), findsOneWidget);
-      final sentenceRow = find.ancestor(
-        of: changeButton(),
-        matching: find.byType(Row),
+      Rect boxRect() => tester.getRect(
+        find
+            .descendant(
+              of: find
+                  .ancestor(of: changeButton(), matching: find.byType(Stack))
+                  .first,
+              matching: find.byType(Container),
+            )
+            .first,
       );
+      void expectOnTopBorder() {
+        final button = tester.getRect(changeButton());
+        final box = boxRect();
+        expect(button.center.dy, closeTo(box.top, 1));
+        expect(button.right, lessThan(box.right));
+        expect(button.left, greaterThan(box.center.dx));
+      }
+
+      expectOnTopBorder();
       expect(
-        find.descendant(
-          of: sentenceRow.first,
-          matching: find.byType(EmphasisText),
-        ),
-        findsOneWidget,
+        boxRect().width,
+        greaterThan(tester.getSize(find.byType(Card).first).width / 2),
       );
 
       await tester.tap(find.textContaining('Show Answer'));
@@ -426,6 +438,7 @@ void main() {
       final other = sentences.singleWhere((s) => !identical(s, onScreen));
 
       expect(changeButton(), findsOneWidget);
+      expectOnTopBorder();
       await tester.tap(changeButton());
       await tester.pumpAndSettle();
 
