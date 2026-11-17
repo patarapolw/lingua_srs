@@ -63,6 +63,10 @@ dependencies:
   # pins device_info_plus <12 (win32 <6, conflicting with file_picker). The 0.10
   # prerelease fixes both but compiles Rust through a build hook, so Linux needs
   # libgtk-3-dev + pkg-config for `flutter test`, locally and in CI.
+  # Its builds log "[SEVERE] RustBuilder: Failed to find lib.name"; that is
+  # harmless. Don't add a `[lib] name` to its Cargo.toml in the pub cache: the
+  # Android library would then be misnamed and fail to load (#255,
+  # test/android_native_library_names_test.dart).
   super_clipboard: ^0.10.0-dev.2
   cryptography_plus: ^3.0.0
   bip39_mnemonic: ^4.1.0
