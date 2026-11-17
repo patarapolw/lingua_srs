@@ -1611,6 +1611,7 @@ class _StudyViewState extends State<StudyView> {
   }) {
     return Stack(
       key: const ValueKey('sentence-box'),
+      clipBehavior: Clip.none,
       // The box keeps the full width it has without the button.
       fit: StackFit.passthrough,
       children: [
@@ -1620,8 +1621,12 @@ class _StudyViewState extends State<StudyView> {
         ),
         if (canChange)
           Positioned(
-            top: 0,
-            right: 16,
+            // Touch platforms pad the button's tap area beyond the circle
+            // ([MaterialTapTargetSize.padded]); offset by that padding so the
+            // circle, not the tap area, is centred on the border. The top of
+            // the padding sticks out above the stack, where it takes no taps.
+            top: -_changeSentenceTapPadding(context),
+            right: 16 - _changeSentenceTapPadding(context),
             child: _changeSentenceButton(borderColor, borderWidth),
           ),
       ],
@@ -1638,6 +1643,14 @@ class _StudyViewState extends State<StudyView> {
 
   static const _gapAboveSentenceBox = 20.0;
   static const _changeSentenceButtonSize = 32.0;
+
+  /// How far the change-sentence button's tap area reaches past its circle on
+  /// each side: none where tap targets shrink-wrap (desktop), and up to the
+  /// minimum interactive size where they are padded (touch).
+  static double _changeSentenceTapPadding(BuildContext context) =>
+      Theme.of(context).materialTapTargetSize == MaterialTapTargetSize.padded
+      ? (kMinInteractiveDimension - _changeSentenceButtonSize) / 2
+      : 0;
 
   void _openEditCurrentCard() {
     if (_currentIndex >= _queue.length) return;
