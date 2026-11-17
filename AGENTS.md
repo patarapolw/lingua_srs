@@ -29,6 +29,7 @@ Flutter app (Dart, `provider` state management). See [README.md](README.md) for 
 - Don't commit machine-specific paths or personal study data.
 - Don't commit secrets. Real values go in the git-ignored `env.json`, `worker/.dev.vars` and `worker/wrangler.jsonc`, or in `wrangler secret put`; commit only the `*.example*` files. GitGuardian scans every PR as a GitHub App, outside `ci.yml`. If it flags a real secret, revoke the secret at its provider; removing it from the branch is not enough.
 - Track bugs and planned work in GitHub Issues, not in the repo. Reference the issue in PRs (e.g. "Fixes #12")
+- In a PR description, when a manual check of a UI change can come out differently on desktop and on mobile (layout at narrow widths, touch targets, hover, keyboard shortcuts, the ⋮ menu that holds toolbar buttons on narrow screens), give desktop and mobile separate unticked boxes, each saying what to try there; one box is enough when the platform makes no difference.
 - In `testWidgets`, wrap real async work (`Future.delayed`, timers, storage I/O) in `tester.runAsync`; the fake-async zone otherwise hangs the test.
 
 ## Debug sessions and hot restart
