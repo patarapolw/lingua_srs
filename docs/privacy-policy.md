@@ -1,6 +1,6 @@
 # LinguaSRS privacy policy
 
-Effective date: `[Effective date]`
+Effective date: 18 November 2026
 
 This policy explains what the LinguaSRS app and its optional sync server do with your data. It covers the app on every platform it is released for (Android through Google Play, and the Windows and Linux builds on GitHub Releases) and the hosted sync server.
 
@@ -8,7 +8,7 @@ In short: your lessons and progress stay on your device. Nothing leaves it unles
 
 ## Who is responsible
 
-`[Operator name and contact address]`
+LinguaSRS is run by patarapolw, who can be reached at [polv@polv.cc](mailto:polv@polv.cc).
 
 Contact this address with questions about this policy or to ask for your data to be deleted.
 
@@ -132,7 +132,7 @@ If you started a signup but did not confirm it, choose **Delete unconfirmed acco
 
 ### Without the app
 
-If you no longer have the app or cannot sign in, email `[Operator name and contact address]` from the email address of the account and ask for it to be deleted. The operator deletes the same data as **Delete account** does. The operator cannot read your synced data, so a deleted account's data cannot be recovered or sent to you.
+If you no longer have the app or cannot sign in, email [polv@polv.cc](mailto:polv@polv.cc) from the email address of the account and ask for it to be deleted. The operator deletes the same data as **Delete account** does. The operator cannot read your synced data, so a deleted account's data cannot be recovered or sent to you.
 
 ### Data on your device
 
@@ -161,4 +161,4 @@ If this policy changes, the new version is published at the same address with a 
 
 ## Contact
 
-`[Operator name and contact address]`
+Email [polv@polv.cc](mailto:polv@polv.cc).
