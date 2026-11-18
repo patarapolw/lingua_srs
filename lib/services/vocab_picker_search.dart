@@ -85,6 +85,9 @@ class VocabPickerSearch {
     return hits.length > limit ? hits.sublist(0, limit) : hits;
   }
 
+  // Built once: textScore runs for every word on each keystroke.
+  static final _latinLetter = RegExp(r'[A-Za-z]');
+
   /// How well [g] matches a typed [query] by its own text, ignoring any
   /// relation to another word; 0 means no match. Hangul in the query searches
   /// the Korean side; anything without Hangul searches meanings. The old
@@ -94,7 +97,7 @@ class VocabPickerSearch {
     if (q.isEmpty) return 0;
     final nq = VocabSimilarity.normalizeTarget(q);
     final korean = hasHangul(q);
-    final latin = RegExp(r'[A-Za-z]').hasMatch(q);
+    final latin = _latinLetter.hasMatch(q);
     var score = 0;
     if (korean) {
       final target = VocabSimilarity.normalizeTarget(g.entry.targetWord);
