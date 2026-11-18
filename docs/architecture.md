@@ -107,6 +107,7 @@ lingua_srs/
 │       ├── lesson_html.dart           # Lesson Markdown to the HTML page, CSS and script the reader's WebView shows
 │       ├── cached_markdown_image.dart # Online Markdown image shown from the disk cache
 │       ├── dialog_messenger.dart      # A dialog's own snackbar messenger, so snackbars show above its barrier
+│       ├── dialog_save_shortcuts.dart # Ctrl/Cmd+Enter and Ctrl/Cmd+S save an edit dialog
 │       ├── markdown_content.dart      # Markdown renderer for notes and chat
 │       ├── markdown_details.dart      # `<details>` blocks in Markdown: a summary that shows and hides text
 │       ├── markdown_heading.dart      # Markdown headings: bold or code keeps the heading size
