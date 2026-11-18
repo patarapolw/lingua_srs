@@ -8,7 +8,10 @@ class VocabPoolSearch {
   /// A part of speech as shown to people: `proper_nouns` becomes
   /// `proper nouns`. Matching and filtering still use the stored spelling.
   static String posLabel(String pos) =>
-      pos.trim().replaceAll('_', ' ').replaceAll(RegExp(r' {2,}'), ' ');
+      pos.trim().replaceAll('_', ' ').replaceAll(_repeatedSpaces, ' ');
+
+  // Built once: posLabel runs for every row shown.
+  static final _repeatedSpaces = RegExp(r' {2,}');
 
   /// The parts of speech in [groups], one per spelling, the one with the most
   /// words first, and alphabetically among equals. Words without one are left
