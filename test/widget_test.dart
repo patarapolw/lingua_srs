@@ -2055,6 +2055,36 @@ vocabulary:
       await tester.pumpAndSettle();
     }
 
+    testWidgets('its close and clear buttons have tooltips', (tester) async {
+      await openAdd(
+        tester,
+        pool: [
+          Sentence(targetText: '사과가 좋아요', translationText: 'I like apples'),
+        ],
+      );
+      await fill(tester, ko: '사과');
+
+      await tester.tap(find.byTooltip('Add from pool'));
+      await tester.pumpAndSettle();
+      expect(find.text('Select examples from the pool'), findsOneWidget);
+      // The dialog's close button and the picker's.
+      expect(find.byTooltip('Close'), findsNWidgets(2));
+
+      await tester.tap(find.byTooltip('Clear search'));
+      await tester.pump();
+      expect(find.byTooltip('Clear search'), findsNothing);
+
+      await tester.tap(find.byTooltip('Close').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Select examples from the pool'), findsNothing);
+
+      await tester.tap(find.byTooltip('Close'));
+      await tester.pumpAndSettle();
+      expect(find.byType(VocabEditDialog), findsNothing);
+      // The controllers are disposed a second after their routes close.
+      await tester.pump(const Duration(seconds: 1));
+    });
+
     testWidgets('has a title and only the schema fields', (tester) async {
       await openAdd(tester);
 
