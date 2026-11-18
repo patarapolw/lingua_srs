@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+ (API 31+): keep every app file out of both the cloud backup
+     to the Google account and the device-to-device transfer to a new phone.
+     On these versions android:allowBackup="false" only turns off the cloud
+     backup, so the transfer needs these rules.
+
+     Why nothing is backed up:
+     - The DeepSeek key, sync sign-in and sync keys must stay on the device
+       (docs/privacy-policy.md).
+     - flutter_secure_storage's data restored on another device cannot be
+       decrypted, since its key lives in the Android Keystore, which is not
+       backed up.
+     - The app has its own JSON backup and end-to-end encrypted sync for
+       moving to a new phone.
+
+     Each domain is excluded whole ("."), so files added later stay out too.
+     test/android_backup_test.dart checks this file. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" path="."/>
+        <exclude domain="file" path="."/>
+        <exclude domain="database" path="."/>
+        <exclude domain="sharedpref" path="."/>
+        <exclude domain="external" path="."/>
+        <exclude domain="device_root" path="."/>
+        <exclude domain="device_file" path="."/>
+        <exclude domain="device_database" path="."/>
+        <exclude domain="device_sharedpref" path="."/>
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" path="."/>
+        <exclude domain="file" path="."/>
+        <exclude domain="database" path="."/>
+        <exclude domain="sharedpref" path="."/>
+        <exclude domain="external" path="."/>
+        <exclude domain="device_root" path="."/>
+        <exclude domain="device_file" path="."/>
+        <exclude domain="device_database" path="."/>
+        <exclude domain="device_sharedpref" path="."/>
+    </device-transfer>
+</data-extraction-rules>

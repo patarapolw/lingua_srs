@@ -178,6 +178,8 @@ Everything a backup contains syncs, except what only makes sense on one device:
 - **Syncs:** lessons and their Markdown, vocabulary entries, word details and SRS progress, the Sentence Pool, merge history, saved AI discussions, questions typed in AI chats, the lesson tree's order, study activity, and the settings listed below.
 - **Stays on the device:** the DeepSeek key and the sync sign-in (secrets), which folders are expanded, the fingerprints of imported Markdown files (they are keyed by a path on this device), the audio and image caches, and one-off migration flags.
 
+Android's own backup is turned off for the app (`android:allowBackup="false"` and `res/xml/data_extraction_rules.xml`), so none of the app's data, synced or not, goes to the Google account backup or to a new phone in a device-to-device transfer. Secure storage restored on another device could not be decrypted anyway, since its key stays in the old device's Keystore. A new phone gets the data from sync or from a backup file.
+
 Times inside records (a card's due date, last review and first review, a message's or merge's time) are saved in UTC (`saved_time.dart`), so a record names the same instant on devices in different time zones, and after a device changes zone. Times saved by older versions have no zone and are read as the device's local time. The first sync after updating to UTC times pushes every card once, since each card's saved text, and so its hash, changes.
 
 ### Kinds

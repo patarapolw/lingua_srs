@@ -1,8 +1,18 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <!-- No Android backup of the app's data: the secrets in secure storage
+         must stay on the device, and restoring them on another device fails
+         to decrypt. allowBackup="false" turns off backup up to Android 11
+         and the cloud backup on 12+; dataExtractionRules also keeps the
+         data out of the device-to-device transfer on 12+. People move to a
+         new phone with the app's JSON backup or sync. -->
     <application
         android:label="LinguaSRS"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        tools:targetApi="31">
         <activity
             android:name=".MainActivity"
             android:exported="true"
