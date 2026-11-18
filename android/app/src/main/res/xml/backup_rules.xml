@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 and lower (API 30 and lower): what Auto Backup copies to the
+     Google account and to a new phone. Android 12+ reads
+     data_extraction_rules.xml instead, which explains the choice; keep the
+     two in step. test/android_backup_test.dart checks this file. -->
+<full-backup-content>
+    <include domain="sharedpref" path="FlutterSharedPreferences.xml"/>
+    <include domain="file" path="lesson_markdown"/>
+</full-backup-content>

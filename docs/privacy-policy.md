@@ -29,11 +29,9 @@ They stay until you delete them in the app, clear the app's data, or uninstall i
 
 ### Android device backup
 
-The app opts out of Android's own backup. Android does not copy its data to your Google account backup, and does not move it to a new phone during device-to-device transfer, even if backup is turned on in your device settings. Your DeepSeek key, sync sign-in and sync keys therefore never leave the device this way.
+If backup is turned on in your Android settings, Android copies your lessons, progress, AI chats and settings to your Google account backup, and to a new phone when you transfer your data to it. That backup is handled by Google under your Google account, not by us. Your DeepSeek key, sync sign-in and sync keys are never included: they stay on the device. The audio and image caches are not included either.
 
-Earlier versions of the app did not opt out, so Android may have included their data in your Google account backup. Google keeps and deletes those copies under your Google account; the current app does not restore them.
-
-To move to a new phone, use the app's backup file (save it on the old phone and restore it on the new one), or sign in to sync on the new phone. Enter the DeepSeek key again on the new phone in either case.
+To move to a new phone without Android's backup, or if it did not bring your lessons (Google limits each app's backup to 25 MB, so a large collection may be left out), save a backup file on the old phone and restore it on the new one, or sign in to sync on the new phone. However your data arrives, enter the DeepSeek key again on the new phone, and sign in to sync again if you use it.
 
 ## What we collect
 

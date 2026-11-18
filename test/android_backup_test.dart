@@ -2,26 +2,23 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-/// Android's own backup must not copy the app's data to the Google account
-/// or to a new phone: the secrets in secure storage stay on the device, and
-/// restored secure storage cannot be decrypted on another device. These tests
-/// read the manifest and the backup rules, which they cannot run.
+/// Android's own backup copies lessons and progress to the Google account
+/// and to a new phone, but never secure storage: the secrets stay on the
+/// device, and restored secure storage cannot be decrypted on another device.
+/// These tests read the manifest and the backup rules, which they cannot run.
 void main() {
   final manifest = File('android/app/src/main/AndroidManifest.xml')
       .readAsStringSync();
-  final rules = File('android/app/src/main/res/xml/data_extraction_rules.xml')
+  final extractionRules = File(
+    'android/app/src/main/res/xml/data_extraction_rules.xml',
+  ).readAsStringSync();
+  final backupRules = File('android/app/src/main/res/xml/backup_rules.xml')
       .readAsStringSync();
 
-  const domains = [
-    'root',
-    'file',
-    'database',
-    'sharedpref',
-    'external',
-    'device_root',
-    'device_file',
-    'device_database',
-    'device_sharedpref',
+  // Everything that is backed up, and nothing else.
+  const includes = [
+    '<include domain="sharedpref" path="FlutterSharedPreferences.xml"/>',
+    '<include domain="file" path="lesson_markdown"/>',
   ];
 
   String application() {
@@ -31,40 +28,56 @@ void main() {
     return manifest.substring(start, end);
   }
 
-  String section(String name) {
+  /// The rules between `<name>` and `</name>`, without the comments.
+  String section(String rules, String name) {
     final start = rules.indexOf('<$name');
     final end = rules.indexOf('</$name>', start);
     expect(start, isNot(-1), reason: 'No <$name> in the backup rules');
     expect(end, isNot(-1), reason: 'No </$name> in the backup rules');
-    return rules.substring(start, end);
+    return rules
+        .substring(start, end)
+        .replaceAll(RegExp(r'<!--.*?-->', dotAll: true), '');
   }
 
-  test('the application turns off backup', () {
-    expect(application(), contains('android:allowBackup="false"'));
-  });
+  void expectOnlyIncludes(String rules, String name) {
+    final body = section(rules, name);
+    final found = RegExp(r'<(include|exclude)\b[^>]*/>')
+        .allMatches(body)
+        .map((match) => match[0])
+        .toList();
+    expect(found, unorderedEquals(includes), reason: name);
+  }
 
-  test('the application uses the data extraction rules', () {
+  test('the application backs up with rules for every Android version', () {
+    final attributes = application();
+    expect(attributes, contains('android:allowBackup="true"'));
     expect(
-      application(),
+      attributes,
+      contains('android:fullBackupContent="@xml/backup_rules"'),
+    );
+    expect(
+      attributes,
       contains('android:dataExtractionRules="@xml/data_extraction_rules"'),
     );
   });
 
-  test('the application has no full backup content that includes files', () {
-    expect(application(), isNot(contains('android:fullBackupContent="@')));
-  });
-
   for (final name in ['cloud-backup', 'device-transfer']) {
-    test('$name excludes every domain and includes nothing', () {
-      final body = section(name);
-      expect(body, isNot(contains('<include')));
-      for (final domain in domains) {
-        expect(
-          body,
-          contains('<exclude domain="$domain" path="."/>'),
-          reason: '$name does not exclude $domain',
-        );
-      }
+    test('$name includes only preferences and lesson Markdown', () {
+      expectOnlyIncludes(extractionRules, name);
     });
   }
+
+  test('full backup content includes only preferences and lesson Markdown', () {
+    expectOnlyIncludes(backupRules, 'full-backup-content');
+  });
+
+  test('no rule names secure storage', () {
+    for (final rules in [extractionRules, backupRules]) {
+      final withoutComments = rules.replaceAll(
+        RegExp(r'<!--.*?-->', dotAll: true),
+        '',
+      );
+      expect(withoutComments, isNot(contains('FlutterSecure')));
+    }
+  });
 }
