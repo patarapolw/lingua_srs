@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+ (API 31+): what goes into the cloud backup to the Google
+     account and the device-to-device transfer to a new phone. backup_rules.xml
+     says the same for Android 11 and lower; keep the two in step.
+
+     Only these are included, so nothing else is:
+     - FlutterSharedPreferences.xml: lessons, progress, settings and the sync
+       state (shared_preferences keeps every key in this one file).
+     - files/lesson_markdown/: each lesson's Markdown.
+
+     Left out, and never to be included:
+     - flutter_secure_storage's files (FlutterSecureStorage*.xml,
+       FlutterSecureKeyStorage.xml): the DeepSeek key, sync sign-in and sync
+       keys stay on the device, and their Keystore key is not backed up, so a
+       restored copy could not be decrypted.
+     The caches are in the cache folder, which Android never backs up.
+
+     A restored copy carries the old device's sync state; StorageService
+     starts it again with a new device id (_forgetRestoredSyncState).
+     test/android_backup_test.dart checks this file. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <include domain="sharedpref" path="FlutterSharedPreferences.xml"/>
+        <include domain="file" path="lesson_markdown"/>
+    </cloud-backup>
+    <device-transfer>
+        <include domain="sharedpref" path="FlutterSharedPreferences.xml"/>
+        <include domain="file" path="lesson_markdown"/>
+    </device-transfer>
+</data-extraction-rules>

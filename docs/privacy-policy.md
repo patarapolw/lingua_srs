@@ -27,7 +27,11 @@ They stay until you delete them in the app, clear the app's data, or uninstall i
 
 *Settings → Backup and restore* saves a backup file wherever you choose. It contains your lessons, progress, AI chats and settings. It does not contain the DeepSeek API key, the sync sign-in or the caches. The file is not encrypted, so keep it somewhere safe.
 
-On Android, if backup is turned on in your device settings, Android may include the app's data in your device backup to your Google account. That backup is handled by Google under your Google account, not by us.
+### Android device backup
+
+If backup is turned on in your Android settings, Android copies your lessons, progress, AI chats and settings to your Google account backup, and to a new phone when you transfer your data to it. That backup is handled by Google under your Google account, not by us. Your DeepSeek key, sync sign-in and sync keys are never included: they stay on the device. The audio and image caches are not included either.
+
+To move to a new phone without Android's backup, or if it did not bring your lessons (Google limits each app's backup to 25 MB, so a large collection may be left out), save a backup file on the old phone and restore it on the new one, or sign in to sync on the new phone. However your data arrives, enter the DeepSeek key again on the new phone, and sign in to sync again if you use it.
 
 ## What we collect
 

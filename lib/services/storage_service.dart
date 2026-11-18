@@ -30,6 +30,7 @@ class StorageService {
   static const String _keyDeepSeekApiKey = 'lingua_srs_deepseek_api_key';
   static const String _keySyncPairing = 'lingua_srs_sync_pairing';
   static const String _keySyncState = 'lingua_srs_sync_state';
+  static const String _keySyncDeviceMark = 'lingua_srs_sync_device_mark';
   static const String _keySyncDataKey = 'lingua_srs_sync_data_key';
   static const String _keySyncLastSyncedAt = 'lingua_srs_sync_last_synced_at';
   static const String _keySyncRemoteActivity =
@@ -67,9 +68,22 @@ class StorageService {
   static Set<String> _storedLessonMarkdownIds = {};
   static SecretStorage _secretStorage = const PlatformSecretStorage();
 
+  /// Whether Android may have restored preferences from its backup without
+  /// secure storage (see `_forgetRestoredSyncState`).
+  static bool _detectsRestoredSyncState = !kIsWeb && Platform.isAndroid;
+  static Future<void>? _restoredSyncStateCheck;
+  static String? _markedDeviceId;
+
   @visibleForTesting
   static set secretStorageForTesting(SecretStorage? storage) {
     _secretStorage = storage ?? const PlatformSecretStorage();
+  }
+
+  @visibleForTesting
+  static set detectsRestoredSyncStateForTesting(bool? detects) {
+    _detectsRestoredSyncState = detects ?? (!kIsWeb && Platform.isAndroid);
+    _restoredSyncStateCheck = null;
+    _markedDeviceId = null;
   }
 
   static void resetLessonMarkdownCache() {
@@ -174,6 +188,9 @@ class StorageService {
   /// What this device knows about its synced records. A missing or unreadable
   /// state starts again, which only means every record is pushed once more.
   static Future<SyncChangeTracker> loadSyncChangeTracker() async {
+    if (_detectsRestoredSyncState) {
+      await (_restoredSyncStateCheck ??= _forgetRestoredSyncState());
+    }
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_keySyncState);
     if (raw == null || raw.isEmpty) return SyncChangeTracker();
@@ -190,6 +207,69 @@ class StorageService {
   static Future<void> saveSyncChangeTracker(SyncChangeTracker tracker) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keySyncState, jsonEncode(tracker.toJson()));
+    if (_detectsRestoredSyncState) await _markDevice(tracker.deviceId);
+  }
+
+  /// Android backs up preferences and lesson Markdown to the Google account
+  /// and copies them to a new phone, but never secure storage
+  /// (`android/app/src/main/res/xml/data_extraction_rules.xml`). A restored
+  /// copy brings the old device's sync state: its device id, which names its
+  /// activity records, and what it had pushed and pulled. Secure storage
+  /// keeps a mark of this device's id. Sync state without a matching mark
+  /// was restored, so it starts again with a new device id and no sign-in,
+  /// as on a device a backup file was restored to.
+  ///
+  /// Devices that synced before marks were kept have none. One still signed
+  /// in has its sync state marked as its own; one signed out gets a new
+  /// device id once.
+  static Future<void> _forgetRestoredSyncState() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_keySyncState);
+    if (raw == null || raw.isEmpty) return;
+    final String deviceId;
+    try {
+      deviceId = SyncChangeTracker.fromJson(
+        Map<String, dynamic>.from(jsonDecode(raw) as Map),
+      ).deviceId;
+    } catch (_) {
+      return; // loadSyncChangeTracker starts unreadable state again
+    }
+
+    final String? mark;
+    final String? pairing;
+    try {
+      mark = await _secretStorage.read(_keySyncDeviceMark);
+      pairing = mark == null
+          ? await _secretStorage.read(_keySyncPairing)
+          : null;
+    } catch (error) {
+      // Without secure storage nothing tells a restored copy apart, and
+      // keeping the device id is what this device did before marks.
+      debugPrint('Could not read the sync device mark: $error');
+      return;
+    }
+    if (mark == deviceId) {
+      _markedDeviceId = mark;
+      return;
+    }
+    if (mark == null && pairing != null) {
+      await _markDevice(deviceId);
+      return;
+    }
+
+    debugPrint('Sync state was restored from another device; starting again.');
+    await prefs.remove(_keySyncLastSyncedAt);
+    await saveSyncChangeTracker(SyncChangeTracker());
+  }
+
+  static Future<void> _markDevice(String deviceId) async {
+    if (_markedDeviceId == deviceId) return;
+    try {
+      await _secretStorage.write(_keySyncDeviceMark, deviceId);
+      _markedDeviceId = deviceId;
+    } catch (error) {
+      debugPrint('Could not mark the sync device: $error');
+    }
   }
 
   static Future<void> saveSyncPairing(SyncPairing? pairing) async {

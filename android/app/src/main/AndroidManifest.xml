@@ -1,8 +1,18 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <!-- Android backup copies lessons, progress and settings to the Google
+         account and to a new phone, but never secure storage: the secrets
+         stay on the device, and restoring them on another device fails to
+         decrypt. fullBackupContent applies up to Android 11,
+         dataExtractionRules on 12+; res/xml explains what each includes. -->
     <application
         android:label="LinguaSRS"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="true"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        tools:targetApi="31">
         <activity
             android:name=".MainActivity"
             android:exported="true"
