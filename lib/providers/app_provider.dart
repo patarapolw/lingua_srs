@@ -1362,13 +1362,39 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     return changed;
   }
 
-  // Sentence Pool lookup
+  /// Where each sentence id was in [_sentences] when the index was last
+  /// built. The list changes in many places, so a lookup checks the entry
+  /// it finds and rebuilds the index when it is out of date.
+  Map<String, int> _sentenceIndexById = const {};
+
+  /// The pool sentence with [id], or null when there is none.
   Sentence? getSentenceById(String id) {
-    try {
-      return _sentences.firstWhere((s) => s.id == id);
-    } catch (_) {
-      return null;
+    final indexed = _indexedSentence(id);
+    if (indexed != null) return indexed;
+    // Not indexed, or the list changed since. Scan for it, as a missing id
+    // costs no more than before, and index again only when it is there.
+    for (final sentence in _sentences) {
+      if (sentence.id != id) continue;
+      _indexSentences();
+      return sentence;
     }
+    return null;
+  }
+
+  Sentence? _indexedSentence(String id) {
+    final index = _sentenceIndexById[id];
+    if (index == null || index >= _sentences.length) return null;
+    final sentence = _sentences[index];
+    return sentence.id == id ? sentence : null;
+  }
+
+  void _indexSentences() {
+    final byId = <String, int>{};
+    for (var index = 0; index < _sentences.length; index++) {
+      // The first of any repeated id, as a scan would find.
+      byId.putIfAbsent(_sentences[index].id, () => index);
+    }
+    _sentenceIndexById = byId;
   }
 
   List<Sentence> getSentencesForVocab(VocabItem vocab) {
