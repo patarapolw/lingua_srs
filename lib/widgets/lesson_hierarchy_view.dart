@@ -10,7 +10,14 @@ class LessonHierarchyRow {
   final Lesson? lesson;
   final int lessonCount;
 
-  const LessonHierarchyRow._({
+  /// The keys of the visible rows under [parentKey], this one included, in
+  /// order. Shared by those rows.
+  late final List<String> siblingKeys;
+
+  /// This row's position in [siblingKeys].
+  late final int siblingIndex;
+
+  LessonHierarchyRow._({
     required this.key,
     required this.parentKey,
     required this.depth,
@@ -20,6 +27,131 @@ class LessonHierarchyRow {
   });
 
   bool get isFolder => folderPath != null;
+}
+
+/// The visible rows of the lesson tree, folders before their contents.
+///
+/// Siblings are sorted by their saved rank in [order]; those without one
+/// follow the highest saved rank, in the order of [lessons]. The children
+/// of a folder collapsed in [folderExpansion] are left out. Each rank and
+/// each row's [LessonHierarchyRow.siblingIndex] are worked out once, so a
+/// build costs about as much as sorting the lessons.
+List<LessonHierarchyRow> buildLessonHierarchyRows({
+  required List<Lesson> lessons,
+  required Map<String, int> order,
+  required Map<String, bool> folderExpansion,
+}) {
+  final roots = _buildTree(lessons, order);
+  final rows = <LessonHierarchyRow>[];
+  _appendVisibleRows(roots, rows, 'root', 0, folderExpansion);
+  final siblingKeysByParent = <String, List<String>>{};
+  for (final row in rows) {
+    final siblingKeys = siblingKeysByParent.putIfAbsent(
+      row.parentKey,
+      () => [],
+    );
+    row
+      ..siblingKeys = siblingKeys
+      ..siblingIndex = siblingKeys.length;
+    siblingKeys.add(row.key);
+  }
+  return rows;
+}
+
+List<_HierarchyNode> _buildTree(List<Lesson> lessons, Map<String, int> order) {
+  final roots = <_HierarchyNode>[];
+  final nodes = <_HierarchyNode>[];
+  final foldersByPath = <String, _HierarchyNode>{};
+  for (var lessonIndex = 0; lessonIndex < lessons.length; lessonIndex++) {
+    final lesson = lessons[lessonIndex];
+    final folders = lesson.folderPath;
+    var siblings = roots;
+    final parentPath = <String>[];
+    for (final folder in folders) {
+      parentPath.add(folder);
+      final folderKey = hierarchyFolderKey(parentPath);
+      var node = foldersByPath[folderKey];
+      if (node == null) {
+        node = _HierarchyNode.folder(
+          key: folderKey,
+          path: List.unmodifiable(parentPath),
+          originOrder: lessonIndex,
+        );
+        foldersByPath[folderKey] = node;
+        nodes.add(node);
+        siblings.add(node);
+      } else if (lessonIndex < node.originOrder) {
+        node.originOrder = lessonIndex;
+      }
+      siblings = node.children;
+    }
+    final node = _HierarchyNode.lesson(
+      key: 'lesson:${lesson.id}',
+      lesson: lesson,
+      originOrder: lessonIndex,
+    );
+    nodes.add(node);
+    siblings.add(node);
+  }
+
+  // Rows without a saved rank go after every saved one, in lesson order.
+  final lastSavedRank = order.values.fold<int>(
+    -1,
+    (maximum, rank) => rank > maximum ? rank : maximum,
+  );
+  for (final node in nodes) {
+    node.rank = order[node.key] ?? lastSavedRank + node.originOrder + 1;
+  }
+
+  void sortNodes(List<_HierarchyNode> nodes) {
+    nodes.sort((first, second) => first.rank.compareTo(second.rank));
+    for (final node in nodes) {
+      sortNodes(node.children);
+    }
+  }
+
+  sortNodes(roots);
+  return roots;
+}
+
+void _appendVisibleRows(
+  List<_HierarchyNode> nodes,
+  List<LessonHierarchyRow> rows,
+  String parentKey,
+  int depth,
+  Map<String, bool> folderExpansion,
+) {
+  for (final node in nodes) {
+    if (node.isFolder) {
+      rows.add(
+        LessonHierarchyRow._(
+          key: node.key,
+          parentKey: parentKey,
+          depth: depth,
+          folderPath: node.path,
+          lessonCount: node.lessonCount,
+        ),
+      );
+      if (folderExpansion[node.key] ?? true) {
+        _appendVisibleRows(
+          node.children,
+          rows,
+          node.key,
+          depth + 1,
+          folderExpansion,
+        );
+      }
+    } else {
+      rows.add(
+        LessonHierarchyRow._(
+          key: node.key,
+          parentKey: parentKey,
+          depth: depth,
+          lesson: node.lesson,
+        ),
+      );
+    }
+  }
 }
 
 class LessonOrderActions {
@@ -74,9 +206,11 @@ class LessonHierarchyView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final roots = _buildTree();
-    final rows = <LessonHierarchyRow>[];
-    _appendVisibleRows(roots, rows, 'root', 0);
+    final rows = buildLessonHierarchyRows(
+      lessons: lessons,
+      order: order,
+      folderExpansion: folderExpansion,
+    );
 
     return ReorderableListView.builder(
       shrinkWrap: true,
@@ -127,7 +261,7 @@ class LessonHierarchyView extends StatelessWidget {
       itemBuilder: (context, index) {
         final row = rows[index];
         final child = row.isFolder
-            ? _folderRow(context, row, index, rows)
+            ? _folderRow(context, row, index)
             : ReorderableDelayedDragStartListener(
                 index: index,
                 child: Padding(
@@ -138,7 +272,7 @@ class LessonHierarchyView extends StatelessWidget {
                   child: lessonBuilder(
                     context,
                     row.lesson!,
-                    _orderActions(row, rows),
+                    _orderActions(row),
                   ),
                 ),
               );
@@ -147,108 +281,9 @@ class LessonHierarchyView extends StatelessWidget {
     );
   }
 
-  List<_HierarchyNode> _buildTree() {
-    final roots = <_HierarchyNode>[];
-    final foldersByPath = <String, _HierarchyNode>{};
-    for (var lessonIndex = 0; lessonIndex < lessons.length; lessonIndex++) {
-      final lesson = lessons[lessonIndex];
-      final folders = lesson.folderPath;
-      var siblings = roots;
-      final parentPath = <String>[];
-      for (final folder in folders) {
-        parentPath.add(folder);
-        final folderKey = hierarchyFolderKey(parentPath);
-        var node = foldersByPath[folderKey];
-        if (node == null) {
-          node = _HierarchyNode.folder(
-            key: folderKey,
-            path: List.unmodifiable(parentPath),
-            originOrder: lessonIndex,
-          );
-          foldersByPath[folderKey] = node;
-          siblings.add(node);
-        } else if (lessonIndex < node.originOrder) {
-          node.originOrder = lessonIndex;
-        }
-        siblings = node.children;
-      }
-      siblings.add(
-        _HierarchyNode.lesson(
-          key: 'lesson:${lesson.id}',
-          lesson: lesson,
-          originOrder: lessonIndex,
-        ),
-      );
-    }
-
-    void sortNodes(List<_HierarchyNode> nodes) {
-      nodes.sort((first, second) {
-        final lastSavedRank = order.values.fold<int>(
-          -1,
-          (maximum, rank) => rank > maximum ? rank : maximum,
-        );
-        final firstRank =
-            order[first.key] ?? lastSavedRank + first.originOrder + 1;
-        final secondRank =
-            order[second.key] ?? lastSavedRank + second.originOrder + 1;
-        return firstRank.compareTo(secondRank);
-      });
-      for (final node in nodes) {
-        sortNodes(node.children);
-      }
-    }
-
-    sortNodes(roots);
-    return roots;
-  }
-
-  void _appendVisibleRows(
-    List<_HierarchyNode> nodes,
-    List<LessonHierarchyRow> rows,
-    String parentKey,
-    int depth,
-  ) {
-    for (final node in nodes) {
-      if (node.isFolder) {
-        final count = _lessonCount(node);
-        rows.add(
-          LessonHierarchyRow._(
-            key: node.key,
-            parentKey: parentKey,
-            depth: depth,
-            folderPath: node.path,
-            lessonCount: count,
-          ),
-        );
-        if (folderExpansion[node.key] ?? true) {
-          _appendVisibleRows(node.children, rows, node.key, depth + 1);
-        }
-      } else {
-        rows.add(
-          LessonHierarchyRow._(
-            key: node.key,
-            parentKey: parentKey,
-            depth: depth,
-            lesson: node.lesson,
-          ),
-        );
-      }
-    }
-  }
-
-  int _lessonCount(_HierarchyNode node) => node.isFolder
-      ? node.children.fold(0, (count, child) => count + _lessonCount(child))
-      : 1;
-
-  LessonOrderActions _orderActions(
-    LessonHierarchyRow row,
-    List<LessonHierarchyRow> rows,
-  ) {
-    final siblings = rows.where(
-      (sibling) => sibling.parentKey == row.parentKey,
-    );
-    final siblingKeys = siblings.map((sibling) => sibling.key).toList();
-    final siblingIndex = siblingKeys.indexOf(row.key);
+  LessonOrderActions _orderActions(LessonHierarchyRow row) {
+    final siblingKeys = row.siblingKeys;
+    final siblingIndex = row.siblingIndex;
     return LessonOrderActions(
       canMoveUp: siblingIndex > 0,
       canMoveDown: siblingIndex < siblingKeys.length - 1,
@@ -266,15 +301,10 @@ class LessonHierarchyView extends StatelessWidget {
     onOrderChanged(reorderedKeys);
   }
 
-  Widget _folderRow(
-    BuildContext context,
-    LessonHierarchyRow row,
-    int index,
-    List<LessonHierarchyRow> rows,
-  ) {
+  Widget _folderRow(BuildContext context, LessonHierarchyRow row, int index) {
     final theme = Theme.of(context);
     final expanded = folderExpansion[row.key] ?? true;
-    final orderActions = _orderActions(row, rows);
+    final orderActions = _orderActions(row);
     return Card(
       margin: EdgeInsets.fromLTRB(4 + _indentPerLevel * row.depth, 12, 4, 2),
       child: ReorderableDelayedDragStartListener(
@@ -427,6 +457,14 @@ class _HierarchyNode {
   final Lesson? lesson;
   final List<_HierarchyNode> children = [];
   int originOrder;
+
+  /// Where the node sorts among its siblings; set once the tree is built.
+  int rank = 0;
+
+  /// The lessons in this folder and its subfolders, or 1 for a lesson.
+  int get lessonCount => isFolder
+      ? children.fold(0, (count, child) => count + child.lessonCount)
+      : 1;
 
   _HierarchyNode._({
     required this.key,

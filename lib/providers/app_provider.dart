@@ -1362,13 +1362,39 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     return changed;
   }
 
-  // Sentence Pool lookup
+  /// Where each sentence id was in [_sentences] when the index was last
+  /// built. The list changes in many places, so a lookup checks the entry
+  /// it finds and rebuilds the index when it is out of date.
+  Map<String, int> _sentenceIndexById = const {};
+
+  /// The pool sentence with [id], or null when there is none.
   Sentence? getSentenceById(String id) {
-    try {
-      return _sentences.firstWhere((s) => s.id == id);
-    } catch (_) {
-      return null;
+    final indexed = _indexedSentence(id);
+    if (indexed != null) return indexed;
+    // Not indexed, or the list changed since. Scan for it, as a missing id
+    // costs no more than before, and index again only when it is there.
+    for (final sentence in _sentences) {
+      if (sentence.id != id) continue;
+      _indexSentences();
+      return sentence;
     }
+    return null;
+  }
+
+  Sentence? _indexedSentence(String id) {
+    final index = _sentenceIndexById[id];
+    if (index == null || index >= _sentences.length) return null;
+    final sentence = _sentences[index];
+    return sentence.id == id ? sentence : null;
+  }
+
+  void _indexSentences() {
+    final byId = <String, int>{};
+    for (var index = 0; index < _sentences.length; index++) {
+      // The first of any repeated id, as a scan would find.
+      byId.putIfAbsent(_sentences[index].id, () => index);
+    }
+    _sentenceIndexById = byId;
   }
 
   List<Sentence> getSentencesForVocab(VocabItem vocab) {
@@ -3724,7 +3750,8 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   /// rated [rating], when its rating is undone: one review on that day and
   /// under that rating, the new card started if [startedNewCard], and its
   /// entry toward the 24-hour limit if it had one. The card itself is
-  /// restored by the caller.
+  /// restored by the caller, before this call; this saves it, so the caller
+  /// doesn't call [saveState] as well.
   Future<void> undoCardReview(
     DateTime at,
     SrsRating rating, {
@@ -3741,6 +3768,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     if (startedNewCard) _decrementDayCount(_dailyNewCardCounts, date);
     final hadTimestamp = _reviewTimestamps24h.remove(at);
     notifyListeners();
+    await StorageService.saveLessons(_lessons);
     await StorageService.saveDailyReviewCounts(_dailyReviewCounts);
     await StorageService.saveDailyRatingCounts(_dailyRatingCounts);
     if (startedNewCard) {
@@ -3752,7 +3780,9 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   }
 
   /// Moves the review made [at] from rating [from] to [to], when an answered
-  /// card is re-rated. It is still one review, so no total changes.
+  /// card is re-rated. It is still one review, so no total changes. The
+  /// caller reschedules the card before this call; this saves it, so the
+  /// caller doesn't call [saveState] as well.
   Future<void> recountCardReview(
     DateTime at,
     SrsRating from,
@@ -3768,6 +3798,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     _addRatingCount(date, from, -1);
     _addRatingCount(date, to, 1);
     notifyListeners();
+    await StorageService.saveLessons(_lessons);
     await StorageService.saveDailyRatingCounts(_dailyRatingCounts);
   }
 

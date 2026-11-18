@@ -213,7 +213,10 @@ class _SentencePoolViewState extends State<SentencePoolView> {
     final provider = context.watch<AppProvider>();
     final theme = Theme.of(context);
 
-    final filtered = provider.activeSentences.where((s) {
+    // Working out each sentence's language takes a pass over every lesson,
+    // so read the list once.
+    final sentences = provider.activeSentences;
+    final filtered = sentences.where((s) {
       if (_filter.isEmpty) return true;
       final query = _filter.toLowerCase();
       return s.targetText.toLowerCase().contains(query) ||
@@ -223,7 +226,7 @@ class _SentencePoolViewState extends State<SentencePoolView> {
 
     // On a narrow screen the search box takes the whole width, so its hint is
     // never cut, and the count becomes a caption line under it.
-    final count = provider.activeSentences.length;
+    final count = sentences.length;
     final countLabel = '$count ${count == 1 ? 'sentence' : 'sentences'}';
     final narrow = MediaQuery.sizeOf(context).width < 700;
     final searchField = TextField(
