@@ -2134,6 +2134,41 @@ vocabulary:
       expect(draft.pos, 'nouns');
     });
 
+    testWidgets('starts in the Korean field and saves on Ctrl+S', (
+      tester,
+    ) async {
+      final (_, draft) = await openAdd(tester);
+      final korean = find.descendant(
+        of: find.widgetWithText(TextField, 'Korean *'),
+        matching: find.byType(EditableText),
+      );
+      expect(tester.widget<EditableText>(korean).focusNode.hasFocus, isTrue);
+
+      await fill(tester, ko: '배', en: 'pear', pos: 'nouns');
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(VocabEditDialog), findsNothing);
+      expect(draft.targetWord, '배');
+      expect(draft.translation, 'pear');
+    });
+
+    testWidgets('Ctrl+Enter checks the required fields like Save', (
+      tester,
+    ) async {
+      await openAdd(tester);
+      await fill(tester, ko: '배');
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Required'), findsNWidgets(2));
+      expect(find.byType(VocabEditDialog), findsOneWidget);
+    });
+
     testWidgets('saves ko_text, audio and notes with the new word', (
       tester,
     ) async {

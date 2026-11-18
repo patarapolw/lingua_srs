@@ -12,6 +12,7 @@ import '../services/korean_text_search.dart';
 import '../services/tts_text.dart';
 import '../widgets/audio_button.dart';
 import '../widgets/audio_edit_fields.dart';
+import '../widgets/dialog_save_shortcuts.dart';
 import '../widgets/emphasis_field.dart';
 import '../widgets/emphasis_text.dart';
 import '../widgets/markdown_content.dart';
@@ -123,428 +124,453 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     final theme = Theme.of(context);
     final provider = context.watch<AppProvider>();
 
-    return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        width: 680,
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.9,
-        ),
-        child: Column(
-          children: [
-            // Header
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 20, 20, 12),
-              child: Row(
-                children: [
-                  Icon(
-                    widget.isNew
-                        ? Icons.add_circle_outline
-                        : Icons.edit_note_rounded,
-                    size: 28,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      widget.isNew ? 'Add vocabulary' : widget.vocab.targetWord,
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-
-            // Form Content
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 16,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+    return DialogSaveShortcuts(
+      onSave: _save,
+      // Adding a word starts in its first field instead.
+      autofocus: !widget.isNew,
+      child: Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          width: 680,
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.9,
+          ),
+          child: Column(
+            children: [
+              // Header
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 20, 20, 12),
+                child: Row(
                   children: [
-                    // Target Word and Translation
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          flex: 5,
-                          child: TextField(
-                            controller: _targetWordCtrl,
-                            decoration: InputDecoration(
-                              labelText: 'Korean *',
-                              errorText: _targetError,
-                              border: const OutlineInputBorder(),
-                            ),
-                            // Also refreshes the suggested examples.
-                            onChanged: (_) =>
-                                setState(() => _targetError = null),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          flex: 5,
-                          child: TextField(
-                            controller: _translationCtrl,
-                            decoration: InputDecoration(
-                              labelText: 'English *',
-                              errorText: _translationError,
-                              border: const OutlineInputBorder(),
-                            ),
-                            onChanged: (_) {
-                              if (_translationError != null) {
-                                setState(() => _translationError = null);
-                              }
-                            },
-                          ),
-                        ),
-                      ],
+                    Icon(
+                      widget.isNew
+                          ? Icons.add_circle_outline
+                          : Icons.edit_note_rounded,
+                      size: 28,
                     ),
-                    if (!widget.isNew) ...[
-                      ..._writingFields(provider),
-                      const SizedBox(height: 16),
-                      _duplicateFrontWarning(
-                        provider,
-                        CardDirection.targetToNative,
-                      ),
-                      _duplicateFrontWarning(
-                        provider,
-                        CardDirection.nativeToTarget,
-                      ),
-                      // Collapsed unless this word needs telling apart from
-                      // another card with the same front.
-                      Theme(
-                        data: theme.copyWith(dividerColor: Colors.transparent),
-                        child: ExpansionTile(
-                          initiallyExpanded: CardDirection.values.any(
-                            (direction) => provider
-                                .getDuplicateFrontVocabularies(
-                                  widget.vocab,
-                                  direction,
-                                )
-                                .isNotEmpty,
-                          ),
-                          maintainState: true,
-                          tilePadding: EdgeInsets.zero,
-                          childrenPadding: const EdgeInsets.only(top: 8),
-                          title: Text(
-                            'Hints',
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          subtitle: Text(
-                            'Tell apart cards with the same front.',
-                            style: theme.textTheme.bodySmall,
-                          ),
-                          children: [
-                            TextField(
-                              controller: _disambiguationCtrl,
-                              decoration: const InputDecoration(
-                                labelText:
-                                    'Front hint, both directions (optional)',
-                                hintText: 'e.g. fruit, vehicle',
-                                helperText: 'Shown on card fronts unless a direction-specific hint below is set.',
-                                helperMaxLines: 3,
-                                border: OutlineInputBorder(),
-                              ),
-                            ),
-                            _hintField(provider, CardDirection.targetToNative),
-                            _hintField(provider, CardDirection.nativeToTarget),
-                          ],
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        widget.isNew
+                            ? 'Add vocabulary'
+                            : widget.vocab.targetWord,
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
                         ),
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      _mergeSection(provider),
-                    ],
-                    const SizedBox(height: 20),
-
-                    // Part of speech / Category & Audio URL
-                    TextField(
-                      controller: _posCtrl,
-                      decoration: InputDecoration(
-                        labelText: widget.isNew
-                            ? 'Part of speech *'
-                            : 'Part of speech',
-                        hintText: 'e.g. nouns, verbs',
-                        errorText: _posError,
-                        border: const OutlineInputBorder(),
-                      ),
-                      onChanged: (_) {
-                        if (_posError != null) {
-                          setState(() => _posError = null);
-                        }
-                      },
                     ),
-                    const SizedBox(height: 16),
-                    AudioEditFields(
-                      audioUrl: _audioCtrl,
-                      useAudio: _useAudio,
-                      onUseAudioChanged: (value) =>
-                          setState(() => _useAudio = value),
-                      ttsText: _ttsCtrl,
-                      spokenFallback: _targetWordCtrl,
-                      ttsHintText: 'e.g. 세 개 for 3개',
-                      ttsHelperText: 'Spoken instead of the Korean word when there is no recording.',
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.of(context).pop(),
                     ),
-                    if (!widget.isNew) ...[
-                      const SizedBox(height: 20),
-                      TextField(
-                        controller: _idCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'ID (optional)',
-                          helperText: 'Same ID shares SRS progress. Blank uses word + meaning.',
-                          helperMaxLines: 3,
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-
-                      // SRS Direction Toggles
-                      Card(
-                        elevation: 0,
-                        color: theme.colorScheme.surfaceContainerHighest
-                            .withValues(alpha: 0.5),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          side: BorderSide(
-                            color: theme.colorScheme.outlineVariant,
-                          ),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 12,
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Cards',
-                                style: theme.textTheme.titleSmall?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              SwitchListTile(
-                                title: const Text('KO ➔ EN'),
-                                subtitle: const Text(
-                                  'Off by default for verbs, adjectives',
-                                ),
-                                value: _enableTargetToNative,
-                                onChanged: (val) =>
-                                    setState(() => _enableTargetToNative = val),
-                              ),
-                              SwitchListTile(
-                                title: const Text('EN ➔ KO (cloze)'),
-                                subtitle: const Text(
-                                  'Off by default for other cards',
-                                ),
-                                value: _enableNativeToTarget,
-                                onChanged: (val) =>
-                                    setState(() => _enableNativeToTarget = val),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-
-                      // Collapsed: these are usually edited from the back of the
-                      // card while reviewing.
-                      Theme(
-                        data: theme.copyWith(dividerColor: Colors.transparent),
-                        child: ExpansionTile(
-                          maintainState: true,
-                          tilePadding: EdgeInsets.zero,
-                          childrenPadding: const EdgeInsets.only(top: 8),
-                          title: Text(
-                            'Review notes',
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          subtitle: Text(
-                            'Per card. Also editable on the back of the card '
-                            'while reviewing.',
-                            style: theme.textTheme.bodySmall,
-                          ),
-                          children: [
-                            MarkdownNotesField(
-                              key: const ValueKey('review-notes-ko-en'),
-                              label: 'KO ➔ EN',
-                              addLabel: 'Add KO ➔ EN review note',
-                              controller: _targetToNativeBackNotesCtrl,
-                            ),
-                            MarkdownNotesField(
-                              key: const ValueKey('review-notes-en-ko'),
-                              label: 'EN ➔ KO',
-                              addLabel: 'Add EN ➔ KO review note',
-                              controller: _nativeToTargetBackNotesCtrl,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                    ],
-
-                    MarkdownNotesField(
-                      key: const ValueKey('vocab-notes'),
-                      label: 'Vocab notes',
-                      addLabel: 'Add vocab note',
-                      controller: _notesCtrl,
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Linked Sentences from Pool
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Examples (${_sentenceIds.length + _draftSentences.length})',
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        // Choosing from the pool is the default; a new sentence
-                        // has to be checked for duplicates first.
-                        if (widget.isNew) ...[
-                          IconButton.filledTonal(
-                            icon: const Icon(Icons.library_add_outlined),
-                            tooltip: 'Add from pool',
-                            onPressed: _openSentencePicker,
-                          ),
-                          const SizedBox(width: 4),
-                          IconButton.outlined(
-                            icon: const Icon(Icons.add),
-                            tooltip: 'Create new sentence',
-                            onPressed: _openCreateSentenceDialog,
-                          ),
-                        ] else ...[
-                          IconButton.outlined(
-                            icon: const Icon(Icons.library_add_outlined),
-                            tooltip: 'Add from pool',
-                            onPressed: _openSentencePicker,
-                          ),
-                          const SizedBox(width: 4),
-                          IconButton.filledTonal(
-                            icon: const Icon(Icons.add),
-                            tooltip: 'Create new sentence',
-                            onPressed: _openCreateSentenceDialog,
-                          ),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    if (_sentenceIds.isNotEmpty || _draftSentences.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: Text(
-                          'Tap an example to edit its text and its **emphasis**.',
-                          style: theme.textTheme.bodySmall,
-                        ),
-                      ),
-                    if (widget.isNew) ..._suggestedExamples(provider, theme),
-                    if (_sentenceIds.isEmpty && _draftSentences.isEmpty)
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(vertical: 20),
-                        alignment: Alignment.center,
-                        child: Text(
-                          widget.isNew
-                              ? 'No examples yet. Choose from the pool, or create a new one with +.'
-                              : 'No examples yet. Add one from the pool or create a new one.',
-                          style: TextStyle(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      )
-                    else if (_sentenceIds.isNotEmpty)
-                      ListView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: _sentenceIds.length,
-                        itemBuilder: (ctx, i) {
-                          final sentence = provider.getSentenceById(
-                            _sentenceIds[i],
-                          );
-                          if (sentence == null) return const SizedBox.shrink();
-                          final usesRecording =
-                              _pendingUseAudio[sentence.id] ??
-                              sentence.useAudio;
-
-                          return _exampleCard(
-                            onTap: () => _editLinkedSentence(sentence),
-                            target: _markedFor(sentence).target,
-                            translation: _markedFor(sentence).translation,
-                            notes: _fieldsFor(sentence).notes,
-                            theme: theme,
-                            audioChoice: SentenceAudioChoice(
-                              hasRecording: sentence.hasAudioUrl,
-                              useAudio: usesRecording,
-                              onChanged: (value) => setState(
-                                () => _pendingUseAudio[sentence.id] = value,
-                              ),
-                            ),
-                            actions: [
-                              AudioButton(
-                                audioUrl: usesRecording
-                                    ? sentence.audioUrl
-                                    : null,
-                                fallbackText: sentence.speechText,
-                                compact: true,
-                              ),
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.delete_outline,
-                                  color: Colors.red,
-                                ),
-                                tooltip: 'Unlink from word',
-                                onPressed: () {
-                                  setState(() {
-                                    _sentenceIds.removeAt(i);
-                                  });
-                                },
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                    for (var i = 0; i < _draftSentences.length; i++)
-                      _draftSentenceCard(i, theme),
                   ],
                 ),
               ),
-            ),
+              const Divider(height: 1),
 
-            // Footer Actions
-            const Divider(height: 1),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  OutlinedButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Cancel'),
+              // Form Content
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 16,
                   ),
-                  const SizedBox(width: 12),
-                  FilledButton(onPressed: _save, child: const Text('Save')),
-                ],
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Target Word and Translation
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            flex: 5,
+                            child: TextField(
+                              controller: _targetWordCtrl,
+                              autofocus: widget.isNew,
+                              decoration: InputDecoration(
+                                labelText: 'Korean *',
+                                errorText: _targetError,
+                                border: const OutlineInputBorder(),
+                              ),
+                              // Also refreshes the suggested examples.
+                              onChanged: (_) =>
+                                  setState(() => _targetError = null),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            flex: 5,
+                            child: TextField(
+                              controller: _translationCtrl,
+                              decoration: InputDecoration(
+                                labelText: 'English *',
+                                errorText: _translationError,
+                                border: const OutlineInputBorder(),
+                              ),
+                              onChanged: (_) {
+                                if (_translationError != null) {
+                                  setState(() => _translationError = null);
+                                }
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (!widget.isNew) ...[
+                        ..._writingFields(provider),
+                        const SizedBox(height: 16),
+                        _duplicateFrontWarning(
+                          provider,
+                          CardDirection.targetToNative,
+                        ),
+                        _duplicateFrontWarning(
+                          provider,
+                          CardDirection.nativeToTarget,
+                        ),
+                        // Collapsed unless this word needs telling apart from
+                        // another card with the same front.
+                        Theme(
+                          data: theme.copyWith(
+                            dividerColor: Colors.transparent,
+                          ),
+                          child: ExpansionTile(
+                            initiallyExpanded: CardDirection.values.any(
+                              (direction) => provider
+                                  .getDuplicateFrontVocabularies(
+                                    widget.vocab,
+                                    direction,
+                                  )
+                                  .isNotEmpty,
+                            ),
+                            maintainState: true,
+                            tilePadding: EdgeInsets.zero,
+                            childrenPadding: const EdgeInsets.only(top: 8),
+                            title: Text(
+                              'Hints',
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            subtitle: Text(
+                              'Tell apart cards with the same front.',
+                              style: theme.textTheme.bodySmall,
+                            ),
+                            children: [
+                              TextField(
+                                controller: _disambiguationCtrl,
+                                decoration: const InputDecoration(
+                                  labelText:
+                                      'Front hint, both directions (optional)',
+                                  hintText: 'e.g. fruit, vehicle',
+                                  helperText: 'Shown on card fronts unless a direction-specific hint below is set.',
+                                  helperMaxLines: 3,
+                                  border: OutlineInputBorder(),
+                                ),
+                              ),
+                              _hintField(
+                                provider,
+                                CardDirection.targetToNative,
+                              ),
+                              _hintField(
+                                provider,
+                                CardDirection.nativeToTarget,
+                              ),
+                            ],
+                          ),
+                        ),
+                        _mergeSection(provider),
+                      ],
+                      const SizedBox(height: 20),
+
+                      // Part of speech / Category & Audio URL
+                      TextField(
+                        controller: _posCtrl,
+                        decoration: InputDecoration(
+                          labelText: widget.isNew
+                              ? 'Part of speech *'
+                              : 'Part of speech',
+                          hintText: 'e.g. nouns, verbs',
+                          errorText: _posError,
+                          border: const OutlineInputBorder(),
+                        ),
+                        onChanged: (_) {
+                          if (_posError != null) {
+                            setState(() => _posError = null);
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      AudioEditFields(
+                        audioUrl: _audioCtrl,
+                        useAudio: _useAudio,
+                        onUseAudioChanged: (value) =>
+                            setState(() => _useAudio = value),
+                        ttsText: _ttsCtrl,
+                        spokenFallback: _targetWordCtrl,
+                        ttsHintText: 'e.g. 세 개 for 3개',
+                        ttsHelperText: 'Spoken instead of the Korean word when there is no recording.',
+                      ),
+                      if (!widget.isNew) ...[
+                        const SizedBox(height: 20),
+                        TextField(
+                          controller: _idCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'ID (optional)',
+                            helperText: 'Same ID shares SRS progress. Blank uses word + meaning.',
+                            helperMaxLines: 3,
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+
+                        // SRS Direction Toggles
+                        Card(
+                          elevation: 0,
+                          color: theme.colorScheme.surfaceContainerHighest
+                              .withValues(alpha: 0.5),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: BorderSide(
+                              color: theme.colorScheme.outlineVariant,
+                            ),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Cards',
+                                  style: theme.textTheme.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                SwitchListTile(
+                                  title: const Text('KO ➔ EN'),
+                                  subtitle: const Text(
+                                    'Off by default for verbs, adjectives',
+                                  ),
+                                  value: _enableTargetToNative,
+                                  onChanged: (val) => setState(
+                                    () => _enableTargetToNative = val,
+                                  ),
+                                ),
+                                SwitchListTile(
+                                  title: const Text('EN ➔ KO (cloze)'),
+                                  subtitle: const Text(
+                                    'Off by default for other cards',
+                                  ),
+                                  value: _enableNativeToTarget,
+                                  onChanged: (val) => setState(
+                                    () => _enableNativeToTarget = val,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+
+                        // Collapsed: these are usually edited from the back of the
+                        // card while reviewing.
+                        Theme(
+                          data: theme.copyWith(
+                            dividerColor: Colors.transparent,
+                          ),
+                          child: ExpansionTile(
+                            maintainState: true,
+                            tilePadding: EdgeInsets.zero,
+                            childrenPadding: const EdgeInsets.only(top: 8),
+                            title: Text(
+                              'Review notes',
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            subtitle: Text(
+                              'Per card. Also editable on the back of the card '
+                              'while reviewing.',
+                              style: theme.textTheme.bodySmall,
+                            ),
+                            children: [
+                              MarkdownNotesField(
+                                key: const ValueKey('review-notes-ko-en'),
+                                label: 'KO ➔ EN',
+                                addLabel: 'Add KO ➔ EN review note',
+                                controller: _targetToNativeBackNotesCtrl,
+                              ),
+                              MarkdownNotesField(
+                                key: const ValueKey('review-notes-en-ko'),
+                                label: 'EN ➔ KO',
+                                addLabel: 'Add EN ➔ KO review note',
+                                controller: _nativeToTargetBackNotesCtrl,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                      ],
+
+                      MarkdownNotesField(
+                        key: const ValueKey('vocab-notes'),
+                        label: 'Vocab notes',
+                        addLabel: 'Add vocab note',
+                        controller: _notesCtrl,
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Linked Sentences from Pool
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Examples (${_sentenceIds.length + _draftSentences.length})',
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          // Choosing from the pool is the default; a new sentence
+                          // has to be checked for duplicates first.
+                          if (widget.isNew) ...[
+                            IconButton.filledTonal(
+                              icon: const Icon(Icons.library_add_outlined),
+                              tooltip: 'Add from pool',
+                              onPressed: _openSentencePicker,
+                            ),
+                            const SizedBox(width: 4),
+                            IconButton.outlined(
+                              icon: const Icon(Icons.add),
+                              tooltip: 'Create new sentence',
+                              onPressed: _openCreateSentenceDialog,
+                            ),
+                          ] else ...[
+                            IconButton.outlined(
+                              icon: const Icon(Icons.library_add_outlined),
+                              tooltip: 'Add from pool',
+                              onPressed: _openSentencePicker,
+                            ),
+                            const SizedBox(width: 4),
+                            IconButton.filledTonal(
+                              icon: const Icon(Icons.add),
+                              tooltip: 'Create new sentence',
+                              onPressed: _openCreateSentenceDialog,
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      if (_sentenceIds.isNotEmpty || _draftSentences.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Text(
+                            'Tap an example to edit its text and its **emphasis**.',
+                            style: theme.textTheme.bodySmall,
+                          ),
+                        ),
+                      if (widget.isNew) ..._suggestedExamples(provider, theme),
+                      if (_sentenceIds.isEmpty && _draftSentences.isEmpty)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 20),
+                          alignment: Alignment.center,
+                          child: Text(
+                            widget.isNew
+                                ? 'No examples yet. Choose from the pool, or create a new one with +.'
+                                : 'No examples yet. Add one from the pool or create a new one.',
+                            style: TextStyle(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        )
+                      else if (_sentenceIds.isNotEmpty)
+                        ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _sentenceIds.length,
+                          itemBuilder: (ctx, i) {
+                            final sentence = provider.getSentenceById(
+                              _sentenceIds[i],
+                            );
+                            if (sentence == null) {
+                              return const SizedBox.shrink();
+                            }
+                            final usesRecording =
+                                _pendingUseAudio[sentence.id] ??
+                                sentence.useAudio;
+
+                            return _exampleCard(
+                              onTap: () => _editLinkedSentence(sentence),
+                              target: _markedFor(sentence).target,
+                              translation: _markedFor(sentence).translation,
+                              notes: _fieldsFor(sentence).notes,
+                              theme: theme,
+                              audioChoice: SentenceAudioChoice(
+                                hasRecording: sentence.hasAudioUrl,
+                                useAudio: usesRecording,
+                                onChanged: (value) => setState(
+                                  () => _pendingUseAudio[sentence.id] = value,
+                                ),
+                              ),
+                              actions: [
+                                AudioButton(
+                                  audioUrl: usesRecording
+                                      ? sentence.audioUrl
+                                      : null,
+                                  fallbackText: sentence.speechText,
+                                  compact: true,
+                                ),
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.delete_outline,
+                                    color: Colors.red,
+                                  ),
+                                  tooltip: 'Unlink from word',
+                                  onPressed: () {
+                                    setState(() {
+                                      _sentenceIds.removeAt(i);
+                                    });
+                                  },
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      for (var i = 0; i < _draftSentences.length; i++)
+                        _draftSentenceCard(i, theme),
+                    ],
+                  ),
+                ),
               ),
-            ),
-          ],
+
+              // Footer Actions
+              const Divider(height: 1),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    OutlinedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Cancel'),
+                    ),
+                    const SizedBox(width: 12),
+                    FilledButton(onPressed: _save, child: const Text('Save')),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

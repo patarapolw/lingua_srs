@@ -6,6 +6,7 @@ import '../models/sentence.dart';
 import '../providers/app_provider.dart';
 import '../services/tts_text.dart';
 import '../widgets/audio_edit_fields.dart';
+import '../widgets/dialog_save_shortcuts.dart';
 import '../widgets/emphasis_text.dart';
 import '../widgets/markdown_content.dart';
 import '../widgets/markdown_notes_field.dart';
@@ -81,113 +82,119 @@ class _SentencePoolViewState extends State<SentencePoolView> {
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(
-          sentence == null ? 'Add Sentence to Pool' : 'Edit Sentence',
-        ),
-        content: StatefulBuilder(
-          builder: (ctx, setDialogState) => SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Plain text: the `**` emphasis belongs to each word that
-                // uses the sentence and is edited from that word.
-                TextField(
-                  controller: targetCtrl,
-                  onChanged: (_) => setDialogState(() {}),
-                  decoration: InputDecoration(
-                    labelText: 'Target Sentence',
-                    hintText: 'e.g. 저는 아줌마를 위해 문을 열었어요',
-                    errorText: targetCtrl.text.contains('**')
-                        ? _emphasisError
-                        : null,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: transCtrl,
-                  onChanged: (_) => setDialogState(() {}),
-                  decoration: InputDecoration(
-                    labelText: 'Translation',
-                    hintText: 'e.g. I opened the door for an older lady',
-                    errorText: transCtrl.text.contains('**')
-                        ? _emphasisError
-                        : null,
-                  ),
-                ),
-                if (usage > 0) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    'Used by $usage ${usage == 1 ? 'word' : 'words'}. '
-                    'Changing the text changes it for all of them.',
-                    style: Theme.of(ctx).textTheme.bodySmall
-                        ?.copyWith(color: Theme.of(ctx).colorScheme.error),
-                  ),
-                ],
-                const SizedBox(height: 12),
-                AudioEditFields(
-                  audioUrl: audioCtrl,
-                  audioUrlLabel: 'Audio URL (Optional)',
-                  useAudio: useAudio,
-                  onUseAudioChanged: (value) =>
-                      setDialogState(() => useAudio = value),
-                  ttsText: ttsCtrl,
-                  spokenFallback: targetCtrl,
-                ),
-                const SizedBox(height: 8),
-                MarkdownNotesField(
-                  label: 'Sentence notes',
-                  addLabel: 'Add sentence note',
-                  controller: notesCtrl,
-                ),
-              ],
+      builder: (ctx) {
+        Future<void> save() async {
+          if (targetCtrl.text.contains('**') || transCtrl.text.contains('**')) {
+            return;
+          }
+          if (targetCtrl.text.trim().isNotEmpty) {
+            final provider = context.read<AppProvider>();
+            if (sentence == null) {
+              final newSentence = Sentence(
+                targetText: targetCtrl.text.trim(),
+                translationText: transCtrl.text.trim(),
+                audioUrl: audioCtrl.text.trim().isEmpty
+                    ? null
+                    : audioCtrl.text.trim(),
+                useAudio: useAudio,
+                ttsText: TtsText.clean(ttsCtrl.text),
+                notes: notesCtrl.text.trim(),
+              );
+              await provider.addSentenceToPool(newSentence);
+            } else {
+              sentence.targetText = targetCtrl.text.trim();
+              sentence.translationText = transCtrl.text.trim();
+              sentence.audioUrl = audioCtrl.text.trim().isEmpty
+                  ? null
+                  : audioCtrl.text.trim();
+              sentence.useAudio = useAudio;
+              sentence.ttsText = TtsText.clean(ttsCtrl.text);
+              sentence.notes = notesCtrl.text.trim();
+              await provider.updateSentenceInPool(sentence);
+            }
+            if (!ctx.mounted) return;
+            Navigator.pop(ctx);
+          }
+        }
+
+        return DialogSaveShortcuts(
+          onSave: save,
+          // Adding a sentence starts in its first field instead.
+          autofocus: sentence != null,
+          child: AlertDialog(
+            title: Text(
+              sentence == null ? 'Add Sentence to Pool' : 'Edit Sentence',
             ),
+            content: StatefulBuilder(
+              builder: (ctx, setDialogState) => SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Plain text: the `**` emphasis belongs to each word that
+                    // uses the sentence and is edited from that word.
+                    TextField(
+                      controller: targetCtrl,
+                      autofocus: sentence == null,
+                      onChanged: (_) => setDialogState(() {}),
+                      decoration: InputDecoration(
+                        labelText: 'Target Sentence',
+                        hintText: 'e.g. 저는 아줌마를 위해 문을 열었어요',
+                        errorText: targetCtrl.text.contains('**')
+                            ? _emphasisError
+                            : null,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: transCtrl,
+                      onChanged: (_) => setDialogState(() {}),
+                      decoration: InputDecoration(
+                        labelText: 'Translation',
+                        hintText: 'e.g. I opened the door for an older lady',
+                        errorText: transCtrl.text.contains('**')
+                            ? _emphasisError
+                            : null,
+                      ),
+                    ),
+                    if (usage > 0) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Used by $usage ${usage == 1 ? 'word' : 'words'}. '
+                        'Changing the text changes it for all of them.',
+                        style: Theme.of(ctx).textTheme.bodySmall
+                            ?.copyWith(color: Theme.of(ctx).colorScheme.error),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    AudioEditFields(
+                      audioUrl: audioCtrl,
+                      audioUrlLabel: 'Audio URL (Optional)',
+                      useAudio: useAudio,
+                      onUseAudioChanged: (value) =>
+                          setDialogState(() => useAudio = value),
+                      ttsText: ttsCtrl,
+                      spokenFallback: targetCtrl,
+                    ),
+                    const SizedBox(height: 8),
+                    MarkdownNotesField(
+                      label: 'Sentence notes',
+                      addLabel: 'Add sentence note',
+                      controller: notesCtrl,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(onPressed: save, child: const Text('Save')),
+            ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              if (targetCtrl.text.contains('**') ||
-                  transCtrl.text.contains('**')) {
-                return;
-              }
-              if (targetCtrl.text.trim().isNotEmpty) {
-                final provider = context.read<AppProvider>();
-                if (sentence == null) {
-                  final newSentence = Sentence(
-                    targetText: targetCtrl.text.trim(),
-                    translationText: transCtrl.text.trim(),
-                    audioUrl: audioCtrl.text.trim().isEmpty
-                        ? null
-                        : audioCtrl.text.trim(),
-                    useAudio: useAudio,
-                    ttsText: TtsText.clean(ttsCtrl.text),
-                    notes: notesCtrl.text.trim(),
-                  );
-                  await provider.addSentenceToPool(newSentence);
-                } else {
-                  sentence.targetText = targetCtrl.text.trim();
-                  sentence.translationText = transCtrl.text.trim();
-                  sentence.audioUrl = audioCtrl.text.trim().isEmpty
-                      ? null
-                      : audioCtrl.text.trim();
-                  sentence.useAudio = useAudio;
-                  sentence.ttsText = TtsText.clean(ttsCtrl.text);
-                  sentence.notes = notesCtrl.text.trim();
-                  await provider.updateSentenceInPool(sentence);
-                }
-                if (!ctx.mounted) return;
-                Navigator.pop(ctx);
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
+        );
+      },
     ).whenComplete(() {
       // The route's exit animation still rebuilds the fields after the future
       // completes, so the controllers must outlive it.
