@@ -983,11 +983,17 @@ void main() {
       return provider;
     }
 
+    /// The discussion dialog's More menu, not a list row's.
+    final dialogMore = find.descendant(
+      of: find.byType(AiDiscussionDialog),
+      matching: find.byTooltip('More'),
+    );
+
     /// Opens a discussion from the list, and deletes it from its More menu.
     Future<void> deleteFromInside(WidgetTester tester, String word) async {
       await tester.tap(title(word));
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('More'));
+      await tester.tap(dialogMore);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Delete discussion'));
       await tester.pumpAndSettle();
@@ -1008,6 +1014,42 @@ void main() {
 
       expect(find.byTooltip('Delete discussion'), findsNothing);
       expect(find.byIcon(Icons.delete_outline), findsNothing);
+    });
+
+    testWidgets("on a desktop a row's More menu deletes it", (tester) async {
+      final provider = await open(tester);
+      final appleMore = find.descendant(
+        of: find.ancestor(of: title('사과'), matching: find.byType(ListTile)),
+        matching: find.byTooltip('More'),
+      );
+      expect(find.byTooltip('More'), findsNWidgets(2));
+
+      await tester.tap(appleMore);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+      expect(find.text('Delete this discussion?'), findsOneWidget);
+      await confirm(tester);
+
+      expect(title('사과'), findsNothing);
+      expect(title('먹다'), findsOneWidget);
+      expect(provider.aiDiscussions.keys, ['v-eat:no-sentence']);
+    });
+
+    testWidgets('on a phone the rows have no More menu', (tester) async {
+      final (provider, _) = await loadedProvider(
+        tester,
+        discussions: discussions,
+      );
+      await pumpWith(
+        tester,
+        provider,
+        const RecentAiDiscussionsView(),
+        size: const Size(400, 800),
+      );
+
+      expect(title('사과'), findsOneWidget);
+      expect(find.byTooltip('More'), findsNothing);
     });
 
     final panel = find.byIcon(Icons.delete_outline);
@@ -1052,7 +1094,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(panel, findsNothing);
-      expect(find.byTooltip('More'), findsNothing);
+      expect(find.byType(AiDiscussionDialog), findsNothing);
     });
 
     testWidgets('pressing a different row puts the swiped row back', (

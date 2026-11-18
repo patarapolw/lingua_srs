@@ -175,16 +175,17 @@ class _DiscussionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final actions = [
+      SwipeAction(
+        label: 'Delete',
+        icon: Icons.delete_outline,
+        semanticLabel: 'Delete discussion',
+        onPressed: () => _confirmDelete(context),
+      ),
+    ];
     return SwipeActions(
       margin: const EdgeInsets.all(4),
-      actions: [
-        SwipeAction(
-          label: 'Delete',
-          icon: Icons.delete_outline,
-          semanticLabel: 'Delete discussion',
-          onPressed: () => _confirmDelete(context),
-        ),
-      ],
+      actions: actions,
       child: Card(
         child: ListTile(
           // The date sits beside the title: ListTile limits its trailing widget
@@ -248,6 +249,11 @@ class _DiscussionCard extends StatelessWidget {
               ),
             ],
           ),
+          // On a desktop, where nobody would discover the swipe, the same
+          // actions are in a ⋮ menu. Nothing shows on narrow screens.
+          trailing: SwipeActionsMenu.isShown(context)
+              ? SwipeActionsMenu(actions: actions)
+              : null,
           onTap: () => showAiDiscussion(context, discussion),
         ),
       ),
