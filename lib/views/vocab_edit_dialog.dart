@@ -156,6 +156,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                   ),
                   IconButton(
                     icon: const Icon(Icons.close),
+                    tooltip: 'Close',
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 ],
@@ -1375,6 +1376,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                       ),
                       IconButton(
                         icon: const Icon(Icons.close),
+                        tooltip: 'Close',
                         onPressed: () => Navigator.pop(ctx),
                       ),
                     ],
@@ -1391,6 +1393,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
                           ? null
                           : IconButton(
                               icon: const Icon(Icons.clear),
+                              tooltip: 'Clear search',
                               onPressed: () {
                                 searchCtrl.clear();
                                 setSheetState(() {});
