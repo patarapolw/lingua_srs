@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lingua_srs/models/lesson.dart';
 import 'package:lingua_srs/models/srs_card.dart';
 import 'package:lingua_srs/providers/app_provider.dart';
 import 'package:lingua_srs/services/audio_service.dart';
@@ -61,6 +62,12 @@ SrsCard _shortIntervalCard() {
     dueDate: now,
   );
 }
+
+/// [card] as saved in [lessons].
+SrsCard _savedCard(List<Lesson> lessons, SrsCard card) => lessons
+    .expand((lesson) => lesson.vocabularies)
+    .map((vocab) => vocab.cardTargetToNative)
+    .firstWhere((saved) => saved.id == card.id);
 
 DateTime _today() {
   final now = DateTime.now();
@@ -182,6 +189,32 @@ void main() {
       expect(await StorageService.loadDailyRatingCounts(), {
         _today(): {SrsRating.again: 1},
       });
+    });
+
+    test('re-rating and undo save the card and notify once', () async {
+      final lesson = await provider.importYaml(
+        '---\nvocabulary:\n  nouns:\n    - ko: 단어\n      en: word\n---\n',
+      );
+      final card = lesson.vocabularies.single.cardTargetToNative;
+      final at = DateTime.now();
+      await provider.recordCardReview(card, SrsRating.good, at: at);
+      var notified = 0;
+      void count() => notified++;
+      provider.addListener(count);
+      addTearDown(() => provider.removeListener(count));
+
+      // The study view reschedules the card, then recounts; nothing else
+      // saves it.
+      card.lapses = 5;
+      await provider.recountCardReview(at, SrsRating.good, SrsRating.again);
+      expect(notified, 1);
+      expect(_savedCard(await StorageService.loadLessons(), card).lapses, 5);
+
+      // Undo restores the card, then takes the review back.
+      card.lapses = 0;
+      await provider.undoCardReview(at, SrsRating.again);
+      expect(notified, 2);
+      expect(_savedCard(await StorageService.loadLessons(), card).lapses, 0);
     });
 
     test("counts other devices' ratings, and old records without", () async {

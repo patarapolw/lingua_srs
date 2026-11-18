@@ -33,7 +33,7 @@ ReviewHistoryRecord answer(
   return record;
 }
 
-void reRate(
+bool reRate(
   ReviewHistoryRecord record,
   SrsRating rating, {
   required List<StudyCardItem> queue,
@@ -60,13 +60,15 @@ void main() {
       final againIds = <String>{};
       final record = answer(a.card, SrsRating.good, index: 0);
 
-      reRate(
+      final changed = reRate(
         record,
         SrsRating.again,
         queue: queue,
         answered: 2,
         againIds: againIds,
       );
+
+      expect(changed, isTrue);
 
       expect(a.card.lapses, 1);
       expect(a.card.interval, 0);
@@ -230,26 +232,31 @@ void main() {
 
       final againIds = <String>{};
 
-      // Good -> Again: record and queue change, card does not.
-      reRate(
+      // Good -> Again: record and queue change, card does not, so there is
+      // nothing to save.
+      final changed = reRate(
         repeat,
         SrsRating.again,
         queue: queue,
         answered: 4,
         againIds: againIds,
       );
+      expect(changed, isFalse);
       expect(repeat.ratingGiven, SrsRating.again);
       expect(againIds, {a.card.id});
       expect(queue.length, 8); // re-queued after the 3 unanswered cards
       expectCardUnchanged();
 
       // Again -> Good: duplicate removed, card still untouched.
-      reRate(
-        repeat,
-        SrsRating.good,
-        queue: queue,
-        answered: 4,
-        againIds: againIds,
+      expect(
+        reRate(
+          repeat,
+          SrsRating.good,
+          queue: queue,
+          answered: 4,
+          againIds: againIds,
+        ),
+        isFalse,
       );
       expect(repeat.ratingGiven, SrsRating.good);
       expect(againIds, isEmpty);
@@ -267,13 +274,14 @@ void main() {
       );
       a.card.mistakesClearedAt = DateTime.now(); // what Good does in practice
 
-      reRate(
+      final changed = reRate(
         record,
         SrsRating.again,
         queue: queue,
         answered: 1,
         practice: true,
       );
+      expect(changed, isTrue);
       expect(a.card.mistakesClearedAt, isNull);
       expect(a.card.interval, 0);
 

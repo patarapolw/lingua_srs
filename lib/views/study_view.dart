@@ -202,8 +202,9 @@ void markPracticeMistake(SrsCard card) {
 }
 
 /// Changes the rating of an already-answered card.
-/// Mutates the card, [queue], [againCardIds] and [record].
-void reRateRecord({
+/// Mutates the card, [queue], [againCardIds] and [record]. Returns whether
+/// the card changed and needs saving: a repeat review leaves it alone.
+bool reRateRecord({
   required ReviewHistoryRecord record,
   required SrsRating rating,
   required bool practiceOnly,
@@ -240,6 +241,7 @@ void reRateRecord({
   } else {
     // A repeat review no longer changes the card
   }
+  final changedCard = practiceOnly || record.wasFirstSessionRating;
 
   // 2. Queue and Again set. Positions before answeredCount are never shifted,
   //    so queue[record.queueIndex] is still this card.
@@ -269,6 +271,7 @@ void reRateRecord({
   }
 
   record.ratingGiven = rating;
+  return changedCard;
 }
 
 /// A queue entry taken out of a study session, with the position it had.
@@ -1110,7 +1113,7 @@ class _StudyViewState extends State<StudyView> {
     context.read<AudioService>().stop();
     final provider = context.read<AppProvider>();
     final previousRating = record.ratingGiven;
-    reRateRecord(
+    final changedCard = reRateRecord(
       record: record,
       rating: rating,
       practiceOnly: _isPracticeCard(record.card),
@@ -1126,7 +1129,8 @@ class _StudyViewState extends State<StudyView> {
         sentence: provider.getRandomSentenceForVocab(source.vocab),
       ),
     );
-    // Still one review, now under the new rating.
+    // Still one review, now under the new rating. recountCardReview saves
+    // the card too; a repeat review changed nothing to save.
     final countedAt = record.countedAt;
     if (countedAt != null) {
       provider.recountCardReview(
@@ -1135,8 +1139,9 @@ class _StudyViewState extends State<StudyView> {
         rating,
         language: _languageOf(record.card),
       );
+    } else if (changedCard) {
+      provider.saveState();
     }
-    provider.saveState();
     _navigateForward();
   }
 
@@ -1212,9 +1217,8 @@ class _StudyViewState extends State<StudyView> {
 
     // Restore previous SRS state
     record.restore();
-    provider.saveState();
     // And take back the review it counted, or rating the card again would
-    // count it twice.
+    // count it twice. undoCardReview saves the restored card too.
     final countedAt = record.countedAt;
     if (countedAt != null) {
       provider.undoCardReview(
@@ -1223,6 +1227,8 @@ class _StudyViewState extends State<StudyView> {
         startedNewCard: record.oldStatus == SrsStatus.isNew,
         language: _languageOf(record.card),
       );
+    } else {
+      provider.saveState();
     }
 
     setState(() {
