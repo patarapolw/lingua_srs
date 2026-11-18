@@ -534,6 +534,47 @@ void main() {
       expect(card.isEnabled, isTrue, reason: 'unsuspending does not hide it');
       expect(find.text('KO ➔ EN (Due)'), findsOneWidget);
     });
+
+    testWidgets('counts recent mistakes once per build', (tester) async {
+      SharedPreferences.setMockInitialValues({
+        'lingua_srs_windows_legacy_migration_complete': true,
+      });
+      final provider = _MistakesCountingProvider();
+      addTearDown(provider.dispose);
+      for (var i = 0; i < 100 && provider.isLoading; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+      final lesson = await seedLesson(tester, provider, total: 2, due: 1);
+      lesson.vocabularies.first.cardTargetToNative
+        ..lastMistakeDate = DateTime.now()
+        ..lastRating = SrsRating.again;
+
+      for (final size in const [Size(1200, 2400), Size(400, 800)]) {
+        await pumpWith(
+          tester,
+          provider,
+          LessonDetailView(lessonId: lesson.id),
+          size: size,
+        );
+        expect(
+          size.width < 700
+              ? find.descendant(
+                  of: find.byTooltip('Review recent mistakes'),
+                  matching: find.text('1'),
+                )
+              : find.text('Mistakes (1)'),
+          findsOneWidget,
+        );
+
+        provider.mistakesCounts = 0;
+        provider.notifyListeners();
+        await tester.pump();
+        expect(provider.mistakesCounts, 1, reason: 'at $size');
+      }
+    });
   });
 
   group('Study ratings', () {
@@ -812,4 +853,15 @@ void main() {
       expect(provider.maxNewCards24h, 10);
     });
   });
+}
+
+/// Counts how often the recent mistakes are counted.
+class _MistakesCountingProvider extends AppProvider {
+  int mistakesCounts = 0;
+
+  @override
+  int getRecentMistakesCount({String? lessonId}) {
+    mistakesCounts++;
+    return super.getRecentMistakesCount(lessonId: lessonId);
+  }
 }

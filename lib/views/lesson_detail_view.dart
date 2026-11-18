@@ -493,6 +493,8 @@ class _LessonDetailViewState extends State<LessonDetailView> {
     flattenSections(rootSection, const [], 0);
 
     final compact = MediaQuery.sizeOf(context).width < 700;
+    // Each count builds the lesson's mistakes queue, so count once.
+    final mistakesCount = provider.getRecentMistakesCount(lessonId: lesson.id);
 
     final previewTooltip = previewCards.isEmpty
         ? 'No new cards to preview'
@@ -556,16 +558,11 @@ class _LessonDetailViewState extends State<LessonDetailView> {
               PopupMenuItem(value: 'yaml', child: Text('Add from YAML')),
             ],
           ),
-          if (context.watch<AppProvider>().getRecentMistakesCount(
-                lessonId: lesson.id,
-              ) >
-              0) ...[
+          if (mistakesCount > 0) ...[
             if (compact)
               IconButton(
                 icon: Badge(
-                  label: Text(
-                    '${context.watch<AppProvider>().getRecentMistakesCount(lessonId: lesson.id)}',
-                  ),
+                  label: Text('$mistakesCount'),
                   backgroundColor: theme.colorScheme.error,
                   child: const Icon(Icons.history_edu_rounded),
                 ),
@@ -589,9 +586,7 @@ class _LessonDetailViewState extends State<LessonDetailView> {
                   foregroundColor: theme.colorScheme.onErrorContainer,
                 ),
                 icon: const Icon(Icons.history_edu_rounded),
-                label: Text(
-                  'Mistakes (${context.watch<AppProvider>().getRecentMistakesCount(lessonId: lesson.id)})',
-                ),
+                label: Text('Mistakes ($mistakesCount)'),
                 onPressed: () {
                   Navigator.push(
                     context,
