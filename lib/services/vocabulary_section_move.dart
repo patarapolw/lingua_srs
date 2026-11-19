@@ -44,32 +44,36 @@ class VocabularySectionMove {
     ];
   }
 
-  /// [markdown] with [words] added to its frontmatter's `vocabulary:`, under
-  /// their part-of-speech sections, and its `## Vocabulary` section removed.
-  /// The rest of the file stays as it is.
+  /// [markdown] with the words of [reading] added to its frontmatter's
+  /// `vocabulary:`, under their part-of-speech sections, and its
+  /// `## Vocabulary` section replaced by [VocabularySectionReading.notes]
+  /// under a `## Vocabulary notes` heading, or removed when it has none. The
+  /// rest of the file stays as it is.
+  ///
+  /// An example whose sentence does not mark the word in `**`, and in which
+  /// the word cannot be found to mark it, becomes a note of the word.
   ///
   /// Throws a [FormatException] when [markdown] is not a Markdown lesson, or
   /// when the words cannot be added safely.
-  static VocabularySectionMove apply(String markdown, List<SectionWord> words) {
+  static VocabularySectionMove apply(
+    String markdown,
+    VocabularySectionReading reading,
+  ) {
     final span = YamlParserService.frontmatterSpan(markdown);
     if (span == null) {
       throw const FormatException('The lesson has no frontmatter.');
     }
     final before = YamlParserService.parseLessonYaml(markdown);
     final lesson = before.lesson;
-    final targetKey = languageKey(lesson.targetLanguage);
-    final nativeKey = languageKey(lesson.nativeLanguage);
-    final toAdd = newWords(before, words);
+    final toAdd = newWords(before, reading.words);
 
     final editor = YamlEditor(markdown.substring(span.$1, span.$2));
     if (toAdd.isNotEmpty) {
-      final bySection = <String, List<Map<String, String>>>{};
+      final bySection = <String, List<Map<String, Object>>>{};
       for (final word in toAdd) {
-        bySection.putIfAbsent(word.section, () => []).add({
-          targetKey: word.word,
-          nativeKey: word.meaning,
-          if (word.notes.trim().isNotEmpty) 'notes': word.notes.trim(),
-        });
+        bySection
+            .putIfAbsent(word.section, () => [])
+            .add(entryYaml(word, lesson));
       }
       final vocabulary = (loadYaml(editor.toString()) as Map)['vocabulary'];
       if (vocabulary is! Map || vocabulary.isEmpty) {
@@ -96,9 +100,17 @@ class VocabularySectionMove {
 
     var yaml = editor.toString();
     if (!yaml.endsWith('\n')) yaml = '$yaml\n';
-    var rest = markdown
-        .substring(span.$2)
-        .replaceAll(YamlParserService.vocabularySectionPattern, '');
+    final notes = reading.notes.trim();
+    var replaced = false;
+    var rest = markdown.substring(span.$2).replaceAllMapped(
+      YamlParserService.vocabularySectionPattern,
+      (_) {
+        // Every section's notes are in [reading]: keep them once.
+        if (replaced || notes.isEmpty) return '';
+        replaced = true;
+        return '\n$notesHeading\n\n$notes\n';
+      },
+    );
     if (markdown.endsWith('\n') && !rest.endsWith('\n')) rest = '$rest\n';
     final text = markdown.substring(0, span.$1) + yaml + rest;
 
@@ -113,8 +125,65 @@ class VocabularySectionMove {
     return VocabularySectionMove(
       text: text,
       added: toAdd.length,
-      skipped: words.length - toAdd.length,
+      skipped: reading.words.length - toAdd.length,
     );
+  }
+
+  /// The heading the text of a `## Vocabulary` section that is not about one
+  /// word is kept under.
+  static const notesHeading = '## Vocabulary notes';
+
+  /// The frontmatter entry for [word] in [lesson]: the word and its meaning
+  /// under the lesson's language keys, then its reading (`pinyin` in a
+  /// Chinese lesson), other forms, notes and examples, as in
+  /// docs/lesson-format.md.
+  static Map<String, Object> entryYaml(SectionWord word, Lesson lesson) {
+    final targetKey = languageKey(lesson.targetLanguage);
+    final nativeKey = languageKey(lesson.nativeLanguage);
+    final language = lesson.targetLanguage.toLowerCase();
+    final notes = [...word.notes];
+    final examples = <Map<String, Object>>[];
+    for (final example in word.examples) {
+      final sentence = YamlParserService.emphasizeWord(
+        example.sentence,
+        word.word,
+        alternatives: word.forms.values,
+        language: language,
+      );
+      if (sentence == null) {
+        notes.add(
+          'Example: ${example.sentence}'
+          '${example.translation.isEmpty ? '' : ' — ${example.translation}'}',
+        );
+        continue;
+      }
+      examples.add({
+        targetKey: sentence,
+        if (example.translation.isNotEmpty) nativeKey: example.translation,
+        if (_notesValue(example.notes) case final value?) 'notes': value,
+      });
+    }
+    return {
+      targetKey: word.word,
+      if (word.reading.isNotEmpty)
+        (targetKey == 'zh' ? 'pinyin' : 'reading'): word.reading,
+      for (final MapEntry(:key, :value) in word.forms.entries)
+        if (value.isNotEmpty && value != word.word) key: value,
+      nativeKey: word.meaning,
+      if (_notesValue(notes) case final value?) 'notes': value,
+      if (examples.isNotEmpty) 'examples': examples,
+    };
+  }
+
+  /// Notes as the frontmatter writes them: one string, a list of
+  /// paragraphs, or null for none.
+  static Object? _notesValue(List<String> notes) {
+    final kept = [
+      for (final note in notes)
+        if (note.trim().isNotEmpty) note.trim(),
+    ];
+    if (kept.isEmpty) return null;
+    return kept.length == 1 ? kept.single : kept;
   }
 
   /// The key entries are written under for [language]: the language alone,
@@ -127,6 +196,19 @@ class VocabularySectionMove {
   static List<AiDiscussionMessage> prompt(String section, Lesson lesson) {
     final target = lesson.targetLanguage;
     final native = lesson.nativeLanguage;
+    final base = languageKey(target);
+    final forms = switch (base) {
+      'zh' =>
+        '- "reading": the pinyin, with tone marks, when the section gives '
+            'it.\n'
+            '- "simplified" and "traditional": the word\'s Simplified and '
+            'Traditional Chinese forms, when the section gives them.\n',
+      'ko' =>
+        '- "hanja": the Hanja of a Sino-Korean word, when the section '
+            'gives it.\n',
+      'ja' => '- "reading": the kana reading, when the section gives it.\n',
+      _ => '',
+    };
     return [
       AiDiscussionMessage(
         role: 'system',
@@ -135,7 +217,9 @@ class VocabularySectionMove {
             'a list of words. The lesson teaches the language "$target" to '
             'speakers of "$native". Reply with only a JSON object: '
             '{"words": [{"section": "nouns", "word": "…", "meaning": "…", '
-            '"notes": "…"}]}.\n'
+            '"reading": "…", "simplified": "…", "traditional": "…", '
+            '"hanja": "…", "notes": ["…"], "examples": [{"sentence": "…", '
+            '"translation": "…", "notes": ["…"]}]}], "notes": "…"}.\n'
             '- "word": the word or phrase being taught, in "$target", as '
             'written in the section, without Markdown.\n'
             '- "meaning": its meaning in "$native", as the section gives '
@@ -144,10 +228,20 @@ class VocabularySectionMove {
             'word (nouns, verbs, adjectives, adverbs, particles, '
             'expressions…), from the section\'s headings when it has them, '
             'otherwise from the word.\n'
-            '- "notes": optional, only for other things the section says '
-            'about the word (usage, an example, a reading), as Markdown.\n'
-            'List every word of the section once, in its order. Do not add '
-            'words that are not in it.',
+            '$forms'
+            '- "notes": paragraphs the section has about the word (usage, '
+            'grammar), as Markdown.\n'
+            '- "examples": the example sentences the section gives for the '
+            'word, in "$target", with the word as it appears in the sentence '
+            'wrapped in **double asterisks**, their "$native" translation '
+            'when given, and notes about the sentence.\n'
+            'Leave out any field the section does not give. List every word '
+            'of the section once, in its order, and do not add words, '
+            'examples or notes that are not in it.\n'
+            '- The top-level "notes": the section\'s Markdown that is not '
+            'about one word, such as an introduction or a note under a '
+            'heading, with the "###" headings it is under; an empty string '
+            'when there is none.',
       ),
       AiDiscussionMessage(role: 'user', content: section),
     ];
@@ -155,7 +249,7 @@ class VocabularySectionMove {
 
   /// The words of an AI's answer to [prompt]. Throws a [FormatException]
   /// when it is not the JSON asked for.
-  static List<SectionWord> parseReply(String reply) {
+  static VocabularySectionReading parseReply(String reply) {
     final Object? decoded;
     try {
       decoded = jsonDecode(reply);
@@ -167,18 +261,46 @@ class VocabularySectionMove {
       throw const FormatException('The AI\'s answer has no "words" list.');
     }
     String field(Map entry, String key) => entry[key]?.toString().trim() ?? '';
-    return [
+    List<String> notes(Object? value) {
+      final values = value is List ? value : [value];
+      return [
+        for (final note in values)
+          if (note != null && note.toString().trim().isNotEmpty)
+            note.toString().trim(),
+      ];
+    }
+
+    final words = [
       for (final entry in list)
         if (entry is Map &&
             field(entry, 'word').isNotEmpty &&
             field(entry, 'meaning').isNotEmpty)
-          (
+          SectionWord(
             section: _sectionName(field(entry, 'section')),
             word: field(entry, 'word'),
             meaning: field(entry, 'meaning'),
-            notes: field(entry, 'notes'),
+            reading: field(entry, 'reading'),
+            forms: {
+              for (final key in ['simplified', 'traditional', 'hanja'])
+                if (field(entry, key).isNotEmpty) key: field(entry, key),
+            },
+            notes: notes(entry['notes']),
+            examples: [
+              if (entry['examples'] case final List examples)
+                for (final example in examples)
+                  if (example is Map && field(example, 'sentence').isNotEmpty)
+                    SectionExample(
+                      sentence: field(example, 'sentence'),
+                      translation: field(example, 'translation'),
+                      notes: notes(example['notes']),
+                    ),
+            ],
           ),
     ];
+    return VocabularySectionReading(
+      words: words,
+      notes: decoded is Map ? notes(decoded['notes']).join('\n\n') : '',
+    );
   }
 
   static String _sectionName(String value) {

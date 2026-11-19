@@ -2924,7 +2924,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
 
   /// The words of [section], a lesson's `## Vocabulary` section, as an AI
   /// reads them, for [VocabularySectionMove.apply].
-  Future<List<SectionWord>> readVocabularySection(
+  Future<VocabularySectionReading> readVocabularySection(
     String section,
     Lesson lesson, {
     http.Client? client,

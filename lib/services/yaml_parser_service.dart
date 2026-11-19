@@ -186,16 +186,75 @@ class VocabularyYamlFilter {
   });
 }
 
+/// An example sentence of a [SectionWord]: the sentence with the word
+/// marked in `**`, once [YamlParserService.emphasizeWord] could find it, its
+/// translation (may be empty) and its notes.
+class SectionExample {
+  final String sentence;
+  final String translation;
+  final List<String> notes;
+
+  SectionExample({
+    required this.sentence,
+    this.translation = '',
+    List<String>? notes,
+  }) : notes = notes ?? [];
+}
+
 /// A word read from a `## Vocabulary` section of a lesson's Markdown body
-/// ([YamlParserService.parseVocabularySection]): the part of speech it is
-/// listed under (a frontmatter section name such as `nouns`), the word, its
-/// meaning, and any notes.
-typedef SectionWord = ({
-  String section,
-  String word,
-  String meaning,
-  String notes,
-});
+/// ([YamlParserService.parseVocabularySection]), with what the section says
+/// about it, to be written into the frontmatter.
+class SectionWord {
+  /// The part of speech it is listed under: a frontmatter section name such
+  /// as `nouns`.
+  final String section;
+  final String word;
+  final String meaning;
+
+  /// How it is read: pinyin for Chinese, kana for Japanese. May be empty.
+  final String reading;
+
+  /// Its other written forms, by frontmatter key: `simplified`,
+  /// `traditional` or `hanja`.
+  final Map<String, String> forms;
+
+  /// Paragraphs of notes.
+  final List<String> notes;
+  final List<SectionExample> examples;
+
+  SectionWord({
+    required this.section,
+    required this.word,
+    required this.meaning,
+    this.reading = '',
+    Map<String, String>? forms,
+    List<String>? notes,
+    List<SectionExample>? examples,
+  }) : forms = forms ?? {},
+       notes = notes ?? [],
+       examples = examples ?? [];
+}
+
+/// What [YamlParserService.parseVocabularySection] read from a
+/// `## Vocabulary` section.
+class VocabularySectionReading {
+  final List<SectionWord> words;
+
+  /// Lines that look like a word but could not be read as one, such as a
+  /// list item without a meaning. They are kept in [notes] too.
+  final List<String> unread;
+
+  /// The Markdown of the section that is not about one word, such as text
+  /// under a `###` heading, with the headings it is under. It cannot go into
+  /// the frontmatter, so it is kept in the lesson's text.
+  final String notes;
+
+  const VocabularySectionReading({
+    required this.words,
+    this.unread = const [],
+    this.notes = '',
+  });
+}
 
 /// An example sentence for a word: the plain sentence for the Sentence Pool,
 /// and the word's own `**` marking of it.
@@ -694,54 +753,79 @@ class YamlParserService {
       .replaceFirst(RegExp(r'\r?\n<!-- /Vocabulary -->$'), '')
       .trim();
 
-  /// The words of a `## Vocabulary` section ([YamlParseResult
-  /// .vocabularySection]), read without an AI: list items such as
-  /// `- 학교 — school` or `* **학교**: school`, and table rows such as
-  /// `| 학교 | school |` (a header row above a `|---|` line is skipped). A
-  /// `###` heading names the part of speech of the words under it, as
-  /// `### Nouns` gives `nouns`; words above any heading are `words`.
-  ///
-  /// [unread] holds the lines that are not a word with a meaning, such as
-  /// prose, so the caller can offer an AI to read the section instead.
-  static ({List<SectionWord> words, List<String> unread})
-  parseVocabularySection(String section) {
+  /// Reads the words of a `## Vocabulary` section ([YamlParseResult
+  /// .vocabularySection]) without an AI, by the rules in
+  /// docs/lesson-format.md (*Moving a Vocabulary section into the
+  /// frontmatter*): list items and table rows, with readings, other written
+  /// forms, notes and examples. [targetLanguage] is the lesson's (`zh-TW`,
+  /// `ko`), which decides what a bracketed form after a word is.
+  static VocabularySectionReading parseVocabularySection(
+    String section, {
+    String targetLanguage = 'ko',
+  }) {
+    final language = targetLanguage.trim().toLowerCase();
     final words = <SectionWord>[];
     final unread = <String>[];
+    final kept = <String>[];
     var current = 'words';
+    String? heading;
+
+    void keep(String line) {
+      if (heading != null) {
+        if (kept.isNotEmpty && kept.last.trim().isNotEmpty) kept.add('');
+        kept
+          ..add(heading!)
+          ..add('');
+        heading = null;
+      }
+      kept.add(line);
+    }
+
+    SectionWord? entry;
+    var entryIndent = 0;
+    SectionExample? example;
+    var exampleIndent = 0;
+    List<String?>? columns;
     String? pendingHeader;
     var inTable = false;
 
-    void add(String word, String meaning, String line) {
-      final w = _plainSectionText(word);
-      final m = _plainSectionText(meaning);
-      if (w.isEmpty || m.isEmpty) {
+    void addRow(String line, List<String?>? roles) {
+      final row = _tableRow(line, roles, current, language);
+      if (row == null) {
         unread.add(line);
+        keep(line);
       } else {
-        words.add((section: current, word: w, meaning: m, notes: ''));
+        words.add(row);
       }
     }
 
     for (final raw in section.split(RegExp(r'\r?\n'))) {
       final line = raw.trim();
       if (!line.startsWith('|')) {
-        // A table's first row is its header only when a rule line follows.
-        if (pendingHeader != null) _addTableRow(pendingHeader, add);
+        if (pendingHeader != null) addRow(pendingHeader, null);
         pendingHeader = null;
         inTable = false;
+        columns = null;
       }
-      if (line.isEmpty) continue;
+      if (line.isEmpty) {
+        if (entry == null && heading == null && kept.isNotEmpty) {
+          if (kept.last.isNotEmpty) kept.add('');
+        }
+        continue;
+      }
+      final indent = _indentOf(raw);
 
-      final heading = RegExp(r'^#{3,6}\s+(.+)$').firstMatch(line);
-      if (heading != null) {
-        final name = _plainSectionText(heading[1]!)
-            .toLowerCase()
-            .replaceAll(RegExp(r'[^\p{L}\p{N}]+', unicode: true), '_')
-            .replaceAll(RegExp(r'^_+|_+$'), '');
+      final headingMatch = RegExp(r'^#{3,6}\s+(.+)$').firstMatch(line);
+      if (headingMatch != null) {
+        entry = null;
+        final name = _sectionSlug(headingMatch[1]!);
         if (name.isNotEmpty) current = name;
+        heading = line;
         continue;
       }
 
       if (line.startsWith('|')) {
+        entry = null;
         if (!inTable) {
           inTable = true;
           pendingHeader = line;
@@ -750,32 +834,356 @@ class YamlParserService {
         final isRule = _tableCells(line)
             .every((cell) => RegExp(r'^:?-{3,}:?$').hasMatch(cell));
         if (pendingHeader != null) {
-          if (!isRule) _addTableRow(pendingHeader, add);
+          if (isRule) {
+            columns = _tableRoles(_tableCells(pendingHeader), language);
+          } else {
+            addRow(pendingHeader, null);
+          }
           pendingHeader = null;
+          if (isRule) continue;
         }
-        if (!isRule) _addTableRow(line, add);
+        if (!isRule) addRow(line, columns);
         continue;
       }
 
-      final item = RegExp(r'^(?:[-*+]|\d+[.)])\s+(.+)$').firstMatch(line);
-      if (item == null) {
-        unread.add(line);
+      final item = _listItem.firstMatch(line);
+      final text = item?[1] ?? line;
+      if (entry != null && indent > entryIndent) {
+        if (example != null && indent > exampleIndent) {
+          final note = _labelled(_noteLabel, text);
+          if (note == null && example.translation.isEmpty) {
+            example = _withTranslation(example, _plainSectionText(text));
+            entry.examples[entry.examples.length - 1] = example;
+          } else {
+            example.notes.add(note ?? text);
+          }
+          continue;
+        }
+        example = _nestedLine(entry, text, language);
+        exampleIndent = indent;
         continue;
       }
-      final text = item[1]!;
-      final separator = RegExp(r'\s+[—–=-]\s+|\s*[:：]\s+|\t+').firstMatch(text);
-      if (separator == null) {
-        unread.add(line);
+      entry = null;
+      example = null;
+      final parsed = item == null
+          ? null
+          : _entryLine(item[1]!, current, language);
+      if (parsed != null) {
+        words.add(parsed);
+        entry = parsed;
+        entryIndent = indent;
         continue;
       }
-      add(
-        text.substring(0, separator.start),
-        text.substring(separator.end),
-        line,
-      );
+      if (item != null) unread.add(line);
+      keep(raw.trimRight());
     }
-    if (pendingHeader != null) _addTableRow(pendingHeader, add);
-    return (words: words, unread: unread);
+    if (pendingHeader != null) addRow(pendingHeader, null);
+    return VocabularySectionReading(
+      words: words,
+      unread: unread,
+      notes: kept.join('\n').trim(),
+    );
+  }
+
+  static final _listItem = RegExp(r'^(?:[-*+]|\d+[.)])\s+(.+)$');
+  static final _han = RegExp(r'\p{Script=Han}', unicode: true);
+  static final _kana = RegExp(
+    r'[\p{Script=Hiragana}\p{Script=Katakana}]',
+    unicode: true,
+  );
+  static final _latin = RegExp(r'\p{Script=Latin}', unicode: true);
+  static final _noteLabel = RegExp(
+    r'^(?:notes?|usage|注意?|备注|備註|说明|說明|참고|메모|メモ|注釈)\s*[:：]\s*',
+    caseSensitive: false,
+  );
+  static final _exampleLabel = RegExp(
+    r'^(?:examples?\s*[:：]|e\.g\.,?|ex\.|例句?\s*[:：]?|예문\s*[:：]?|예\s*[:：])\s*',
+    caseSensitive: false,
+  );
+
+  /// Separates a word from its meaning in a list item.
+  static final _wordSeparator = RegExp(r'\s+[—–=-]+\s+|\s*：\s*|\s*:\s+|\t+');
+
+  /// Separates a sentence from its translation: not `:`, which sentences
+  /// have.
+  static final _sentenceSeparator = RegExp(r'\s+[—–=-]+\s+|\t+');
+
+  /// A bracketed group at the end of a text: `(…)`, `（…）`, `[…]`, `【…】`.
+  static final _trailingGroup = RegExp(
+    r'\s*(?:\(([^()]*)\)|（([^（）]*)）|\[([^\[\]]*)\]|【([^【】]*)】)\s*$',
+  );
+
+  /// The first match of [pattern] in [text] that is not inside brackets,
+  /// so `老师（繁：老師）：teacher` splits at its last `：`.
+  static RegExpMatch? _outsideBrackets(RegExp pattern, String text) {
+    for (final match in pattern.allMatches(text)) {
+      var depth = 0;
+      for (final char in text.substring(0, match.start).split('')) {
+        if ('(（[【'.contains(char)) depth++;
+        if (')）]】'.contains(char) && depth > 0) depth--;
+      }
+      if (depth == 0) return match;
+    }
+    return null;
+  }
+
+  static int _indentOf(String raw) {
+    var width = 0;
+    for (final char in raw.split('')) {
+      if (char == ' ') {
+        width++;
+      } else if (char == '\t') {
+        width += 4;
+      } else {
+        break;
+      }
+    }
+    return width;
+  }
+
+  static String _sectionSlug(String name) =>
+      _plainSectionText(name)
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^\p{L}\p{N}]+', unicode: true), '_')
+          .replaceAll(RegExp(r'^_+|_+$'), '');
+
+  /// [text] after a [label], or null when it does not start with one.
+  static String? _labelled(RegExp label, String text) {
+    final match = label.firstMatch(text);
+    if (match == null) return null;
+    final rest = text.substring(match.end).trim();
+    return rest.isEmpty ? null : rest;
+  }
+
+  /// A word's list item, `WORD (forms…) — MEANING`, or null if it is not one.
+  static SectionWord? _entryLine(String text, String section, String language) {
+    final separator = _outsideBrackets(_wordSeparator, text);
+    if (separator == null) return null;
+    final head = _wordAndForms(text.substring(0, separator.start), language);
+    final meaning = _plainSectionText(text.substring(separator.end));
+    if (head.word.isEmpty || meaning.isEmpty) return null;
+    return SectionWord(
+      section: section,
+      word: head.word,
+      meaning: meaning,
+      reading: head.reading,
+      forms: head.forms,
+      notes: head.notes,
+    );
+  }
+
+  /// A word and the bracketed groups after it, sorted into its reading,
+  /// other written forms and notes.
+  static ({
+    String word,
+    String reading,
+    Map<String, String> forms,
+    List<String> notes,
+  })
+  _wordAndForms(String text, String language) {
+    var word = _plainSectionText(text);
+    final groups = <String>[];
+    for (
+      var match = _trailingGroup.firstMatch(word);
+      match != null && match.start > 0;
+      match = _trailingGroup.firstMatch(word)
+    ) {
+      groups.insert(
+        0,
+        (match[1] ?? match[2] ?? match[3] ?? match[4] ?? '').trim(),
+      );
+      word = word.substring(0, match.start).trim();
+    }
+    var reading = '';
+    final forms = <String, String>{};
+    final notes = <String>[];
+    for (final group in groups.where((group) => group.isNotEmpty)) {
+      final form = _classifyForm(group, word, language);
+      if (form == null) {
+        notes.add(group);
+      } else if (form.key == 'reading') {
+        if (reading.isEmpty) reading = form.value;
+      } else if (form.value != word) {
+        forms.putIfAbsent(form.key, () => form.value);
+      }
+    }
+    return (word: word, reading: reading, forms: forms, notes: notes);
+  }
+
+  /// What a bracketed [group] after [word] is: `reading`, `simplified`,
+  /// `traditional` or `hanja`, with its text. Null for anything else, which
+  /// becomes a note.
+  static MapEntry<String, String>? _classifyForm(
+    String group,
+    String word,
+    String language,
+  ) {
+    final base = language.split(RegExp('[-_]')).first;
+    final labelled = RegExp(
+      r'^(pinyin|拼音|reading|読み|读音|讀音|'
+      r'trad(?:itional)?\.?|繁(?:體|体)?(?:字)?|'
+      r'simp(?:lified)?\.?|简(?:体)?(?:字)?|簡(?:體)?(?:字)?|'
+      r'hanja|漢字|한자)\s*[:：]?\s*(.+)$',
+      caseSensitive: false,
+    ).firstMatch(group);
+    if (labelled != null) {
+      final label = labelled[1]!.toLowerCase();
+      final value = labelled[2]!.trim();
+      if (RegExp(r'^(pinyin|拼音|reading|読み|读音|讀音)$').hasMatch(label)) {
+        return MapEntry('reading', value);
+      }
+      if (label.startsWith('trad') || label.startsWith('繁')) {
+        return MapEntry('traditional', value);
+      }
+      if (label.startsWith('simp') ||
+          label.startsWith('简') ||
+          label.startsWith('簡')) {
+        return MapEntry('simplified', value);
+      }
+      return MapEntry('hanja', value);
+    }
+    final onlyHan = RegExp(
+      r'^[\p{Script=Han}\s]+$',
+      unicode: true,
+    ).hasMatch(group);
+    if (base == 'zh') {
+      if (onlyHan) {
+        final traditionalLesson = RegExp(r'^zh[-_](tw|hk|mo|hant)')
+            .hasMatch(language);
+        return MapEntry(
+          traditionalLesson ? 'simplified' : 'traditional',
+          group,
+        );
+      }
+      // Pinyin has tone marks or tone numbers: `xuésheng`, `xue2sheng5`.
+      final pinyin = RegExp(
+        r"^[a-zA-ZāáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜüĀÁǍÀĒÉĚÈĪÍǏÌŌÓǑÒŪÚǓÙÜ1-5\s'·-]+$",
+      );
+      if (pinyin.hasMatch(group) &&
+          RegExp(r'[āáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜĀÁǍÀĒÉĚÈĪÍǏÌŌÓǑÒŪÚǓÙ]|[a-zü][1-5]')
+              .hasMatch(group)) {
+        return MapEntry('reading', group);
+      }
+    } else if (base == 'ko' &&
+        _han.hasMatch(group) &&
+        !_latin.hasMatch(group)) {
+      return MapEntry('hanja', group);
+    } else if (base == 'ja' &&
+        _kana.hasMatch(group) &&
+        !_han.hasMatch(group) &&
+        !_latin.hasMatch(group)) {
+      return MapEntry('reading', group);
+    }
+    return null;
+  }
+
+  /// Adds a line nested under [entry] to it, as a note or an example; the
+  /// example, when it is one, for lines nested under it in turn.
+  static SectionExample? _nestedLine(
+    SectionWord entry,
+    String text,
+    String language,
+  ) {
+    final note = _labelled(_noteLabel, text);
+    if (note != null) {
+      entry.notes.add(note);
+      return null;
+    }
+    // An example is labelled, marks the word in `**`, or has the word and
+    // a translation. Any other line is a note.
+    final labelled = _labelled(_exampleLabel, text);
+    final example = _exampleText(labelled ?? text, entry, language);
+    if (example != null &&
+        (labelled != null ||
+            text.contains('**') ||
+            example.translation.isNotEmpty)) {
+      entry.examples.add(example);
+      return example;
+    }
+    entry.notes.add(labelled == null ? text : 'Example: $labelled');
+    return null;
+  }
+
+  /// An example, `SENTENCE — TRANSLATION` or `SENTENCE (TRANSLATION)`, with
+  /// [entry]'s word marked in `**`. Null when the word cannot be found in
+  /// the sentence to mark it.
+  static SectionExample? _exampleText(
+    String text,
+    SectionWord entry,
+    String language,
+  ) {
+    var sentence = text.trim();
+    var translation = '';
+    final separator = _outsideBrackets(_sentenceSeparator, sentence);
+    if (separator != null) {
+      translation = sentence.substring(separator.end).trim();
+      sentence = sentence.substring(0, separator.start).trim();
+    } else {
+      final group = _trailingGroup.firstMatch(sentence);
+      final inner = group == null
+          ? null
+          : (group[1] ?? group[2] ?? group[3] ?? group[4])?.trim();
+      final before = group == null ? '' : sentence.substring(0, group.start);
+      // A translation in brackets: Latin text after a sentence that is not.
+      if (inner != null &&
+          inner.isNotEmpty &&
+          _latin.hasMatch(inner) &&
+          !_latin.hasMatch(before.replaceAll(RegExp(r'\*\*'), ''))) {
+        translation = inner;
+        sentence = before.trim();
+      }
+    }
+    final emphasized = sentence.contains('**')
+        ? sentence
+        : emphasizeWord(
+            sentence,
+            entry.word,
+            alternatives: entry.forms.values,
+            language: language,
+          );
+    if (emphasized == null || emphasized.trim().isEmpty) return null;
+    return SectionExample(
+      sentence: emphasized.replaceAll('`', '').trim(),
+      translation: translation.replaceAll('`', '').trim(),
+    );
+  }
+
+  static SectionExample _withTranslation(
+    SectionExample example,
+    String translation,
+  ) => SectionExample(
+    sentence: example.sentence,
+    translation: translation,
+    notes: example.notes,
+  );
+
+  /// [sentence] with the first place [word] (or one of its [alternatives]
+  /// forms) is in it marked in `**`, or null when it is not in it. For a
+  /// Korean `-다` word, its stem is looked for too (`먹다` in `먹어요`), and
+  /// for a `-하다` verb the part before `하다` (`공부하다` in `공부해요`).
+  static String? emphasizeWord(
+    String sentence,
+    String word, {
+    Iterable<String> alternatives = const [],
+    String language = '',
+  }) {
+    if (sentence.contains('**')) return sentence;
+    final candidates = <String>[
+      word,
+      ...alternatives,
+      if (language.startsWith('ko') && word.endsWith('하다') && word.length > 2)
+        word.substring(0, word.length - 2),
+      if (language.startsWith('ko') && word.endsWith('다') && word.length > 1)
+        word.substring(0, word.length - 1),
+    ].map((candidate) => candidate.trim()).where((c) => c.isNotEmpty);
+    for (final candidate in candidates) {
+      final at = sentence.toLowerCase().indexOf(candidate.toLowerCase());
+      if (at == -1) continue;
+      final end = at + candidate.length;
+      return '${sentence.substring(0, at)}**${sentence.substring(at, end)}**'
+          '${sentence.substring(end)}';
+    }
+    return null;
   }
 
   static List<String> _tableCells(String line) {
@@ -786,12 +1194,143 @@ class YamlParserService {
     );
   }
 
-  static void _addTableRow(
+  /// What each column of a table with these [headers] holds: `word`,
+  /// `reading`, `simplified`, `traditional`, `hanja`, `meaning`, `example`,
+  /// `exampleTranslation`, `notes` or `pos`. A column it does not know is
+  /// null, and its cells become notes headed by its name.
+  static List<String?> _tableRoles(List<String> headers, String language) {
+    final base = language.split(RegExp('[-_]')).first;
+    String? role(String header) {
+      final h = _plainSectionText(header).toLowerCase().trim();
+      bool any(List<String> names) => names.any(h.contains);
+      final aboutExample = any(['example', 'sentence', '例', '예문']);
+      if (aboutExample &&
+          any(['translation', 'english', 'meaning', '翻译', '翻譯', '意思'])) {
+        return 'exampleTranslation';
+      }
+      if (aboutExample) return 'example';
+      if (any(['pinyin', '拼音', 'reading', 'kana', '読み', '读音', '讀音'])) {
+        return 'reading';
+      }
+      if (any(['traditional', '繁'])) return 'traditional';
+      if (any(['simplified', '简', '簡'])) return 'simplified';
+      if (any(['hanja', '한자']) || (base == 'ko' && h == '漢字')) {
+        return 'hanja';
+      }
+      if (h == 'pos' || any(['part of speech', '词性', '詞性', '품사'])) {
+        return 'pos';
+      }
+      if (any(['note', 'usage', '注', '备注', '備註', '참고'])) return 'notes';
+      if (any([
+        'meaning',
+        'translation',
+        'english',
+        'definition',
+        '意思',
+        '意味',
+        '뜻',
+        '의미',
+      ])) {
+        return 'meaning';
+      }
+      if (any([
+            'word',
+            'term',
+            'vocab',
+            'korean',
+            'chinese',
+            'japanese',
+            'hanzi',
+            '汉字',
+            '漢字',
+            '词',
+            '詞',
+            '단어',
+            '単語',
+          ]) ||
+          h == base) {
+        return 'word';
+      }
+      return null;
+    }
+
+    final roles = headers.map(role).toList();
+    // The first columns are the word and its meaning unless named otherwise.
+    if (!roles.contains('word') && roles.isNotEmpty && roles[0] == null) {
+      roles[0] = 'word';
+    }
+    if (!roles.contains('meaning')) {
+      final free = roles.indexWhere((r) => r == null);
+      if (free != -1) roles[free] = 'meaning';
+    }
+    return [
+      for (var i = 0; i < roles.length; i++)
+        roles[i] ?? 'note:${_plainSectionText(headers[i])}',
+    ];
+  }
+
+  /// A word from a table row, with columns as [roles] says, or the word and
+  /// its meaning in the first two columns without them. Null if the row has
+  /// no word or no meaning.
+  static SectionWord? _tableRow(
     String line,
-    void Function(String word, String meaning, String line) add,
+    List<String?>? roles,
+    String section,
+    String language,
   ) {
     final cells = _tableCells(line);
-    add(cells.isEmpty ? '' : cells[0], cells.length < 2 ? '' : cells[1], line);
+    roles ??= ['word', 'meaning', for (var i = 2; i < cells.length; i++) null];
+    final values = <String, String>{};
+    final notes = <String>[];
+    for (var i = 0; i < cells.length && i < roles.length; i++) {
+      final role = roles[i];
+      final value = cells[i].replaceAll(RegExp(r'<br\s*/?>'), '\n').trim();
+      if (value.isEmpty || value == '-' || role == null) continue;
+      if (role.startsWith('note:')) {
+        final name = role.substring(5);
+        notes.add(name.isEmpty ? value : '$name: $value');
+      } else if (role == 'notes') {
+        notes.add(value);
+      } else {
+        values.putIfAbsent(role, () => value);
+      }
+    }
+    final head = _wordAndForms(values['word'] ?? '', language);
+    final meaning = _plainSectionText(values['meaning'] ?? '');
+    if (head.word.isEmpty || meaning.isEmpty) return null;
+    final forms = {
+      ...head.forms,
+      for (final key in ['simplified', 'traditional', 'hanja'])
+        if (values[key] case final value? when value != head.word)
+          key: _plainSectionText(value),
+    };
+    final word = SectionWord(
+      section: values['pos'] == null || _sectionSlug(values['pos']!).isEmpty
+          ? section
+          : _sectionSlug(values['pos']!),
+      word: head.word,
+      meaning: meaning,
+      reading: values['reading'] == null
+          ? head.reading
+          : _plainSectionText(values['reading']!),
+      forms: forms,
+      notes: [...head.notes, ...notes],
+    );
+    if (values['example'] case final text?) {
+      final example = _exampleText(
+        values['exampleTranslation'] == null
+            ? text
+            : '$text\t${values['exampleTranslation']}',
+        word,
+        language,
+      );
+      if (example == null) {
+        word.notes.add('Example: $text');
+      } else {
+        word.examples.add(example);
+      }
+    }
+    return word;
   }
 
   /// [text] without Markdown emphasis and code marks.

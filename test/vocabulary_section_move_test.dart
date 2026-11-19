@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lingua_srs/models/lesson.dart';
 import 'package:lingua_srs/services/vocabulary_section_move.dart';
@@ -48,6 +50,7 @@ vocabulary:
 + 가다 - to go
 1. 책 = book
 - 친구\tfriend
+- 你好：hello
 ''');
       expect(parsed.words.map((w) => '${w.section}|${w.word}|${w.meaning}'), [
         'words|학교|school',
@@ -55,8 +58,10 @@ vocabulary:
         'words|가다|to go',
         'words|책|book',
         'words|친구|friend',
+        'words|你好|hello',
       ]);
       expect(parsed.unread, isEmpty);
+      expect(parsed.notes, isEmpty);
     });
 
     test('takes parts of speech from ### headings', () {
@@ -69,10 +74,94 @@ vocabulary:
       expect(parsed.words.map((w) => w.section), ['nouns', 'verbs']);
     });
 
-    test('reads table rows and skips the header row', () {
+    test('reads nested notes and examples', () {
       final parsed = YamlParserService.parseVocabularySection('''
-| Korean | English |
-| --- | :---: |
+- 먹다 — to eat
+  - Note: Irregular in honorific speech.
+  - 밥을 **먹어요**. — I eat rice.
+  - Example: 빵을 먹었어요.
+    - I ate bread.
+    - Note: Past tense.
+  - 사과를 먹어요. (I eat an apple.)
+  - Often used with 밥.
+''', targetLanguage: 'ko');
+      final word = parsed.words.single;
+      expect(word.notes, [
+        'Irregular in honorific speech.',
+        'Often used with 밥.',
+      ]);
+      expect(
+        word.examples.map((e) => '${e.sentence}|${e.translation}|${e.notes}'),
+        [
+          '밥을 **먹어요**.|I eat rice.|[]',
+          '빵을 **먹**었어요.|I ate bread.|[Past tense.]',
+          '사과를 **먹**어요.|I eat an apple.|[]',
+        ],
+      );
+    });
+
+    test('reads pinyin and Traditional forms of a Chinese word', () {
+      final parsed = YamlParserService.parseVocabularySection('''
+### 名词
+- 学生 (xuésheng) [學生] — student
+  - 注：Also used for pupils.
+  - 我是学生。 — I am a student.
+  - 例句：他们都是学生
+- 老师（lǎoshī）（繁：老師）（formal）：teacher
+''', targetLanguage: 'zh-CN');
+      final student = parsed.words.first;
+      expect(student.section, '名词');
+      expect(student.word, '学生');
+      expect(student.reading, 'xuésheng');
+      expect(student.forms, {'traditional': '學生'});
+      expect(student.notes, ['Also used for pupils.']);
+      expect(student.examples.map((e) => '${e.sentence}|${e.translation}'), [
+        '我是**学生**。|I am a student.',
+        '他们都是**学生**|',
+      ]);
+      final teacher = parsed.words.last;
+      expect(teacher.word, '老师');
+      expect(teacher.reading, 'lǎoshī');
+      expect(teacher.forms, {'traditional': '老師'});
+      expect(teacher.notes, ['formal']);
+    });
+
+    test('takes Han characters as Simplified in a Traditional lesson', () {
+      final parsed = YamlParserService.parseVocabularySection(
+        '- 學生 (学生) — student',
+        targetLanguage: 'zh-TW',
+      );
+      expect(parsed.words.single.forms, {'simplified': '学生'});
+    });
+
+    test('takes Han characters as Hanja in a Korean lesson', () {
+      final parsed = YamlParserService.parseVocabularySection(
+        '- 학생 (學生) — student',
+        targetLanguage: 'ko',
+      );
+      expect(parsed.words.single.forms, {'hanja': '學生'});
+    });
+
+    test('reads tables by their header names', () {
+      final parsed = YamlParserService.parseVocabularySection('''
+| 汉字 | 拼音 | 繁體 | English | 例句 | Example translation | Notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| 学生 | xuésheng | 學生 | student | 我是学生。 | I am a student. | Common. |
+| 老师 | lǎoshī | 老師 | teacher | | | |
+''', targetLanguage: 'zh');
+      expect(parsed.words, hasLength(2));
+      final student = parsed.words.first;
+      expect(student.reading, 'xuésheng');
+      expect(student.forms, {'traditional': '學生'});
+      expect(student.meaning, 'student');
+      expect(student.notes, ['Common.']);
+      expect(student.examples.single.sentence, '我是**学生**。');
+      expect(student.examples.single.translation, 'I am a student.');
+      expect(parsed.words.last.examples, isEmpty);
+    });
+
+    test('reads a table without a header row as word and meaning', () {
+      final parsed = YamlParserService.parseVocabularySection('''
 | 학교 | school |
 | **가다** | to go |
 ''');
@@ -80,17 +169,27 @@ vocabulary:
         '학교|school',
         '가다|to go',
       ]);
-      expect(parsed.unread, isEmpty);
     });
 
-    test('keeps lines it cannot read as words', () {
+    test('keeps text that is not about one word, with its heading', () {
       final parsed = YamlParserService.parseVocabularySection('''
 These words are about school.
-- 학교 — school
-- 공부하다
-''');
-      expect(parsed.words.single.word, '학교');
-      expect(parsed.unread, ['These words are about school.', '- 공부하다']);
+
+### Verbs
+
+Verbs end in 다.
+
+- 공부하다 — to study
+  - 매일 공부해요. — I study every day.
+- 가다
+''', targetLanguage: 'ko');
+      expect(parsed.words.single.examples.single.sentence, '매일 **공부**해요.');
+      expect(parsed.unread, ['- 가다']);
+      expect(
+        parsed.notes,
+        'These words are about school.\n\n### Verbs\n\nVerbs end in 다.\n\n'
+        '- 가다',
+      );
     });
   });
 
@@ -109,9 +208,13 @@ Intro.
 
 ## Vocabulary
 
+Words for the classroom.
+
 ### Nouns
 - 학교 — school
-- 선생님 — teacher
+- 선생님 (先生님) — teacher
+  - Note: Polite.
+  - **선생님**, 안녕하세요. — Hello, teacher.
 ### Verbs
 - 가다 — to go
 
@@ -120,22 +223,28 @@ Intro.
 Practice text.
 ''';
 
-    test('adds new words to the frontmatter and removes the section', () {
-      final words = YamlParserService.parseVocabularySection(
-        YamlParserService.parseLessonYaml(markdown).vocabularySection!,
-      ).words;
-      final move = VocabularySectionMove.apply(markdown, words);
+    test('adds new words with their details and keeps the other text', () {
+      final result = YamlParserService.parseLessonYaml(markdown);
+      final reading = YamlParserService.parseVocabularySection(
+        result.vocabularySection!,
+        targetLanguage: result.lesson.targetLanguage,
+      );
+      final move = VocabularySectionMove.apply(markdown, reading);
 
       expect(move.added, 2);
       expect(move.skipped, 1);
       expect(move.text, contains('title: School   # page title'));
-      expect(move.text, isNot(contains('## Vocabulary')));
+      expect(move.text, isNot(contains('## Vocabulary\n')));
+      expect(
+        move.text,
+        contains('## Vocabulary notes\n\nWords for the classroom.\n\n## '),
+      );
       expect(move.text, contains('## Practice\n\nPractice text.\n'));
 
-      final result = YamlParserService.parseLessonYaml(move.text);
-      expect(result.vocabularySection, isNull);
+      final after = YamlParserService.parseLessonYaml(move.text);
+      expect(after.vocabularySection, isNull);
       expect(
-        result.lesson.vocabularies.map(
+        after.lesson.vocabularies.map(
           (v) => '${v.pos}|${v.targetWord}|${v.translation}',
         ),
         unorderedEquals([
@@ -144,10 +253,44 @@ Practice text.
           'verbs|가다|to go',
         ]),
       );
+      final teacher = after.lesson.vocabularies.firstWhere(
+        (v) => v.targetWord == '선생님',
+      );
+      expect(teacher.notes, 'Polite.');
+      expect(move.text, contains('hanja: 先生님'));
+      expect(after.sentences.map((s) => s.targetText), contains('선생님, 안녕하세요.'));
     });
 
-    test('fills an empty vocabulary key', () {
-      const empty = '''---
+    test('writes a Chinese entry with pinyin, forms and examples', () {
+      const chinese = '''---
+target: zh-CN
+vocabulary:
+---
+
+# Lesson
+
+## Vocabulary
+
+- 学生 (xuésheng) [學生] — student
+  - 我是学生。 — I am a student.
+''';
+      final reading = YamlParserService.parseVocabularySection(
+        YamlParserService.parseLessonYaml(chinese).vocabularySection!,
+        targetLanguage: 'zh-CN',
+      );
+      final move = VocabularySectionMove.apply(chinese, reading);
+      expect(move.text, contains('zh: 学生'));
+      expect(move.text, contains('pinyin: xuésheng'));
+      expect(move.text, contains('traditional: 學生'));
+      expect(move.text, endsWith('# Lesson\n'));
+      final after = YamlParserService.parseLessonYaml(move.text);
+      expect(after.lesson.vocabularies.single.targetWord, '学生');
+      expect(after.sentences.single.targetText, '我是学生。');
+      expect(after.sentences.single.translationText, 'I am a student.');
+    });
+
+    test('turns an example without the word into a note', () {
+      const lesson = '''---
 vocabulary:
 ---
 
@@ -157,45 +300,95 @@ vocabulary:
 
 - 학교 — school
 ''';
-      final move = VocabularySectionMove.apply(empty, [
-        (section: 'words', word: '학교', meaning: 'school', notes: 'A place.'),
-      ]);
-      final result = YamlParserService.parseLessonYaml(move.text);
-      expect(result.lesson.vocabularies.single.targetWord, '학교');
-      expect(result.lesson.vocabularies.single.notes, 'A place.');
-      expect(move.text, endsWith('# Lesson\n'));
+      final move = VocabularySectionMove.apply(
+        lesson,
+        VocabularySectionReading(
+          words: [
+            SectionWord(
+              section: 'nouns',
+              word: '학교',
+              meaning: 'school',
+              examples: [
+                SectionExample(sentence: '집에 가요.', translation: 'I go home.'),
+              ],
+            ),
+          ],
+        ),
+      );
+      final word = YamlParserService.parseLessonYaml(move.text)
+          .lesson
+          .vocabularies
+          .single;
+      expect(word.notes, 'Example: 집에 가요. — I go home.');
     });
+  });
 
-    test('writes entries under the lesson\'s language key', () {
-      const chinese = '''---
-target: zh-TW
-vocabulary:
----
+  test('docs/lesson-format.md example moves as it says', () {
+    final doc = File('docs/lesson-format.md')
+        .readAsStringSync()
+        .replaceAll('\r\n', '\n');
+    final from = doc.indexOf('### Moving a Vocabulary section');
+    final blocks = RegExp(
+      r'```(markdown|yaml)\n(.*?)```',
+      dotAll: true,
+    ).allMatches(doc.substring(from)).toList();
+    final section = blocks[0][2]!;
+    final expected = blocks[1][2]!;
+    final markdown =
+        '---\ntarget: zh-CN\nvocabulary:\n---\n\n# Lesson\n\n$section';
 
-# Lesson
+    final result = YamlParserService.parseLessonYaml(markdown);
+    final move = VocabularySectionMove.apply(
+      markdown,
+      YamlParserService.parseVocabularySection(
+        result.vocabularySection!,
+        targetLanguage: 'zh-CN',
+      ),
+    );
+    expect(move.text, contains(expected));
+    expect(
+      move.text,
+      endsWith('## Vocabulary notes\n\nWords for the classroom.\n'),
+    );
+  });
 
-## Vocabulary
-
-- 學生 — student
-''';
-      final move = VocabularySectionMove.apply(chinese, [
-        (section: 'nouns', word: '學生', meaning: 'student', notes: ''),
-      ]);
-      expect(move.text, contains('zh: 學生'));
+  group('emphasizeWord', () {
+    test('marks the word, an alternative form or a Korean stem', () {
+      expect(YamlParserService.emphasizeWord('我是学生。', '学生'), '我是**学生**。');
+      expect(
+        YamlParserService.emphasizeWord('我是學生。', '学生', alternatives: ['學生']),
+        '我是**學生**。',
+      );
+      expect(
+        YamlParserService.emphasizeWord('밥을 먹어요.', '먹다', language: 'ko'),
+        '밥을 **먹**어요.',
+      );
+      expect(YamlParserService.emphasizeWord('집에 가요.', '학교'), isNull);
     });
   });
 
   group('VocabularySectionMove AI reply', () {
     test('reads the words of the JSON answer', () {
-      final words = VocabularySectionMove.parseReply(
-        '{"words": [{"section": "Nouns", "word": "학교", "meaning": "school"},'
-        ' {"word": "가다", "meaning": "to go", "notes": "Irregular."},'
-        ' {"word": "", "meaning": "nothing"}]}',
-      );
-      expect(words.map((w) => '${w.section}|${w.word}|${w.notes}'), [
-        'nouns|학교|',
-        'words|가다|Irregular.',
-      ]);
+      final reading = VocabularySectionMove.parseReply('''
+{"words": [
+  {"section": "Nouns", "word": "学生", "meaning": "student",
+   "reading": "xuésheng", "traditional": "學生", "notes": ["Common."],
+   "examples": [{"sentence": "我是**学生**。", "translation": "I am a student.",
+                 "notes": "Simple."}]},
+  {"word": "가다", "meaning": "to go", "notes": "Irregular."},
+  {"word": "", "meaning": "nothing"}
+], "notes": "### Nouns\\n\\nPeople at school."}
+''');
+      final student = reading.words.first;
+      expect(student.section, 'nouns');
+      expect(student.reading, 'xuésheng');
+      expect(student.forms, {'traditional': '學生'});
+      expect(student.notes, ['Common.']);
+      expect(student.examples.single.notes, ['Simple.']);
+      expect(reading.words.last.section, 'words');
+      expect(reading.words.last.notes, ['Irregular.']);
+      expect(reading.words, hasLength(2));
+      expect(reading.notes, '### Nouns\n\nPeople at school.');
     });
 
     test('rejects an answer that is not the JSON asked for', () {
@@ -209,13 +402,15 @@ vocabulary:
       );
     });
 
-    test('prompt names the lesson\'s languages and holds the section', () {
+    test('prompt asks a Chinese lesson for pinyin and both forms', () {
       final messages = VocabularySectionMove.prompt(
-        '- 학교 — school',
-        Lesson(title: 'L', targetLanguage: 'ko', nativeLanguage: 'en'),
+        '- 学生 — student',
+        Lesson(title: 'L', targetLanguage: 'zh-CN', nativeLanguage: 'en'),
       );
-      expect(messages.first.content, contains('"ko"'));
-      expect(messages.last.content, '- 학교 — school');
+      expect(messages.first.content, contains('"zh-CN"'));
+      expect(messages.first.content, contains('pinyin'));
+      expect(messages.first.content, contains('"traditional"'));
+      expect(messages.last.content, '- 学生 — student');
     });
   });
 }

@@ -104,7 +104,67 @@ Frontmatter-only Markdown imports the same as equivalent plain YAML. The body is
 
 A `## Vocabulary` section in the body is left out when the lesson is imported, from that heading to the next `## ` heading, a `<!-- /Vocabulary -->` line, or the end of the file: the words are in the frontmatter, and the app lists them under **View Vocabulary**. The section and closing comment are not stored, so the reader does not show them and an export does not write them back. If it is the only section after the title, the lesson has no Markdown content. Other headings, such as `## Vocabulary list` or `### Vocabulary`, are not filtered.
 
-When Markdown typed or pasted into **Add Lessons** has a `## Vocabulary` section, the preview warns that it will be removed and says how many of its words are not in the frontmatter. **Move words to frontmatter** adds them to `vocabulary:` and removes the section, leaving the rest of the file as it is; words the frontmatter already has are skipped. It reads list items (`- 학교 — school`, `* **학교**: school`; the separator can be ` — `, ` – `, ` - `, ` = `, `: ` or a tab) and table rows (`| 학교 | school |`, skipping a header row), with a `### Nouns` heading putting the words under it in `nouns:` (`words:` without a heading). With a DeepSeek key in settings, **Move with AI** reads the section instead, for prose or other layouts; check the words it gives in the preview before importing. Files and folders that are imported are listed with a note when they have the section; paste such a file into the editor to move its words.
+### Moving a Vocabulary section into the frontmatter
+
+When Markdown typed or pasted into **Add Lessons** has a `## Vocabulary` section, the preview warns that the section will be removed. It also says how many of its words and example sentences are not in the frontmatter yet. **Move words to frontmatter** adds those words to `vocabulary:`, skipping words the frontmatter already has. It then removes the section and leaves the rest of the file as it is. Section text that is not about one word is kept under a new `## Vocabulary notes` heading in place of the section, with the `###` headings it was under, so nothing is lost. With a DeepSeek key in settings, **Move with AI** reads the section instead, for prose or other layouts; check the words it gives in the preview before importing. A file or folder being imported is listed with a note when it has the section. To move its words, paste the file into the editor.
+
+The section is read by these rules:
+
+- **Parts of speech.** A `###` heading names the frontmatter section of the words under it, in lowercase: `### Nouns` gives `nouns:`, `### 名词` gives `名词:`. Words above any heading go in `words:`.
+- **Words.** A top-level list item (`-`, `*`, `+` or `1.`) is a word: `WORD — MEANING`. The separator can be ` — `, ` – `, ` - `, ` = `, `: `, a full-width `：` (with or without spaces) or a tab; separators inside brackets don't count. `**` and backticks around the word are dropped. A list item with no separator, or with nothing on one side of it, is not a word. It is kept under `## Vocabulary notes`, and the warning counts it.
+- **Readings and forms.** Bracketed groups right after the word, `(…)`, `（…）`, `[…]` or `【…】`, say more about it:
+  - In a Chinese lesson, Latin text with tone marks or tone numbers (`xuésheng`, `xue2sheng`) is the `pinyin`. Han characters are the other script: `traditional` in a Simplified lesson, `simplified` when `target:` is `zh-TW`, `zh-HK`, `zh-MO` or `zh-Hant`.
+  - In a Korean lesson, Han characters are the `hanja` (`선생님 (先生님)`).
+  - In a Japanese lesson, kana is the `reading`.
+  - A label picks the field in any lesson: `pinyin:`/`拼音:`/`reading:`, `trad:`/`繁:`, `simp:`/`简:`, `hanja:`/`한자:`.
+  - Any other group, such as `(formal)`, becomes a note of the word.
+- **Notes and examples.** List items or lines indented under a word belong to it:
+  - `Note:`, `Usage:`, `注:`, `注意:`, `备注:` or `참고:` starts a note.
+  - `Example:`, `e.g.`, `例:`, `例句:` or `예문:` starts an example sentence. So does a line with `**`, or a line with a separator that has the word in it (`我是学生。 — I am a student.`).
+  - An example's translation follows a separator (` — `, ` – `, ` - `, ` = ` or a tab; not `:`, which sentences have), or is Latin text in brackets at the end of a sentence that is not Latin (`我是学生。(I am a student.)`). The first list item indented under an example is its translation when it has none yet; `Note:` items under it are its notes.
+  - The word is marked in `**` in an example that has no `**`: its first place in the sentence, or of its other form (`學生` for `学生`), or for a Korean `-다` word its stem (`먹다` in `먹어요`, `공부하다` in `공부해요`). A labelled example in which the word can't be found becomes a note starting `Example:`.
+  - Any other indented line is a note. Each note is a paragraph of the word's `notes`.
+- **Tables.** A table with a header row (a `|---|` line under it) is read by its column names. Matching ignores case and looks for the name anywhere in the header:
+  - word: `word`, `term`, `vocab`, `Korean`, `Chinese`, `hanzi`, `汉字`, `词`, `단어` or the language code
+  - `pinyin`/`拼音`/`reading`/`kana`
+  - `traditional`/`繁`, `simplified`/`简`, `hanja`/`한자`
+  - meaning: `meaning`, `translation`, `English`, `definition`, `意思`, `뜻`
+  - an example: `example`, `sentence`, `例句`, `예문`
+  - the example's translation: `example translation`, `sentence meaning`, `例句翻译`
+  - notes: `notes`, `usage`, `备注`
+  - the part of speech: `part of speech`, `POS`, `词性`, `품사`
+
+  Without a word or meaning column, the first unnamed columns are taken as those. Other columns become notes headed by their name. A table without a header row is read as word and meaning. `<br>` in a cell is a line break.
+
+For example, in a lesson with `target: zh-CN`:
+
+```markdown
+## Vocabulary
+
+Words for the classroom.
+
+### Nouns
+- 学生 (xuésheng) [學生] — student
+  - 注：Also used for pupils.
+  - 我是学生。 — I am a student.
+```
+
+moves into the frontmatter as
+
+```yaml
+vocabulary:
+  nouns:
+    - zh: 学生
+      pinyin: xuésheng
+      traditional: 學生
+      en: student
+      notes: Also used for pupils.
+      examples:
+        - zh: 我是**学生**。
+          en: I am a student.
+```
+
+and the section becomes `## Vocabulary notes` holding *Words for the classroom.*
 
 To keep a footer without adding a heading to the page or table of contents, put the closing comment on its own line:
 

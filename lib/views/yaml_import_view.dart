@@ -185,10 +185,13 @@ class _YamlImportViewState extends State<YamlImportView>
     final provider = useAi ? context.read<AppProvider>() : null;
     setState(() => _movingSection = true);
     try {
-      final words = provider != null
+      final reading = provider != null
           ? await provider.readVocabularySection(section, preview.lesson)
-          : YamlParserService.parseVocabularySection(section).words;
-      final move = VocabularySectionMove.apply(text, words);
+          : YamlParserService.parseVocabularySection(
+              section,
+              targetLanguage: preview.lesson.targetLanguage,
+            );
+      final move = VocabularySectionMove.apply(text, reading);
       if (!mounted) return;
       if (_yamlController.text != text) {
         throw const FormatException('The lesson was edited meanwhile.');
@@ -201,7 +204,9 @@ class _YamlImportViewState extends State<YamlImportView>
             '${move.added == 1 ? '1 word' : '${move.added} words'} moved '
             'into the frontmatter'
             '${move.skipped == 0 ? '' : ' (${move.skipped} already there)'}'
-            '; the ## Vocabulary section was removed.',
+            '; the ## Vocabulary section was removed'
+            '${reading.notes.trim().isEmpty ? '' : ', and its other text kept '
+                      'under ${VocabularySectionMove.notesHeading}'}.',
           ),
         ),
       );
@@ -220,6 +225,11 @@ class _YamlImportViewState extends State<YamlImportView>
   Widget _vocabularySectionWarning(ThemeData theme, YamlParseResult preview) {
     final parsed = YamlParserService.parseVocabularySection(
       preview.vocabularySection!,
+      targetLanguage: preview.lesson.targetLanguage,
+    );
+    final examples = parsed.words.fold<int>(
+      0,
+      (sum, word) => sum + word.examples.length,
     );
     final newWords = VocabularySectionMove.newWords(preview, parsed.words);
     final canUseAi = context.read<AppProvider?>()?.canUseAi ?? false;
@@ -233,6 +243,15 @@ class _YamlImportViewState extends State<YamlImportView>
         )
       else if (parsed.words.isNotEmpty)
         'Its words are all in the frontmatter already.',
+      if (newWords.isNotEmpty && examples > 0)
+        count(
+          examples,
+          'Its words have 1 example sentence.',
+          'Its words have $examples example sentences.',
+        ),
+      if (parsed.notes.isNotEmpty)
+        'Its other text will be kept under '
+            '${VocabularySectionMove.notesHeading}.',
       if (parsed.unread.isNotEmpty)
         count(
           parsed.unread.length,
