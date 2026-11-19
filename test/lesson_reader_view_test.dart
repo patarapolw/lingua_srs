@@ -243,10 +243,39 @@ Preview text.
   });
 
   group('## Vocabulary written in the editor', () {
-    Future<void> saveEdit(WidgetTester tester, String markdown) async {
+    const warning = "Don't add vocabulary here.";
+
+    testWidgets('warns not to add vocabulary in the lesson text', (
+      tester,
+    ) async {
+      await openReader(tester, const Size(1200, 800));
       await tester.tap(find.byTooltip('Edit Markdown'));
       await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextField).first, markdown);
+      expect(find.textContaining(warning), findsNothing);
+
+      await tester.enterText(
+        find.byType(TextField).first,
+        '# Greetings\n\n## Vocabulary\n\n- 학교 — school\n',
+      );
+      await tester.pump();
+      expect(find.textContaining(warning), findsOneWidget);
+
+      await tester.enterText(
+        find.byType(TextField).first,
+        '# Greetings\n\n## Vocabulary list\n\n- 학교 — school\n',
+      );
+      await tester.pump();
+      expect(find.textContaining(warning), findsNothing);
+    });
+
+    testWidgets('saves the section as text without asking', (tester) async {
+      await openReader(tester, const Size(1200, 800));
+      await tester.tap(find.byTooltip('Edit Markdown'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byType(TextField).first,
+        '# Greetings\n\n## Vocabulary\n\n- 학교 — school\n',
+      );
       await tester.tap(find.text('Save'));
       for (var i = 0; i < 5; i++) {
         await tester.runAsync(
@@ -255,45 +284,9 @@ Preview text.
         await tester.pump();
       }
       await tester.pumpAndSettle();
-    }
 
-    const edited =
-        '# Greetings\n\n## Vocabulary\n\n- 단어 — word\n- 학교 — school\n';
-
-    testWidgets('offers to add the words the lesson lacks', (tester) async {
-      await openReader(tester, const Size(1200, 800));
-      await saveEdit(tester, edited);
-
-      expect(find.text('Add 1 word to the vocabulary?'), findsOneWidget);
-      await tester.tap(find.text('Review 1 word'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Add Vocabulary'), findsWidgets);
-      final yaml = tester
-          .widgetList<TextField>(find.byType(TextField))
-          .last
-          .controller!
-          .text;
-      expect(yaml, contains('ko: 학교'));
-      expect(yaml, isNot(contains('단어')));
-    });
-
-    testWidgets('Not now keeps the section as text only', (tester) async {
-      await openReader(tester, const Size(1200, 800));
-      await saveEdit(tester, edited);
-
-      await tester.tap(find.text('Not now'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Add 1 word to the vocabulary?'), findsNothing);
-      expect(find.byTooltip('Edit Markdown'), findsOneWidget);
-    });
-
-    testWidgets('says nothing when the lesson has every word', (tester) async {
-      await openReader(tester, const Size(1200, 800));
-      await saveEdit(tester, '# Greetings\n\n## Vocabulary\n\n- 단어 — word\n');
-
-      expect(find.textContaining('to the vocabulary?'), findsNothing);
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.textContaining(warning), findsNothing);
       expect(find.byTooltip('Edit Markdown'), findsOneWidget);
     });
   });

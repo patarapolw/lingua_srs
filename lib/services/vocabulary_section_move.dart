@@ -50,30 +50,6 @@ class VocabularySectionMove {
     ];
   }
 
-  /// The words of [reading] that [lesson] does not have yet, as the plain
-  /// vocabulary YAML the Add Vocabulary screen takes, with the lesson's
-  /// `target:`; null when the lesson has them all. For a `## Vocabulary`
-  /// section written in the app's lesson editor, whose words would otherwise
-  /// stay in the lesson's text only.
-  static ({String yaml, int count})? addToLesson(
-    Lesson lesson,
-    VocabularySectionReading reading,
-  ) {
-    final words = _unseen(lesson.vocabularies, reading.words);
-    if (words.isEmpty) return null;
-    final bySection = <String, List<Map<String, Object>>>{};
-    for (final word in words) {
-      bySection
-          .putIfAbsent(word.section, () => [])
-          .add(entryYaml(word, lesson));
-    }
-    final editor = YamlEditor('')
-      ..update([], {'target': lesson.targetLanguage, 'vocabulary': bySection});
-    var yaml = editor.toString();
-    if (!yaml.endsWith('\n')) yaml = '$yaml\n';
-    return (yaml: yaml, count: words.length);
-  }
-
   /// [markdown] with the words of [reading] added to its frontmatter's
   /// `vocabulary:`, under their part-of-speech sections, and its
   /// `## Vocabulary` section replaced by [VocabularySectionReading.notes]

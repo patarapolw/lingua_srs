@@ -449,61 +449,6 @@ vocabulary:
     );
   });
 
-  group('VocabularySectionMove.addToLesson', () {
-    test('writes the words the lesson lacks as vocabulary YAML', () {
-      final lesson = YamlParserService.parseLessonYaml('''---
-target: zh-TW
-vocabulary:
-  nouns:
-    - zh: 學生
-      en: student
----
-# L
-''').lesson;
-      final add = VocabularySectionMove.addToLesson(
-        lesson,
-        YamlParserService.parseVocabularySection('''
-### Nouns
-- 學生 — student
-- 老師 (lǎoshī) — teacher
-  - 他是老師。 — He is a teacher.
-''', targetLanguage: 'zh-TW'),
-      )!;
-      expect(add.count, 1);
-      expect(
-        add.yaml,
-        'target: zh-TW\n'
-        'vocabulary:\n'
-        '  nouns:\n'
-        '    - zh: 老師\n'
-        '      pinyin: lǎoshī\n'
-        '      en: teacher\n'
-        '      examples:\n'
-        '        - zh: 他是**老師**。\n'
-        '          en: He is a teacher.\n',
-      );
-      final parsed = YamlParserService.parseLessonYaml(
-        add.yaml,
-        allowMarkdown: false,
-      );
-      expect(parsed.lesson.targetLanguage, 'zh-TW');
-      expect(parsed.lesson.vocabularies.single.targetWord, '老師');
-    });
-
-    test('is null when the lesson has every word', () {
-      final lesson = YamlParserService.parseLessonYaml(
-        '---\nvocabulary:\n  nouns:\n    - ko: 학교\n      en: school\n---\n',
-      ).lesson;
-      expect(
-        VocabularySectionMove.addToLesson(
-          lesson,
-          YamlParserService.parseVocabularySection('- 학교 — school'),
-        ),
-        isNull,
-      );
-    });
-  });
-
   group('emphasizeWord', () {
     test('marks the word, an alternative form or a Korean stem', () {
       expect(YamlParserService.emphasizeWord('我是学生。', '学生'), '我是**学生**。');

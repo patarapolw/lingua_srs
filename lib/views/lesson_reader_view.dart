@@ -6,13 +6,11 @@ import '../models/lesson.dart';
 import '../providers/app_provider.dart';
 import '../services/lesson_ai_prompt.dart';
 import '../services/lesson_links.dart';
-import '../services/vocabulary_section_move.dart';
 import '../services/yaml_parser_service.dart';
 import '../widgets/lesson_content_view.dart';
 import '../widgets/markdown_text_field.dart';
 import 'ai_discussion_dialog.dart';
 import 'lesson_detail_view.dart';
-import 'yaml_import_view.dart';
 
 class LessonReaderView extends StatefulWidget {
   final String lessonId;
@@ -305,15 +303,11 @@ class _LessonMarkdownEditorState extends State<_LessonMarkdownEditor> {
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
-      final markdown = _controller.text;
       await context.read<AppProvider>().updateLessonMarkdown(
         widget.lesson.id,
-        markdown,
+        _controller.text,
       );
-      if (!mounted) return;
-      if (!await _offerVocabularySection(markdown) && mounted) {
-        Navigator.pop(context);
-      }
+      if (mounted) Navigator.pop(context);
     } catch (error) {
       if (!mounted) return;
       setState(() => _saving = false);
@@ -323,61 +317,48 @@ class _LessonMarkdownEditorState extends State<_LessonMarkdownEditor> {
     }
   }
 
-  /// A `## Vocabulary` section written here stays in the lesson's text: the
-  /// lesson's words are kept apart from it. When the section has words the
-  /// lesson does not, offers to add them, through the Add Vocabulary screen
-  /// with their YAML filled in. True when that screen replaced this one.
-  Future<bool> _offerVocabularySection(String markdown) async {
-    final section = YamlParserService.vocabularySectionOf(markdown);
-    if (section == null) return false;
-    final lesson = widget.lesson;
-    final add = VocabularySectionMove.addToLesson(
-      lesson,
-      YamlParserService.parseVocabularySection(
-        section,
-        targetLanguage: lesson.targetLanguage,
-      ),
-    );
-    if (add == null) return false;
-    final words = add.count == 1 ? '1 word' : '${add.count} words';
-    final review = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Add $words to the vocabulary?'),
-        content: Text(
-          'The ## Vocabulary section has $words that this lesson\'s '
-          'vocabulary does not. The section is saved as part of the text; '
-          'add its words to study them. You can check them before they are '
-          'added.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Not now'),
+  /// Tells the person not to add words here: a `## Vocabulary` section in
+  /// the lesson's text stays text, and its words are not added to the
+  /// lesson. Shown while the text has one.
+  Widget _vocabularySectionWarning(BuildContext context) {
+    final theme = Theme.of(context);
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: _controller,
+      builder: (context, value, _) {
+        if (!YamlParserService.vocabularySectionPattern.hasMatch(value.text)) {
+          return const SizedBox.shrink();
+        }
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.tertiaryContainer,
+            borderRadius: BorderRadius.circular(8),
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text('Review $words'),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.info_outline,
+                color: theme.colorScheme.onTertiaryContainer,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Don\'t add vocabulary here. Words in a ## Vocabulary '
+                  'section of the lesson text are not added to the lesson '
+                  'and are not studied. Add them in View Vocabulary with '
+                  'Add vocabulary (+).',
+                  style: TextStyle(
+                    color: theme.colorScheme.onTertiaryContainer,
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
-    if (review != true || !mounted) return false;
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute<void>(
-        builder: (_) => YamlImportView(
-          initialLessonName: joinHierarchyPath([
-            ...lesson.folderPath,
-            lesson.displayTitle,
-          ]),
-          initialYaml: add.yaml,
-          previewInitialYaml: true,
-          vocabularyOnly: true,
-        ),
-      ),
-    );
-    return true;
   }
 
   @override
@@ -410,6 +391,7 @@ class _LessonMarkdownEditorState extends State<_LessonMarkdownEditor> {
               children: [
                 VirtualPathBar(lesson: widget.lesson),
                 const SizedBox(height: 12),
+                _vocabularySectionWarning(context),
                 Expanded(
                   child: MarkdownTextField(
                     controller: _controller,

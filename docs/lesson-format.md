@@ -194,7 +194,7 @@ When a heading's text repeats, its anchor gets `-1`, `-2`, … in order, as on G
 A `## Vocabulary` section lists a lesson's words in its Markdown, as a list or a table, the way you might write them in any notes. You don't need YAML, frontmatter or any other tool to use it:
 
 - **In Add Lessons**, type or paste a title and a `## Vocabulary` section, and the words are read from it ([Lessons without frontmatter](#lessons-without-frontmatter)). The preview shows them before you import, and **Move words to frontmatter** turns them into YAML if you want to edit them that way ([below](#moving-a-vocabulary-section-into-the-frontmatter)).
-- **In the lesson editor** (**Edit Markdown** in the reader), a `## Vocabulary` section is saved as part of the lesson's text, and the reader shows it. When you save, the app offers to add the words it has that the lesson's vocabulary does not: **Review N words** opens **Add Vocabulary** with them filled in, to check before they are added. **Not now** keeps the section as text only.
+- **Not in the lesson editor.** **Edit Markdown** in the reader edits the lesson's text only. A `## Vocabulary` section written there is saved as text and shown in the reader, but its words are not added to the lesson and are not studied; the editor says so while the text has one. Add words to an existing lesson in **View Vocabulary** with **Add vocabulary** (+): *Add manually*, or *Add from YAML*.
 
 [vocabulary-section-examples.md](vocabulary-section-examples.md) has an example of every rule below, with the frontmatter each one moves into.
 
