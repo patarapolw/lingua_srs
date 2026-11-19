@@ -283,7 +283,9 @@ Preview text.
         );
         await tester.pump();
       }
-      await tester.pumpAndSettle();
+      // Back in the reader, whose content view reloads the saved text and
+      // so never settles: wait out the editor's pop transition only.
+      await tester.pump(const Duration(milliseconds: 500));
 
       expect(find.byType(AlertDialog), findsNothing);
       expect(find.textContaining(warning), findsNothing);
