@@ -138,6 +138,49 @@ The full lesson body.
     expect(find.text('Lesson 7: Markdown import'), findsOneWidget);
   });
 
+  testWidgets('keeps the preview while typing and parses once it pauses', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    Future<void> waitForParse() async {
+      await tester.pump(const Duration(milliseconds: 301));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 500)),
+      );
+      await tester.pump();
+    }
+
+    FilledButton importButton() => tester.widget<FilledButton>(
+      find.ancestor(
+        of: find.text('Import Markdown'),
+        matching: find.byType(FilledButton),
+      ),
+    );
+
+    await tester.pumpWidget(const MaterialApp(home: YamlImportView()));
+    const lesson =
+        '---\nvocabulary:\n  nouns:\n    - ko: 배\n      en: pear\n---\n';
+    await tester.enterText(find.byType(TextField).last, '$lesson# Lesson A\n');
+    await waitForParse();
+    expect(find.text('Lesson A'), findsOneWidget);
+    expect(importButton().onPressed, isNotNull);
+
+    // Typing: no progress bar and no cleared preview on each key, but no
+    // importing the old parse either.
+    await tester.enterText(find.byType(TextField).last, '$lesson# Lesson AB\n');
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('Lesson A'), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+    expect(find.text('Parsing lesson...'), findsNothing);
+    expect(importButton().onPressed, isNull);
+
+    await waitForParse();
+    expect(find.text('Lesson AB'), findsOneWidget);
+    expect(importButton().onPressed, isNotNull);
+  });
+
   testWidgets('offers to add a vocabulary to Markdown with no words', (
     tester,
   ) async {

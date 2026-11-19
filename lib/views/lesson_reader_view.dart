@@ -317,6 +317,24 @@ class _LessonMarkdownEditorState extends State<_LessonMarkdownEditor> {
     }
   }
 
+  /// The text [_vocabularyHeading] was worked out for: the controller also
+  /// notifies on every cursor move, when the text, and so the answer, is
+  /// the same.
+  String? _checkedText;
+  bool _vocabularyHeading = false;
+
+  /// Whether [text] has a `## Vocabulary` heading, or a near miss such as
+  /// `## Vocabularies`: words under either are not added to the lesson.
+  bool _hasVocabularyHeading(String text) {
+    if (!identical(text, _checkedText) && text != _checkedText) {
+      _checkedText = text;
+      _vocabularyHeading =
+          YamlParserService.vocabularySectionPattern.hasMatch(text) ||
+          YamlParserService.nearMissVocabularyHeading(text) != null;
+    }
+    return _vocabularyHeading;
+  }
+
   /// Tells the person not to add words here: a `## Vocabulary` section in
   /// the lesson's text stays text, and its words are not added to the
   /// lesson. Shown while the text has one.
@@ -325,10 +343,7 @@ class _LessonMarkdownEditorState extends State<_LessonMarkdownEditor> {
     return ValueListenableBuilder<TextEditingValue>(
       valueListenable: _controller,
       builder: (context, value, _) {
-        // `## Vocabularies` and other near misses too: words written under
-        // them are no more added than under `## Vocabulary`.
-        if (!YamlParserService.vocabularySectionPattern.hasMatch(value.text) &&
-            YamlParserService.nearMissVocabularyHeading(value.text) == null) {
+        if (!_hasVocabularyHeading(value.text)) {
           return const SizedBox.shrink();
         }
         return Container(

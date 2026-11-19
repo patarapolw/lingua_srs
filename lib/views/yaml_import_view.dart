@@ -69,6 +69,22 @@ class _YamlImportViewState extends State<YamlImportView>
   final TextEditingController _yamlController = TextEditingController();
   String? _errorMessage;
   YamlParseResult? _previewResult;
+
+  /// The text [_previewResult] was parsed from, trimmed. While the editor's
+  /// text differs, a parse is due ([_parsePending]) and the preview is the
+  /// last one, kept on screen rather than cleared at every keystroke.
+  String? _previewText;
+  bool _parsePending = false;
+
+  /// What the preview's `## Vocabulary` section reads as, and its words the
+  /// frontmatter lacks, worked out with the preview rather than on every
+  /// rebuild.
+  VocabularySectionReading? _sectionReading;
+  List<SectionWord> _sectionNewWords = const [];
+
+  /// A heading such as `## Vocabularies` in the parsed text
+  /// ([YamlParserService.nearMissVocabularyHeading]).
+  String? _nearMissHeading;
   String? _defaultUnitTitle;
   List<MarkdownImportFile> _directoryFiles = [];
   final Set<String> _selectedDirectoryPaths = {};
@@ -131,6 +147,8 @@ class _YamlImportViewState extends State<YamlImportView>
     _parseTimer?.cancel();
     final generation = ++_parseGeneration;
     final text = _yamlController.text.trim();
+    // Typing over a scanned folder's results clears them: show that now.
+    final hadFiles = _directoryFiles.isNotEmpty || _staleFiles > 0;
     if (_directoryFiles.isNotEmpty) {
       _directoryFiles = [];
       _importSourceLabel = null;
@@ -147,6 +165,11 @@ class _YamlImportViewState extends State<YamlImportView>
         _errorMessage = null;
         _needsVocabulary = false;
         _previewResult = null;
+        _previewText = null;
+        _parsePending = false;
+        _sectionReading = null;
+        _sectionNewWords = const [];
+        _nearMissHeading = null;
         _progressMessage = null;
       });
       return;
@@ -154,15 +177,13 @@ class _YamlImportViewState extends State<YamlImportView>
 
     final nameParts = _lessonNameParts(_lessonNameController.text);
     final unitTitle = nameParts.unitTitle ?? _defaultUnitTitle;
-    setState(() {
-      _errorMessage = null;
-      _needsVocabulary = false;
-      _previewResult = null;
-      _progressMessage = 'Parsing lesson...';
-    });
+    // While someone types, the last preview stays as it is until the text
+    // has been still for a moment; only the first keystroke after a parse
+    // rebuilds, to mark the preview out of date (and Import with it).
+    if (!_parsePending || hadFiles) setState(() => _parsePending = true);
     _parseTimer = Timer(const Duration(milliseconds: 300), () async {
       try {
-        final result = await _parseLessonInBackground(
+        final parsed = await _parseLessonInBackground(
           text,
           nameParts.title,
           unitTitle,
@@ -171,7 +192,13 @@ class _YamlImportViewState extends State<YamlImportView>
         if (!mounted || generation != _parseGeneration) return;
         setState(() {
           _errorMessage = null;
-          _previewResult = result;
+          _needsVocabulary = false;
+          _previewResult = parsed.result;
+          _previewText = text;
+          _parsePending = false;
+          _sectionReading = parsed.section;
+          _sectionNewWords = parsed.newSectionWords;
+          _nearMissHeading = parsed.nearMissHeading;
           _progressMessage = null;
         });
       } catch (error) {
@@ -188,11 +215,22 @@ class _YamlImportViewState extends State<YamlImportView>
               ? 'YAML Parse Error: $error'
               : 'YAML / Markdown Parse Error: $error';
           _previewResult = null;
+          _previewText = null;
+          _parsePending = false;
+          _sectionReading = null;
+          _sectionNewWords = const [];
+          _nearMissHeading = YamlParserService.nearMissVocabularyHeading(text);
           _progressMessage = null;
         });
       }
     });
   }
+
+  /// Whether [_previewResult] is the parse of the editor's current text.
+  bool get _previewIsCurrent =>
+      !_parsePending &&
+      _previewResult != null &&
+      _previewText == _yamlController.text.trim();
 
   /// Gives Markdown with no source of words a `vocabulary:` (and a
   /// `target:`), so it can be imported. With [useAi], an AI first lists the
@@ -300,7 +338,12 @@ class _YamlImportViewState extends State<YamlImportView>
   Future<void> _moveVocabularySection({required bool useAi}) async {
     final preview = _previewResult;
     final section = preview?.vocabularySection;
-    if (preview == null || section == null || _movingSection) return;
+    if (preview == null ||
+        section == null ||
+        _movingSection ||
+        !_previewIsCurrent) {
+      return;
+    }
     final text = _yamlController.text;
     final messenger = ScaffoldMessenger.of(context);
     final provider = useAi ? context.read<AppProvider>() : null;
@@ -344,18 +387,13 @@ class _YamlImportViewState extends State<YamlImportView>
   /// be removed on import, with buttons to move its words into the
   /// frontmatter first.
   Widget _vocabularySectionWarning(ThemeData theme, YamlParseResult preview) {
-    final parsed = YamlParserService.parseVocabularySection(
-      preview.vocabularySection!,
-      targetLanguage: preview.lesson.targetLanguage,
-    );
+    // Read with the preview, in the background: not again on every rebuild.
+    final parsed = _sectionReading ?? const VocabularySectionReading(words: []);
+    final newWords = _sectionNewWords;
     final examples = parsed.words.fold<int>(
       0,
       (sum, word) => sum + word.examples.length,
     );
-    // Without frontmatter, the preview's words are the section's own.
-    final newWords = preview.wordsFromSection
-        ? parsed.words
-        : VocabularySectionMove.newWords(preview, parsed.words);
     final canUseAi = context.read<AppProvider?>()?.canUseAi ?? false;
     String count(int n, String one, String many) => n == 1 ? one : many;
     final details = [
@@ -494,6 +532,8 @@ class _YamlImportViewState extends State<YamlImportView>
     setState(() {
       _isParsing = true;
       _previewResult = null;
+      _previewText = null;
+      _parsePending = false;
       _directoryFiles = [];
       _directoryErrors = [];
       _directorySkipped = 0;
@@ -718,6 +758,8 @@ class _YamlImportViewState extends State<YamlImportView>
     setState(() {
       _isParsing = true;
       _previewResult = null;
+      _previewText = null;
+      _parsePending = false;
       _directoryFiles = [];
       _directoryErrors = [];
       _directorySkipped = 0;
@@ -885,7 +927,8 @@ class _YamlImportViewState extends State<YamlImportView>
 
     final text = _yamlController.text.trim();
     final preview = _previewResult;
-    if (text.isEmpty || preview == null) return;
+    // A preview of older text: its parse is still to come.
+    if (text.isEmpty || preview == null || !_previewIsCurrent) return;
 
     setState(() => _isParsing = true);
     try {
@@ -1103,7 +1146,7 @@ class _YamlImportViewState extends State<YamlImportView>
                         : 'Import ${_selectedDirectoryPaths.length} Lessons'),
             ),
             onPressed:
-                (_previewResult != null ||
+                ((_previewResult != null && !_parsePending) ||
                         _selectedDirectoryPaths.isNotEmpty ||
                         (_writeBack && _staleFiles > 0)) &&
                     !_isParsing
@@ -1297,10 +1340,7 @@ class _YamlImportViewState extends State<YamlImportView>
                       const SizedBox(height: 12),
 
                       if (!vocabularyOnly && _directoryFiles.isEmpty)
-                        if (YamlParserService.nearMissVocabularyHeading(
-                              _yamlController.text,
-                            )
-                            case final heading?)
+                        if (_nearMissHeading case final heading?)
                           Container(
                             width: double.infinity,
                             margin: const EdgeInsets.only(bottom: 12),
@@ -1885,19 +1925,59 @@ class MarkdownDirectoryResult {
   });
 }
 
-Future<YamlParseResult> _parseLessonInBackground(
+/// A lesson typed into the import screen, parsed, with what its banners
+/// need, so none of it is worked out again when the screen rebuilds.
+class _TypedPreview {
+  final YamlParseResult result;
+
+  /// The lesson's `## Vocabulary` section read as words, and those words the
+  /// lesson's frontmatter lacks (all of them without frontmatter).
+  final VocabularySectionReading? section;
+  final List<SectionWord> newSectionWords;
+
+  /// A heading such as `## Vocabularies` that starts no section.
+  final String? nearMissHeading;
+
+  const _TypedPreview({
+    required this.result,
+    this.section,
+    this.newSectionWords = const [],
+    this.nearMissHeading,
+  });
+}
+
+Future<_TypedPreview> _parseLessonInBackground(
   String text,
   String? title,
   String? unitTitle, {
   bool allowMarkdown = true,
-}) => Isolate.run(
-  () => YamlParserService.parseLessonYaml(
+}) => Isolate.run(() {
+  final result = YamlParserService.parseLessonYaml(
     text,
     defaultTitle: title,
     defaultUnitTitle: unitTitle,
     allowMarkdown: allowMarkdown,
-  ),
-);
+  );
+  final sectionText = result.vocabularySection;
+  final section = sectionText == null
+      ? null
+      : YamlParserService.parseVocabularySection(
+          sectionText,
+          targetLanguage: result.lesson.targetLanguage,
+        );
+  return _TypedPreview(
+    result: result,
+    section: section,
+    newSectionWords: section == null
+        ? const []
+        : result.wordsFromSection
+        ? section.words
+        : VocabularySectionMove.newWords(result, section.words),
+    nearMissHeading: allowMarkdown
+        ? YamlParserService.nearMissVocabularyHeading(text)
+        : null,
+  );
+});
 
 Future<MarkdownDirectoryResult> _parseMarkdownDirectoryInBackground(
   List<String> paths,
