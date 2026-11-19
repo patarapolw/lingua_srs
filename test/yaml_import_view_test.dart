@@ -126,6 +126,8 @@ The full lesson body.
       () => Future<void>.delayed(const Duration(milliseconds: 500)),
     );
     await tester.pump();
+    // The parse lands in a microtask after that frame: build it.
+    await tester.pump();
 
     expect(
       find.text('Import Markdown'),
@@ -149,6 +151,8 @@ The full lesson body.
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 500)),
       );
+      await tester.pump();
+      // The parse lands in a microtask after that frame: build it.
       await tester.pump();
     }
 
@@ -192,6 +196,8 @@ The full lesson body.
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 500)),
       );
+      await tester.pump();
+      // The parse lands in a microtask after that frame: build it.
       await tester.pump();
     }
 
@@ -237,6 +243,8 @@ The full lesson body.
       () => Future<void>.delayed(const Duration(milliseconds: 500)),
     );
     await tester.pump();
+    // The parse lands in a microtask after that frame: build it.
+    await tester.pump();
 
     expect(
       find.textContaining('The heading "## Vocabularies" is read as lesson'),
@@ -255,6 +263,8 @@ The full lesson body.
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 500)),
       );
+      await tester.pump();
+      // The parse lands in a microtask after that frame: build it.
       await tester.pump();
     }
 
@@ -345,6 +355,8 @@ vocabulary:
       () => Future<void>.delayed(const Duration(milliseconds: 500)),
     );
     await tester.pump();
+    // The parse lands in a microtask after that frame: build it.
+    await tester.pump();
 
     final importButton = tester.widget<FilledButton>(
       find.ancestor(
@@ -389,6 +401,8 @@ vocabulary:
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 500)),
       );
+      await tester.pump();
+      // The parse lands in a microtask after that frame: build it.
       await tester.pump();
     }
 
