@@ -29,6 +29,11 @@ class YamlParseResult {
   /// (docs/lesson-format.md). Null when the body has no such section.
   final String? vocabularySection;
 
+  /// The lesson is Markdown without frontmatter, so its words were read from
+  /// its `## Vocabulary` section ([YamlParserService.parseVocabularySection])
+  /// rather than from YAML.
+  final bool wordsFromSection;
+
   YamlParseResult({
     required this.lesson,
     required this.sentences,
@@ -36,6 +41,7 @@ class YamlParseResult {
     this.sections = const {},
     this.vocabularyPath = const [],
     this.vocabularySection,
+    this.wordsFromSection = false,
   });
 
   static const sectionSeparator = '\u0000';
@@ -380,10 +386,17 @@ class YamlParserService {
     bool allowMarkdown = true,
     String? sourcePath,
   }) {
-    var frontMatter = yamlString.trim();
+    final source = yamlString.trim();
+    // Markdown without frontmatter is a lesson when it has a `## Vocabulary`
+    // section: its words are read from the section.
+    final wordsFromSection =
+        !source.startsWith('---') && isSectionOnlyMarkdown(source);
+    var frontMatter = wordsFromSection ? '---\n---\n$source' : source;
     String? markdownTitle;
     String markdownContent = '';
     String? removedVocabularySection;
+    VocabularySectionReading? sectionReading;
+    String? sectionLanguage;
     final isMarkdown = frontMatter.startsWith('---');
     if (isMarkdown && !allowMarkdown) {
       throw const FormatException(markdownNotAllowed);
@@ -399,7 +412,17 @@ class YamlParserService {
       removedVocabularySection = vocabularySection.hasMatch(markdownBody)
           ? removed.join('\n\n')
           : null;
-      markdownContent = markdownBody.replaceAll(vocabularySection, '').trim();
+      if (wordsFromSection) {
+        sectionLanguage = guessSectionLanguage(removedVocabularySection ?? '');
+        sectionReading = parseVocabularySection(
+          removedVocabularySection ?? '',
+          targetLanguage: sectionLanguage,
+        );
+      }
+      markdownContent = withVocabularyNotes(
+        markdownBody,
+        sectionReading?.notes ?? '',
+      ).trim();
       final bodyLines = markdownContent
           .split(RegExp(r'\r?\n'))
           .map((line) => line.trim())
@@ -421,7 +444,22 @@ class YamlParserService {
       frontMatter = frontMatterParts.$1;
     }
 
-    final doc = loadYaml(frontMatter);
+    final doc = sectionReading == null
+        ? loadYaml(frontMatter)
+        : {
+            'target': sectionLanguage,
+            'vocabulary': {
+              for (final word in sectionReading.words) word.section: <Object>[],
+            },
+          };
+    if (sectionReading != null) {
+      final vocabulary = (doc as Map)['vocabulary'] as Map;
+      for (final word in sectionReading.words) {
+        (vocabulary[word.section] as List).add(
+          sectionWordYaml(word, targetLanguage: sectionLanguage!),
+        );
+      }
+    }
     if (doc is! Map) {
       throw const FormatException('YAML root must be a map/dictionary.');
     }
@@ -735,7 +773,132 @@ class YamlParserService {
       sections: sections,
       vocabularyPath: vocabularyPath,
       vocabularySection: removedVocabularySection,
+      wordsFromSection: wordsFromSection,
     );
+  }
+
+  /// Whether [markdown], text without frontmatter, is a lesson read from
+  /// its `## Vocabulary` section: it has one, and is not plain YAML (where
+  /// `## Vocabulary` would be a comment).
+  static bool isSectionOnlyMarkdown(String markdown) {
+    final source = markdown.trim();
+    if (source.startsWith('---') ||
+        !vocabularySectionPattern.hasMatch(source)) {
+      return false;
+    }
+    try {
+      return loadYaml(source) is! Map;
+    } on YamlException {
+      return true;
+    }
+  }
+
+  /// Whether a Markdown file found in a folder or ZIP is a lesson: it has
+  /// frontmatter with a `vocabulary:` key, or no frontmatter and a
+  /// `## Vocabulary` section. Frontmatter without `vocabulary:` marks a page
+  /// that is not a lesson, such as a VitePress `index.md`.
+  static bool isLessonMarkdown(String markdown) {
+    final source = markdown.trim();
+    if (source.startsWith('---')) {
+      try {
+        return hasVocabularyFrontmatter(source);
+      } on Exception {
+        return false;
+      }
+    }
+    return isSectionOnlyMarkdown(source);
+  }
+
+  /// The heading the text of a `## Vocabulary` section that is not about one
+  /// word is kept under, when its words are read from it.
+  static const vocabularyNotesHeading = '## Vocabulary notes';
+
+  /// [body], a lesson's Markdown, with its `## Vocabulary` sections replaced
+  /// by [notes] under [vocabularyNotesHeading], or removed when [notes] is
+  /// empty.
+  static String withVocabularyNotes(String body, String notes) {
+    var replaced = false;
+    final kept = notes.trim();
+    return body.replaceAllMapped(vocabularySectionPattern, (_) {
+      // Every section's notes are in [notes]: keep them once.
+      if (replaced || kept.isEmpty) return '';
+      replaced = true;
+      return '\n$vocabularyNotesHeading\n\n$kept\n';
+    });
+  }
+
+  /// The language of a `## Vocabulary` section with no `target:` to say it:
+  /// Korean if it has Hangul, Japanese if it has kana, Chinese if it has Han
+  /// characters, and otherwise Korean, the app's default.
+  static String guessSectionLanguage(String section) {
+    if (RegExp(r'\p{Script=Hangul}', unicode: true).hasMatch(section)) {
+      return 'ko';
+    }
+    if (_kana.hasMatch(section)) return 'ja';
+    if (_han.hasMatch(section)) return 'zh';
+    return 'ko';
+  }
+
+  /// The key entries are written under for [language]: the language alone,
+  /// `zh` for `zh-TW` (docs/lesson-format.md).
+  static String languageKey(String language) =>
+      language.split(RegExp('[-_]')).first.trim().toLowerCase();
+
+  /// The frontmatter entry for [word]: the word and its meaning under the
+  /// lesson's language keys, then its reading (`pinyin` in a Chinese
+  /// lesson), other forms, notes and examples. An example in which the word
+  /// is not marked in `**` and cannot be found to mark becomes a note.
+  static Map<String, Object> sectionWordYaml(
+    SectionWord word, {
+    required String targetLanguage,
+    String nativeLanguage = 'en',
+  }) {
+    final targetKey = languageKey(targetLanguage);
+    final nativeKey = languageKey(nativeLanguage);
+    final language = targetLanguage.toLowerCase();
+    final notes = [...word.notes];
+    final examples = <Map<String, Object>>[];
+    for (final example in word.examples) {
+      final sentence = emphasizeWord(
+        example.sentence,
+        word.word,
+        alternatives: word.forms.values,
+        language: language,
+      );
+      if (sentence == null) {
+        notes.add(
+          'Example: ${example.sentence}'
+          '${example.translation.isEmpty ? '' : ' — ${example.translation}'}',
+        );
+        continue;
+      }
+      examples.add({
+        targetKey: sentence,
+        if (example.translation.isNotEmpty) nativeKey: example.translation,
+        'notes': ?_sectionNotesValue(example.notes),
+      });
+    }
+    return {
+      targetKey: word.word,
+      if (word.reading.isNotEmpty)
+        (targetKey == 'zh' ? 'pinyin' : 'reading'): word.reading,
+      for (final MapEntry(:key, :value) in word.forms.entries)
+        if (value.isNotEmpty && value != word.word) key: value,
+      nativeKey: word.meaning,
+      'notes': ?_sectionNotesValue(notes),
+      if (examples.isNotEmpty) 'examples': examples,
+    };
+  }
+
+  /// Notes as the frontmatter writes them: one string, a list of
+  /// paragraphs, or null for none.
+  static Object? _sectionNotesValue(List<String> notes) {
+    final kept = [
+      for (final note in notes)
+        if (note.trim().isNotEmpty) note.trim(),
+    ];
+    if (kept.isEmpty) return null;
+    return kept.length == 1 ? kept.single : kept;
   }
 
   /// A `## Vocabulary` section of a lesson's Markdown body: from that heading
@@ -755,9 +918,8 @@ class YamlParserService {
 
   /// Reads the words of a `## Vocabulary` section ([YamlParseResult
   /// .vocabularySection]) without an AI, by the rules in
-  /// docs/lesson-format.md (*Moving a Vocabulary section into the
-  /// frontmatter*): list items and table rows, with readings, other written
-  /// forms, notes and examples. [targetLanguage] is the lesson's (`zh-TW`,
+  /// docs/lesson-format.md (*Reading a Vocabulary section*): list items
+  /// and table rows, with readings, other written forms, notes and examples. [targetLanguage] is the lesson's (`zh-TW`,
   /// `ko`), which decides what a bracketed form after a word is.
   static VocabularySectionReading parseVocabularySection(
     String section, {
@@ -1665,8 +1827,11 @@ class YamlParserService {
     String? defaultUnitTitle,
   }) {
     final fileName = _markdownFileName(sourcePath);
-    if (fileName == null || !hasVocabularyFrontmatter(markdown)) return null;
-    final body = _splitMarkdownFrontmatter(markdown.trim()).$2;
+    if (fileName == null || !isLessonMarkdown(markdown)) return null;
+    final source = markdown.trim();
+    final body = source.startsWith('---')
+        ? _splitMarkdownFrontmatter(source).$2
+        : source;
     final heading = RegExp(
       r'^#\s+(.+)$',
       multiLine: true,

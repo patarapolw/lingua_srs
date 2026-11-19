@@ -59,10 +59,18 @@ class VocabularySectionMove {
     String markdown,
     VocabularySectionReading reading,
   ) {
-    final span = YamlParserService.frontmatterSpan(markdown);
-    if (span == null) {
-      throw const FormatException('The lesson has no frontmatter.');
+    if (YamlParserService.frontmatterSpan(markdown) == null) {
+      // Markdown without frontmatter: give it one, naming the language its
+      // words were read in, so they can be written there.
+      final guessed = YamlParserService.parseLessonYaml(markdown);
+      if (!guessed.wordsFromSection) {
+        throw const FormatException('The lesson has no frontmatter.');
+      }
+      markdown =
+          '---\ntarget: ${guessed.lesson.targetLanguage}\nvocabulary:\n---\n\n'
+          '${markdown.trimLeft()}';
     }
+    final span = YamlParserService.frontmatterSpan(markdown)!;
     final before = YamlParserService.parseLessonYaml(markdown);
     final lesson = before.lesson;
     final toAdd = newWords(before, reading.words);
@@ -100,16 +108,9 @@ class VocabularySectionMove {
 
     var yaml = editor.toString();
     if (!yaml.endsWith('\n')) yaml = '$yaml\n';
-    final notes = reading.notes.trim();
-    var replaced = false;
-    var rest = markdown.substring(span.$2).replaceAllMapped(
-      YamlParserService.vocabularySectionPattern,
-      (_) {
-        // Every section's notes are in [reading]: keep them once.
-        if (replaced || notes.isEmpty) return '';
-        replaced = true;
-        return '\n$notesHeading\n\n$notes\n';
-      },
+    var rest = YamlParserService.withVocabularyNotes(
+      markdown.substring(span.$2),
+      reading.notes,
     );
     if (markdown.endsWith('\n') && !rest.endsWith('\n')) rest = '$rest\n';
     final text = markdown.substring(0, span.$1) + yaml + rest;
@@ -131,65 +132,21 @@ class VocabularySectionMove {
 
   /// The heading the text of a `## Vocabulary` section that is not about one
   /// word is kept under.
-  static const notesHeading = '## Vocabulary notes';
+  static const notesHeading = YamlParserService.vocabularyNotesHeading;
 
-  /// The frontmatter entry for [word] in [lesson]: the word and its meaning
-  /// under the lesson's language keys, then its reading (`pinyin` in a
-  /// Chinese lesson), other forms, notes and examples, as in
-  /// docs/lesson-format.md.
-  static Map<String, Object> entryYaml(SectionWord word, Lesson lesson) {
-    final targetKey = languageKey(lesson.targetLanguage);
-    final nativeKey = languageKey(lesson.nativeLanguage);
-    final language = lesson.targetLanguage.toLowerCase();
-    final notes = [...word.notes];
-    final examples = <Map<String, Object>>[];
-    for (final example in word.examples) {
-      final sentence = YamlParserService.emphasizeWord(
-        example.sentence,
-        word.word,
-        alternatives: word.forms.values,
-        language: language,
+  /// The frontmatter entry for [word] in [lesson]
+  /// ([YamlParserService.sectionWordYaml]).
+  static Map<String, Object> entryYaml(SectionWord word, Lesson lesson) =>
+      YamlParserService.sectionWordYaml(
+        word,
+        targetLanguage: lesson.targetLanguage,
+        nativeLanguage: lesson.nativeLanguage,
       );
-      if (sentence == null) {
-        notes.add(
-          'Example: ${example.sentence}'
-          '${example.translation.isEmpty ? '' : ' — ${example.translation}'}',
-        );
-        continue;
-      }
-      examples.add({
-        targetKey: sentence,
-        if (example.translation.isNotEmpty) nativeKey: example.translation,
-        'notes': ?_notesValue(example.notes),
-      });
-    }
-    return {
-      targetKey: word.word,
-      if (word.reading.isNotEmpty)
-        (targetKey == 'zh' ? 'pinyin' : 'reading'): word.reading,
-      for (final MapEntry(:key, :value) in word.forms.entries)
-        if (value.isNotEmpty && value != word.word) key: value,
-      nativeKey: word.meaning,
-      'notes': ?_notesValue(notes),
-      if (examples.isNotEmpty) 'examples': examples,
-    };
-  }
 
-  /// Notes as the frontmatter writes them: one string, a list of
-  /// paragraphs, or null for none.
-  static Object? _notesValue(List<String> notes) {
-    final kept = [
-      for (final note in notes)
-        if (note.trim().isNotEmpty) note.trim(),
-    ];
-    if (kept.isEmpty) return null;
-    return kept.length == 1 ? kept.single : kept;
-  }
-
-  /// The key entries are written under for [language]: the language alone,
-  /// `zh` for `zh-TW` (docs/lesson-format.md).
+  /// The key entries are written under for [language]
+  /// ([YamlParserService.languageKey]).
   static String languageKey(String language) =>
-      language.split(RegExp('[-_]')).first.trim().toLowerCase();
+      YamlParserService.languageKey(language);
 
   /// Asks an AI for the words of [section], a lesson's `## Vocabulary`
   /// section; [parseReply] reads its answer.

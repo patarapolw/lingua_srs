@@ -193,6 +193,103 @@ Verbs end in 다.
     });
   });
 
+  group('Markdown without frontmatter', () {
+    const chinese = '''# Lesson 3
+
+Intro.
+
+## Vocabulary
+
+Words for the classroom.
+
+### Nouns
+- 学生 (xuésheng) [學生] — student
+  - 我是学生。 — I am a student.
+    - Note: 是 links two nouns.
+
+## Practice
+
+Practice text.
+''';
+
+    test('is a lesson only with a ## Vocabulary section', () {
+      expect(YamlParserService.isLessonMarkdown(chinese), isTrue);
+      expect(
+        YamlParserService.isLessonMarkdown('# README\n\nHow to build.\n'),
+        isFalse,
+      );
+      expect(
+        YamlParserService.isLessonMarkdown(
+          '---\ntitle: index\n---\n# Index\n\n## Vocabulary\n\n- a — b\n',
+        ),
+        isFalse,
+      );
+      expect(
+        YamlParserService.isLessonMarkdown('---\nvocabulary:\n---\n# L\n'),
+        isTrue,
+      );
+      // `## Vocabulary` in plain YAML is a comment.
+      expect(
+        YamlParserService.isLessonMarkdown(
+          '## Vocabulary\nvocabulary:\n  nouns:\n    - ko: 책\n      en: book\n',
+        ),
+        isFalse,
+      );
+    });
+
+    test('reads its words from the section', () {
+      final result = YamlParserService.parseLessonYaml(chinese);
+      expect(result.wordsFromSection, isTrue);
+      expect(result.lesson.title, 'Lesson 3');
+      expect(result.lesson.targetLanguage, 'zh');
+      final word = result.lesson.vocabularies.single;
+      expect(word.pos, 'nouns');
+      expect(word.targetWord, '学生');
+      expect(word.translation, 'student');
+      final sentence = result.sentences.single;
+      expect(sentence.targetText, '我是学生。');
+      expect(sentence.translationText, 'I am a student.');
+      expect(sentence.notes, '是 links two nouns.');
+      expect(
+        result.lesson.markdownContent,
+        '# Lesson 3\n\nIntro.\n\n## Vocabulary notes\n\n'
+        'Words for the classroom.\n\n## Practice\n\nPractice text.',
+      );
+    });
+
+    test('gives it a frontmatter when its words are moved', () {
+      final result = YamlParserService.parseLessonYaml(chinese);
+      final move = VocabularySectionMove.apply(
+        chinese,
+        YamlParserService.parseVocabularySection(
+          result.vocabularySection!,
+          targetLanguage: result.lesson.targetLanguage,
+        ),
+      );
+      expect(move.added, 1);
+      expect(move.text, startsWith('---\ntarget: zh\nvocabulary:\n  nouns:\n'));
+      expect(move.text, contains('notes: 是 links two nouns.'));
+      final after = YamlParserService.parseLessonYaml(move.text);
+      expect(after.wordsFromSection, isFalse);
+      expect(after.lesson.vocabularies.single.targetWord, '学生');
+      expect(after.sentences.single.notes, '是 links two nouns.');
+    });
+
+    test('lessonFileInfo takes its title from the heading', () {
+      final lesson = YamlParserService.lessonFileInfo(
+        chinese,
+        sourcePath: 'unit/lesson-3.md',
+      );
+      expect(lesson?.title, 'Lesson 3');
+    });
+
+    test('guesses the language from the script', () {
+      expect(YamlParserService.guessSectionLanguage('- 학교 — school'), 'ko');
+      expect(YamlParserService.guessSectionLanguage('- 学校 — school'), 'zh');
+      expect(YamlParserService.guessSectionLanguage('- がっこう — school'), 'ja');
+    });
+  });
+
   group('VocabularySectionMove.apply', () {
     const markdown = '''---
 title: School   # page title
@@ -327,7 +424,7 @@ vocabulary:
     final doc = File('docs/lesson-format.md')
         .readAsStringSync()
         .replaceAll('\r\n', '\n');
-    final from = doc.indexOf('### Moving a Vocabulary section');
+    final from = doc.indexOf('### Reading a Vocabulary section');
     final blocks = RegExp(
       r'```(markdown|yaml)\n(.*?)```',
       dotAll: true,

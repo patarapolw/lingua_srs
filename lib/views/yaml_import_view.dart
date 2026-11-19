@@ -231,7 +231,10 @@ class _YamlImportViewState extends State<YamlImportView>
       0,
       (sum, word) => sum + word.examples.length,
     );
-    final newWords = VocabularySectionMove.newWords(preview, parsed.words);
+    // Without frontmatter, the preview's words are the section's own.
+    final newWords = preview.wordsFromSection
+        ? parsed.words
+        : VocabularySectionMove.newWords(preview, parsed.words);
     final canUseAi = context.read<AppProvider?>()?.canUseAi ?? false;
     String count(int n, String one, String many) => n == 1 ? one : many;
     final details = [
@@ -272,9 +275,16 @@ class _YamlImportViewState extends State<YamlImportView>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'The ## Vocabulary section will be removed on import. The app '
-            'reads a lesson\'s words from its frontmatter, and lists them '
-            'under View Vocabulary. ${details.join(' ')}',
+            preview.wordsFromSection
+                ? 'This Markdown has no frontmatter, so its words are read '
+                      'from its ## Vocabulary section, which is left out of '
+                      'the lesson\'s text. The language is taken to be '
+                      '${preview.lesson.targetLanguage}; move the words into '
+                      'a frontmatter to change it with target:, or to edit '
+                      'them as YAML. ${details.join(' ')}'
+                : 'The ## Vocabulary section will be removed on import. The '
+                      'app reads a lesson\'s words from its frontmatter, and '
+                      'lists them under View Vocabulary. ${details.join(' ')}',
             style: TextStyle(color: theme.colorScheme.onTertiaryContainer),
           ),
           const SizedBox(height: 8),
@@ -423,7 +433,7 @@ class _YamlImportViewState extends State<YamlImportView>
                     ? 'No changed Markdown files found. '
                           '${parseResult.unchanged} unchanged files were skipped.'
                           '${_followedNote(followed)}'
-                    : 'No Markdown files with vocabulary frontmatter were found.'
+                    : 'No lesson Markdown files (vocabulary frontmatter or a ## Vocabulary section) were found.'
               : describeImportErrors(
                   'No importable files found. ${parseResult.errors.length} '
                   'files could not be parsed:',
@@ -675,7 +685,7 @@ class _YamlImportViewState extends State<YamlImportView>
                   ? 'No changed Markdown files found. '
                         '${result.unchanged} unchanged files were skipped.'
                         '${_followedNote(followed)}'
-                  : 'No Markdown files with a vocabulary frontmatter section were found.'
+                  : 'No lesson Markdown files (vocabulary frontmatter or a ## Vocabulary section) were found.'
             : describeImportErrors(
                 'No importable files found. ${result.errors.length} '
                 'files could not be parsed:',
@@ -859,7 +869,7 @@ class _YamlImportViewState extends State<YamlImportView>
         SnackBar(
           content: Text(
             'Imported $importedCount lessons; skipped $_directorySkipped '
-            'files without vocabulary frontmatter, $_directoryUnchanged '
+            'files that are not lessons, $_directoryUnchanged '
             'unchanged Markdown files; '
             '${_directoryErrors.length} invalid files excluded. '
             'Existing SRS progress was preserved.'
@@ -1316,7 +1326,11 @@ class _YamlImportViewState extends State<YamlImportView>
                                   subtitle: Text(
                                     '${lesson.effectiveUnitTitle ?? file.path} · '
                                     '${lesson.vocabularies.length} vocabulary items'
-                                    '${file.preview.vocabularySection == null ? '' : ' · ## Vocabulary section will be removed; '
+                                    '${file.preview.wordsFromSection
+                                        ? ' · no frontmatter: words read from ## Vocabulary'
+                                        : file.preview.vocabularySection == null
+                                        ? ''
+                                        : ' · ## Vocabulary section will be removed; '
                                               'paste the file into the editor to move its words to the frontmatter'}',
                                   ),
                                 ),
@@ -1752,7 +1766,7 @@ MarkdownDirectoryResult parsePickedMarkdownSources(
     String sourceKey,
     String contents, {
     required String? defaultTitle,
-    required bool requireVocabularyFrontmatter,
+    required bool requireLessonMarkdown,
     String? hierarchyPath,
     String? legacySourceKey,
   }) {
@@ -1774,8 +1788,8 @@ MarkdownDirectoryResult parsePickedMarkdownSources(
         }
         return;
       }
-      if (requireVocabularyFrontmatter &&
-          !YamlParserService.hasVocabularyFrontmatter(contents)) {
+      if (requireLessonMarkdown &&
+          !YamlParserService.isLessonMarkdown(contents)) {
         skipped++;
         return;
       }
@@ -1813,7 +1827,7 @@ MarkdownDirectoryResult parsePickedMarkdownSources(
             zipEntrySourceKey(file.path),
             file.contents,
             defaultTitle: null,
-            requireVocabularyFrontmatter: true,
+            requireLessonMarkdown: true,
             hierarchyPath: file.path,
             // Saved before ZIP entries were keyed by their path alone.
             legacySourceKey: markdownSourceKey(
@@ -1829,7 +1843,7 @@ MarkdownDirectoryResult parsePickedMarkdownSources(
           markdownSourceKey(source.sourceKey),
           utf8.decode(source.bytes),
           defaultTitle: null,
-          requireVocabularyFrontmatter: filename.toLowerCase().endsWith('.md'),
+          requireLessonMarkdown: filename.toLowerCase().endsWith('.md'),
         );
       }
     } catch (error) {
@@ -1910,7 +1924,7 @@ MarkdownDirectoryResult parseMarkdownFiles(
         }
         continue;
       }
-      if (!YamlParserService.hasVocabularyFrontmatter(contents)) {
+      if (!YamlParserService.isLessonMarkdown(contents)) {
         skipped++;
         continue;
       }
