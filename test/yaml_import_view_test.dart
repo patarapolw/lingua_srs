@@ -57,17 +57,27 @@ void main() {
     expect(markdownInput.expands, isTrue);
     expect(markdownInput.style?.fontFamily, 'monospace');
     expect(markdownInput.controller?.text, isEmpty);
-    expect(
-      markdownInput.decoration!.hintText,
-      contains('  nouns:  # Replace with a part of speech'),
-    );
-    final parsedHint = YamlParserService.parseLessonYaml(
-      markdownInput.decoration!.hintText!,
-    );
+    // The placeholder is a lesson in Markdown, with no YAML: a title, text
+    // and a ## Vocabulary list the words are read from.
+    final hint = markdownInput.decoration!.hintText!;
+    expect(hint, startsWith('# Lesson 1\n'));
+    expect(hint, isNot(contains('---')));
+    final parsedHint = YamlParserService.parseLessonYaml(hint);
+    expect(parsedHint.wordsFromSection, isTrue);
     expect(parsedHint.lesson.title, 'Lesson 1');
-    expect(parsedHint.lesson.vocabularies, hasLength(1));
-    expect(parsedHint.lesson.vocabularies.single.targetWord, 'Korean word');
+    expect(parsedHint.lesson.targetLanguage, 'ko');
+    expect(
+      parsedHint.lesson.vocabularies.map((v) => '${v.pos}|${v.targetWord}'),
+      ['nouns|학교', 'nouns|학생', 'verbs|가다'],
+    );
+    final school = parsedHint.lesson.vocabularies.first;
+    expect(school.notes, 'Optional notes about the word.');
+    expect(parsedHint.lesson.vocabularies[1].hanja, '學生');
     expect(parsedHint.sentences, hasLength(2));
+    expect(
+      parsedHint.sentences.first.notes,
+      'Optional notes about the sentence.',
+    );
     expect(find.text('Enter Markdown to see preview'), findsOneWidget);
 
     final importButton = tester.widget<FilledButton>(
