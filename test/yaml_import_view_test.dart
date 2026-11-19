@@ -171,18 +171,60 @@ The full lesson body.
     expect(find.text('Lesson A'), findsOneWidget);
     expect(importButton().onPressed, isNotNull);
 
-    // Typing: no progress bar and no cleared preview on each key, but no
-    // importing the old parse either.
+    // Typing: no progress bar, no cleared preview and no Import button
+    // turning grey on each key. Import parses the new text first instead.
     await tester.enterText(find.byType(TextField).last, '$lesson# Lesson AB\n');
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.text('Lesson A'), findsOneWidget);
     expect(find.byType(LinearProgressIndicator), findsNothing);
     expect(find.text('Parsing lesson...'), findsNothing);
-    expect(importButton().onPressed, isNull);
+    expect(importButton().onPressed, isNotNull);
 
     await waitForParse();
     expect(find.text('Lesson AB'), findsOneWidget);
     expect(importButton().onPressed, isNotNull);
+  });
+
+  testWidgets('a button pressed while typing acts on the text as it is', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(const MaterialApp(home: YamlImportView()));
+    const start = '---\nvocabulary:\n---\n# Lesson\n\n## Vocabulary\n\n';
+    await tester.enterText(
+      find.byType(TextField).last,
+      '$start- 학교 - school\n',
+    );
+    await tester.pump(const Duration(milliseconds: 301));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 500)),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Move words to frontmatter'), findsOneWidget);
+
+    // A word typed just now, before the preview has caught up, still moves.
+    await tester.enterText(
+      find.byType(TextField).last,
+      '$start- 학교 - school\n- 책 - book\n',
+    );
+    await tester.pump();
+    await tester.tap(find.text('Move words to frontmatter'));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 500)),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    final text = tester
+        .widgetList<TextField>(find.byType(TextField))
+        .last
+        .controller!
+        .text;
+    expect(text, contains('ko: 학교'));
+    expect(text, contains('ko: 책'));
   });
 
   testWidgets('offers to add a vocabulary to Markdown with no words', (

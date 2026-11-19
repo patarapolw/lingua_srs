@@ -178,52 +178,86 @@ class _YamlImportViewState extends State<YamlImportView>
     final nameParts = _lessonNameParts(_lessonNameController.text);
     final unitTitle = nameParts.unitTitle ?? _defaultUnitTitle;
     // While someone types, the last preview stays as it is until the text
-    // has been still for a moment; only the first keystroke after a parse
-    // rebuilds, to mark the preview out of date (and Import with it).
-    if (!_parsePending || hadFiles) setState(() => _parsePending = true);
-    _parseTimer = Timer(const Duration(milliseconds: 300), () async {
-      try {
-        final parsed = await _parseLessonInBackground(
-          text,
-          nameParts.title,
-          unitTitle,
-          allowMarkdown: !widget.vocabularyOnly,
-        );
-        if (!mounted || generation != _parseGeneration) return;
-        setState(() {
-          _errorMessage = null;
-          _needsVocabulary = false;
-          _previewResult = parsed.result;
-          _previewText = text;
-          _parsePending = false;
-          _sectionReading = parsed.section;
-          _sectionNewWords = parsed.newSectionWords;
-          _nearMissHeading = parsed.nearMissHeading;
-          _progressMessage = null;
-        });
-      } catch (error) {
-        if (!mounted || generation != _parseGeneration) return;
-        // Markdown with no words is not a YAML mistake: offer to add a
-        // vocabulary instead of the parser's error.
-        final needsVocabulary =
-            !widget.vocabularyOnly && YamlParserService.needsVocabulary(text);
-        setState(() {
-          _needsVocabulary = needsVocabulary;
-          _errorMessage = needsVocabulary
-              ? null
-              : widget.vocabularyOnly
-              ? 'YAML Parse Error: $error'
-              : 'YAML / Markdown Parse Error: $error';
-          _previewResult = null;
-          _previewText = null;
-          _parsePending = false;
-          _sectionReading = null;
-          _sectionNewWords = const [];
-          _nearMissHeading = YamlParserService.nearMissVocabularyHeading(text);
-          _progressMessage = null;
-        });
-      }
-    });
+    // has been still for a moment. Nothing on screen changes per keystroke:
+    // Import stays enabled, and parses the text first if it is out of date
+    // ([_parseNow]). Cleared folder results are the one thing to show now.
+    _parsePending = true;
+    if (hadFiles) setState(() {});
+    _parseTimer = Timer(
+      const Duration(milliseconds: 300),
+      () => _runParse(generation, text, nameParts.title, unitTitle),
+    );
+  }
+
+  /// Parses [text] in the background and shows the result, unless a newer
+  /// parse ([generation]) has started meanwhile.
+  Future<void> _runParse(
+    int generation,
+    String text,
+    String? title,
+    String? unitTitle,
+  ) async {
+    try {
+      final parsed = await _parseLessonInBackground(
+        text,
+        title,
+        unitTitle,
+        allowMarkdown: !widget.vocabularyOnly,
+      );
+      if (!mounted || generation != _parseGeneration) return;
+      setState(() {
+        _errorMessage = null;
+        _needsVocabulary = false;
+        _previewResult = parsed.result;
+        _previewText = text;
+        _parsePending = false;
+        _sectionReading = parsed.section;
+        _sectionNewWords = parsed.newSectionWords;
+        _nearMissHeading = parsed.nearMissHeading;
+        _progressMessage = null;
+      });
+    } catch (error) {
+      if (!mounted || generation != _parseGeneration) return;
+      // Markdown with no words is not a YAML mistake: offer to add a
+      // vocabulary instead of the parser's error.
+      final needsVocabulary =
+          !widget.vocabularyOnly && YamlParserService.needsVocabulary(text);
+      setState(() {
+        _needsVocabulary = needsVocabulary;
+        _errorMessage = needsVocabulary
+            ? null
+            : widget.vocabularyOnly
+            ? 'YAML Parse Error: $error'
+            : 'YAML / Markdown Parse Error: $error';
+        _previewResult = null;
+        _previewText = null;
+        _parsePending = false;
+        _sectionReading = null;
+        _sectionNewWords = const [];
+        _nearMissHeading = YamlParserService.nearMissVocabularyHeading(text);
+        _progressMessage = null;
+      });
+    }
+  }
+
+  /// Parses the editor's text now, instead of when typing pauses, so an
+  /// action on the preview uses the text as it is. True when the preview is
+  /// then the current text's; false when it failed to parse, whose error is
+  /// shown instead.
+  Future<bool> _parseNow() async {
+    if (_previewIsCurrent) return true;
+    _parseTimer?.cancel();
+    final generation = ++_parseGeneration;
+    final text = _yamlController.text.trim();
+    if (text.isEmpty) return false;
+    final nameParts = _lessonNameParts(_lessonNameController.text);
+    await _runParse(
+      generation,
+      text,
+      nameParts.title,
+      nameParts.unitTitle ?? _defaultUnitTitle,
+    );
+    return mounted && _previewIsCurrent;
   }
 
   /// Whether [_previewResult] is the parse of the editor's current text.
@@ -336,14 +370,11 @@ class _YamlImportViewState extends State<YamlImportView>
   /// Moves the words of the lesson's `## Vocabulary` section, which import
   /// leaves out, into its frontmatter, read by an AI when [useAi].
   Future<void> _moveVocabularySection({required bool useAi}) async {
+    if (_movingSection || !await _parseNow()) return;
+    if (!mounted) return;
     final preview = _previewResult;
     final section = preview?.vocabularySection;
-    if (preview == null ||
-        section == null ||
-        _movingSection ||
-        !_previewIsCurrent) {
-      return;
-    }
+    if (preview == null || section == null) return;
     final text = _yamlController.text;
     final messenger = ScaffoldMessenger.of(context);
     final provider = useAi ? context.read<AppProvider>() : null;
@@ -925,10 +956,13 @@ class _YamlImportViewState extends State<YamlImportView>
       return;
     }
 
+    // A preview of older text: parse the text as it is first, and import
+    // that, or show why it can't be.
+    if (!await _parseNow()) return;
+    if (!mounted) return;
     final text = _yamlController.text.trim();
     final preview = _previewResult;
-    // A preview of older text: its parse is still to come.
-    if (text.isEmpty || preview == null || !_previewIsCurrent) return;
+    if (text.isEmpty || preview == null) return;
 
     setState(() => _isParsing = true);
     try {
@@ -1146,7 +1180,7 @@ class _YamlImportViewState extends State<YamlImportView>
                         : 'Import ${_selectedDirectoryPaths.length} Lessons'),
             ),
             onPressed:
-                ((_previewResult != null && !_parsePending) ||
+                (_previewResult != null ||
                         _selectedDirectoryPaths.isNotEmpty ||
                         (_writeBack && _staleFiles > 0)) &&
                     !_isParsing
