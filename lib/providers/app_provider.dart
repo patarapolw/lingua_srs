@@ -35,6 +35,7 @@ import '../services/sync_record_cipher.dart';
 import '../services/sync_records.dart';
 import '../services/typed_questions.dart';
 import '../services/vocab_ai_service.dart';
+import '../services/vocabulary_section_move.dart';
 import '../services/yaml_parser_service.dart';
 
 class StudyCardItem {
@@ -2920,6 +2921,22 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       rethrow;
     }
   }
+
+  /// The words of [section], a lesson's `## Vocabulary` section, as an AI
+  /// reads them, for [VocabularySectionMove.apply].
+  Future<List<SectionWord>> readVocabularySection(
+    String section,
+    Lesson lesson, {
+    http.Client? client,
+  }) => _withAi(
+    () async => VocabularySectionMove.parseReply(
+      await DeepSeekService.completeJson(
+        apiKey: _deepSeekApiKey,
+        messages: VocabularySectionMove.prompt(section, lesson),
+        client: client,
+      ),
+    ),
+  );
 
   Future<List<VocabMergeSuggestion>> suggestVocabMerges({http.Client? client}) {
     return _withAi(() async {

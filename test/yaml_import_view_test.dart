@@ -112,6 +112,59 @@ The full lesson body.
     expect(find.text('Lesson 7: Markdown import'), findsOneWidget);
   });
 
+  testWidgets('warns of a ## Vocabulary section and moves its words', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    Future<void> waitForParse() async {
+      await tester.pump(const Duration(milliseconds: 301));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 500)),
+      );
+      await tester.pump();
+    }
+
+    await tester.pumpWidget(const MaterialApp(home: YamlImportView()));
+    await tester.enterText(find.byType(TextField).last, '''
+---
+vocabulary:
+---
+# Lesson 8
+
+## Vocabulary
+
+- 학교 — school
+''');
+    await waitForParse();
+
+    expect(
+      find.textContaining('## Vocabulary section will be removed'),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('1 word in it is not in the frontmatter'),
+      findsOneWidget,
+    );
+    expect(find.text('Move with AI'), findsNothing);
+
+    await tester.tap(find.text('Move words to frontmatter'));
+    await waitForParse();
+
+    final text = tester
+        .widgetList<TextField>(find.byType(TextField))
+        .last
+        .controller!
+        .text;
+    expect(text, contains('- ko: 학교'));
+    expect(text, isNot(contains('## Vocabulary')));
+    expect(
+      find.textContaining('## Vocabulary section will be removed'),
+      findsNothing,
+    );
+  });
+
   testWidgets('prefills the lesson name and YAML when adding to a lesson', (
     tester,
   ) async {

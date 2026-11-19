@@ -15,6 +15,7 @@ import '../services/lesson_ai_prompt.dart';
 import '../services/lesson_file_update.dart';
 import '../services/markdown_archive_service.dart';
 import '../services/storage_service.dart';
+import '../services/vocabulary_section_move.dart';
 import '../services/yaml_parser_service.dart';
 import '../widgets/lesson_clash_dialog.dart';
 
@@ -89,6 +90,10 @@ class _YamlImportViewState extends State<YamlImportView>
   int _progressTotal = 0;
   Timer? _parseTimer;
   int _parseGeneration = 0;
+
+  /// Whether the words of the `## Vocabulary` section are being moved into
+  /// the frontmatter.
+  bool _movingSection = false;
 
   @override
   void initState() {
@@ -167,6 +172,125 @@ class _YamlImportViewState extends State<YamlImportView>
         });
       }
     });
+  }
+
+  /// Moves the words of the lesson's `## Vocabulary` section, which import
+  /// leaves out, into its frontmatter, read by an AI when [useAi].
+  Future<void> _moveVocabularySection({required bool useAi}) async {
+    final preview = _previewResult;
+    final section = preview?.vocabularySection;
+    if (preview == null || section == null || _movingSection) return;
+    final text = _yamlController.text;
+    final messenger = ScaffoldMessenger.of(context);
+    final provider = useAi ? context.read<AppProvider>() : null;
+    setState(() => _movingSection = true);
+    try {
+      final words = provider != null
+          ? await provider.readVocabularySection(section, preview.lesson)
+          : YamlParserService.parseVocabularySection(section).words;
+      final move = VocabularySectionMove.apply(text, words);
+      if (!mounted) return;
+      if (_yamlController.text != text) {
+        throw const FormatException('The lesson was edited meanwhile.');
+      }
+      _yamlController.text = move.text;
+      _parseCurrentYaml();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            '${move.added == 1 ? '1 word' : '${move.added} words'} moved '
+            'into the frontmatter'
+            '${move.skipped == 0 ? '' : ' (${move.skipped} already there)'}'
+            '; the ## Vocabulary section was removed.',
+          ),
+        ),
+      );
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Could not move the words: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _movingSection = false);
+    }
+  }
+
+  /// Says that the `## Vocabulary` section of the lesson in the editor will
+  /// be removed on import, with buttons to move its words into the
+  /// frontmatter first.
+  Widget _vocabularySectionWarning(ThemeData theme, YamlParseResult preview) {
+    final parsed = YamlParserService.parseVocabularySection(
+      preview.vocabularySection!,
+    );
+    final newWords = VocabularySectionMove.newWords(preview, parsed.words);
+    final canUseAi = context.read<AppProvider?>()?.canUseAi ?? false;
+    String count(int n, String one, String many) => n == 1 ? one : many;
+    final details = [
+      if (newWords.isNotEmpty)
+        count(
+          newWords.length,
+          '1 word in it is not in the frontmatter.',
+          '${newWords.length} words in it are not in the frontmatter.',
+        )
+      else if (parsed.words.isNotEmpty)
+        'Its words are all in the frontmatter already.',
+      if (parsed.unread.isNotEmpty)
+        count(
+          parsed.unread.length,
+          '1 line could not be read as a word${canUseAi ? '; an AI can read it' : ''}.',
+          '${parsed.unread.length} lines could not be read as words'
+              '${canUseAi ? '; an AI can read them' : ''}.',
+        ),
+    ];
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.tertiaryContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'The ## Vocabulary section will be removed on import. The app '
+            'reads a lesson\'s words from its frontmatter, and lists them '
+            'under View Vocabulary. ${details.join(' ')}',
+            style: TextStyle(color: theme.colorScheme.onTertiaryContainer),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton.tonal(
+                onPressed: _movingSection
+                    ? null
+                    : () => _moveVocabularySection(useAi: false),
+                child: Text(
+                  newWords.isEmpty
+                      ? 'Remove section'
+                      : 'Move words to frontmatter',
+                ),
+              ),
+              if (canUseAi)
+                OutlinedButton.icon(
+                  onPressed: _movingSection
+                      ? null
+                      : () => _moveVocabularySection(useAi: true),
+                  icon: _movingSection
+                      ? const SizedBox.square(
+                          dimension: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.auto_awesome, size: 18),
+                  label: const Text('Move with AI'),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
   static ({String? title, String? unitTitle}) _lessonNameParts(String value) {
@@ -1172,7 +1296,9 @@ class _YamlImportViewState extends State<YamlImportView>
                                   title: Text(lesson.displayTitle),
                                   subtitle: Text(
                                     '${lesson.effectiveUnitTitle ?? file.path} · '
-                                    '${lesson.vocabularies.length} vocabulary items',
+                                    '${lesson.vocabularies.length} vocabulary items'
+                                    '${file.preview.vocabularySection == null ? '' : ' · ## Vocabulary section will be removed; '
+                                              'paste the file into the editor to move its words to the frontmatter'}',
                                   ),
                                 ),
                               );
@@ -1180,6 +1306,8 @@ class _YamlImportViewState extends State<YamlImportView>
                           ),
                         ),
                       ] else if (_previewResult != null) ...[
+                        if (_previewResult!.vocabularySection != null)
+                          _vocabularySectionWarning(theme, _previewResult!),
                         Card(
                           elevation: 0,
                           color: theme.colorScheme.surfaceContainerHighest

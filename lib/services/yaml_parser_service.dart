@@ -24,12 +24,18 @@ class YamlParseResult {
   /// of plain YAML that has no such key.
   final List<Object?> vocabularyPath;
 
+  /// The text of the Markdown body's `## Vocabulary` section, without its
+  /// heading and closing comment, which import leaves out of the lesson
+  /// (docs/lesson-format.md). Null when the body has no such section.
+  final String? vocabularySection;
+
   YamlParseResult({
     required this.lesson,
     required this.sentences,
     this.locations = const [],
     this.sections = const {},
     this.vocabularyPath = const [],
+    this.vocabularySection,
   });
 
   static const sectionSeparator = '\u0000';
@@ -180,6 +186,17 @@ class VocabularyYamlFilter {
   });
 }
 
+/// A word read from a `## Vocabulary` section of a lesson's Markdown body
+/// ([YamlParserService.parseVocabularySection]): the part of speech it is
+/// listed under (a frontmatter section name such as `nouns`), the word, its
+/// meaning, and any notes.
+typedef SectionWord = ({
+  String section,
+  String word,
+  String meaning,
+  String notes,
+});
+
 /// An example sentence for a word: the plain sentence for the Sentence Pool,
 /// and the word's own `**` marking of it.
 typedef ExampleSentence = ({Sentence sentence, SentenceEmphasis emphasis});
@@ -307,6 +324,7 @@ class YamlParserService {
     var frontMatter = yamlString.trim();
     String? markdownTitle;
     String markdownContent = '';
+    String? removedVocabularySection;
     final isMarkdown = frontMatter.startsWith('---');
     if (isMarkdown && !allowMarkdown) {
       throw const FormatException(markdownNotAllowed);
@@ -314,10 +332,14 @@ class YamlParserService {
     if (isMarkdown) {
       final frontMatterParts = _splitMarkdownFrontmatter(frontMatter);
       final markdownBody = frontMatterParts.$2;
-      final vocabularySection = RegExp(
-        r'(?:^|\r?\n)## Vocabulary(?=\r?\n|$)[^]*?'
-        r'(?:\r?\n<!-- /Vocabulary -->(?=\r?\n|$)|(?=\r?\n## |$))',
-      );
+      final vocabularySection = vocabularySectionPattern;
+      final removed = [
+        for (final match in vocabularySection.allMatches(markdownBody))
+          _vocabularySectionText(match[0]!),
+      ].where((text) => text.isNotEmpty);
+      removedVocabularySection = vocabularySection.hasMatch(markdownBody)
+          ? removed.join('\n\n')
+          : null;
       markdownContent = markdownBody.replaceAll(vocabularySection, '').trim();
       final bodyLines = markdownContent
           .split(RegExp(r'\r?\n'))
@@ -653,8 +675,130 @@ class YamlParserService {
       locations: locations,
       sections: sections,
       vocabularyPath: vocabularyPath,
+      vocabularySection: removedVocabularySection,
     );
   }
+
+  /// A `## Vocabulary` section of a lesson's Markdown body: from that heading
+  /// to a `<!-- /Vocabulary -->` line, the next `## ` heading or the end.
+  /// Import leaves it out of the lesson.
+  static final vocabularySectionPattern = RegExp(
+    r'(?:^|\r?\n)## Vocabulary(?=\r?\n|$)[^]*?'
+    r'(?:\r?\n<!-- /Vocabulary -->(?=\r?\n|$)|(?=\r?\n## |$))',
+  );
+
+  /// The text of a [vocabularySectionPattern] match, without its heading and
+  /// closing comment.
+  static String _vocabularySectionText(String match) => match
+      .replaceFirst(RegExp(r'^\r?\n?## Vocabulary'), '')
+      .replaceFirst(RegExp(r'\r?\n<!-- /Vocabulary -->$'), '')
+      .trim();
+
+  /// The words of a `## Vocabulary` section ([YamlParseResult
+  /// .vocabularySection]), read without an AI: list items such as
+  /// `- 학교 — school` or `* **학교**: school`, and table rows such as
+  /// `| 학교 | school |` (a header row above a `|---|` line is skipped). A
+  /// `###` heading names the part of speech of the words under it, as
+  /// `### Nouns` gives `nouns`; words above any heading are `words`.
+  ///
+  /// [unread] holds the lines that are not a word with a meaning, such as
+  /// prose, so the caller can offer an AI to read the section instead.
+  static ({List<SectionWord> words, List<String> unread})
+  parseVocabularySection(String section) {
+    final words = <SectionWord>[];
+    final unread = <String>[];
+    var current = 'words';
+    String? pendingHeader;
+    var inTable = false;
+
+    void add(String word, String meaning, String line) {
+      final w = _plainSectionText(word);
+      final m = _plainSectionText(meaning);
+      if (w.isEmpty || m.isEmpty) {
+        unread.add(line);
+      } else {
+        words.add((section: current, word: w, meaning: m, notes: ''));
+      }
+    }
+
+    for (final raw in section.split(RegExp(r'\r?\n'))) {
+      final line = raw.trim();
+      if (!line.startsWith('|')) {
+        // A table's first row is its header only when a rule line follows.
+        if (pendingHeader != null) _addTableRow(pendingHeader, add);
+        pendingHeader = null;
+        inTable = false;
+      }
+      if (line.isEmpty) continue;
+
+      final heading = RegExp(r'^#{3,6}\s+(.+)$').firstMatch(line);
+      if (heading != null) {
+        final name = _plainSectionText(heading[1]!)
+            .toLowerCase()
+            .replaceAll(RegExp(r'[^\p{L}\p{N}]+', unicode: true), '_')
+            .replaceAll(RegExp(r'^_+|_+$'), '');
+        if (name.isNotEmpty) current = name;
+        continue;
+      }
+
+      if (line.startsWith('|')) {
+        if (!inTable) {
+          inTable = true;
+          pendingHeader = line;
+          continue;
+        }
+        final isRule = _tableCells(line)
+            .every((cell) => RegExp(r'^:?-{3,}:?$').hasMatch(cell));
+        if (pendingHeader != null) {
+          if (!isRule) _addTableRow(pendingHeader, add);
+          pendingHeader = null;
+        }
+        if (!isRule) _addTableRow(line, add);
+        continue;
+      }
+
+      final item = RegExp(r'^(?:[-*+]|\d+[.)])\s+(.+)$').firstMatch(line);
+      if (item == null) {
+        unread.add(line);
+        continue;
+      }
+      final text = item[1]!;
+      final separator = RegExp(r'\s+[—–=-]\s+|\s*[:：]\s+|\t+').firstMatch(text);
+      if (separator == null) {
+        unread.add(line);
+        continue;
+      }
+      add(
+        text.substring(0, separator.start),
+        text.substring(separator.end),
+        line,
+      );
+    }
+    if (pendingHeader != null) _addTableRow(pendingHeader, add);
+    return (words: words, unread: unread);
+  }
+
+  static List<String> _tableCells(String line) {
+    final cells = line.split('|').map((cell) => cell.trim()).toList();
+    return cells.sublist(
+      1,
+      line.length > 1 && line.endsWith('|') ? cells.length - 1 : null,
+    );
+  }
+
+  static void _addTableRow(
+    String line,
+    void Function(String word, String meaning, String line) add,
+  ) {
+    final cells = _tableCells(line);
+    add(cells.isEmpty ? '' : cells[0], cells.length < 2 ? '' : cells[1], line);
+  }
+
+  /// [text] without Markdown emphasis and code marks.
+  static String _plainSectionText(String text) => text
+      .replaceAll(RegExp(r'\*\*|__|`'), '')
+      .replaceAll(RegExp(r'^[*_]+|[*_]+$'), '')
+      .trim();
 
   /// Where the YAML of [markdown]'s frontmatter starts and ends in it: the
   /// text between the `---` lines, without them. Null when there is no

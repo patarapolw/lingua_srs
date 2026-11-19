@@ -104,6 +104,8 @@ Frontmatter-only Markdown imports the same as equivalent plain YAML. The body is
 
 A `## Vocabulary` section in the body is left out when the lesson is imported, from that heading to the next `## ` heading, a `<!-- /Vocabulary -->` line, or the end of the file: the words are in the frontmatter, and the app lists them under **View Vocabulary**. The section and closing comment are not stored, so the reader does not show them and an export does not write them back. If it is the only section after the title, the lesson has no Markdown content. Other headings, such as `## Vocabulary list` or `### Vocabulary`, are not filtered.
 
+When Markdown typed or pasted into **Add Lessons** has a `## Vocabulary` section, the preview warns that it will be removed and says how many of its words are not in the frontmatter. **Move words to frontmatter** adds them to `vocabulary:` and removes the section, leaving the rest of the file as it is; words the frontmatter already has are skipped. It reads list items (`- 학교 — school`, `* **학교**: school`; the separator can be ` — `, ` – `, ` - `, ` = `, `: ` or a tab) and table rows (`| 학교 | school |`, skipping a header row), with a `### Nouns` heading putting the words under it in `nouns:` (`words:` without a heading). With a DeepSeek key in settings, **Move with AI** reads the section instead, for prose or other layouts; check the words it gives in the preview before importing. Files and folders that are imported are listed with a note when they have the section; paste such a file into the editor to move its words.
+
 To keep a footer without adding a heading to the page or table of contents, put the closing comment on its own line:
 
 ```markdown
