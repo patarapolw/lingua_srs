@@ -66,7 +66,16 @@ void main() {
     // Easy to type: a hyphen, not an em dash.
     expect(hint, isNot(contains('—')));
     expect(find.text('Markdown'), findsOneWidget);
-    expect(find.textContaining('YAML frontmatter'), findsOneWidget);
+    // The Files tab's drop hint mentions YAML frontmatter too: find the
+    // editor's own line.
+    expect(
+      find.textContaining('List words under a ## Vocabulary heading'),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('YAML frontmatter with vocabulary:, or plain YAML'),
+      findsOneWidget,
+    );
     // Pasted HTML is converted, as in the lesson editor.
     expect(find.byType(MarkdownTextField), findsOneWidget);
     final parsedHint = YamlParserService.parseLessonYaml(hint);
