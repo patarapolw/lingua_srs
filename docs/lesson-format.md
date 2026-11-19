@@ -1,6 +1,6 @@
 # Lesson Format
 
-Lessons are Markdown files with YAML frontmatter (or plain YAML). Write them in the app via **Add Lessons**, or import files, folders and ZIP archives. To write them on a computer with a live preview, see [Editing lessons outside the app](#editing-lessons-outside-the-app).
+Lessons are Markdown files with YAML frontmatter (or plain YAML). [lesson-examples.md](lesson-examples.md) shows whole lessons and what the app reads from them, and [vocabulary-section-examples.md](vocabulary-section-examples.md) shows `## Vocabulary` sections and how they move into the frontmatter. Write them in the app via **Add Lessons**, or import files, folders and ZIP archives. To write them on a computer with a live preview, see [Editing lessons outside the app](#editing-lessons-outside-the-app).
 
 ## Lesson name and hierarchy
 
@@ -191,7 +191,7 @@ When a heading's text repeats, its anchor gets `-1`, `-2`, … in order, as on G
 
 ## Vocabulary sections
 
-A `## Vocabulary` section lists a lesson's words in its Markdown, for people reading the file. Whether the app reads words from it depends on the frontmatter:
+A `## Vocabulary` section lists a lesson's words in its Markdown, for people reading the file. [vocabulary-section-examples.md](vocabulary-section-examples.md) has an example of every rule below, with the frontmatter each one moves into. Whether the app reads words from it depends on the frontmatter:
 
 | The file has | It is | Its words come from |
 | --- | --- | --- |
@@ -220,7 +220,7 @@ A file or folder being imported is listed with a note when it has the section. T
 ### Reading a Vocabulary section
 
 - **Parts of speech.** A `###` heading names the frontmatter section of the words under it, in lowercase: `### Nouns` gives `nouns:`, `### 名词` gives `名词:`. Words above any heading go in `words:`.
-- **Words.** A top-level list item (`-`, `*`, `+` or `1.`) is a word: `WORD — MEANING`. The separator can be ` — `, ` – `, ` - `, ` = `, `: `, a full-width `：` (with or without spaces) or a tab; separators inside brackets don't count. `**` and backticks around the word are dropped. A list item with no separator, or with nothing on one side of it, is not a word. It is kept under `## Vocabulary notes`, and the warning counts it.
+- **Words.** A top-level list item (`-`, `*`, `+` or `1.`) is a word: `WORD — MEANING`. The separator can be `—` or `–` (with or without spaces), ` - ` or ` = ` (with spaces), `: `, a full-width `：` (with or without spaces) or a tab; separators inside brackets don't count. `**` and backticks around the word are dropped. A list item with no separator, or with nothing on one side of it, is not a word. It is kept under `## Vocabulary notes`, and the warning counts it.
 - **Readings and forms.** Bracketed groups right after the word, `(…)`, `（…）`, `[…]` or `【…】`, say more about it:
   - In a Chinese lesson, Latin text with tone marks or tone numbers (`xuésheng`, `xue2sheng`) is the `pinyin`. Han characters are the other script: `traditional` in a Simplified lesson, `simplified` when `target:` is `zh-TW`, `zh-HK`, `zh-MO` or `zh-Hant`.
   - In a Korean lesson, Han characters are the `hanja` (`선생님 (先生님)`).

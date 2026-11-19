@@ -1064,7 +1064,11 @@ class YamlParserService {
   );
 
   /// Separates a word from its meaning in a list item.
-  static final _wordSeparator = RegExp(r'\s+[—–=-]+\s+|\s*：\s*|\s*:\s+|\t+');
+  /// A dash `—` or `–` needs no spaces around it (`学生（がくせい）—
+  /// student`); a hyphen or `=` does.
+  static final _wordSeparator = RegExp(
+    r'\s*[—–]+\s*|\s+[=-]+\s+|\s*：\s*|\s*:\s+|\t+',
+  );
 
   /// Separates a sentence from its translation: not `:`, which sentences
   /// have.
