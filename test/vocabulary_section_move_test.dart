@@ -471,6 +471,90 @@ vocabulary:
     );
   });
 
+  group('Markdown with no source of words', () {
+    // Markdown pasted from a web page: `---` rules read as YAML documents.
+    const pasted = '''# 인사
+
+Hello in Korean is **안녕하세요**.
+
+---
+
+Goodbye is 안녕히 가세요.
+''';
+
+    test('needsVocabulary tells it from lessons and from YAML', () {
+      expect(YamlParserService.needsVocabulary(pasted), isTrue);
+      expect(YamlParserService.needsVocabulary('# Title\n\nText.'), isTrue);
+      expect(
+        YamlParserService.needsVocabulary('---\ntitle: T\n---\n# T\n'),
+        isTrue,
+      );
+      expect(
+        YamlParserService.needsVocabulary('---\nvocabulary:\n---\n# T\n'),
+        isFalse,
+      );
+      expect(
+        YamlParserService.needsVocabulary('# T\n\n## Vocabulary\n- 책 - book\n'),
+        isFalse,
+      );
+      // Plain YAML keeps its own errors.
+      expect(YamlParserService.needsVocabulary('lesson: Greetings\n'), isFalse);
+      expect(YamlParserService.needsVocabulary('  '), isFalse);
+    });
+
+    test('addVocabularyKey gives Markdown a frontmatter', () {
+      final text = VocabularySectionMove.addVocabularyKey(pasted);
+      expect(text, startsWith('---\ntarget: ko\nvocabulary:\n---\n\n# 인사\n'));
+      final lesson = YamlParserService.parseLessonYaml(text).lesson;
+      expect(lesson.title, '인사');
+      expect(lesson.vocabularies, isEmpty);
+      expect(lesson.markdownContent, contains('Goodbye is 안녕히 가세요.'));
+    });
+
+    test('addVocabularyKey keeps the frontmatter it has', () {
+      final text = VocabularySectionMove.addVocabularyKey(
+        '---\ntitle: Lesson 9   # page title\n---\n# 第九课\n',
+      );
+      expect(
+        text,
+        '---\ntarget: zh\ntitle: Lesson 9   # page title\nvocabulary:\n'
+        '---\n# 第九课\n',
+      );
+      expect(
+        VocabularySectionMove.addVocabularyKey(
+          '---\ntarget: zh-TW\n---\n# 第九課\n',
+        ),
+        '---\ntarget: zh-TW\nvocabulary:\n---\n# 第九課\n',
+      );
+    });
+
+    test('lessonPrompt asks for the lesson\'s own sentences only', () {
+      final messages = VocabularySectionMove.lessonPrompt(
+        pasted,
+        Lesson(title: 'L', targetLanguage: 'ko', nativeLanguage: 'en'),
+      );
+      expect(messages.first.content, contains('"ko"'));
+      expect(messages.first.content, contains('Do not write new sentences'));
+      expect(messages.last.content, pasted);
+    });
+
+    test('words from the AI move into the new frontmatter', () {
+      final withKey = VocabularySectionMove.addVocabularyKey(pasted);
+      final move = VocabularySectionMove.apply(
+        withKey,
+        VocabularySectionMove.parseReply(
+          '{"words": [{"section": "expressions", "word": "안녕하세요", '
+          '"meaning": "hello", "examples": [{"sentence": '
+          '"Hello in Korean is **안녕하세요**."}]}], "notes": ""}',
+        ),
+      );
+      expect(move.added, 1);
+      final lesson = YamlParserService.parseLessonYaml(move.text).lesson;
+      expect(lesson.vocabularies.single.targetWord, '안녕하세요');
+      expect(move.text, isNot(contains('## Vocabulary notes')));
+    });
+  });
+
   group('emphasizeWord', () {
     test('marks the word, an alternative form or a Korean stem', () {
       expect(YamlParserService.emphasizeWord('我是学生。', '学生'), '我是**学生**。');

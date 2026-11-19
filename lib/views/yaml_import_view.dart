@@ -100,6 +100,11 @@ class _YamlImportViewState extends State<YamlImportView>
   /// the frontmatter.
   bool _movingSection = false;
 
+  /// The text is Markdown with no source of words: no `vocabulary:` and no
+  /// `## Vocabulary` section ([YamlParserService.needsVocabulary]). Its
+  /// banner offers to add one instead of showing a YAML error.
+  bool _needsVocabulary = false;
+
   @override
   void initState() {
     super.initState();
@@ -140,6 +145,7 @@ class _YamlImportViewState extends State<YamlImportView>
     if (text.isEmpty) {
       setState(() {
         _errorMessage = null;
+        _needsVocabulary = false;
         _previewResult = null;
         _progressMessage = null;
       });
@@ -150,6 +156,7 @@ class _YamlImportViewState extends State<YamlImportView>
     final unitTitle = nameParts.unitTitle ?? _defaultUnitTitle;
     setState(() {
       _errorMessage = null;
+      _needsVocabulary = false;
       _previewResult = null;
       _progressMessage = 'Parsing lesson...';
     });
@@ -169,8 +176,15 @@ class _YamlImportViewState extends State<YamlImportView>
         });
       } catch (error) {
         if (!mounted || generation != _parseGeneration) return;
+        // Markdown with no words is not a YAML mistake: offer to add a
+        // vocabulary instead of the parser's error.
+        final needsVocabulary =
+            !widget.vocabularyOnly && YamlParserService.needsVocabulary(text);
         setState(() {
-          _errorMessage = widget.vocabularyOnly
+          _needsVocabulary = needsVocabulary;
+          _errorMessage = needsVocabulary
+              ? null
+              : widget.vocabularyOnly
               ? 'YAML Parse Error: $error'
               : 'YAML / Markdown Parse Error: $error';
           _previewResult = null;
@@ -178,6 +192,107 @@ class _YamlImportViewState extends State<YamlImportView>
         });
       }
     });
+  }
+
+  /// Gives Markdown with no source of words a `vocabulary:` (and a
+  /// `target:`), so it can be imported. With [useAi], an AI first lists the
+  /// words the lesson's text teaches, each with a note saying it was
+  /// suggested by AI. If that fails, the vocabulary is added empty anyway,
+  /// and the snackbar says why.
+  Future<void> _addVocabulary({required bool useAi}) async {
+    if (_movingSection) return;
+    final text = _yamlController.text;
+    final messenger = ScaffoldMessenger.of(context);
+    final provider = useAi ? context.read<AppProvider>() : null;
+    setState(() => _movingSection = true);
+    try {
+      var updated = VocabularySectionMove.addVocabularyKey(text);
+      var message =
+          'Added an empty vocabulary: to the lesson, so it can be imported. '
+          'Add words later in View Vocabulary.';
+      if (provider != null) {
+        try {
+          final lesson = YamlParserService.parseLessonYaml(updated).lesson;
+          final reading = await provider.generateLessonVocabulary(text, lesson);
+          final move = VocabularySectionMove.apply(updated, reading);
+          updated = move.text;
+          message =
+              'Added ${move.added == 1 ? '1 word' : '${move.added} words'} '
+              'suggested by AI. Check them in the preview before importing.';
+        } catch (error) {
+          message =
+              'Could not list the words with AI ($error). Added an empty '
+              'vocabulary: instead, so the lesson can be imported.';
+        }
+      }
+      if (!mounted) return;
+      if (_yamlController.text != text) {
+        throw const FormatException('The lesson was edited meanwhile.');
+      }
+      _yamlController.text = updated;
+      _parseCurrentYaml();
+      messenger.showSnackBar(SnackBar(content: Text(message)));
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Could not add a vocabulary: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _movingSection = false);
+    }
+  }
+
+  /// Says that the Markdown has no words for the app to study yet, with
+  /// buttons to have an AI list them, or to import the lesson without words.
+  Widget _noVocabularyBanner(ThemeData theme) {
+    final canUseAi = context.read<AppProvider?>()?.canUseAi ?? false;
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.tertiaryContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'This lesson has no words to study yet: no ## Vocabulary list, '
+            'and no vocabulary: in YAML frontmatter. '
+            '${canUseAi ? 'An AI can list the words its text teaches, or ' : ''}'
+            '${canUseAi ? 'you' : 'You'} can continue without words and '
+            'add them later in View Vocabulary.',
+            style: TextStyle(color: theme.colorScheme.onTertiaryContainer),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              if (canUseAi)
+                FilledButton.tonalIcon(
+                  onPressed: _movingSection
+                      ? null
+                      : () => _addVocabulary(useAi: true),
+                  icon: _movingSection
+                      ? const SizedBox.square(
+                          dimension: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.auto_awesome, size: 18),
+                  label: const Text('Generate vocabulary list with AI'),
+                ),
+              OutlinedButton(
+                onPressed: _movingSection
+                    ? null
+                    : () => _addVocabulary(useAi: false),
+                child: const Text('Continue without words'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
   /// Moves the words of the lesson's `## Vocabulary` section, which import
@@ -1205,6 +1320,9 @@ class _YamlImportViewState extends State<YamlImportView>
                               ),
                             ),
                           ),
+
+                      if (_needsVocabulary && _directoryFiles.isEmpty)
+                        _noVocabularyBanner(theme),
 
                       if (_errorMessage != null)
                         Container(

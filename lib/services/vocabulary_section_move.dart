@@ -154,6 +154,105 @@ class VocabularySectionMove {
   static String languageKey(String language) =>
       YamlParserService.languageKey(language);
 
+  /// [markdown], Markdown with no source of words
+  /// ([YamlParserService.needsVocabulary]), with an empty `vocabulary:` so it
+  /// imports as a lesson, and a `target:` naming the language guessed from
+  /// its text ([YamlParserService.guessSectionLanguage]) when it has none.
+  /// Frontmatter it already has is kept as written; Markdown without any
+  /// gets one. Throws a [FormatException] when the result still can't be
+  /// read as a lesson.
+  static String addVocabularyKey(String markdown) {
+    final language = YamlParserService.guessSectionLanguage(markdown);
+    final span = YamlParserService.frontmatterSpan(markdown);
+    Object? doc;
+    if (span != null) {
+      try {
+        doc = loadYaml(markdown.substring(span.$1, span.$2));
+      } on YamlException {
+        doc = null;
+      }
+    }
+    final String text;
+    if (span != null && doc is Map) {
+      var yaml = markdown.substring(span.$1, span.$2);
+      if (yaml.isNotEmpty && !yaml.endsWith('\n')) yaml = '$yaml\n';
+      final hasTarget = doc.keys.any(
+        (key) => const [
+          'target',
+          'target_lang',
+          'language',
+        ].contains(key.toString().trim().toLowerCase()),
+      );
+      text =
+          markdown.substring(0, span.$1) +
+          (hasTarget ? '' : 'target: $language\n') +
+          yaml +
+          (doc.containsKey('vocabulary') ? '' : 'vocabulary:\n') +
+          markdown.substring(span.$2);
+    } else {
+      text =
+          '---\ntarget: $language\nvocabulary:\n---\n\n'
+          '${markdown.trimLeft()}';
+    }
+    YamlParserService.parseLessonYaml(text);
+    return text;
+  }
+
+  /// Asks an AI for the words that [markdown], a lesson's text with no list
+  /// of words, teaches; [parseReply] reads its answer. The examples are to be
+  /// the lesson's own sentences, so only the words are the AI's suggestion.
+  static List<AiDiscussionMessage> lessonPrompt(
+    String markdown,
+    Lesson lesson,
+  ) {
+    final target = lesson.targetLanguage;
+    final native = lesson.nativeLanguage;
+    final base = languageKey(target);
+    final forms = switch (base) {
+      'zh' =>
+        '- "reading": the pinyin, with tone marks.\n'
+            '- "simplified" and "traditional": the word\'s Simplified and '
+            'Traditional Chinese forms.\n',
+      'ko' => '- "hanja": the Hanja of a Sino-Korean word.\n',
+      'ja' => '- "reading": the kana reading of a word written in kanji.\n',
+      _ => '',
+    };
+    return [
+      AiDiscussionMessage(
+        role: 'system',
+        content:
+            'You list the vocabulary a language lesson teaches, for a '
+            'learner to study as flashcards. The lesson teaches the '
+            'language "$target" to speakers of "$native"; if its text is '
+            'clearly about another language, use that one. Reply with only '
+            'a JSON object: {"words": [{"section": "nouns", "word": "…", '
+            '"meaning": "…", "reading": "…", "simplified": "…", '
+            '"traditional": "…", "hanja": "…", "notes": ["…"], '
+            '"examples": [{"sentence": "…", "translation": "…"}]}], '
+            '"notes": ""}.\n'
+            '- "word": a word or phrase the lesson teaches or uses that a '
+            'learner of this lesson should study, in its dictionary form, '
+            'without Markdown.\n'
+            '- "meaning": its meaning in "$native", short.\n'
+            '- "section": the part of speech, as a lowercase plural English '
+            'word (nouns, verbs, adjectives, adverbs, particles, '
+            'expressions…).\n'
+            '$forms'
+            '- "notes": optional, a short note on usage when the lesson '
+            'explains one.\n'
+            '- "examples": sentences of the lesson itself that use the word, '
+            'copied as written, with the word as it appears there wrapped '
+            'in **double asterisks**, and their "$native" translation when '
+            'the lesson gives one. Do not write new sentences.\n'
+            'Leave out fields you cannot fill. List each word once, in the '
+            'order it first appears, and leave out names and words a '
+            'beginner of this lesson would already know. The top-level '
+            '"notes" is always an empty string.',
+      ),
+      AiDiscussionMessage(role: 'user', content: markdown),
+    ];
+  }
+
   /// Asks an AI for the words of [section], a lesson's `## Vocabulary`
   /// section; [parseReply] reads its answer.
   static List<AiDiscussionMessage> prompt(String section, Lesson lesson) {

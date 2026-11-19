@@ -2938,6 +2938,28 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
     ),
   );
 
+  /// The words an AI finds in [markdown], the text of [lesson] with no list
+  /// of words, for [VocabularySectionMove.apply]. Each word gets
+  /// [LessonAiPrompt.aiWordNote], as it is the AI's suggestion.
+  Future<VocabularySectionReading> generateLessonVocabulary(
+    String markdown,
+    Lesson lesson, {
+    http.Client? client,
+  }) => _withAi(() async {
+    final reading = VocabularySectionMove.parseReply(
+      await DeepSeekService.completeJson(
+        apiKey: _deepSeekApiKey,
+        messages: VocabularySectionMove.lessonPrompt(markdown, lesson),
+        client: client,
+      ),
+    );
+    for (final word in reading.words) {
+      word.notes.add(LessonAiPrompt.aiWordNote);
+    }
+    // Only words: the lesson's text stays as it is.
+    return VocabularySectionReading(words: reading.words);
+  });
+
   Future<List<VocabMergeSuggestion>> suggestVocabMerges({http.Client? client}) {
     return _withAi(() async {
       final groups = vocabGroups;

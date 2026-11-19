@@ -787,6 +787,35 @@ class YamlParserService {
     }
   }
 
+  /// Whether [text], typed or pasted into Add Lessons, is Markdown with no
+  /// source of words: no `vocabulary:` in its frontmatter (or no frontmatter
+  /// at all), and no `## Vocabulary` section. Such text fails to parse with a
+  /// YAML error that means nothing to its writer (`---` rules in pasted
+  /// Markdown read as YAML documents), so the import screen offers to give
+  /// it a `vocabulary:` instead. Plain YAML is not Markdown, and keeps its
+  /// own errors.
+  static bool needsVocabulary(String text) {
+    final source = text.trim();
+    if (source.isEmpty) return false;
+    final span = frontmatterSpan(source);
+    if (span != null) {
+      Object? doc;
+      try {
+        doc = loadYaml(source.substring(span.$1, span.$2));
+      } on YamlException {
+        doc = null;
+      }
+      if (doc is Map) return !doc.containsKey('vocabulary');
+      // Not YAML: the `---` lines are horizontal rules of plain Markdown.
+    }
+    if (isSectionOnlyMarkdown(source)) return false;
+    try {
+      return loadYaml(source) is! Map;
+    } on YamlException {
+      return true;
+    }
+  }
+
   /// Whether a Markdown file found in a folder or ZIP is a lesson: it has
   /// frontmatter with a `vocabulary:` key, or no frontmatter and a
   /// `## Vocabulary` section. Frontmatter without `vocabulary:` marks a page

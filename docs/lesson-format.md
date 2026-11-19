@@ -217,6 +217,15 @@ A Markdown lesson with no frontmatter, typed into **Add Lessons** or imported fr
 
 The section is not shown in the reader. Its text that is not about one word is kept in the lesson under `## Vocabulary notes`, as when the words are moved. Writing the app's words back to the files skips a lesson without frontmatter.
 
+### Markdown with no words yet
+
+Markdown typed or pasted into **Add Lessons** with no `## Vocabulary` section and no `vocabulary:` in YAML frontmatter, such as an article copied from a web page, has no words for the app to study. Instead of an error, the preview says so and offers:
+
+- **Generate vocabulary list with AI** (with a DeepSeek key in settings): the AI lists the words the text teaches, with their meanings, parts of speech and readings, and takes their examples from the lesson's own sentences. They are written into a new frontmatter, each with a note saying it was suggested by AI. Check them in the preview, and edit or remove them before importing. If the AI can't be reached or its answer can't be read, the lesson gets an empty `vocabulary:` instead, as below, and a message says why.
+- **Continue without words**: adds a frontmatter with a `target:` guessed from the text (as for [lessons without frontmatter](#lessons-without-frontmatter)) and an empty `vocabulary:`, so the lesson imports with its text and no words. Add words later in **View Vocabulary**.
+
+A frontmatter the text already has (for example with only `title:`) is kept as written; only `vocabulary:`, and `target:` when it has none, are added to it.
+
 ### Moving a Vocabulary section into the frontmatter
 
 When Markdown typed or pasted into **Add Lessons** has a `## Vocabulary` section, the preview shows a banner. With frontmatter, it warns that the section will be removed; without, it says the words are read from it and which language was guessed. It says how many of its words and example sentences are not in the frontmatter yet.

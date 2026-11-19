@@ -138,6 +138,46 @@ The full lesson body.
     expect(find.text('Lesson 7: Markdown import'), findsOneWidget);
   });
 
+  testWidgets('offers to add a vocabulary to Markdown with no words', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    Future<void> waitForParse() async {
+      await tester.pump(const Duration(milliseconds: 301));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 500)),
+      );
+      await tester.pump();
+    }
+
+    await tester.pumpWidget(const MaterialApp(home: YamlImportView()));
+    // As pasted from a web page: a rule that YAML reads as a new document.
+    await tester.enterText(
+      find.byType(TextField).last,
+      '# 인사\n\nHello is **안녕하세요**.\n\n---\n\nMore text.\n',
+    );
+    await waitForParse();
+
+    expect(find.textContaining('Parse Error'), findsNothing);
+    expect(find.textContaining('no words to study yet'), findsOneWidget);
+    // No AI key here: only the button that needs none.
+    expect(find.text('Generate vocabulary list with AI'), findsNothing);
+
+    await tester.tap(find.text('Continue without words'));
+    await waitForParse();
+
+    final text = tester
+        .widgetList<TextField>(find.byType(TextField))
+        .last
+        .controller!
+        .text;
+    expect(text, startsWith('---\ntarget: ko\nvocabulary:\n---\n'));
+    expect(find.textContaining('no words to study yet'), findsNothing);
+    expect(find.text('인사'), findsWidgets);
+  });
+
   testWidgets('warns that ## Vocabularies is not a Vocabulary section', (
     tester,
   ) async {
