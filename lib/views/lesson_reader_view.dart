@@ -6,10 +6,13 @@ import '../models/lesson.dart';
 import '../providers/app_provider.dart';
 import '../services/lesson_ai_prompt.dart';
 import '../services/lesson_links.dart';
+import '../services/vocabulary_section_move.dart';
+import '../services/yaml_parser_service.dart';
 import '../widgets/lesson_content_view.dart';
 import '../widgets/markdown_text_field.dart';
 import 'ai_discussion_dialog.dart';
 import 'lesson_detail_view.dart';
+import 'yaml_import_view.dart';
 
 class LessonReaderView extends StatefulWidget {
   final String lessonId;
@@ -302,11 +305,15 @@ class _LessonMarkdownEditorState extends State<_LessonMarkdownEditor> {
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
+      final markdown = _controller.text;
       await context.read<AppProvider>().updateLessonMarkdown(
         widget.lesson.id,
-        _controller.text,
+        markdown,
       );
-      if (mounted) Navigator.pop(context);
+      if (!mounted) return;
+      if (!await _offerVocabularySection(markdown) && mounted) {
+        Navigator.pop(context);
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() => _saving = false);
@@ -314,6 +321,63 @@ class _LessonMarkdownEditorState extends State<_LessonMarkdownEditor> {
         SnackBar(content: Text('Could not save Markdown: $error')),
       );
     }
+  }
+
+  /// A `## Vocabulary` section written here stays in the lesson's text: the
+  /// lesson's words are kept apart from it. When the section has words the
+  /// lesson does not, offers to add them, through the Add Vocabulary screen
+  /// with their YAML filled in. True when that screen replaced this one.
+  Future<bool> _offerVocabularySection(String markdown) async {
+    final section = YamlParserService.vocabularySectionOf(markdown);
+    if (section == null) return false;
+    final lesson = widget.lesson;
+    final add = VocabularySectionMove.addToLesson(
+      lesson,
+      YamlParserService.parseVocabularySection(
+        section,
+        targetLanguage: lesson.targetLanguage,
+      ),
+    );
+    if (add == null) return false;
+    final words = add.count == 1 ? '1 word' : '${add.count} words';
+    final review = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Add $words to the vocabulary?'),
+        content: Text(
+          'The ## Vocabulary section has $words that this lesson\'s '
+          'vocabulary does not. The section is saved as part of the text; '
+          'add its words to study them. You can check them before they are '
+          'added.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('Review $words'),
+          ),
+        ],
+      ),
+    );
+    if (review != true || !mounted) return false;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => YamlImportView(
+          initialLessonName: joinHierarchyPath([
+            ...lesson.folderPath,
+            lesson.displayTitle,
+          ]),
+          initialYaml: add.yaml,
+          previewInitialYaml: true,
+          vocabularyOnly: true,
+        ),
+      ),
+    );
+    return true;
   }
 
   @override

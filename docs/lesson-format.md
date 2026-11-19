@@ -191,7 +191,14 @@ When a heading's text repeats, its anchor gets `-1`, `-2`, … in order, as on G
 
 ## Vocabulary sections
 
-A `## Vocabulary` section lists a lesson's words in its Markdown, for people reading the file. [vocabulary-section-examples.md](vocabulary-section-examples.md) has an example of every rule below, with the frontmatter each one moves into. Whether the app reads words from it depends on the frontmatter:
+A `## Vocabulary` section lists a lesson's words in its Markdown, as a list or a table, the way you might write them in any notes. You don't need YAML, frontmatter or any other tool to use it:
+
+- **In Add Lessons**, type or paste a title and a `## Vocabulary` section, and the words are read from it ([Lessons without frontmatter](#lessons-without-frontmatter)). The preview shows them before you import, and **Move words to frontmatter** turns them into YAML if you want to edit them that way ([below](#moving-a-vocabulary-section-into-the-frontmatter)).
+- **In the lesson editor** (**Edit Markdown** in the reader), a `## Vocabulary` section is saved as part of the lesson's text, and the reader shows it. When you save, the app offers to add the words it has that the lesson's vocabulary does not: **Review N words** opens **Add Vocabulary** with them filled in, to check before they are added. **Not now** keeps the section as text only.
+
+[vocabulary-section-examples.md](vocabulary-section-examples.md) has an example of every rule below, with the frontmatter each one moves into.
+
+A lesson file imported from a folder or ZIP is read the same way. Whether its words come from the section depends on its frontmatter:
 
 | The file has | It is | Its words come from |
 | --- | --- | --- |
@@ -200,11 +207,11 @@ A `## Vocabulary` section lists a lesson's words in its Markdown, for people rea
 | no frontmatter, and a `## Vocabulary` section | a lesson | the section, by the [rules below](#reading-a-vocabulary-section) |
 | no frontmatter, and no `## Vocabulary` section | not a lesson (skipped in folders and ZIPs) | — |
 
-So a folder or ZIP can hold a `README.md` or other pages that are not lessons: they have no `## Vocabulary` section. To keep a page that has one from being imported, give it frontmatter without `vocabulary:`, such as `title:`.
+So a folder or ZIP can hold a `README.md` or other pages that are not lessons: they have no `## Vocabulary` section. To keep a page that has one from being imported, give it frontmatter without `vocabulary:`, such as `title:`. (A file with frontmatter may have the section as well, for example to show the words in a preview such as [VitePress](vitepress.md), which does not show frontmatter.)
 
 ### Lessons without frontmatter
 
-A Markdown lesson with no frontmatter has its words read from its `## Vocabulary` section. Its title is the first `#` heading, as usual. With no `target:` to say its language, the language is guessed from the section: Korean if it has Hangul, Japanese if it has kana (and no Hangul), Chinese if it has Han characters only, and Korean otherwise. The words are keyed by that language (`zh:` for a Chinese lesson), so a Traditional Chinese lesson read this way is `zh`, spoken by a mainland voice. To choose the language, or to edit the words as YAML, move them into a frontmatter (below) and set `target:`.
+A Markdown lesson with no frontmatter, typed into **Add Lessons** or imported from a file, has its words read from its `## Vocabulary` section. Its title is the first `#` heading, as usual. With no `target:` to say its language, the language is guessed from the section: Korean if it has Hangul, Japanese if it has kana (and no Hangul), Chinese if it has Han characters only, and Korean otherwise. The words are keyed by that language (`zh:` for a Chinese lesson), so a Traditional Chinese lesson read this way is `zh`, spoken by a mainland voice. To choose the language, or to edit the words as YAML, move them into a frontmatter (below) and set `target:`.
 
 The section is not shown in the reader. Its text that is not about one word is kept in the lesson under `## Vocabulary notes`, as when the words are moved. Writing the app's words back to the files skips a lesson without frontmatter.
 
@@ -215,7 +222,7 @@ When Markdown typed or pasted into **Add Lessons** has a `## Vocabulary` section
 - **Move words to frontmatter** adds those words to `vocabulary:`, skipping words the frontmatter already has. A file without frontmatter gets one, with `target:` set to the guessed language. The section is removed and the rest of the file stays as it is. Section text that is not about one word is kept under a new `## Vocabulary notes` heading in place of the section, with the `###` headings it was under, so nothing is lost.
 - With a DeepSeek key in settings, **Move with AI** reads the section instead, for prose or other layouts. Check the words it gives in the preview before importing.
 
-A file or folder being imported is listed with a note when it has the section. To move its words, paste the file into the editor.
+A file or folder being imported is listed with a note when it has the section. To move its words, paste the file into **Add Lessons**.
 
 ### Reading a Vocabulary section
 

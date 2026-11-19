@@ -405,13 +405,7 @@ class YamlParserService {
       final frontMatterParts = _splitMarkdownFrontmatter(frontMatter);
       final markdownBody = frontMatterParts.$2;
       final vocabularySection = vocabularySectionPattern;
-      final removed = [
-        for (final match in vocabularySection.allMatches(markdownBody))
-          _vocabularySectionText(match[0]!),
-      ].where((text) => text.isNotEmpty);
-      removedVocabularySection = vocabularySection.hasMatch(markdownBody)
-          ? removed.join('\n\n')
-          : null;
+      removedVocabularySection = vocabularySectionOf(markdownBody);
       if (wordsFromSection) {
         sectionLanguage = guessSectionLanguage(removedVocabularySection ?? '');
         sectionReading = parseVocabularySection(
@@ -908,6 +902,17 @@ class YamlParserService {
     r'(?:^|\r?\n)## Vocabulary(?=\r?\n|$)[^]*?'
     r'(?:\r?\n<!-- /Vocabulary -->(?=\r?\n|$)|(?=\r?\n## |$))',
   );
+
+  /// The text of the `## Vocabulary` sections of [markdown], a lesson's
+  /// Markdown body, joined, without their headings and closing comments.
+  /// Null when it has none.
+  static String? vocabularySectionOf(String markdown) {
+    if (!vocabularySectionPattern.hasMatch(markdown)) return null;
+    return [
+      for (final match in vocabularySectionPattern.allMatches(markdown))
+        _vocabularySectionText(match[0]!),
+    ].where((text) => text.isNotEmpty).join('\n\n');
+  }
 
   /// The text of a [vocabularySectionPattern] match, without its heading and
   /// closing comment.

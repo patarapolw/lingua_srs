@@ -242,6 +242,62 @@ Preview text.
     expect(find.byTooltip('Copy link to this lesson'), findsOneWidget);
   });
 
+  group('## Vocabulary written in the editor', () {
+    Future<void> saveEdit(WidgetTester tester, String markdown) async {
+      await tester.tap(find.byTooltip('Edit Markdown'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, markdown);
+      await tester.tap(find.text('Save'));
+      for (var i = 0; i < 5; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
+        await tester.pump();
+      }
+      await tester.pumpAndSettle();
+    }
+
+    const edited =
+        '# Greetings\n\n## Vocabulary\n\n- 단어 — word\n- 학교 — school\n';
+
+    testWidgets('offers to add the words the lesson lacks', (tester) async {
+      await openReader(tester, const Size(1200, 800));
+      await saveEdit(tester, edited);
+
+      expect(find.text('Add 1 word to the vocabulary?'), findsOneWidget);
+      await tester.tap(find.text('Review 1 word'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Add Vocabulary'), findsWidgets);
+      final yaml = tester
+          .widgetList<TextField>(find.byType(TextField))
+          .last
+          .controller!
+          .text;
+      expect(yaml, contains('ko: 학교'));
+      expect(yaml, isNot(contains('단어')));
+    });
+
+    testWidgets('Not now keeps the section as text only', (tester) async {
+      await openReader(tester, const Size(1200, 800));
+      await saveEdit(tester, edited);
+
+      await tester.tap(find.text('Not now'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Add 1 word to the vocabulary?'), findsNothing);
+      expect(find.byTooltip('Edit Markdown'), findsOneWidget);
+    });
+
+    testWidgets('says nothing when the lesson has every word', (tester) async {
+      await openReader(tester, const Size(1200, 800));
+      await saveEdit(tester, '# Greetings\n\n## Vocabulary\n\n- 단어 — word\n');
+
+      expect(find.textContaining('to the vocabulary?'), findsNothing);
+      expect(find.byTooltip('Edit Markdown'), findsOneWidget);
+    });
+  });
+
   group('lesson links', () {
     Future<(Lesson, Lesson)> openLinked(WidgetTester tester) async {
       final provider = await loadedProvider(tester);

@@ -5,6 +5,7 @@ import 'package:yaml_edit/yaml_edit.dart';
 
 import '../models/ai_discussion_message.dart';
 import '../models/lesson.dart';
+import '../models/vocab_item.dart';
 import 'yaml_parser_service.dart';
 
 /// Moves the words of a lesson's `## Vocabulary` section into its
@@ -33,15 +34,44 @@ class VocabularySectionMove {
   static List<SectionWord> newWords(
     YamlParseResult preview,
     List<SectionWord> words,
+  ) => _unseen(preview.lesson.vocabularies, words);
+
+  /// [words] whose word none of [have] is, each word once.
+  static List<SectionWord> _unseen(
+    Iterable<VocabItem> have,
+    List<SectionWord> words,
   ) {
     final seen = {
-      for (final word in preview.lesson.vocabularies)
-        YamlParserService.vocabularyKey(word.targetWord),
+      for (final word in have) YamlParserService.vocabularyKey(word.targetWord),
     };
     return [
       for (final word in words)
         if (seen.add(YamlParserService.vocabularyKey(word.word))) word,
     ];
+  }
+
+  /// The words of [reading] that [lesson] does not have yet, as the plain
+  /// vocabulary YAML the Add Vocabulary screen takes, with the lesson's
+  /// `target:`; null when the lesson has them all. For a `## Vocabulary`
+  /// section written in the app's lesson editor, whose words would otherwise
+  /// stay in the lesson's text only.
+  static ({String yaml, int count})? addToLesson(
+    Lesson lesson,
+    VocabularySectionReading reading,
+  ) {
+    final words = _unseen(lesson.vocabularies, reading.words);
+    if (words.isEmpty) return null;
+    final bySection = <String, List<Map<String, Object>>>{};
+    for (final word in words) {
+      bySection
+          .putIfAbsent(word.section, () => [])
+          .add(entryYaml(word, lesson));
+    }
+    final editor = YamlEditor('')
+      ..update([], {'target': lesson.targetLanguage, 'vocabulary': bySection});
+    var yaml = editor.toString();
+    if (!yaml.endsWith('\n')) yaml = '$yaml\n';
+    return (yaml: yaml, count: words.length);
   }
 
   /// [markdown] with the words of [reading] added to its frontmatter's

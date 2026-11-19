@@ -306,7 +306,7 @@ lesson text: (none)
 
 ## A Vocabulary section next to the frontmatter
 
-With frontmatter, a `## Vocabulary` section is for people reading the file: the words come from the frontmatter, and the section is left out of the lesson text, up to the next `## ` heading or a `<!-- /Vocabulary -->` line. The import screen offers to move words the frontmatter lacks into it ([examples](vocabulary-section-examples.md)).
+With frontmatter, the words come from the frontmatter, even when the file also lists them in a `## Vocabulary` section, and the section is left out of the lesson text, up to the next `## ` heading or a `<!-- /Vocabulary -->` line. The import screen offers to move words the frontmatter lacks into it ([examples](vocabulary-section-examples.md)).
 
 ```markdown
 ---

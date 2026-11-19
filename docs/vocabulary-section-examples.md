@@ -553,7 +553,7 @@ Words the frontmatter has (the same word, ignoring case and spacing) are skipped
 
 ```markdown
 ---
-title: Lesson 7   # shown by VitePress
+title: Lesson 7   # comments are kept
 vocabulary:
   nouns:
     - ko: 학교
@@ -575,7 +575,7 @@ vocabulary:
 Moved, the frontmatter is:
 
 ```yaml
-title: Lesson 7   # shown by VitePress
+title: Lesson 7   # comments are kept
 vocabulary:
   nouns:
     - ko: 학교
