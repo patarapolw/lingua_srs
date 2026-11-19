@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:lingua_srs/services/yaml_parser_service.dart';
 import 'package:lingua_srs/views/yaml_import_view.dart';
+import 'package:lingua_srs/widgets/markdown_text_field.dart';
 
 void main() {
   testWidgets('offers separate file and folder import actions', (tester) async {
@@ -62,6 +63,12 @@ void main() {
     final hint = markdownInput.decoration!.hintText!;
     expect(hint, startsWith('# Lesson 1\n'));
     expect(hint, isNot(contains('---')));
+    // Easy to type: a hyphen, not an em dash.
+    expect(hint, isNot(contains('—')));
+    expect(find.text('Markdown'), findsOneWidget);
+    expect(find.textContaining('YAML frontmatter'), findsOneWidget);
+    // Pasted HTML is converted, as in the lesson editor.
+    expect(find.byType(MarkdownTextField), findsOneWidget);
     final parsedHint = YamlParserService.parseLessonYaml(hint);
     expect(parsedHint.wordsFromSection, isTrue);
     expect(parsedHint.lesson.title, 'Lesson 1');
@@ -120,6 +127,29 @@ The full lesson body.
           .join('\n'),
     );
     expect(find.text('Lesson 7: Markdown import'), findsOneWidget);
+  });
+
+  testWidgets('warns that ## Vocabularies is not a Vocabulary section', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(const MaterialApp(home: YamlImportView()));
+    await tester.enterText(
+      find.byType(TextField).last,
+      '---\nvocabulary:\n---\n# Lesson\n\n## Vocabularies\n\n- 학교 - school\n',
+    );
+    await tester.pump(const Duration(milliseconds: 301));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 500)),
+    );
+    await tester.pump();
+
+    expect(
+      find.textContaining('The heading "## Vocabularies" is read as lesson'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('warns of a ## Vocabulary section and moves its words', (

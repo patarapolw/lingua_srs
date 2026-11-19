@@ -22,6 +22,8 @@ class MarkdownTextField extends StatelessWidget {
   final StrutStyle? strutStyle;
   final TextAlignVertical? textAlignVertical;
   final TextInputType? keyboardType;
+  final bool autocorrect;
+  final bool enableSuggestions;
   final ValueChanged<String>? onChanged;
 
   const MarkdownTextField({
@@ -37,6 +39,8 @@ class MarkdownTextField extends StatelessWidget {
     this.strutStyle,
     this.textAlignVertical,
     this.keyboardType,
+    this.autocorrect = true,
+    this.enableSuggestions = true,
     this.onChanged,
   });
 
@@ -105,6 +109,8 @@ class MarkdownTextField extends StatelessWidget {
           strutStyle: strutStyle,
           textAlignVertical: textAlignVertical,
           keyboardType: keyboardType,
+          autocorrect: autocorrect,
+          enableSuggestions: enableSuggestions,
           onChanged: onChanged,
           contextMenuBuilder: _contextMenu,
         ),

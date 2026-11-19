@@ -196,6 +196,8 @@ A `## Vocabulary` section lists a lesson's words in its Markdown, as a list or a
 - **In Add Lessons**, type or paste a title and a `## Vocabulary` section, and the words are read from it ([Lessons without frontmatter](#lessons-without-frontmatter)). The preview shows them before you import, and **Move words to frontmatter** turns them into YAML if you want to edit them that way ([below](#moving-a-vocabulary-section-into-the-frontmatter)).
 - **Not in the lesson editor.** **Edit Markdown** in the reader edits the lesson's text only. A `## Vocabulary` section written there is saved as text and shown in the reader, but its words are not added to the lesson and are not studied; the editor says so while the text has one. Add words to an existing lesson in **View Vocabulary** with **Add vocabulary** (+): *Add manually*, or *Add from YAML*.
 
+Only a `## Vocabulary` heading, spelled and capitalised that way, starts a section. `## Vocabularies` or `## vocabulary` is read as ordinary lesson text, so Add Lessons warns about it and suggests renaming it, and the lesson editor warns about it as about `## Vocabulary`.
+
 [vocabulary-section-examples.md](vocabulary-section-examples.md) has an example of every rule below, with the frontmatter each one moves into.
 
 A lesson file imported from a folder or ZIP is read the same way. Whether its words come from the section depends on its frontmatter:
@@ -207,7 +209,7 @@ A lesson file imported from a folder or ZIP is read the same way. Whether its wo
 | no frontmatter, and a `## Vocabulary` section | a lesson | the section, by the [rules below](#reading-a-vocabulary-section) |
 | no frontmatter, and no `## Vocabulary` section | not a lesson (skipped in folders and ZIPs) | — |
 
-So a folder or ZIP can hold a `README.md` or other pages that are not lessons: they have no `## Vocabulary` section. To keep a page that has one from being imported, give it frontmatter without `vocabulary:`, such as `title:`. (A file with frontmatter may have the section as well, for example to show the words in a preview such as [VitePress](vitepress.md), which does not show frontmatter.)
+So a folder or ZIP can hold a `README.md` or other pages that are not lessons: they have no `## Vocabulary` section. The import screen names the files it skipped this way, so a lesson left out by mistake is easy to spot. To keep a page that has one from being imported, give it frontmatter without `vocabulary:`, such as `title:`. (A file with frontmatter may have the section as well, for example to show the words in a preview such as [VitePress](vitepress.md), which does not show frontmatter.)
 
 ### Lessons without frontmatter
 
@@ -318,7 +320,7 @@ The import button stays disabled until the input can be previewed. Fix any displ
 - **Pick Folder** (desktop only, for VitePress-compatible folders; not shown on mobile) scans Markdown files recursively. Multiple folders can be selected together on macOS; other platforms select one at a time. Nested folder and archive paths preserve lesson hierarchy.
 - **Order.** Folder and ZIP lessons are listed, and added to the lesson list, in natural order of their paths: folder by folder, ignoring case, with numbers compared as numbers (`lesson-2`, `lesson-9`, `lesson-10`; `lesson-02` sorts with `lesson-2`). Folders and files are not separated. VitePress has no sort of its own (its sidebar is whatever the folder's config lists), so this is the usual natural file-name order rather than a VitePress rule; list the lessons in the sidebar in the same order to keep the preview and the app alike.
 - Folder and ZIP results start unchecked; select lessons individually or use **Check all** / **Uncheck all**.
-- Only lesson files are imported: Markdown with a `vocabulary:` key in its frontmatter, or with no frontmatter and a `## Vocabulary` section (see [Vocabulary sections](#vocabulary-sections)). Other Markdown, such as a `README.md` or a page whose frontmatter has no `vocabulary:`, is ignored.
+- Only lesson files are imported: Markdown with a `vocabulary:` key in its frontmatter, or with no frontmatter and a `## Vocabulary` section (see [Vocabulary sections](#vocabulary-sections)). Other Markdown, such as a `README.md` or a page whose frontmatter has no `vocabulary:`, is skipped, and the import screen lists the files it skipped by name.
 - A folder or ZIP is not looked into under `node_modules`, `__MACOSX`, or any folder whose name starts with a dot (`.vitepress`, `.git`); files whose names start with a dot are left out too. So the folder a VitePress or Git project lives in can be picked as it is. The folder you pick is always looked into, whatever its name.
 - A file in a ZIP that is not UTF-8 text is listed as an error, and the rest of the ZIP is still read.
 - Re-importing updates matching lessons and vocabulary in place, keeping SRS progress and any entries not present in the import. A lesson matches when it is at the same virtual path (see [Links to `.md` files](#links-to-md-files)): the same file in the same folder, or, for a lesson with no file, the same title. [Importing a file again](#importing-a-file-again) says what is taken from the file.

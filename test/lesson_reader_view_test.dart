@@ -266,6 +266,13 @@ Preview text.
       );
       await tester.pump();
       expect(find.textContaining(warning), findsNothing);
+
+      await tester.enterText(
+        find.byType(TextField).first,
+        '# Greetings\n\n## Vocabularies\n\n- 학교 - school\n',
+      );
+      await tester.pump();
+      expect(find.textContaining(warning), findsOneWidget);
     });
 
     testWidgets('saves the section as text without asking', (tester) async {

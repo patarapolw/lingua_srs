@@ -18,6 +18,7 @@ import '../services/storage_service.dart';
 import '../services/vocabulary_section_move.dart';
 import '../services/yaml_parser_service.dart';
 import '../widgets/lesson_clash_dialog.dart';
+import '../widgets/markdown_text_field.dart';
 
 class YamlImportView extends StatefulWidget {
   /// Overrides the platform check for folder import in tests.
@@ -73,6 +74,10 @@ class _YamlImportViewState extends State<YamlImportView>
   final Set<String> _selectedDirectoryPaths = {};
   List<String> _directoryErrors = [];
   int _directorySkipped = 0;
+
+  /// The files [_directorySkipped] counts, named so it's clear why they
+  /// were left out (a `README.md` is not a lesson).
+  List<String> _directorySkippedPaths = [];
   int _directoryUnchanged = 0;
 
   /// Unchanged files of the scanned folder, and how many of them no longer
@@ -127,6 +132,7 @@ class _YamlImportViewState extends State<YamlImportView>
       _selectedDirectoryPaths.clear();
       _directoryErrors = [];
       _directorySkipped = 0;
+      _directorySkippedPaths = [];
       _directoryUnchanged = 0;
     }
     _unchangedFiles = [];
@@ -376,6 +382,7 @@ class _YamlImportViewState extends State<YamlImportView>
       _directoryFiles = [];
       _directoryErrors = [];
       _directorySkipped = 0;
+      _directorySkippedPaths = [];
       _directoryUnchanged = 0;
       _unchangedFiles = [];
       _staleFiles = 0;
@@ -423,6 +430,7 @@ class _YamlImportViewState extends State<YamlImportView>
         _selectedDirectoryPaths.clear();
         _directoryErrors = parseResult.errors;
         _directorySkipped = parseResult.skipped;
+        _directorySkippedPaths = parseResult.skippedPaths;
         _directoryUnchanged = parseResult.unchanged;
         _progressCurrent = sources.length;
         _isParsing = false;
@@ -433,7 +441,7 @@ class _YamlImportViewState extends State<YamlImportView>
                     ? 'No changed Markdown files found. '
                           '${parseResult.unchanged} unchanged files were skipped.'
                           '${_followedNote(followed)}'
-                    : 'No lesson Markdown files (vocabulary frontmatter or a ## Vocabulary section) were found.'
+                    : 'No lesson Markdown files were found.${_skippedNote(parseResult.skippedPaths)}'
               : describeImportErrors(
                   'No importable files found. ${parseResult.errors.length} '
                   'files could not be parsed:',
@@ -598,6 +606,7 @@ class _YamlImportViewState extends State<YamlImportView>
       _directoryFiles = [];
       _directoryErrors = [];
       _directorySkipped = 0;
+      _directorySkippedPaths = [];
       _directoryUnchanged = 0;
       _unchangedFiles = [];
       _staleFiles = 0;
@@ -675,6 +684,7 @@ class _YamlImportViewState extends State<YamlImportView>
       _selectedDirectoryPaths.clear();
       _directoryErrors = result.errors;
       _directorySkipped = result.skipped;
+      _directorySkippedPaths = result.skippedPaths;
       _directoryUnchanged = result.unchanged;
       _progressCurrent = markdownPaths.length + files.length;
       _isParsing = false;
@@ -685,7 +695,7 @@ class _YamlImportViewState extends State<YamlImportView>
                   ? 'No changed Markdown files found. '
                         '${result.unchanged} unchanged files were skipped.'
                         '${_followedNote(followed)}'
-                  : 'No lesson Markdown files (vocabulary frontmatter or a ## Vocabulary section) were found.'
+                  : 'No lesson Markdown files were found.${_skippedNote(result.skippedPaths)}'
             : describeImportErrors(
                 'No importable files found. ${result.errors.length} '
                 'files could not be parsed:',
@@ -703,6 +713,19 @@ class _YamlImportViewState extends State<YamlImportView>
       : ' ${count == 1 ? '1 lesson' : '$count lessons'} imported before '
             'file paths were kept now ${count == 1 ? 'follows its' : 'follow their'} '
             'file.';
+
+  /// Names the files that were not lessons, at most [shown] of them, and
+  /// says what makes a Markdown file a lesson. Empty when there are none.
+  static String _skippedNote(List<String> paths, {int shown = 5}) {
+    if (paths.isEmpty) return '';
+    final names = paths.take(shown).join(', ');
+    final more = paths.length > shown
+        ? ' and ${paths.length - shown} more'
+        : '';
+    return ' Not lessons, so skipped: $names$more. A Markdown file is a '
+        'lesson when its frontmatter has vocabulary:, or when it has no '
+        'frontmatter and has a ## Vocabulary section.';
+  }
 
   void _showFollowed(int count) {
     if (count == 0 || !mounted) return;
@@ -1049,11 +1072,20 @@ class _YamlImportViewState extends State<YamlImportView>
                       Text(
                         vocabularyOnly
                             ? 'Vocabulary YAML (no Markdown)'
-                            : 'Markdown with YAML frontmatter (or plain YAML)',
+                            : 'Markdown',
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
                       ),
+                      if (!vocabularyOnly) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'List words under a ## Vocabulary heading, as '
+                          'below. YAML frontmatter with vocabulary:, or plain '
+                          'YAML, works too.',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      ],
                       if (widget.aiSuggested) ...[
                         const SizedBox(height: 4),
                         Text(
@@ -1065,7 +1097,9 @@ class _YamlImportViewState extends State<YamlImportView>
                       ],
                       const SizedBox(height: 8),
                       Expanded(
-                        child: TextField(
+                        // Converts pasted HTML (a web page, Google Docs) to
+                        // Markdown, as the lesson editor does.
+                        child: MarkdownTextField(
                           controller: _yamlController,
                           maxLines: null,
                           expands: true,
@@ -1107,15 +1141,15 @@ class _YamlImportViewState extends State<YamlImportView>
                                       '## Vocabulary\n'
                                       '\n'
                                       '### Nouns\n'
-                                      '- 학교 — school\n'
+                                      '- 학교 - school\n'
                                       '  - Note: Optional notes about the word.\n'
-                                      '  - 저는 학교에 가요. — I go to school.\n'
+                                      '  - 저는 학교에 가요. - I go to school.\n'
                                       '    - Note: Optional notes about the sentence.\n'
-                                      '- 학생 (學生) — student\n'
+                                      '- 학생 (學生) - student\n'
                                       '\n'
                                       '### Verbs\n'
-                                      '- 가다 — to go\n'
-                                      '  - 집에 가요. — I\'m going home.',
+                                      '- 가다 - to go\n'
+                                      '  - 집에 가요. - I\'m going home.',
                             hintStyle: TextStyle(
                               color: theme.colorScheme.onSurfaceVariant
                                   .withValues(alpha: 0.65),
@@ -1146,6 +1180,31 @@ class _YamlImportViewState extends State<YamlImportView>
                         ),
                       ),
                       const SizedBox(height: 12),
+
+                      if (!vocabularyOnly && _directoryFiles.isEmpty)
+                        if (YamlParserService.nearMissVocabularyHeading(
+                              _yamlController.text,
+                            )
+                            case final heading?)
+                          Container(
+                            width: double.infinity,
+                            margin: const EdgeInsets.only(bottom: 12),
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.tertiaryContainer,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              'The heading "$heading" is read as lesson '
+                              'text, not as a list of words: only '
+                              '## Vocabulary starts a Vocabulary section. '
+                              'Rename it to ## Vocabulary for its words to '
+                              'be read.',
+                              style: TextStyle(
+                                color: theme.colorScheme.onTertiaryContainer,
+                              ),
+                            ),
+                          ),
 
                       if (_errorMessage != null)
                         Container(
@@ -1248,6 +1307,15 @@ class _YamlImportViewState extends State<YamlImportView>
                                   '$_directorySkipped files skipped and '
                                   '$_directoryUnchanged unchanged.',
                                 ),
+                                if (_directorySkippedPaths.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    _skippedNote(_directorySkippedPaths).trim(),
+                                    style: TextStyle(
+                                      color: theme.colorScheme.tertiary,
+                                    ),
+                                  ),
+                                ],
                                 const SizedBox(height: 4),
                                 const Text(
                                   'Matching lessons and vocabulary will be updated '
@@ -1671,6 +1739,10 @@ class MarkdownDirectoryResult {
   final int skipped;
   final int unchanged;
 
+  /// The paths of the [skipped] files: Markdown that is not a lesson
+  /// ([YamlParserService.isLessonMarkdown]), such as a `README.md`.
+  final List<String> skippedPaths;
+
   /// The lessons the [unchanged] files are, without vocabulary
   /// ([YamlParserService.lessonFileInfo]), so the lessons saved from them can
   /// take their real file paths ([AppProvider.adoptFilePaths]).
@@ -1688,6 +1760,7 @@ class MarkdownDirectoryResult {
     required this.errors,
     required this.skipped,
     required this.unchanged,
+    this.skippedPaths = const [],
     this.unchangedLessons = const [],
     this.unchangedKeys = const [],
     this.unchangedFiles = const [],
@@ -1755,6 +1828,7 @@ MarkdownDirectoryResult parsePickedMarkdownSources(
   final imports = <MarkdownImportFile>[];
   final errors = <String>[];
   var skipped = 0;
+  final skippedPaths = <String>[];
   var unchanged = 0;
   final unchangedLessons = <Lesson>[];
   final unchangedKeys = <String>[];
@@ -1789,6 +1863,7 @@ MarkdownDirectoryResult parsePickedMarkdownSources(
       if (requireLessonMarkdown &&
           !YamlParserService.isLessonMarkdown(contents)) {
         skipped++;
+        skippedPaths.add(path);
         return;
       }
       final preview = YamlParserService.parseLessonYaml(
@@ -1853,6 +1928,7 @@ MarkdownDirectoryResult parsePickedMarkdownSources(
     imports: imports,
     errors: errors,
     skipped: skipped,
+    skippedPaths: skippedPaths,
     unchanged: unchanged,
     unchangedLessons: unchangedLessons,
     unchangedKeys: unchangedKeys,
@@ -1871,6 +1947,7 @@ MarkdownDirectoryResult parseMarkdownFiles(
   final imports = <MarkdownImportFile>[];
   final errors = <String>[];
   var skipped = 0;
+  final skippedPaths = <String>[];
   var unchanged = 0;
   final unchangedLessons = <Lesson>[];
   final unchangedFiles = <LessonFileRef>[];
@@ -1924,6 +2001,7 @@ MarkdownDirectoryResult parseMarkdownFiles(
       }
       if (!YamlParserService.isLessonMarkdown(contents)) {
         skipped++;
+        skippedPaths.add(relativePath);
         continue;
       }
       final preview = YamlParserService.parseLessonYaml(
@@ -1948,6 +2026,7 @@ MarkdownDirectoryResult parseMarkdownFiles(
     imports: imports,
     errors: errors,
     skipped: skipped,
+    skippedPaths: skippedPaths,
     unchanged: unchanged,
     unchangedLessons: unchangedLessons,
     unchangedKeys: unchangedKeys,
@@ -1961,6 +2040,7 @@ MarkdownDirectoryResult _combineMarkdownDirectoryResults(
   imports: results.expand((result) => result.imports).toList(),
   errors: results.expand((result) => result.errors).toList(),
   skipped: results.fold(0, (total, result) => total + result.skipped),
+  skippedPaths: [for (final result in results) ...result.skippedPaths],
   unchanged: results.fold(0, (total, result) => total + result.unchanged),
   unchangedLessons: [for (final result in results) ...result.unchangedLessons],
   unchangedKeys: [for (final result in results) ...result.unchangedKeys],

@@ -182,6 +182,8 @@ void main() {
       expect(result.errors.join('\n'), contains('사과가 커요'));
       expect(result.errors.join('\n'), contains('귤이 커요'));
       expect(result.skipped, 1);
+      // Named, so the import screen can say why it was left out.
+      expect(result.skippedPaths, ['lessons.zip/unit2/notes.md']);
     });
 
     test('skips unchanged entries when the zip is picked from elsewhere', () {

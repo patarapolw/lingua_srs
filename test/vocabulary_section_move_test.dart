@@ -449,6 +449,28 @@ vocabulary:
     );
   });
 
+  test('nearMissVocabularyHeading finds headings that start no section', () {
+    expect(
+      YamlParserService.nearMissVocabularyHeading('# L\n\n## Vocabularies\n'),
+      '## Vocabularies',
+    );
+    expect(
+      YamlParserService.nearMissVocabularyHeading('## vocabulary:\n- a - b'),
+      '## vocabulary:',
+    );
+    expect(
+      YamlParserService.nearMissVocabularyHeading('## Vocabulary\n- a - b'),
+      isNull,
+    );
+    // Other headings are left alone, as the docs say.
+    expect(
+      YamlParserService.nearMissVocabularyHeading(
+        '## Vocabulary list\n### Vocabularies\n',
+      ),
+      isNull,
+    );
+  });
+
   group('emphasizeWord', () {
     test('marks the word, an alternative form or a Korean stem', () {
       expect(YamlParserService.emphasizeWord('我是学生。', '学生'), '我是**学生**。');

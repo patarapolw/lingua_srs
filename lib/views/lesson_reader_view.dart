@@ -325,7 +325,10 @@ class _LessonMarkdownEditorState extends State<_LessonMarkdownEditor> {
     return ValueListenableBuilder<TextEditingValue>(
       valueListenable: _controller,
       builder: (context, value, _) {
-        if (!YamlParserService.vocabularySectionPattern.hasMatch(value.text)) {
+        // `## Vocabularies` and other near misses too: words written under
+        // them are no more added than under `## Vocabulary`.
+        if (!YamlParserService.vocabularySectionPattern.hasMatch(value.text) &&
+            YamlParserService.nearMissVocabularyHeading(value.text) == null) {
           return const SizedBox.shrink();
         }
         return Container(
@@ -346,9 +349,9 @@ class _LessonMarkdownEditorState extends State<_LessonMarkdownEditor> {
               Expanded(
                 child: Text(
                   'Don\'t add vocabulary here. Words in a ## Vocabulary '
-                  'section of the lesson text are not added to the lesson '
-                  'and are not studied. Add them in View Vocabulary with '
-                  'Add vocabulary (+).',
+                  'section (or ## Vocabularies) of the lesson text are not '
+                  'added to the lesson and are not studied. Add them in View '
+                  'Vocabulary with Add vocabulary (+).',
                   style: TextStyle(
                     color: theme.colorScheme.onTertiaryContainer,
                   ),

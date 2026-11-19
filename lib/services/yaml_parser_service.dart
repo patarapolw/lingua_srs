@@ -903,6 +903,22 @@ class YamlParserService {
     r'(?:\r?\n<!-- /Vocabulary -->(?=\r?\n|$)|(?=\r?\n## |$))',
   );
 
+  /// A `##` heading that looks like a Vocabulary section's but isn't one, so
+  /// its words are read as lesson text: `## Vocabularies`, or `## vocabulary`
+  /// in another case. Only `## Vocabulary` starts a section. Null when
+  /// [markdown] has none; otherwise the heading, as written.
+  static String? nearMissVocabularyHeading(String markdown) {
+    for (final match in RegExp(
+      r'^##[ \t]+(vocabular(?:y|ies))[ \t]*:?[ \t]*$',
+      multiLine: true,
+      caseSensitive: false,
+    ).allMatches(markdown)) {
+      final heading = match[0]!.trim();
+      if (heading != '## Vocabulary') return heading;
+    }
+    return null;
+  }
+
   /// The text of the `## Vocabulary` sections of [markdown], a lesson's
   /// Markdown body, joined, without their headings and closing comments.
   /// Null when it has none.
