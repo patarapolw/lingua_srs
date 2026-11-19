@@ -160,7 +160,7 @@ class VocabularySectionMove {
       examples.add({
         targetKey: sentence,
         if (example.translation.isNotEmpty) nativeKey: example.translation,
-        if (_notesValue(example.notes) case final value?) 'notes': value,
+        'notes': ?_notesValue(example.notes),
       });
     }
     return {
@@ -170,7 +170,7 @@ class VocabularySectionMove {
       for (final MapEntry(:key, :value) in word.forms.entries)
         if (value.isNotEmpty && value != word.word) key: value,
       nativeKey: word.meaning,
-      if (_notesValue(notes) case final value?) 'notes': value,
+      'notes': ?_notesValue(notes),
       if (examples.isNotEmpty) 'examples': examples,
     };
   }
