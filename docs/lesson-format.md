@@ -1,6 +1,6 @@
 # Lesson Format
 
-Lessons are Markdown files with YAML frontmatter (or plain YAML). Write them in the app via **Add Lessons**, or import files, folders and ZIP archives. To write them on a computer with a live preview, see [Editing lessons outside the app](#editing-lessons-outside-the-app).
+Lessons are Markdown files with YAML frontmatter (or plain YAML). [lesson-examples.md](lesson-examples.md) shows whole lessons and what the app reads from them, and [vocabulary-section-examples.md](vocabulary-section-examples.md) shows `## Vocabulary` sections and how they move into the frontmatter. Write them in the app via **Add Lessons**, or import files, folders and ZIP archives. To write them on a computer with a live preview, see [Editing lessons outside the app](#editing-lessons-outside-the-app).
 
 ## Lesson name and hierarchy
 
@@ -88,7 +88,7 @@ vocabulary:
 
 ## Markdown frontmatter
 
-Markdown imports must have YAML frontmatter containing a `vocabulary:` key. It can be empty, and the Markdown body is optional. The first heading supplies the lesson title unless a name is supplied separately:
+Markdown imports must have YAML frontmatter containing a `vocabulary:` key, or no frontmatter and a `## Vocabulary` section (see [Vocabulary sections](#vocabulary-sections)). The key can be empty, and the Markdown body is optional. The first heading supplies the lesson title unless a name is supplied separately:
 
 ```markdown
 ---
@@ -189,6 +189,119 @@ When a heading's text repeats, its anchor gets `-1`, `-2`, … in order, as on G
 
 `{#past-polite}` is not shown, and `[[#past-polite|polite past]]` or `[polite past](#past-polite)` links to that heading (from another lesson, `[[Lesson 1#past-polite]]`). Classes and other attributes (`{#id .note lang=ko}`) are allowed and ignored. A link looks for a heading with that id or anchor first, then for one with that text, then for one with the same letters and digits, so an anchor copied from another tool (VitePress writes `1. Intro` as `#_1-intro`) finds its heading too.
 
+## Vocabulary sections
+
+A `## Vocabulary` section lists a lesson's words in its Markdown, as a list or a table, the way you might write them in any notes. You don't need YAML, frontmatter or any other tool to use it:
+
+- **In Add Lessons**, type or paste a title and a `## Vocabulary` section, and the words are read from it ([Lessons without frontmatter](#lessons-without-frontmatter)). The preview shows them before you import, and **Move words to frontmatter** turns them into YAML if you want to edit them that way ([below](#moving-a-vocabulary-section-into-the-frontmatter)).
+- **Not in the lesson editor.** **Edit Markdown** in the reader edits the lesson's text only. A `## Vocabulary` section written there is saved as text and shown in the reader, but its words are not added to the lesson and are not studied; the editor says so while the text has one. Add words to an existing lesson in **View Vocabulary** with **Add vocabulary** (+): *Add manually*, or *Add from YAML*.
+
+Only a `## Vocabulary` heading, spelled and capitalised that way, starts a section. `## Vocabularies` or `## vocabulary` is read as ordinary lesson text, so Add Lessons warns about it and suggests renaming it, and the lesson editor warns about it as about `## Vocabulary`.
+
+[vocabulary-section-examples.md](vocabulary-section-examples.md) has an example of every rule below, with the frontmatter each one moves into.
+
+A lesson file imported from a folder or ZIP is read the same way. Whether its words come from the section depends on its frontmatter:
+
+| The file has | It is | Its words come from |
+| --- | --- | --- |
+| frontmatter with `vocabulary:` | a lesson | the frontmatter; the section is left out of the lesson's text |
+| frontmatter without `vocabulary:` | not a lesson (skipped in folders and ZIPs) | — |
+| no frontmatter, and a `## Vocabulary` section | a lesson | the section, by the [rules below](#reading-a-vocabulary-section) |
+| no frontmatter, and no `## Vocabulary` section | not a lesson (skipped in folders and ZIPs) | — |
+
+So a folder or ZIP can hold a `README.md` or other pages that are not lessons: they have no `## Vocabulary` section. The import screen names the files it skipped this way, so a lesson left out by mistake is easy to spot. To keep a page that has one from being imported, give it frontmatter without `vocabulary:`, such as `title:`. (A file with frontmatter may have the section as well, for example to show the words in a preview such as [VitePress](vitepress.md), which does not show frontmatter.)
+
+### Lessons without frontmatter
+
+A Markdown lesson with no frontmatter, typed into **Add Lessons** or imported from a file, has its words read from its `## Vocabulary` section. Its title is the first `#` heading, as usual. With no `target:` to say its language, the language is guessed from the section: Korean if it has Hangul, Japanese if it has kana (and no Hangul), Chinese if it has Han characters only, and Korean otherwise. The words are keyed by that language (`zh:` for a Chinese lesson), so a Traditional Chinese lesson read this way is `zh`, spoken by a mainland voice. To choose the language, or to edit the words as YAML, move them into a frontmatter (below) and set `target:`.
+
+The section is not shown in the reader. Its text that is not about one word is kept in the lesson under `## Vocabulary notes`, as when the words are moved. Writing the app's words back to the files skips a lesson without frontmatter.
+
+### Markdown with no words yet
+
+Markdown typed or pasted into **Add Lessons** with no `## Vocabulary` section and no `vocabulary:` in YAML frontmatter, such as an article copied from a web page, has no words for the app to study. Instead of an error, the preview says so and offers:
+
+- **Generate vocabulary list with AI** (with a DeepSeek key in settings): the AI lists the words the text teaches, with their meanings, parts of speech and readings, and takes their examples from the lesson's own sentences. They are written into a new frontmatter, each with a note saying it was suggested by AI. Check them in the preview, and edit or remove them before importing. If the AI can't be reached or its answer can't be read, the lesson gets an empty `vocabulary:` instead, as below, and a message says why.
+- **Continue without words**: adds a frontmatter with a `target:` guessed from the text (as for [lessons without frontmatter](#lessons-without-frontmatter)) and an empty `vocabulary:`, so the lesson imports with its text and no words. Add words later in **View Vocabulary**.
+
+A frontmatter the text already has (for example with only `title:`) is kept as written; only `vocabulary:`, and `target:` when it has none, are added to it.
+
+### Moving a Vocabulary section into the frontmatter
+
+When Markdown typed or pasted into **Add Lessons** has a `## Vocabulary` section, the preview shows a banner. With frontmatter, it warns that the section will be removed; without, it says the words are read from it and which language was guessed. It says how many of its words and example sentences are not in the frontmatter yet.
+
+- **Move words to frontmatter** adds those words to `vocabulary:`, skipping words the frontmatter already has. A file without frontmatter gets one, with `target:` set to the guessed language. The section is removed and the rest of the file stays as it is. Section text that is not about one word is kept under a new `## Vocabulary notes` heading in place of the section, with the `###` headings it was under, so nothing is lost.
+- With a DeepSeek key in settings, **Move with AI** reads the section instead, for prose or other layouts. Check the words it gives in the preview before importing.
+
+A file or folder being imported is listed with a note when it has the section. To move its words, paste the file into **Add Lessons**.
+
+### Reading a Vocabulary section
+
+- **Parts of speech.** A `###` heading names the frontmatter section of the words under it, in lowercase: `### Nouns` gives `nouns:`, `### 名词` gives `名词:`. Words above any heading go in `words:`.
+- **Words.** A top-level list item (`-`, `*`, `+` or `1.`) is a word: `WORD — MEANING`. The separator can be `—` or `–` (with or without spaces), ` - ` or ` = ` (with spaces), `: `, a full-width `：` (with or without spaces) or a tab; separators inside brackets don't count. `**` and backticks around the word are dropped. A list item with no separator, or with nothing on one side of it, is not a word. It is kept under `## Vocabulary notes`, and the warning counts it.
+- **Readings and forms.** Bracketed groups right after the word, `(…)`, `（…）`, `[…]` or `【…】`, say more about it:
+  - In a Chinese lesson, Latin text with tone marks or tone numbers (`xuésheng`, `xue2sheng`) is the `pinyin`. Han characters are the other script: `traditional` in a Simplified lesson, `simplified` when `target:` is `zh-TW`, `zh-HK`, `zh-MO` or `zh-Hant`.
+  - In a Korean lesson, Han characters are the `hanja` (`선생님 (先生님)`).
+  - In a Japanese lesson, kana is the `reading`.
+  - A label picks the field in any lesson: `pinyin:`/`拼音:`/`reading:`, `trad:`/`繁:`, `simp:`/`简:`, `hanja:`/`한자:`.
+  - Any other group, such as `(formal)`, becomes a note of the word.
+- **Notes and examples.** List items or lines indented under a word belong to it:
+  - `Note:`, `Usage:`, `注:`, `注意:`, `备注:` or `참고:` starts a note.
+  - `Example:`, `e.g.`, `例:`, `例句:` or `예문:` starts an example sentence. So does a line with `**`, or a line with a separator that has the word in it (`我是学生。 — I am a student.`).
+  - An example's translation follows a separator (` — `, ` – `, ` - `, ` = ` or a tab; not `:`, which sentences have), or is Latin text in brackets at the end of a sentence that is not Latin (`我是学生。(I am a student.)`). The first list item indented under an example is its translation when it has none yet. A `Note:` item indented under an example is a sentence note, shown on the card back and editable from the Sentence Pool; a `Note:` item at the word's level is a note of the word.
+  - The word is marked in `**` in an example that has no `**`: its first place in the sentence, or of its other form (`學生` for `学生`), or for a Korean `-다` word its stem (`먹다` in `먹어요`, `공부하다` in `공부해요`). A labelled example in which the word can't be found becomes a note starting `Example:`.
+  - Any other indented line is a note. Each note is a paragraph of the word's `notes`.
+- **Tables.** A table with a header row (a `|---|` line under it) is read by its column names. Matching ignores case and looks for the name anywhere in the header:
+  - word: `word`, `term`, `vocab`, `Korean`, `Chinese`, `hanzi`, `汉字`, `词`, `단어` or the language code
+  - `pinyin`/`拼音`/`reading`/`kana`
+  - `traditional`/`繁`, `simplified`/`简`, `hanja`/`한자`
+  - meaning: `meaning`, `translation`, `English`, `definition`, `意思`, `뜻`
+  - an example: `example`, `sentence`, `例句`, `예문`
+  - the example's translation: `example translation`, `sentence meaning`, `例句翻译`
+  - notes: `notes`, `usage`, `备注`
+  - the part of speech: `part of speech`, `POS`, `词性`, `품사`
+
+  Without a word or meaning column, the first unnamed columns are taken as those. Other columns become notes headed by their name. A table without a header row is read as word and meaning. `<br>` in a cell is a line break.
+
+For example, this section in a lesson with `target: zh-CN` has a word with its pinyin, Traditional form and a note, and an example sentence with a translation and a note of its own:
+
+```markdown
+## Vocabulary
+
+Words for the classroom.
+
+### Nouns
+- 学生 (xuésheng) [學生] — student
+  - 注：Also used for pupils.
+  - 我是学生。 — I am a student.
+    - Note: 是 links two nouns.
+```
+
+Its words move into the frontmatter as
+
+```yaml
+vocabulary:
+  nouns:
+    - zh: 学生
+      pinyin: xuésheng
+      traditional: 學生
+      en: student
+      notes: Also used for pupils.
+      examples:
+        - zh: 我是**学生**。
+          en: I am a student.
+          notes: 是 links two nouns.
+```
+
+and the section becomes `## Vocabulary notes` holding *Words for the classroom.* The note on the sentence is a sentence note: it is shown on the card back and can be edited from the Sentence Pool. The same sentence and note can be written on one line, `例句：我是学生。 — I am a student.`, with the note as an item under it; or with the translation as an item under it too:
+
+```markdown
+- 学生 — student
+  - 例句：我是学生。
+    - I am a student.
+    - Note: 是 links two nouns.
+```
+
 ## Editing lessons outside the app
 
 Lessons are plain Markdown files, so a folder of them can be written in any editor and then imported. [VitePress](https://vitepress.dev) is used here as an editing tool: its dev server shows each lesson as a page while you write it, and updates the page when the file is saved. The app does not need it, and nothing has to be published; the app reads the same `.md` files, not the pages VitePress builds.
@@ -216,7 +329,7 @@ The import button stays disabled until the input can be previewed. Fix any displ
 - **Pick Folder** (desktop only, for VitePress-compatible folders; not shown on mobile) scans Markdown files recursively. Multiple folders can be selected together on macOS; other platforms select one at a time. Nested folder and archive paths preserve lesson hierarchy.
 - **Order.** Folder and ZIP lessons are listed, and added to the lesson list, in natural order of their paths: folder by folder, ignoring case, with numbers compared as numbers (`lesson-2`, `lesson-9`, `lesson-10`; `lesson-02` sorts with `lesson-2`). Folders and files are not separated. VitePress has no sort of its own (its sidebar is whatever the folder's config lists), so this is the usual natural file-name order rather than a VitePress rule; list the lessons in the sidebar in the same order to keep the preview and the app alike.
 - Folder and ZIP results start unchecked; select lessons individually or use **Check all** / **Uncheck all**.
-- Only files with a `vocabulary:` key in their frontmatter are imported; other Markdown is ignored.
+- Only lesson files are imported: Markdown with a `vocabulary:` key in its frontmatter, or with no frontmatter and a `## Vocabulary` section (see [Vocabulary sections](#vocabulary-sections)). Other Markdown, such as a `README.md` or a page whose frontmatter has no `vocabulary:`, is skipped, and the import screen lists the files it skipped by name.
 - A folder or ZIP is not looked into under `node_modules`, `__MACOSX`, or any folder whose name starts with a dot (`.vitepress`, `.git`); files whose names start with a dot are left out too. So the folder a VitePress or Git project lives in can be picked as it is. The folder you pick is always looked into, whatever its name.
 - A file in a ZIP that is not UTF-8 text is listed as an error, and the rest of the ZIP is still read.
 - Re-importing updates matching lessons and vocabulary in place, keeping SRS progress and any entries not present in the import. A lesson matches when it is at the same virtual path (see [Links to `.md` files](#links-to-md-files)): the same file in the same folder, or, for a lesson with no file, the same title. [Importing a file again](#importing-a-file-again) says what is taken from the file.

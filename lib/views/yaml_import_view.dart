@@ -15,8 +15,10 @@ import '../services/lesson_ai_prompt.dart';
 import '../services/lesson_file_update.dart';
 import '../services/markdown_archive_service.dart';
 import '../services/storage_service.dart';
+import '../services/vocabulary_section_move.dart';
 import '../services/yaml_parser_service.dart';
 import '../widgets/lesson_clash_dialog.dart';
+import '../widgets/markdown_text_field.dart';
 
 class YamlImportView extends StatefulWidget {
   /// Overrides the platform check for folder import in tests.
@@ -67,11 +69,31 @@ class _YamlImportViewState extends State<YamlImportView>
   final TextEditingController _yamlController = TextEditingController();
   String? _errorMessage;
   YamlParseResult? _previewResult;
+
+  /// The text [_previewResult] was parsed from, trimmed. While the editor's
+  /// text differs, a parse is due ([_parsePending]) and the preview is the
+  /// last one, kept on screen rather than cleared at every keystroke.
+  String? _previewText;
+  bool _parsePending = false;
+
+  /// What the preview's `## Vocabulary` section reads as, and its words the
+  /// frontmatter lacks, worked out with the preview rather than on every
+  /// rebuild.
+  VocabularySectionReading? _sectionReading;
+  List<SectionWord> _sectionNewWords = const [];
+
+  /// A heading such as `## Vocabularies` in the parsed text
+  /// ([YamlParserService.nearMissVocabularyHeading]).
+  String? _nearMissHeading;
   String? _defaultUnitTitle;
   List<MarkdownImportFile> _directoryFiles = [];
   final Set<String> _selectedDirectoryPaths = {};
   List<String> _directoryErrors = [];
   int _directorySkipped = 0;
+
+  /// The files [_directorySkipped] counts, named so it's clear why they
+  /// were left out (a `README.md` is not a lesson).
+  List<String> _directorySkippedPaths = [];
   int _directoryUnchanged = 0;
 
   /// Unchanged files of the scanned folder, and how many of them no longer
@@ -89,6 +111,15 @@ class _YamlImportViewState extends State<YamlImportView>
   int _progressTotal = 0;
   Timer? _parseTimer;
   int _parseGeneration = 0;
+
+  /// Whether the words of the `## Vocabulary` section are being moved into
+  /// the frontmatter.
+  bool _movingSection = false;
+
+  /// The text is Markdown with no source of words: no `vocabulary:` and no
+  /// `## Vocabulary` section ([YamlParserService.needsVocabulary]). Its
+  /// banner offers to add one instead of showing a YAML error.
+  bool _needsVocabulary = false;
 
   @override
   void initState() {
@@ -116,12 +147,15 @@ class _YamlImportViewState extends State<YamlImportView>
     _parseTimer?.cancel();
     final generation = ++_parseGeneration;
     final text = _yamlController.text.trim();
+    // Typing over a scanned folder's results clears them: show that now.
+    final hadFiles = _directoryFiles.isNotEmpty || _staleFiles > 0;
     if (_directoryFiles.isNotEmpty) {
       _directoryFiles = [];
       _importSourceLabel = null;
       _selectedDirectoryPaths.clear();
       _directoryErrors = [];
       _directorySkipped = 0;
+      _directorySkippedPaths = [];
       _directoryUnchanged = 0;
     }
     _unchangedFiles = [];
@@ -129,7 +163,13 @@ class _YamlImportViewState extends State<YamlImportView>
     if (text.isEmpty) {
       setState(() {
         _errorMessage = null;
+        _needsVocabulary = false;
         _previewResult = null;
+        _previewText = null;
+        _parsePending = false;
+        _sectionReading = null;
+        _sectionNewWords = const [];
+        _nearMissHeading = null;
         _progressMessage = null;
       });
       return;
@@ -137,36 +177,339 @@ class _YamlImportViewState extends State<YamlImportView>
 
     final nameParts = _lessonNameParts(_lessonNameController.text);
     final unitTitle = nameParts.unitTitle ?? _defaultUnitTitle;
-    setState(() {
-      _errorMessage = null;
-      _previewResult = null;
-      _progressMessage = 'Parsing lesson...';
-    });
-    _parseTimer = Timer(const Duration(milliseconds: 300), () async {
-      try {
-        final result = await _parseLessonInBackground(
-          text,
-          nameParts.title,
-          unitTitle,
-          allowMarkdown: !widget.vocabularyOnly,
-        );
-        if (!mounted || generation != _parseGeneration) return;
-        setState(() {
-          _errorMessage = null;
-          _previewResult = result;
-          _progressMessage = null;
-        });
-      } catch (error) {
-        if (!mounted || generation != _parseGeneration) return;
-        setState(() {
-          _errorMessage = widget.vocabularyOnly
-              ? 'YAML Parse Error: $error'
-              : 'YAML / Markdown Parse Error: $error';
-          _previewResult = null;
-          _progressMessage = null;
-        });
+    // While someone types, the last preview stays as it is until the text
+    // has been still for a moment. Nothing on screen changes per keystroke:
+    // Import stays enabled, and parses the text first if it is out of date
+    // ([_parseNow]). Cleared folder results are the one thing to show now.
+    _parsePending = true;
+    if (hadFiles) setState(() {});
+    _parseTimer = Timer(
+      const Duration(milliseconds: 300),
+      () => _runParse(generation, text, nameParts.title, unitTitle),
+    );
+  }
+
+  /// Parses [text] in the background and shows the result, unless a newer
+  /// parse ([generation]) has started meanwhile.
+  Future<void> _runParse(
+    int generation,
+    String text,
+    String? title,
+    String? unitTitle,
+  ) async {
+    try {
+      final parsed = await _parseLessonInBackground(
+        text,
+        title,
+        unitTitle,
+        allowMarkdown: !widget.vocabularyOnly,
+      );
+      if (!mounted || generation != _parseGeneration) return;
+      setState(() {
+        _errorMessage = null;
+        _needsVocabulary = false;
+        _previewResult = parsed.result;
+        _previewText = text;
+        _parsePending = false;
+        _sectionReading = parsed.section;
+        _sectionNewWords = parsed.newSectionWords;
+        _nearMissHeading = parsed.nearMissHeading;
+        _progressMessage = null;
+      });
+    } catch (error) {
+      if (!mounted || generation != _parseGeneration) return;
+      // Markdown with no words is not a YAML mistake: offer to add a
+      // vocabulary instead of the parser's error.
+      final needsVocabulary =
+          !widget.vocabularyOnly && YamlParserService.needsVocabulary(text);
+      setState(() {
+        _needsVocabulary = needsVocabulary;
+        _errorMessage = needsVocabulary
+            ? null
+            : widget.vocabularyOnly
+            ? 'YAML Parse Error: $error'
+            : 'YAML / Markdown Parse Error: $error';
+        _previewResult = null;
+        _previewText = null;
+        _parsePending = false;
+        _sectionReading = null;
+        _sectionNewWords = const [];
+        _nearMissHeading = YamlParserService.nearMissVocabularyHeading(text);
+        _progressMessage = null;
+      });
+    }
+  }
+
+  /// Parses the editor's text now, instead of when typing pauses, so an
+  /// action on the preview uses the text as it is. True when the preview is
+  /// then the current text's; false when it failed to parse, whose error is
+  /// shown instead.
+  Future<bool> _parseNow() async {
+    if (_previewIsCurrent) return true;
+    _parseTimer?.cancel();
+    final generation = ++_parseGeneration;
+    final text = _yamlController.text.trim();
+    if (text.isEmpty) return false;
+    final nameParts = _lessonNameParts(_lessonNameController.text);
+    await _runParse(
+      generation,
+      text,
+      nameParts.title,
+      nameParts.unitTitle ?? _defaultUnitTitle,
+    );
+    return mounted && _previewIsCurrent;
+  }
+
+  /// Whether [_previewResult] is the parse of the editor's current text.
+  bool get _previewIsCurrent =>
+      !_parsePending &&
+      _previewResult != null &&
+      _previewText == _yamlController.text.trim();
+
+  /// Gives Markdown with no source of words a `vocabulary:` (and a
+  /// `target:`), so it can be imported. With [useAi], an AI first lists the
+  /// words the lesson's text teaches, each with a note saying it was
+  /// suggested by AI. If that fails, the vocabulary is added empty anyway,
+  /// and the snackbar says why.
+  Future<void> _addVocabulary({required bool useAi}) async {
+    if (_movingSection) return;
+    final text = _yamlController.text;
+    final messenger = ScaffoldMessenger.of(context);
+    final provider = useAi ? context.read<AppProvider>() : null;
+    setState(() => _movingSection = true);
+    try {
+      var updated = VocabularySectionMove.addVocabularyKey(text);
+      var message =
+          'Added an empty vocabulary: to the lesson, so it can be imported. '
+          'Add words later in View Vocabulary.';
+      if (provider != null) {
+        try {
+          final lesson = YamlParserService.parseLessonYaml(updated).lesson;
+          final reading = await provider.generateLessonVocabulary(text, lesson);
+          final move = VocabularySectionMove.apply(updated, reading);
+          updated = move.text;
+          message =
+              'Added ${move.added == 1 ? '1 word' : '${move.added} words'} '
+              'suggested by AI. Check them in the preview before importing.';
+        } catch (error) {
+          message =
+              'Could not list the words with AI ($error). Added an empty '
+              'vocabulary: instead, so the lesson can be imported.';
+        }
       }
-    });
+      if (!mounted) return;
+      if (_yamlController.text != text) {
+        throw const FormatException('The lesson was edited meanwhile.');
+      }
+      _yamlController.text = updated;
+      _parseCurrentYaml();
+      messenger.showSnackBar(SnackBar(content: Text(message)));
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Could not add a vocabulary: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _movingSection = false);
+    }
+  }
+
+  /// Says that the Markdown has no words for the app to study yet, with
+  /// buttons to have an AI list them, or to import the lesson without words.
+  Widget _noVocabularyBanner(ThemeData theme) {
+    final canUseAi = context.read<AppProvider?>()?.canUseAi ?? false;
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.tertiaryContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'This lesson has no words to study yet: no ## Vocabulary list, '
+            'and no vocabulary: in YAML frontmatter. '
+            '${canUseAi ? 'An AI can list the words its text teaches, or ' : ''}'
+            '${canUseAi ? 'you' : 'You'} can continue without words and '
+            'add them later in View Vocabulary.',
+            style: TextStyle(color: theme.colorScheme.onTertiaryContainer),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              if (canUseAi)
+                FilledButton.tonalIcon(
+                  onPressed: _movingSection
+                      ? null
+                      : () => _addVocabulary(useAi: true),
+                  icon: _movingSection
+                      ? const SizedBox.square(
+                          dimension: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.auto_awesome, size: 18),
+                  label: const Text('Generate vocabulary list with AI'),
+                ),
+              OutlinedButton(
+                onPressed: _movingSection
+                    ? null
+                    : () => _addVocabulary(useAi: false),
+                child: const Text('Continue without words'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Moves the words of the lesson's `## Vocabulary` section, which import
+  /// leaves out, into its frontmatter, read by an AI when [useAi].
+  Future<void> _moveVocabularySection({required bool useAi}) async {
+    if (_movingSection || !await _parseNow()) return;
+    if (!mounted) return;
+    final preview = _previewResult;
+    final section = preview?.vocabularySection;
+    if (preview == null || section == null) return;
+    final text = _yamlController.text;
+    final messenger = ScaffoldMessenger.of(context);
+    final provider = useAi ? context.read<AppProvider>() : null;
+    setState(() => _movingSection = true);
+    try {
+      final reading = provider != null
+          ? await provider.readVocabularySection(section, preview.lesson)
+          : YamlParserService.parseVocabularySection(
+              section,
+              targetLanguage: preview.lesson.targetLanguage,
+            );
+      final move = VocabularySectionMove.apply(text, reading);
+      if (!mounted) return;
+      if (_yamlController.text != text) {
+        throw const FormatException('The lesson was edited meanwhile.');
+      }
+      _yamlController.text = move.text;
+      _parseCurrentYaml();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            '${move.added == 1 ? '1 word' : '${move.added} words'} moved '
+            'into the frontmatter'
+            '${move.skipped == 0 ? '' : ' (${move.skipped} already there)'}'
+            '; the ## Vocabulary section was removed'
+            '${reading.notes.trim().isEmpty ? '' : ', and its other text kept '
+                      'under ${VocabularySectionMove.notesHeading}'}.',
+          ),
+        ),
+      );
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Could not move the words: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _movingSection = false);
+    }
+  }
+
+  /// Says that the `## Vocabulary` section of the lesson in the editor will
+  /// be removed on import, with buttons to move its words into the
+  /// frontmatter first.
+  Widget _vocabularySectionWarning(ThemeData theme, YamlParseResult preview) {
+    // Read with the preview, in the background: not again on every rebuild.
+    final parsed = _sectionReading ?? const VocabularySectionReading(words: []);
+    final newWords = _sectionNewWords;
+    final examples = parsed.words.fold<int>(
+      0,
+      (sum, word) => sum + word.examples.length,
+    );
+    final canUseAi = context.read<AppProvider?>()?.canUseAi ?? false;
+    String count(int n, String one, String many) => n == 1 ? one : many;
+    final details = [
+      if (newWords.isNotEmpty)
+        count(
+          newWords.length,
+          '1 word in it is not in the frontmatter.',
+          '${newWords.length} words in it are not in the frontmatter.',
+        )
+      else if (parsed.words.isNotEmpty)
+        'Its words are all in the frontmatter already.',
+      if (newWords.isNotEmpty && examples > 0)
+        count(
+          examples,
+          'Its words have 1 example sentence.',
+          'Its words have $examples example sentences.',
+        ),
+      if (parsed.notes.isNotEmpty)
+        'Its other text will be kept under '
+            '${VocabularySectionMove.notesHeading}.',
+      if (parsed.unread.isNotEmpty)
+        count(
+          parsed.unread.length,
+          '1 line could not be read as a word${canUseAi ? '; an AI can read it' : ''}.',
+          '${parsed.unread.length} lines could not be read as words'
+              '${canUseAi ? '; an AI can read them' : ''}.',
+        ),
+    ];
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.tertiaryContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            preview.wordsFromSection
+                ? 'This Markdown has no frontmatter, so its words are read '
+                      'from its ## Vocabulary section, which is left out of '
+                      'the lesson\'s text. The language is taken to be '
+                      '${preview.lesson.targetLanguage}; move the words into '
+                      'a frontmatter to change it with target:, or to edit '
+                      'them as YAML. ${details.join(' ')}'
+                : 'The ## Vocabulary section will be removed on import. The '
+                      'app reads a lesson\'s words from its frontmatter, and '
+                      'lists them under View Vocabulary. ${details.join(' ')}',
+            style: TextStyle(color: theme.colorScheme.onTertiaryContainer),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton.tonal(
+                onPressed: _movingSection
+                    ? null
+                    : () => _moveVocabularySection(useAi: false),
+                child: Text(
+                  newWords.isEmpty
+                      ? 'Remove section'
+                      : 'Move words to frontmatter',
+                ),
+              ),
+              if (canUseAi)
+                OutlinedButton.icon(
+                  onPressed: _movingSection
+                      ? null
+                      : () => _moveVocabularySection(useAi: true),
+                  icon: _movingSection
+                      ? const SizedBox.square(
+                          dimension: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.auto_awesome, size: 18),
+                  label: const Text('Move with AI'),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
   static ({String? title, String? unitTitle}) _lessonNameParts(String value) {
@@ -220,9 +563,12 @@ class _YamlImportViewState extends State<YamlImportView>
     setState(() {
       _isParsing = true;
       _previewResult = null;
+      _previewText = null;
+      _parsePending = false;
       _directoryFiles = [];
       _directoryErrors = [];
       _directorySkipped = 0;
+      _directorySkippedPaths = [];
       _directoryUnchanged = 0;
       _unchangedFiles = [];
       _staleFiles = 0;
@@ -270,6 +616,7 @@ class _YamlImportViewState extends State<YamlImportView>
         _selectedDirectoryPaths.clear();
         _directoryErrors = parseResult.errors;
         _directorySkipped = parseResult.skipped;
+        _directorySkippedPaths = parseResult.skippedPaths;
         _directoryUnchanged = parseResult.unchanged;
         _progressCurrent = sources.length;
         _isParsing = false;
@@ -280,7 +627,7 @@ class _YamlImportViewState extends State<YamlImportView>
                     ? 'No changed Markdown files found. '
                           '${parseResult.unchanged} unchanged files were skipped.'
                           '${_followedNote(followed)}'
-                    : 'No Markdown files with vocabulary frontmatter were found.'
+                    : 'No lesson Markdown files were found.${_skippedNote(parseResult.skippedPaths)}'
               : describeImportErrors(
                   'No importable files found. ${parseResult.errors.length} '
                   'files could not be parsed:',
@@ -442,9 +789,12 @@ class _YamlImportViewState extends State<YamlImportView>
     setState(() {
       _isParsing = true;
       _previewResult = null;
+      _previewText = null;
+      _parsePending = false;
       _directoryFiles = [];
       _directoryErrors = [];
       _directorySkipped = 0;
+      _directorySkippedPaths = [];
       _directoryUnchanged = 0;
       _unchangedFiles = [];
       _staleFiles = 0;
@@ -522,6 +872,7 @@ class _YamlImportViewState extends State<YamlImportView>
       _selectedDirectoryPaths.clear();
       _directoryErrors = result.errors;
       _directorySkipped = result.skipped;
+      _directorySkippedPaths = result.skippedPaths;
       _directoryUnchanged = result.unchanged;
       _progressCurrent = markdownPaths.length + files.length;
       _isParsing = false;
@@ -532,7 +883,7 @@ class _YamlImportViewState extends State<YamlImportView>
                   ? 'No changed Markdown files found. '
                         '${result.unchanged} unchanged files were skipped.'
                         '${_followedNote(followed)}'
-                  : 'No Markdown files with a vocabulary frontmatter section were found.'
+                  : 'No lesson Markdown files were found.${_skippedNote(result.skippedPaths)}'
             : describeImportErrors(
                 'No importable files found. ${result.errors.length} '
                 'files could not be parsed:',
@@ -550,6 +901,19 @@ class _YamlImportViewState extends State<YamlImportView>
       : ' ${count == 1 ? '1 lesson' : '$count lessons'} imported before '
             'file paths were kept now ${count == 1 ? 'follows its' : 'follow their'} '
             'file.';
+
+  /// Names the files that were not lessons, at most [shown] of them, and
+  /// says what makes a Markdown file a lesson. Empty when there are none.
+  static String _skippedNote(List<String> paths, {int shown = 5}) {
+    if (paths.isEmpty) return '';
+    final names = paths.take(shown).join(', ');
+    final more = paths.length > shown
+        ? ' and ${paths.length - shown} more'
+        : '';
+    return ' Not lessons, so skipped: $names$more. A Markdown file is a '
+        'lesson when its frontmatter has vocabulary:, or when it has no '
+        'frontmatter and has a ## Vocabulary section.';
+  }
 
   void _showFollowed(int count) {
     if (count == 0 || !mounted) return;
@@ -592,6 +956,10 @@ class _YamlImportViewState extends State<YamlImportView>
       return;
     }
 
+    // A preview of older text: parse the text as it is first, and import
+    // that, or show why it can't be.
+    if (!await _parseNow()) return;
+    if (!mounted) return;
     final text = _yamlController.text.trim();
     final preview = _previewResult;
     if (text.isEmpty || preview == null) return;
@@ -716,7 +1084,7 @@ class _YamlImportViewState extends State<YamlImportView>
         SnackBar(
           content: Text(
             'Imported $importedCount lessons; skipped $_directorySkipped '
-            'files without vocabulary frontmatter, $_directoryUnchanged '
+            'files that are not lessons, $_directoryUnchanged '
             'unchanged Markdown files; '
             '${_directoryErrors.length} invalid files excluded. '
             'Existing SRS progress was preserved.'
@@ -896,11 +1264,20 @@ class _YamlImportViewState extends State<YamlImportView>
                       Text(
                         vocabularyOnly
                             ? 'Vocabulary YAML (no Markdown)'
-                            : 'Markdown with YAML frontmatter (or plain YAML)',
+                            : 'Markdown',
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
                       ),
+                      if (!vocabularyOnly) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'List words under a ## Vocabulary heading, as '
+                          'below. YAML frontmatter with vocabulary:, or plain '
+                          'YAML, works too.',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      ],
                       if (widget.aiSuggested) ...[
                         const SizedBox(height: 4),
                         Text(
@@ -912,7 +1289,9 @@ class _YamlImportViewState extends State<YamlImportView>
                       ],
                       const SizedBox(height: 8),
                       Expanded(
-                        child: TextField(
+                        // Converts pasted HTML (a web page, Google Docs) to
+                        // Markdown, as the lesson editor does.
+                        child: MarkdownTextField(
                           controller: _yamlController,
                           maxLines: null,
                           expands: true,
@@ -947,24 +1326,22 @@ class _YamlImportViewState extends State<YamlImportView>
                                       '      examples:\n'
                                       '        - ko: "Sentence with **word**"\n'
                                       '          en: "Translated sentence with **meaning**"'
-                                : '---\n'
-                                      'vocabulary:\n'
-                                      '  nouns:  # Replace with a part of speech\n'
-                                      '    - ko: "Korean word"\n'
-                                      '      audio: "https://example.com/word-audio.mp3"\n'
-                                      '      en: "English meaning"\n'
-                                      '      notes: "Optional **Markdown** notes"\n'
-                                      '      examples:\n'
-                                      '        - ko: "Sentence with **word**"\n'
-                                      '          en: "Translated sentence with **meaning**"\n'
-                                      '        - ko: "Another **example** sentence"\n'
-                                      '          audio: "https://example.com/sentence-audio.mp3"\n'
-                                      '          en: "Another translation"\n'
-                                      '---\n'
+                                : '# Lesson 1\n'
                                       '\n'
-                                      '# Lesson 1\n'
+                                      'Lesson contents go **here**.\n'
                                       '\n'
-                                      'Lesson contents go **here**.',
+                                      '## Vocabulary\n'
+                                      '\n'
+                                      '### Nouns\n'
+                                      '- 학교 - school\n'
+                                      '  - Note: Optional notes about the word.\n'
+                                      '  - 저는 학교에 가요. - I go to school.\n'
+                                      '    - Note: Optional notes about the sentence.\n'
+                                      '- 학생 (學生) - student\n'
+                                      '\n'
+                                      '### Verbs\n'
+                                      '- 가다 - to go\n'
+                                      '  - 집에 가요. - I\'m going home.',
                             hintStyle: TextStyle(
                               color: theme.colorScheme.onSurfaceVariant
                                   .withValues(alpha: 0.65),
@@ -995,6 +1372,31 @@ class _YamlImportViewState extends State<YamlImportView>
                         ),
                       ),
                       const SizedBox(height: 12),
+
+                      if (!vocabularyOnly && _directoryFiles.isEmpty)
+                        if (_nearMissHeading case final heading?)
+                          Container(
+                            width: double.infinity,
+                            margin: const EdgeInsets.only(bottom: 12),
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.tertiaryContainer,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              'The heading "$heading" is read as lesson '
+                              'text, not as a list of words: only '
+                              '## Vocabulary starts a Vocabulary section. '
+                              'Rename it to ## Vocabulary for its words to '
+                              'be read.',
+                              style: TextStyle(
+                                color: theme.colorScheme.onTertiaryContainer,
+                              ),
+                            ),
+                          ),
+
+                      if (_needsVocabulary && _directoryFiles.isEmpty)
+                        _noVocabularyBanner(theme),
 
                       if (_errorMessage != null)
                         Container(
@@ -1097,6 +1499,15 @@ class _YamlImportViewState extends State<YamlImportView>
                                   '$_directorySkipped files skipped and '
                                   '$_directoryUnchanged unchanged.',
                                 ),
+                                if (_directorySkippedPaths.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    _skippedNote(_directorySkippedPaths).trim(),
+                                    style: TextStyle(
+                                      color: theme.colorScheme.tertiary,
+                                    ),
+                                  ),
+                                ],
                                 const SizedBox(height: 4),
                                 const Text(
                                   'Matching lessons and vocabulary will be updated '
@@ -1172,7 +1583,13 @@ class _YamlImportViewState extends State<YamlImportView>
                                   title: Text(lesson.displayTitle),
                                   subtitle: Text(
                                     '${lesson.effectiveUnitTitle ?? file.path} · '
-                                    '${lesson.vocabularies.length} vocabulary items',
+                                    '${lesson.vocabularies.length} vocabulary items'
+                                    '${file.preview.wordsFromSection
+                                        ? ' · no frontmatter: words read from ## Vocabulary'
+                                        : file.preview.vocabularySection == null
+                                        ? ''
+                                        : ' · ## Vocabulary section will be removed; '
+                                              'paste the file into the editor to move its words to the frontmatter'}',
                                   ),
                                 ),
                               );
@@ -1180,6 +1597,8 @@ class _YamlImportViewState extends State<YamlImportView>
                           ),
                         ),
                       ] else if (_previewResult != null) ...[
+                        if (_previewResult!.vocabularySection != null)
+                          _vocabularySectionWarning(theme, _previewResult!),
                         Card(
                           elevation: 0,
                           color: theme.colorScheme.surfaceContainerHighest
@@ -1512,6 +1931,10 @@ class MarkdownDirectoryResult {
   final int skipped;
   final int unchanged;
 
+  /// The paths of the [skipped] files: Markdown that is not a lesson
+  /// ([YamlParserService.isLessonMarkdown]), such as a `README.md`.
+  final List<String> skippedPaths;
+
   /// The lessons the [unchanged] files are, without vocabulary
   /// ([YamlParserService.lessonFileInfo]), so the lessons saved from them can
   /// take their real file paths ([AppProvider.adoptFilePaths]).
@@ -1529,25 +1952,66 @@ class MarkdownDirectoryResult {
     required this.errors,
     required this.skipped,
     required this.unchanged,
+    this.skippedPaths = const [],
     this.unchangedLessons = const [],
     this.unchangedKeys = const [],
     this.unchangedFiles = const [],
   });
 }
 
-Future<YamlParseResult> _parseLessonInBackground(
+/// A lesson typed into the import screen, parsed, with what its banners
+/// need, so none of it is worked out again when the screen rebuilds.
+class _TypedPreview {
+  final YamlParseResult result;
+
+  /// The lesson's `## Vocabulary` section read as words, and those words the
+  /// lesson's frontmatter lacks (all of them without frontmatter).
+  final VocabularySectionReading? section;
+  final List<SectionWord> newSectionWords;
+
+  /// A heading such as `## Vocabularies` that starts no section.
+  final String? nearMissHeading;
+
+  const _TypedPreview({
+    required this.result,
+    this.section,
+    this.newSectionWords = const [],
+    this.nearMissHeading,
+  });
+}
+
+Future<_TypedPreview> _parseLessonInBackground(
   String text,
   String? title,
   String? unitTitle, {
   bool allowMarkdown = true,
-}) => Isolate.run(
-  () => YamlParserService.parseLessonYaml(
+}) => Isolate.run(() {
+  final result = YamlParserService.parseLessonYaml(
     text,
     defaultTitle: title,
     defaultUnitTitle: unitTitle,
     allowMarkdown: allowMarkdown,
-  ),
-);
+  );
+  final sectionText = result.vocabularySection;
+  final section = sectionText == null
+      ? null
+      : YamlParserService.parseVocabularySection(
+          sectionText,
+          targetLanguage: result.lesson.targetLanguage,
+        );
+  return _TypedPreview(
+    result: result,
+    section: section,
+    newSectionWords: section == null
+        ? const []
+        : result.wordsFromSection
+        ? section.words
+        : VocabularySectionMove.newWords(result, section.words),
+    nearMissHeading: allowMarkdown
+        ? YamlParserService.nearMissVocabularyHeading(text)
+        : null,
+  );
+});
 
 Future<MarkdownDirectoryResult> _parseMarkdownDirectoryInBackground(
   List<String> paths,
@@ -1596,6 +2060,7 @@ MarkdownDirectoryResult parsePickedMarkdownSources(
   final imports = <MarkdownImportFile>[];
   final errors = <String>[];
   var skipped = 0;
+  final skippedPaths = <String>[];
   var unchanged = 0;
   final unchangedLessons = <Lesson>[];
   final unchangedKeys = <String>[];
@@ -1605,7 +2070,7 @@ MarkdownDirectoryResult parsePickedMarkdownSources(
     String sourceKey,
     String contents, {
     required String? defaultTitle,
-    required bool requireVocabularyFrontmatter,
+    required bool requireLessonMarkdown,
     String? hierarchyPath,
     String? legacySourceKey,
   }) {
@@ -1627,9 +2092,10 @@ MarkdownDirectoryResult parsePickedMarkdownSources(
         }
         return;
       }
-      if (requireVocabularyFrontmatter &&
-          !YamlParserService.hasVocabularyFrontmatter(contents)) {
+      if (requireLessonMarkdown &&
+          !YamlParserService.isLessonMarkdown(contents)) {
         skipped++;
+        skippedPaths.add(path);
         return;
       }
       final preview = YamlParserService.parseLessonYaml(
@@ -1666,7 +2132,7 @@ MarkdownDirectoryResult parsePickedMarkdownSources(
             zipEntrySourceKey(file.path),
             file.contents,
             defaultTitle: null,
-            requireVocabularyFrontmatter: true,
+            requireLessonMarkdown: true,
             hierarchyPath: file.path,
             // Saved before ZIP entries were keyed by their path alone.
             legacySourceKey: markdownSourceKey(
@@ -1682,7 +2148,7 @@ MarkdownDirectoryResult parsePickedMarkdownSources(
           markdownSourceKey(source.sourceKey),
           utf8.decode(source.bytes),
           defaultTitle: null,
-          requireVocabularyFrontmatter: filename.toLowerCase().endsWith('.md'),
+          requireLessonMarkdown: filename.toLowerCase().endsWith('.md'),
         );
       }
     } catch (error) {
@@ -1694,6 +2160,7 @@ MarkdownDirectoryResult parsePickedMarkdownSources(
     imports: imports,
     errors: errors,
     skipped: skipped,
+    skippedPaths: skippedPaths,
     unchanged: unchanged,
     unchangedLessons: unchangedLessons,
     unchangedKeys: unchangedKeys,
@@ -1712,6 +2179,7 @@ MarkdownDirectoryResult parseMarkdownFiles(
   final imports = <MarkdownImportFile>[];
   final errors = <String>[];
   var skipped = 0;
+  final skippedPaths = <String>[];
   var unchanged = 0;
   final unchangedLessons = <Lesson>[];
   final unchangedFiles = <LessonFileRef>[];
@@ -1763,8 +2231,9 @@ MarkdownDirectoryResult parseMarkdownFiles(
         }
         continue;
       }
-      if (!YamlParserService.hasVocabularyFrontmatter(contents)) {
+      if (!YamlParserService.isLessonMarkdown(contents)) {
         skipped++;
+        skippedPaths.add(relativePath);
         continue;
       }
       final preview = YamlParserService.parseLessonYaml(
@@ -1789,6 +2258,7 @@ MarkdownDirectoryResult parseMarkdownFiles(
     imports: imports,
     errors: errors,
     skipped: skipped,
+    skippedPaths: skippedPaths,
     unchanged: unchanged,
     unchangedLessons: unchangedLessons,
     unchangedKeys: unchangedKeys,
@@ -1802,6 +2272,7 @@ MarkdownDirectoryResult _combineMarkdownDirectoryResults(
   imports: results.expand((result) => result.imports).toList(),
   errors: results.expand((result) => result.errors).toList(),
   skipped: results.fold(0, (total, result) => total + result.skipped),
+  skippedPaths: [for (final result in results) ...result.skippedPaths],
   unchanged: results.fold(0, (total, result) => total + result.unchanged),
   unchangedLessons: [for (final result in results) ...result.unchangedLessons],
   unchangedKeys: [for (final result in results) ...result.unchangedKeys],

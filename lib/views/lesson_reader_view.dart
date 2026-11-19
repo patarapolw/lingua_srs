@@ -6,6 +6,7 @@ import '../models/lesson.dart';
 import '../providers/app_provider.dart';
 import '../services/lesson_ai_prompt.dart';
 import '../services/lesson_links.dart';
+import '../services/yaml_parser_service.dart';
 import '../widgets/lesson_content_view.dart';
 import '../widgets/markdown_text_field.dart';
 import 'ai_discussion_dialog.dart';
@@ -316,6 +317,68 @@ class _LessonMarkdownEditorState extends State<_LessonMarkdownEditor> {
     }
   }
 
+  /// The text [_vocabularyHeading] was worked out for: the controller also
+  /// notifies on every cursor move, when the text, and so the answer, is
+  /// the same.
+  String? _checkedText;
+  bool _vocabularyHeading = false;
+
+  /// Whether [text] has a `## Vocabulary` heading, or a near miss such as
+  /// `## Vocabularies`: words under either are not added to the lesson.
+  bool _hasVocabularyHeading(String text) {
+    if (!identical(text, _checkedText) && text != _checkedText) {
+      _checkedText = text;
+      _vocabularyHeading =
+          YamlParserService.vocabularySectionPattern.hasMatch(text) ||
+          YamlParserService.nearMissVocabularyHeading(text) != null;
+    }
+    return _vocabularyHeading;
+  }
+
+  /// Tells the person not to add words here: a `## Vocabulary` section in
+  /// the lesson's text stays text, and its words are not added to the
+  /// lesson. Shown while the text has one.
+  Widget _vocabularySectionWarning(BuildContext context) {
+    final theme = Theme.of(context);
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: _controller,
+      builder: (context, value, _) {
+        if (!_hasVocabularyHeading(value.text)) {
+          return const SizedBox.shrink();
+        }
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.tertiaryContainer,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.info_outline,
+                color: theme.colorScheme.onTertiaryContainer,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Don\'t add vocabulary here. Words in a ## Vocabulary '
+                  'section (or ## Vocabularies) of the lesson text are not '
+                  'added to the lesson and are not studied. Add them in View '
+                  'Vocabulary with Add vocabulary (+).',
+                  style: TextStyle(
+                    color: theme.colorScheme.onTertiaryContainer,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -346,6 +409,7 @@ class _LessonMarkdownEditorState extends State<_LessonMarkdownEditor> {
               children: [
                 VirtualPathBar(lesson: widget.lesson),
                 const SizedBox(height: 12),
+                _vocabularySectionWarning(context),
                 Expanded(
                   child: MarkdownTextField(
                     controller: _controller,

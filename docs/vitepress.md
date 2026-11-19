@@ -26,13 +26,13 @@ npx vitepress dev lessons
 
 VitePress loads `.vitepress/theme/index.js` by itself. If you already have a theme, copy the `components/` folder and `lesson.css` next to it, and add the `app.component(...)` lines and the CSS import from [`index.js`](vitepress-theme/index.js) to your own.
 
-The app does not look into `.vitepress/`, `node_modules/` or `.git/`, and imports only Markdown files with `vocabulary:` frontmatter, so the folder can be imported as it is, also when `package.json` and `node_modules/` are inside it.
+The app does not look into `.vitepress/`, `node_modules/` or `.git/`, and imports only lesson files: Markdown with `vocabulary:` in its frontmatter, or with no frontmatter and a `## Vocabulary` section (see [Vocabulary sections](lesson-format.md#vocabulary-sections)). So the folder can be imported as it is, also when `package.json` and `node_modules/` are inside it, and a page such as `index.md` stays out as long as it has frontmatter without `vocabulary:` or no `## Vocabulary` section.
 
 Words edited in the app can be written back into the files' frontmatter when the folder is imported again; VitePress does not show the frontmatter, so the preview does not change. See [Writing the app's words back to the files](lesson-format.md#writing-the-apps-words-back-to-the-files).
 
 ## Differences from the app
 
-- **The `## Vocabulary` section** is shown in the preview and left out by the app; see [Markdown frontmatter](lesson-format.md#markdown-frontmatter). Tags used only there never reach the app.
+- **The `## Vocabulary` section** is shown in the preview and left out of the lesson's text by the app; see [Vocabulary sections](lesson-format.md#vocabulary-sections). In a file with frontmatter its words come from the frontmatter, so tags used only in the section never reach the app; in a file without frontmatter its words are read from it.
 - **Close every tag.** The app accepts `<AudioButton src="...">` and `<YouTube id="...">` left open; VitePress stops with an error on them. Write `<AudioButton src="..." />`, which both accept.
 - **Audio paths.** A full URL plays in both. In the preview, a path starting with `/` is a file in the `public/` folder of the folder VitePress serves.
 - **Speech** uses the voices the browser has, in Korean unless the tag has `lang="..."`. It sounds different from the app, and is silent in a browser with no voice for the language.

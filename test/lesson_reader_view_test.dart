@@ -242,6 +242,64 @@ Preview text.
     expect(find.byTooltip('Copy link to this lesson'), findsOneWidget);
   });
 
+  group('## Vocabulary written in the editor', () {
+    const warning = "Don't add vocabulary here.";
+
+    testWidgets('warns not to add vocabulary in the lesson text', (
+      tester,
+    ) async {
+      await openReader(tester, const Size(1200, 800));
+      await tester.tap(find.byTooltip('Edit Markdown'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining(warning), findsNothing);
+
+      await tester.enterText(
+        find.byType(TextField).first,
+        '# Greetings\n\n## Vocabulary\n\n- 학교 — school\n',
+      );
+      await tester.pump();
+      expect(find.textContaining(warning), findsOneWidget);
+
+      await tester.enterText(
+        find.byType(TextField).first,
+        '# Greetings\n\n## Vocabulary list\n\n- 학교 — school\n',
+      );
+      await tester.pump();
+      expect(find.textContaining(warning), findsNothing);
+
+      await tester.enterText(
+        find.byType(TextField).first,
+        '# Greetings\n\n## Vocabularies\n\n- 학교 - school\n',
+      );
+      await tester.pump();
+      expect(find.textContaining(warning), findsOneWidget);
+    });
+
+    testWidgets('saves the section as text without asking', (tester) async {
+      await openReader(tester, const Size(1200, 800));
+      await tester.tap(find.byTooltip('Edit Markdown'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byType(TextField).first,
+        '# Greetings\n\n## Vocabulary\n\n- 학교 — school\n',
+      );
+      await tester.tap(find.text('Save'));
+      for (var i = 0; i < 5; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
+        await tester.pump();
+      }
+      // Back in the reader, whose content view reloads the saved text and
+      // so never settles: wait out the editor's pop transition only.
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.textContaining(warning), findsNothing);
+      expect(find.byTooltip('Edit Markdown'), findsOneWidget);
+    });
+  });
+
   group('lesson links', () {
     Future<(Lesson, Lesson)> openLinked(WidgetTester tester) async {
       final provider = await loadedProvider(tester);

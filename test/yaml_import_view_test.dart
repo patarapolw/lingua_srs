@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:lingua_srs/services/yaml_parser_service.dart';
 import 'package:lingua_srs/views/yaml_import_view.dart';
+import 'package:lingua_srs/widgets/markdown_text_field.dart';
 
 void main() {
   testWidgets('offers separate file and folder import actions', (tester) async {
@@ -57,17 +58,42 @@ void main() {
     expect(markdownInput.expands, isTrue);
     expect(markdownInput.style?.fontFamily, 'monospace');
     expect(markdownInput.controller?.text, isEmpty);
+    // The placeholder is a lesson in Markdown, with no YAML: a title, text
+    // and a ## Vocabulary list the words are read from.
+    final hint = markdownInput.decoration!.hintText!;
+    expect(hint, startsWith('# Lesson 1\n'));
+    expect(hint, isNot(contains('---')));
+    // Easy to type: a hyphen, not an em dash.
+    expect(hint, isNot(contains('—')));
+    expect(find.text('Markdown'), findsOneWidget);
+    // The Files tab's drop hint mentions YAML frontmatter too: find the
+    // editor's own line.
     expect(
-      markdownInput.decoration!.hintText,
-      contains('  nouns:  # Replace with a part of speech'),
+      find.textContaining('List words under a ## Vocabulary heading'),
+      findsOneWidget,
     );
-    final parsedHint = YamlParserService.parseLessonYaml(
-      markdownInput.decoration!.hintText!,
+    expect(
+      find.textContaining('YAML frontmatter with vocabulary:, or plain YAML'),
+      findsOneWidget,
     );
+    // Pasted HTML is converted, as in the lesson editor.
+    expect(find.byType(MarkdownTextField), findsOneWidget);
+    final parsedHint = YamlParserService.parseLessonYaml(hint);
+    expect(parsedHint.wordsFromSection, isTrue);
     expect(parsedHint.lesson.title, 'Lesson 1');
-    expect(parsedHint.lesson.vocabularies, hasLength(1));
-    expect(parsedHint.lesson.vocabularies.single.targetWord, 'Korean word');
+    expect(parsedHint.lesson.targetLanguage, 'ko');
+    expect(
+      parsedHint.lesson.vocabularies.map((v) => '${v.pos}|${v.targetWord}'),
+      ['nouns|학교', 'nouns|학생', 'verbs|가다'],
+    );
+    final school = parsedHint.lesson.vocabularies.first;
+    expect(school.notes, 'Optional notes about the word.');
+    expect(parsedHint.lesson.vocabularies[1].hanja, '學生');
     expect(parsedHint.sentences, hasLength(2));
+    expect(
+      parsedHint.sentences.first.notes,
+      'Optional notes about the sentence.',
+    );
     expect(find.text('Enter Markdown to see preview'), findsOneWidget);
 
     final importButton = tester.widget<FilledButton>(
@@ -100,6 +126,8 @@ The full lesson body.
       () => Future<void>.delayed(const Duration(milliseconds: 500)),
     );
     await tester.pump();
+    // The parse lands in a microtask after that frame: build it.
+    await tester.pump();
 
     expect(
       find.text('Import Markdown'),
@@ -110,6 +138,215 @@ The full lesson body.
           .join('\n'),
     );
     expect(find.text('Lesson 7: Markdown import'), findsOneWidget);
+  });
+
+  testWidgets('keeps the preview while typing and parses once it pauses', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    Future<void> waitForParse() async {
+      await tester.pump(const Duration(milliseconds: 301));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 500)),
+      );
+      await tester.pump();
+      // The parse lands in a microtask after that frame: build it.
+      await tester.pump();
+    }
+
+    FilledButton importButton() => tester.widget<FilledButton>(
+      find.ancestor(
+        of: find.text('Import Markdown'),
+        matching: find.byType(FilledButton),
+      ),
+    );
+
+    await tester.pumpWidget(const MaterialApp(home: YamlImportView()));
+    const lesson =
+        '---\nvocabulary:\n  nouns:\n    - ko: 배\n      en: pear\n---\n';
+    await tester.enterText(find.byType(TextField).last, '$lesson# Lesson A\n');
+    await waitForParse();
+    expect(find.text('Lesson A'), findsOneWidget);
+    expect(importButton().onPressed, isNotNull);
+
+    // Typing: no progress bar, no cleared preview and no Import button
+    // turning grey on each key. Import parses the new text first instead.
+    await tester.enterText(find.byType(TextField).last, '$lesson# Lesson AB\n');
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('Lesson A'), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+    expect(find.text('Parsing lesson...'), findsNothing);
+    expect(importButton().onPressed, isNotNull);
+
+    await waitForParse();
+    expect(find.text('Lesson AB'), findsOneWidget);
+    expect(importButton().onPressed, isNotNull);
+  });
+
+  testWidgets('a button pressed while typing acts on the text as it is', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(const MaterialApp(home: YamlImportView()));
+    const start = '---\nvocabulary:\n---\n# Lesson\n\n## Vocabulary\n\n';
+    await tester.enterText(
+      find.byType(TextField).last,
+      '$start- 학교 - school\n',
+    );
+    await tester.pump(const Duration(milliseconds: 301));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 500)),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Move words to frontmatter'), findsOneWidget);
+
+    // A word typed just now, before the preview has caught up, still moves.
+    await tester.enterText(
+      find.byType(TextField).last,
+      '$start- 학교 - school\n- 책 - book\n',
+    );
+    await tester.pump();
+    await tester.tap(find.text('Move words to frontmatter'));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 500)),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    final text = tester
+        .widgetList<TextField>(find.byType(TextField))
+        .last
+        .controller!
+        .text;
+    expect(text, contains('ko: 학교'));
+    expect(text, contains('ko: 책'));
+  });
+
+  testWidgets('offers to add a vocabulary to Markdown with no words', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    Future<void> waitForParse() async {
+      await tester.pump(const Duration(milliseconds: 301));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 500)),
+      );
+      await tester.pump();
+      // The parse lands in a microtask after that frame: build it.
+      await tester.pump();
+    }
+
+    await tester.pumpWidget(const MaterialApp(home: YamlImportView()));
+    // As pasted from a web page: a rule that YAML reads as a new document.
+    await tester.enterText(
+      find.byType(TextField).last,
+      '# 인사\n\nHello is **안녕하세요**.\n\n---\n\nMore text.\n',
+    );
+    await waitForParse();
+
+    expect(find.textContaining('Parse Error'), findsNothing);
+    expect(find.textContaining('no words to study yet'), findsOneWidget);
+    // No AI key here: only the button that needs none.
+    expect(find.text('Generate vocabulary list with AI'), findsNothing);
+
+    await tester.tap(find.text('Continue without words'));
+    await waitForParse();
+
+    final text = tester
+        .widgetList<TextField>(find.byType(TextField))
+        .last
+        .controller!
+        .text;
+    expect(text, startsWith('---\ntarget: ko\nvocabulary:\n---\n'));
+    expect(find.textContaining('no words to study yet'), findsNothing);
+    expect(find.text('인사'), findsWidgets);
+  });
+
+  testWidgets('warns that ## Vocabularies is not a Vocabulary section', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(const MaterialApp(home: YamlImportView()));
+    await tester.enterText(
+      find.byType(TextField).last,
+      '---\nvocabulary:\n---\n# Lesson\n\n## Vocabularies\n\n- 학교 - school\n',
+    );
+    await tester.pump(const Duration(milliseconds: 301));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 500)),
+    );
+    await tester.pump();
+    // The parse lands in a microtask after that frame: build it.
+    await tester.pump();
+
+    expect(
+      find.textContaining('The heading "## Vocabularies" is read as lesson'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('warns of a ## Vocabulary section and moves its words', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    Future<void> waitForParse() async {
+      await tester.pump(const Duration(milliseconds: 301));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 500)),
+      );
+      await tester.pump();
+      // The parse lands in a microtask after that frame: build it.
+      await tester.pump();
+    }
+
+    await tester.pumpWidget(const MaterialApp(home: YamlImportView()));
+    await tester.enterText(find.byType(TextField).last, '''
+---
+vocabulary:
+---
+# Lesson 8
+
+## Vocabulary
+
+- 학교 — school
+''');
+    await waitForParse();
+
+    expect(
+      find.textContaining('## Vocabulary section will be removed'),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('1 word in it is not in the frontmatter'),
+      findsOneWidget,
+    );
+    expect(find.text('Move with AI'), findsNothing);
+
+    await tester.tap(find.text('Move words to frontmatter'));
+    await waitForParse();
+
+    final text = tester
+        .widgetList<TextField>(find.byType(TextField))
+        .last
+        .controller!
+        .text;
+    expect(text, contains('- ko: 학교'));
+    expect(text, isNot(contains('## Vocabulary')));
+    expect(
+      find.textContaining('## Vocabulary section will be removed'),
+      findsNothing,
+    );
   });
 
   testWidgets('prefills the lesson name and YAML when adding to a lesson', (
@@ -160,6 +397,8 @@ The full lesson body.
       () => Future<void>.delayed(const Duration(milliseconds: 500)),
     );
     await tester.pump();
+    // The parse lands in a microtask after that frame: build it.
+    await tester.pump();
 
     final importButton = tester.widget<FilledButton>(
       find.ancestor(
@@ -204,6 +443,8 @@ The full lesson body.
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 500)),
       );
+      await tester.pump();
+      // The parse lands in a microtask after that frame: build it.
       await tester.pump();
     }
 
