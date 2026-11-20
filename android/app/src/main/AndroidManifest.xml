@@ -4,9 +4,11 @@
          account and to a new phone, but never secure storage: the secrets
          stay on the device, and restoring them on another device fails to
          decrypt. fullBackupContent applies up to Android 11,
-         dataExtractionRules on 12+; res/xml explains what each includes. -->
+         dataExtractionRules on 12+; res/xml explains what each includes.
+         The launcher label is spelled "Lingua SRS" so the launcher wraps it
+         at the space instead of splitting "LinguaSRS" mid-word. -->
     <application
-        android:label="LinguaSRS"
+        android:label="Lingua SRS"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="true"
