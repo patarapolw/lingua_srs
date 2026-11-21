@@ -5,7 +5,6 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   app_links
   audioplayers_windows
-  desktop_drop
   flutter_secure_storage_windows
   flutter_tts
   irondash_engine_context

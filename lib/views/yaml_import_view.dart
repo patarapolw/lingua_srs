@@ -4,7 +4,6 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:crypto/crypto.dart';
-import 'package:desktop_drop/desktop_drop.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
@@ -106,7 +105,6 @@ class _YamlImportViewState extends State<YamlImportView>
   bool _writeBack = false;
   String? _importSourceLabel;
   bool _isParsing = false;
-  bool _isDraggingFiles = false;
   String? _progressMessage;
   int _progressCurrent = 0;
   int _progressTotal = 0;
@@ -648,74 +646,6 @@ class _YamlImportViewState extends State<YamlImportView>
     }
   }
 
-  Future<void> _handleDroppedFiles(DropDoneDetails details) async {
-    final sources = <PickedMarkdownSource>[];
-    final errors = <String>[];
-    const supportedExtensions = {'md', 'yaml', 'yml', 'txt', 'zip'};
-
-    for (final item in details.files) {
-      final filename = item.name;
-      final extension = filename.contains('.')
-          ? filename.split('.').last.toLowerCase()
-          : '';
-      if (extension == '' || !supportedExtensions.contains(extension)) {
-        errors.add('$filename: unsupported file type');
-        continue;
-      }
-      try {
-        final bookmark = Platform.isMacOS ? item.extraAppleBookmark : null;
-        final startedAccess = bookmark != null && bookmark.isNotEmpty
-            ? await DesktopDrop.instance.startAccessingSecurityScopedResource(
-                bookmark: bookmark,
-              )
-            : false;
-        if (bookmark != null && bookmark.isNotEmpty && !startedAccess) {
-          throw FileSystemException(
-            'Could not access the dropped file',
-            item.path,
-          );
-        }
-
-        try {
-          sources.add(
-            PickedMarkdownSource(
-              name: filename,
-              sourceKey: File(item.path).uri.toString(),
-              bytes: await item.readAsBytes(),
-            ),
-          );
-        } finally {
-          if (startedAccess) {
-            await DesktopDrop.instance.stopAccessingSecurityScopedResource(
-              bookmark: bookmark,
-            );
-          }
-        }
-      } catch (error) {
-        errors.add('$filename: $error');
-      }
-    }
-
-    if (sources.isNotEmpty) {
-      await _importPickedSources(sources, label: 'Dropped files');
-      if (errors.isNotEmpty && mounted) {
-        setState(() {
-          _directoryErrors = [..._directoryErrors, ...errors];
-        });
-      }
-    } else if (mounted) {
-      setState(() {
-        _directoryErrors = errors;
-        _errorMessage = errors.isEmpty
-            ? 'No files were dropped.'
-            : describeImportErrors(
-                'No supported files could be imported:',
-                errors,
-              );
-      });
-    }
-  }
-
   Future<void> _pickDirectory() async {
     if (Platform.isMacOS) {
       await _pickMultipleDirectories();
@@ -1191,591 +1121,526 @@ class _YamlImportViewState extends State<YamlImportView>
           SizedBox(width: compactBar ? 8 : 16),
         ],
       ),
-      body: DropTarget(
-        enable: _supportsDesktopFileDrop && !_isParsing && !vocabularyOnly,
-        onDragEntered: (_) => setState(() => _isDraggingFiles = true),
-        onDragExited: (_) => setState(() => _isDraggingFiles = false),
-        onDragDone: _handleDroppedFiles,
-        child: Stack(
-          children: [
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final narrow = constraints.maxWidth < 700;
-                final hint = vocabularyOnly
-                    ? 'vocabulary:\n'
-                          '  nouns:  # Replace with a part of speech\n'
-                          '    - ko: "Korean word"\n'
-                          '      en: "English meaning"\n'
-                          '      examples:\n'
-                          '        - ko: "Sentence with **word**"\n'
-                          '          en: "Translated sentence with **meaning**"'
-                    : '# Lesson 1\n'
-                          '\n'
-                          'Lesson contents go **here**.\n'
-                          '\n'
-                          '## Vocabulary\n'
-                          '\n'
-                          '### Nouns\n'
-                          '- 학교 - school\n'
-                          '  - Note: Optional notes about the word.\n'
-                          '  - 저는 학교에 가요. - I go to school.\n'
-                          '    - Note: Optional notes about the sentence.\n'
-                          '- 학생 (學生) - student\n'
-                          '\n'
-                          '### Verbs\n'
-                          '- 가다 - to go\n'
-                          '  - 집에 가요. - I\'m going home.';
-                final editor = Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (_supportsDesktopFileDrop && !vocabularyOnly) ...[
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.surfaceContainerHighest
-                                .withValues(alpha: 0.45),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Text(
-                            'Drop .md, .yaml, .yml, or .zip files anywhere here. '
-                            'Markdown with YAML frontmatter and plain YAML both work.',
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                      if (_progressMessage != null) ...[
-                        Text(_progressMessage!),
-                        const SizedBox(height: 6),
-                        LinearProgressIndicator(
-                          value: _progressTotal == 0
-                              ? null
-                              : _progressCurrent / _progressTotal,
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                      Text(
-                        'Lesson name',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: _lessonNameController,
-                        enabled: !_isParsing && _directoryFiles.isEmpty,
-                        readOnly: vocabularyOnly,
-                        textInputAction: TextInputAction.next,
-                        decoration: InputDecoration(
-                          border: const OutlineInputBorder(),
-                          hintText: 'e.g. Unit 2::Lesson 1',
-                          helperText: vocabularyOnly
-                              ? 'The words are added to this lesson; its other '
-                                    'words, its text and SRS progress are kept.'
-                              : 'Use :: to separate hierarchy levels. Enter an '
-                                    'existing lesson\'s name to add vocabulary '
-                                    'to it; existing words and SRS progress are '
-                                    'kept.',
-                          helperMaxLines: 3,
-                        ),
-                        onChanged: (_) => _parseCurrentYaml(),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        vocabularyOnly
-                            ? 'Vocabulary YAML (no Markdown)'
-                            : 'Markdown',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      if (!vocabularyOnly) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          'List words under a ## Vocabulary heading, as '
-                          'below. YAML frontmatter with vocabulary:, or plain '
-                          'YAML, works too.',
-                          style: theme.textTheme.bodySmall,
-                        ),
-                      ],
-                      if (widget.aiSuggested) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          'Suggested by AI. Each word, and each example '
-                          'sentence not in your Sentence Pool yet, gets a '
-                          'note saying so when added.',
-                          style: theme.textTheme.bodySmall,
-                        ),
-                      ],
-                      const SizedBox(height: 8),
-                      Expanded(
-                        // Pasted HTML (a web page, Google Docs) becomes
-                        // Markdown, as in the lesson editor. The text is laid
-                        // out by a WebView, which keeps taller CJK glyphs
-                        // inside the box (#207).
-                        child: MarkdownEditor(
-                          controller: _yamlController,
-                          enabled: !_isParsing && _directoryFiles.isEmpty,
-                          hintText: hint,
-                          allowPreview: !vocabularyOnly,
-                          previewMarkdown: YamlParserService.withoutFrontmatter,
-                          onChanged: (_) => _parseCurrentYaml(),
-                          fallback: MarkdownTextField(
-                            controller: _yamlController,
-                            maxLines: null,
-                            expands: true,
-                            enabled: !_isParsing && _directoryFiles.isEmpty,
-                            textAlignVertical: TextAlignVertical.top,
-                            keyboardType: TextInputType.multiline,
-                            autocorrect: false,
-                            enableSuggestions: false,
-                            style: const TextStyle(
-                              fontFamily: 'monospace',
-                              fontSize: 14,
-                              height: 1.45,
-                              leadingDistribution: TextLeadingDistribution.even,
-                            ),
-                            // No forced strut height: fallback glyphs (CJK) are
-                            // taller than the strut and would be pushed up over
-                            // the top border on desktop.
-                            strutStyle: const StrutStyle(
-                              fontFamily: 'monospace',
-                              fontSize: 14,
-                              height: 1.45,
-                              leadingDistribution: TextLeadingDistribution.even,
-                            ),
-                            decoration: InputDecoration(
-                              border: const OutlineInputBorder(),
-                              alignLabelWithHint: true,
-                              hintText: hint,
-                              hintStyle: TextStyle(
-                                color: theme.colorScheme.onSurfaceVariant
-                                    .withValues(alpha: 0.65),
-                                fontFamily: 'monospace',
-                                fontSize: 14,
-                                height: 1.45,
-                              ),
-                              contentPadding: EdgeInsets.symmetric(
-                                horizontal: 16,
-                              ),
-                            ),
-                            onChanged: (_) => _parseCurrentYaml(),
-                          ),
-                        ),
-                      ),
-                    ],
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final narrow = constraints.maxWidth < 700;
+          final hint = vocabularyOnly
+              ? 'vocabulary:\n'
+                    '  nouns:  # Replace with a part of speech\n'
+                    '    - ko: "Korean word"\n'
+                    '      en: "English meaning"\n'
+                    '      examples:\n'
+                    '        - ko: "Sentence with **word**"\n'
+                    '          en: "Translated sentence with **meaning**"'
+              : '# Lesson 1\n'
+                    '\n'
+                    'Lesson contents go **here**.\n'
+                    '\n'
+                    '## Vocabulary\n'
+                    '\n'
+                    '### Nouns\n'
+                    '- 학교 - school\n'
+                    '  - Note: Optional notes about the word.\n'
+                    '  - 저는 학교에 가요. - I go to school.\n'
+                    '    - Note: Optional notes about the sentence.\n'
+                    '- 학생 (學生) - student\n'
+                    '\n'
+                    '### Verbs\n'
+                    '- 가다 - to go\n'
+                    '  - 집에 가요. - I\'m going home.';
+          final editor = Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (_progressMessage != null) ...[
+                  Text(_progressMessage!),
+                  const SizedBox(height: 6),
+                  LinearProgressIndicator(
+                    value: _progressTotal == 0
+                        ? null
+                        : _progressCurrent / _progressTotal,
                   ),
-                );
-
-                final preview = Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Validation & Preview',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-
-                      if (!vocabularyOnly && _directoryFiles.isEmpty)
-                        if (_nearMissHeading case final heading?)
-                          Container(
-                            width: double.infinity,
-                            margin: const EdgeInsets.only(bottom: 12),
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: theme.colorScheme.tertiaryContainer,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              'The heading "$heading" is read as lesson '
-                              'text, not as a list of words: only '
-                              '## Vocabulary starts a Vocabulary section. '
-                              'Rename it to ## Vocabulary for its words to '
-                              'be read.',
-                              style: TextStyle(
-                                color: theme.colorScheme.onTertiaryContainer,
-                              ),
-                            ),
-                          ),
-
-                      if (_needsVocabulary && _directoryFiles.isEmpty)
-                        _noVocabularyBanner(theme),
-
-                      if (_errorMessage != null)
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.errorContainer,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxHeight: 320),
-                            child: SingleChildScrollView(
-                              child: SelectableText(
-                                _errorMessage!,
-                                style: TextStyle(
-                                  color: theme.colorScheme.onErrorContainer,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-
-                      if (_canWriteBack)
-                        CheckboxListTile(
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          controlAffinity: ListTileControlAffinity.leading,
-                          value: _writeBack,
-                          onChanged: _isParsing
-                              ? null
-                              : (checked) => setState(
-                                  () => _writeBack = checked ?? false,
-                                ),
-                          title: const Text(
-                            'Write words from the app back to the files',
-                          ),
-                          subtitle: Text(
-                            '${_staleFiles == 0
-                                ? ''
-                                : _staleFiles == 1
-                                ? '1 unchanged file no longer matches the '
-                                      'words in the app. '
-                                : '$_staleFiles unchanged files no longer '
-                                      'match the words in the app. '}'
-                            'Words and examples edited or added in the app '
-                            'are written to the vocabulary in each '
-                            'file\'s frontmatter, for imported files after '
-                            'they are merged. Lesson text is not touched.',
-                          ),
-                        ),
-
-                      if (_directoryFiles.isNotEmpty) ...[
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                '${_directoryFiles.length} lessons found; '
-                                '${_selectedDirectoryPaths.length} selected.',
-                              ),
-                            ),
-                            TextButton(
-                              onPressed: _isParsing
-                                  ? null
-                                  : () => setState(() {
-                                      _selectedDirectoryPaths
-                                        ..clear()
-                                        ..addAll(
-                                          _directoryFiles.map(
-                                            (file) => file.sourceKey,
-                                          ),
-                                        );
-                                    }),
-                              child: const Text('Check all'),
-                            ),
-                            TextButton(
-                              onPressed: _isParsing
-                                  ? null
-                                  : () =>
-                                        setState(_selectedDirectoryPaths.clear),
-                              child: const Text('Uncheck all'),
-                            ),
-                          ],
-                        ),
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '$_importSourceLabel ready',
-                                  style: theme.textTheme.titleLarge?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  '${_directoryFiles.length} lessons found; '
-                                  '${_selectedDirectoryPaths.length} selected, '
-                                  '$_directorySkipped files skipped and '
-                                  '$_directoryUnchanged unchanged.',
-                                ),
-                                if (_directorySkippedPaths.isNotEmpty) ...[
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    _skippedNote(_directorySkippedPaths).trim(),
-                                    style: TextStyle(
-                                      color: theme.colorScheme.tertiary,
-                                    ),
-                                  ),
-                                ],
-                                const SizedBox(height: 4),
-                                const Text(
-                                  'Matching lessons and vocabulary will be updated '
-                                  'in place. Existing vocabulary SRS progress will '
-                                  'be preserved; unmatched vocabulary will be kept.',
-                                ),
-                                if (_directoryErrors.isNotEmpty) ...[
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    '${_directoryErrors.length} files could not be '
-                                    'parsed and will not be imported.',
-                                    style: TextStyle(
-                                      color: theme.colorScheme.error,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  ConstrainedBox(
-                                    constraints: const BoxConstraints(
-                                      maxHeight: 200,
-                                    ),
-                                    child: SingleChildScrollView(
-                                      child: SelectableText(
-                                        describeImportErrors(
-                                          '',
-                                          _directoryErrors,
-                                        ).trim(),
-                                        style: theme.textTheme.bodySmall
-                                            ?.copyWith(
-                                              color: theme.colorScheme.error,
-                                            ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Lessons Preview:',
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Expanded(
-                          child: ListView.builder(
-                            itemCount: _directoryFiles.length,
-                            itemBuilder: (context, index) {
-                              final file = _directoryFiles[index];
-                              final lesson = file.preview.lesson;
-                              return Card(
-                                margin: const EdgeInsets.symmetric(vertical: 4),
-                                child: ListTile(
-                                  dense: true,
-                                  leading: Checkbox(
-                                    value: _selectedDirectoryPaths.contains(
-                                      file.sourceKey,
-                                    ),
-                                    onChanged: (checked) => setState(() {
-                                      if (checked == true) {
-                                        _selectedDirectoryPaths.add(
-                                          file.sourceKey,
-                                        );
-                                      } else {
-                                        _selectedDirectoryPaths.remove(
-                                          file.sourceKey,
-                                        );
-                                      }
-                                    }),
-                                  ),
-                                  title: Text(lesson.displayTitle),
-                                  subtitle: Text(
-                                    '${lesson.effectiveUnitTitle ?? file.path} · '
-                                    '${lesson.vocabularies.length} vocabulary items'
-                                    '${file.preview.wordsFromSection
-                                        ? ' · no frontmatter: words read from ## Vocabulary'
-                                        : file.preview.vocabularySection == null
-                                        ? ''
-                                        : ' · ## Vocabulary section will be removed; '
-                                              'paste the file into the editor to move its words to the frontmatter'}',
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ] else if (_previewResult != null) ...[
-                        if (_previewResult!.vocabularySection != null)
-                          _vocabularySectionWarning(theme, _previewResult!),
-                        Card(
-                          elevation: 0,
-                          color: theme.colorScheme.surfaceContainerHighest
-                              .withValues(alpha: 0.5),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  _previewResult!.lesson.displayTitle,
-                                  style: theme.textTheme.titleLarge?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                if (_previewResult!.lesson.effectiveUnitTitle !=
-                                    null) ...[
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    _previewResult!.lesson.effectiveUnitTitle!,
-                                    style: theme.textTheme.labelLarge?.copyWith(
-                                      color: theme.colorScheme.primary,
-                                    ),
-                                  ),
-                                ],
-                                const SizedBox(height: 8),
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 8,
-                                  children: [
-                                    Chip(
-                                      avatar: const Icon(
-                                        Icons.language,
-                                        size: 16,
-                                      ),
-                                      label: Text(
-                                        '${_previewResult!.lesson.targetLanguage.toUpperCase()} ➔ ${_previewResult!.lesson.nativeLanguage.toUpperCase()}',
-                                      ),
-                                    ),
-                                    Chip(
-                                      avatar: const Icon(Icons.style, size: 16),
-                                      label: Text(
-                                        '${_previewResult!.lesson.vocabularies.length} Vocabs',
-                                      ),
-                                    ),
-                                    Chip(
-                                      avatar: const Icon(
-                                        Icons.format_quote,
-                                        size: 16,
-                                      ),
-                                      label: Text(
-                                        '${_previewResult!.sentences.length} Pooled Sentences',
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Vocabulary Items Preview:',
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Expanded(
-                          child: ListView.builder(
-                            itemCount:
-                                _previewResult!.lesson.vocabularies.length,
-                            itemBuilder: (context, idx) {
-                              final v =
-                                  _previewResult!.lesson.vocabularies[idx];
-                              return Card(
-                                margin: const EdgeInsets.symmetric(vertical: 4),
-                                child: ListTile(
-                                  dense: true,
-                                  title: Text(
-                                    v.targetWord,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                  subtitle: Text(v.translation),
-                                  trailing: Chip(
-                                    label: Text(v.pos),
-                                    visualDensity: VisualDensity.compact,
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ] else if (_errorMessage == null)
-                        const Expanded(
-                          child: Center(
-                            child: Text('Enter Markdown to see preview'),
-                          ),
-                        ),
-                    ],
+                  const SizedBox(height: 12),
+                ],
+                Text(
+                  'Lesson name',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
                   ),
-                );
-
-                if (narrow) {
-                  return Column(
-                    children: [
-                      TabBar(
-                        controller: _tabController,
-                        tabs: const [
-                          Tab(text: 'Editor'),
-                          Tab(text: 'Preview'),
-                        ],
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _lessonNameController,
+                  enabled: !_isParsing && _directoryFiles.isEmpty,
+                  readOnly: vocabularyOnly,
+                  textInputAction: TextInputAction.next,
+                  decoration: InputDecoration(
+                    border: const OutlineInputBorder(),
+                    hintText: 'e.g. Unit 2::Lesson 1',
+                    helperText: vocabularyOnly
+                        ? 'The words are added to this lesson; its other '
+                              'words, its text and SRS progress are kept.'
+                        : 'Use :: to separate hierarchy levels. Enter an '
+                              'existing lesson\'s name to add vocabulary '
+                              'to it; existing words and SRS progress are '
+                              'kept.',
+                    helperMaxLines: 3,
+                  ),
+                  onChanged: (_) => _parseCurrentYaml(),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  vocabularyOnly ? 'Vocabulary YAML (no Markdown)' : 'Markdown',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                if (!vocabularyOnly) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'List words under a ## Vocabulary heading, as '
+                    'below. YAML frontmatter with vocabulary:, or plain '
+                    'YAML, works too.',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
+                if (widget.aiSuggested) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Suggested by AI. Each word, and each example '
+                    'sentence not in your Sentence Pool yet, gets a '
+                    'note saying so when added.',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
+                const SizedBox(height: 8),
+                Expanded(
+                  // Pasted HTML (a web page, Google Docs) becomes
+                  // Markdown, as in the lesson editor. The text is laid
+                  // out by a WebView, which keeps taller CJK glyphs
+                  // inside the box (#207).
+                  child: MarkdownEditor(
+                    controller: _yamlController,
+                    enabled: !_isParsing && _directoryFiles.isEmpty,
+                    hintText: hint,
+                    allowPreview: !vocabularyOnly,
+                    previewMarkdown: YamlParserService.withoutFrontmatter,
+                    onChanged: (_) => _parseCurrentYaml(),
+                    fallback: MarkdownTextField(
+                      controller: _yamlController,
+                      maxLines: null,
+                      expands: true,
+                      enabled: !_isParsing && _directoryFiles.isEmpty,
+                      textAlignVertical: TextAlignVertical.top,
+                      keyboardType: TextInputType.multiline,
+                      autocorrect: false,
+                      enableSuggestions: false,
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 14,
+                        height: 1.45,
+                        leadingDistribution: TextLeadingDistribution.even,
                       ),
-                      Expanded(
-                        child: TabBarView(
-                          controller: _tabController,
-                          children: [editor, preview],
+                      // No forced strut height: fallback glyphs (CJK) are
+                      // taller than the strut and would be pushed up over
+                      // the top border on desktop.
+                      strutStyle: const StrutStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 14,
+                        height: 1.45,
+                        leadingDistribution: TextLeadingDistribution.even,
+                      ),
+                      decoration: InputDecoration(
+                        border: const OutlineInputBorder(),
+                        alignLabelWithHint: true,
+                        hintText: hint,
+                        hintStyle: TextStyle(
+                          color: theme.colorScheme.onSurfaceVariant.withValues(
+                            alpha: 0.65,
+                          ),
+                          fontFamily: 'monospace',
+                          fontSize: 14,
+                          height: 1.45,
                         ),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 16),
                       ),
-                    ],
-                  );
-                }
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(flex: 6, child: editor),
-                    const VerticalDivider(width: 1),
-                    Expanded(flex: 5, child: preview),
-                  ],
-                );
-              },
+                      onChanged: (_) => _parseCurrentYaml(),
+                    ),
+                  ),
+                ),
+              ],
             ),
-            if (_supportsDesktopFileDrop && _isDraggingFiles)
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: Container(
-                    alignment: Alignment.center,
-                    color: theme.colorScheme.primary.withValues(alpha: 0.14),
-                    child: Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Text(
-                          'Drop Markdown, YAML, or ZIP files to import',
-                          style: theme.textTheme.titleLarge,
+          );
+
+          final preview = Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Validation & Preview',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                if (!vocabularyOnly && _directoryFiles.isEmpty)
+                  if (_nearMissHeading case final heading?)
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.tertiaryContainer,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        'The heading "$heading" is read as lesson '
+                        'text, not as a list of words: only '
+                        '## Vocabulary starts a Vocabulary section. '
+                        'Rename it to ## Vocabulary for its words to '
+                        'be read.',
+                        style: TextStyle(
+                          color: theme.colorScheme.onTertiaryContainer,
+                        ),
+                      ),
+                    ),
+
+                if (_needsVocabulary && _directoryFiles.isEmpty)
+                  _noVocabularyBanner(theme),
+
+                if (_errorMessage != null)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.errorContainer,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 320),
+                      child: SingleChildScrollView(
+                        child: SelectableText(
+                          _errorMessage!,
+                          style: TextStyle(
+                            color: theme.colorScheme.onErrorContainer,
+                          ),
                         ),
                       ),
                     ),
                   ),
+
+                if (_canWriteBack)
+                  CheckboxListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    value: _writeBack,
+                    onChanged: _isParsing
+                        ? null
+                        : (checked) =>
+                              setState(() => _writeBack = checked ?? false),
+                    title: const Text(
+                      'Write words from the app back to the files',
+                    ),
+                    subtitle: Text(
+                      '${_staleFiles == 0
+                          ? ''
+                          : _staleFiles == 1
+                          ? '1 unchanged file no longer matches the '
+                                'words in the app. '
+                          : '$_staleFiles unchanged files no longer '
+                                'match the words in the app. '}'
+                      'Words and examples edited or added in the app '
+                      'are written to the vocabulary in each '
+                      'file\'s frontmatter, for imported files after '
+                      'they are merged. Lesson text is not touched.',
+                    ),
+                  ),
+
+                if (_directoryFiles.isNotEmpty) ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${_directoryFiles.length} lessons found; '
+                          '${_selectedDirectoryPaths.length} selected.',
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _isParsing
+                            ? null
+                            : () => setState(() {
+                                _selectedDirectoryPaths
+                                  ..clear()
+                                  ..addAll(
+                                    _directoryFiles.map(
+                                      (file) => file.sourceKey,
+                                    ),
+                                  );
+                              }),
+                        child: const Text('Check all'),
+                      ),
+                      TextButton(
+                        onPressed: _isParsing
+                            ? null
+                            : () => setState(_selectedDirectoryPaths.clear),
+                        child: const Text('Uncheck all'),
+                      ),
+                    ],
+                  ),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '$_importSourceLabel ready',
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '${_directoryFiles.length} lessons found; '
+                            '${_selectedDirectoryPaths.length} selected, '
+                            '$_directorySkipped files skipped and '
+                            '$_directoryUnchanged unchanged.',
+                          ),
+                          if (_directorySkippedPaths.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              _skippedNote(_directorySkippedPaths).trim(),
+                              style: TextStyle(
+                                color: theme.colorScheme.tertiary,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Matching lessons and vocabulary will be updated '
+                            'in place. Existing vocabulary SRS progress will '
+                            'be preserved; unmatched vocabulary will be kept.',
+                          ),
+                          if (_directoryErrors.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              '${_directoryErrors.length} files could not be '
+                              'parsed and will not be imported.',
+                              style: TextStyle(color: theme.colorScheme.error),
+                            ),
+                            const SizedBox(height: 4),
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxHeight: 200),
+                              child: SingleChildScrollView(
+                                child: SelectableText(
+                                  describeImportErrors(
+                                    '',
+                                    _directoryErrors,
+                                  ).trim(),
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: theme.colorScheme.error,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Lessons Preview:',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: _directoryFiles.length,
+                      itemBuilder: (context, index) {
+                        final file = _directoryFiles[index];
+                        final lesson = file.preview.lesson;
+                        return Card(
+                          margin: const EdgeInsets.symmetric(vertical: 4),
+                          child: ListTile(
+                            dense: true,
+                            leading: Checkbox(
+                              value: _selectedDirectoryPaths.contains(
+                                file.sourceKey,
+                              ),
+                              onChanged: (checked) => setState(() {
+                                if (checked == true) {
+                                  _selectedDirectoryPaths.add(file.sourceKey);
+                                } else {
+                                  _selectedDirectoryPaths.remove(
+                                    file.sourceKey,
+                                  );
+                                }
+                              }),
+                            ),
+                            title: Text(lesson.displayTitle),
+                            subtitle: Text(
+                              '${lesson.effectiveUnitTitle ?? file.path} · '
+                              '${lesson.vocabularies.length} vocabulary items'
+                              '${file.preview.wordsFromSection
+                                  ? ' · no frontmatter: words read from ## Vocabulary'
+                                  : file.preview.vocabularySection == null
+                                  ? ''
+                                  : ' · ## Vocabulary section will be removed; '
+                                        'paste the file into the editor to move its words to the frontmatter'}',
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ] else if (_previewResult != null) ...[
+                  if (_previewResult!.vocabularySection != null)
+                    _vocabularySectionWarning(theme, _previewResult!),
+                  Card(
+                    elevation: 0,
+                    color: theme.colorScheme.surfaceContainerHighest.withValues(
+                      alpha: 0.5,
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _previewResult!.lesson.displayTitle,
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          if (_previewResult!.lesson.effectiveUnitTitle !=
+                              null) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              _previewResult!.lesson.effectiveUnitTitle!,
+                              style: theme.textTheme.labelLarge?.copyWith(
+                                color: theme.colorScheme.primary,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              Chip(
+                                avatar: const Icon(Icons.language, size: 16),
+                                label: Text(
+                                  '${_previewResult!.lesson.targetLanguage.toUpperCase()} ➔ ${_previewResult!.lesson.nativeLanguage.toUpperCase()}',
+                                ),
+                              ),
+                              Chip(
+                                avatar: const Icon(Icons.style, size: 16),
+                                label: Text(
+                                  '${_previewResult!.lesson.vocabularies.length} Vocabs',
+                                ),
+                              ),
+                              Chip(
+                                avatar: const Icon(
+                                  Icons.format_quote,
+                                  size: 16,
+                                ),
+                                label: Text(
+                                  '${_previewResult!.sentences.length} Pooled Sentences',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Vocabulary Items Preview:',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: _previewResult!.lesson.vocabularies.length,
+                      itemBuilder: (context, idx) {
+                        final v = _previewResult!.lesson.vocabularies[idx];
+                        return Card(
+                          margin: const EdgeInsets.symmetric(vertical: 4),
+                          child: ListTile(
+                            dense: true,
+                            title: Text(
+                              v.targetWord,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            subtitle: Text(v.translation),
+                            trailing: Chip(
+                              label: Text(v.pos),
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ] else if (_errorMessage == null)
+                  const Expanded(
+                    child: Center(child: Text('Enter Markdown to see preview')),
+                  ),
+              ],
+            ),
+          );
+
+          if (narrow) {
+            return Column(
+              children: [
+                TabBar(
+                  controller: _tabController,
+                  tabs: const [
+                    Tab(text: 'Editor'),
+                    Tab(text: 'Preview'),
+                  ],
                 ),
-              ),
-          ],
-        ),
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [editor, preview],
+                  ),
+                ),
+              ],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(flex: 6, child: editor),
+              const VerticalDivider(width: 1),
+              Expanded(flex: 5, child: preview),
+            ],
+          );
+        },
       ),
     );
   }
 
-  bool get _supportsDesktopFileDrop =>
+  bool get _isDesktop =>
       Platform.isWindows || Platform.isMacOS || Platform.isLinux;
 
   /// Folder import is for VitePress-compatible folders, so desktop only.
   bool get _supportsFolderImport =>
-      YamlImportView.debugSupportsFolderImport ?? _supportsDesktopFileDrop;
+      YamlImportView.debugSupportsFolderImport ?? _isDesktop;
 }
 
 class MarkdownImportFile {

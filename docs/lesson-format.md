@@ -325,7 +325,7 @@ Obsidian, VS Code's Markdown preview and GitHub work for the same files, without
 
 The import button stays disabled until the input can be previewed. Fix any displayed parse errors, review the preview, then import.
 
-- **Pick File** loads a YAML/YML/TXT/Markdown file, or a ZIP archive (the way to batch-import on Android, where directory import is restricted). On desktop you can also drag `.md`, `.yaml`/`.yml` and `.zip` files onto the import screen.
+- **Pick File** loads a YAML/YML/TXT/Markdown file, or a ZIP archive (the way to batch-import on Android, where directory import is restricted). Dragging files onto the import screen is no longer supported; pick them instead.
 - **Pick Folder** (desktop only, for VitePress-compatible folders; not shown on mobile) scans Markdown files recursively. Multiple folders can be selected together on macOS; other platforms select one at a time. Nested folder and archive paths preserve lesson hierarchy.
 - **Order.** Folder and ZIP lessons are listed, and added to the lesson list, in natural order of their paths: folder by folder, ignoring case, with numbers compared as numbers (`lesson-2`, `lesson-9`, `lesson-10`; `lesson-02` sorts with `lesson-2`). Folders and files are not separated. VitePress has no sort of its own (its sidebar is whatever the folder's config lists), so this is the usual natural file-name order rather than a VitePress rule; list the lessons in the sidebar in the same order to keep the preview and the app alike.
 - Folder and ZIP results start unchecked; select lessons individually or use **Check all** / **Uncheck all**.
