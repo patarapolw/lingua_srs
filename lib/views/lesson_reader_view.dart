@@ -8,6 +8,7 @@ import '../services/lesson_ai_prompt.dart';
 import '../services/lesson_links.dart';
 import '../services/yaml_parser_service.dart';
 import '../widgets/lesson_content_view.dart';
+import '../widgets/markdown_editor.dart';
 import '../widgets/markdown_text_field.dart';
 import 'ai_discussion_dialog.dart';
 import 'lesson_detail_view.dart';
@@ -411,21 +412,29 @@ class _LessonMarkdownEditorState extends State<_LessonMarkdownEditor> {
                 const SizedBox(height: 12),
                 _vocabularySectionWarning(context),
                 Expanded(
-                  child: MarkdownTextField(
+                  child: MarkdownEditor(
                     controller: _controller,
                     enabled: !_saving,
-                    expands: true,
-                    maxLines: null,
-                    textAlignVertical: TextAlignVertical.top,
-                    keyboardType: TextInputType.multiline,
-                    style: const TextStyle(
-                      fontFamily: 'monospace',
-                      fontSize: 14,
-                      height: 1.5,
-                    ),
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                      hintText: 'Enter lesson Markdown',
+                    hintText: 'Enter lesson Markdown',
+                    // Opens on the lesson as it reads, with Edit a tap away.
+                    startInPreview: true,
+                    onSave: _saving ? null : _save,
+                    fallback: MarkdownTextField(
+                      controller: _controller,
+                      enabled: !_saving,
+                      expands: true,
+                      maxLines: null,
+                      textAlignVertical: TextAlignVertical.top,
+                      keyboardType: TextInputType.multiline,
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 14,
+                        height: 1.5,
+                      ),
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        hintText: 'Enter lesson Markdown',
+                      ),
                     ),
                   ),
                 ),

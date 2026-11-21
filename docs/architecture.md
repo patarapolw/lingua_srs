@@ -116,6 +116,7 @@ lingua_srs/
 │       ├── markdown_notes_field.dart  # Notes form field: Add button, rendered notes, Edit/Preview
 │       ├── icon_switch.dart           # Switch flanked by icons, e.g. light and dark
 │       ├── markdown_text_field.dart   # Markdown text field that converts pasted HTML
+│       ├── markdown_editor.dart       # Markdown editor in a WebView textarea, with Edit/Preview and HTML paste as Markdown
 │       ├── pronunciation_line.dart    # Optional romanization and IPA lines under Korean text
 │       ├── pronunciation_toggle.dart  # RR and IPA toggles in the review menu
 │       ├── review_notes_editor.dart   # Review note editable from a card's back; text-focus check for shortcuts

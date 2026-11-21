@@ -18,6 +18,7 @@ import '../services/storage_service.dart';
 import '../services/vocabulary_section_move.dart';
 import '../services/yaml_parser_service.dart';
 import '../widgets/lesson_clash_dialog.dart';
+import '../widgets/markdown_editor.dart';
 import '../widgets/markdown_text_field.dart';
 
 class YamlImportView extends StatefulWidget {
@@ -1200,6 +1201,30 @@ class _YamlImportViewState extends State<YamlImportView>
             LayoutBuilder(
               builder: (context, constraints) {
                 final narrow = constraints.maxWidth < 700;
+                final hint = vocabularyOnly
+                    ? 'vocabulary:\n'
+                          '  nouns:  # Replace with a part of speech\n'
+                          '    - ko: "Korean word"\n'
+                          '      en: "English meaning"\n'
+                          '      examples:\n'
+                          '        - ko: "Sentence with **word**"\n'
+                          '          en: "Translated sentence with **meaning**"'
+                    : '# Lesson 1\n'
+                          '\n'
+                          'Lesson contents go **here**.\n'
+                          '\n'
+                          '## Vocabulary\n'
+                          '\n'
+                          '### Nouns\n'
+                          '- 학교 - school\n'
+                          '  - Note: Optional notes about the word.\n'
+                          '  - 저는 학교에 가요. - I go to school.\n'
+                          '    - Note: Optional notes about the sentence.\n'
+                          '- 학생 (學生) - student\n'
+                          '\n'
+                          '### Verbs\n'
+                          '- 가다 - to go\n'
+                          '  - 집에 가요. - I\'m going home.';
                 final editor = Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
@@ -1289,71 +1314,58 @@ class _YamlImportViewState extends State<YamlImportView>
                       ],
                       const SizedBox(height: 8),
                       Expanded(
-                        // Converts pasted HTML (a web page, Google Docs) to
-                        // Markdown, as the lesson editor does.
-                        child: MarkdownTextField(
+                        // Pasted HTML (a web page, Google Docs) becomes
+                        // Markdown, as in the lesson editor. The text is laid
+                        // out by a WebView, which keeps taller CJK glyphs
+                        // inside the box (#207).
+                        child: MarkdownEditor(
                           controller: _yamlController,
-                          maxLines: null,
-                          expands: true,
                           enabled: !_isParsing && _directoryFiles.isEmpty,
-                          textAlignVertical: TextAlignVertical.top,
-                          keyboardType: TextInputType.multiline,
-                          autocorrect: false,
-                          enableSuggestions: false,
-                          style: const TextStyle(
-                            fontFamily: 'monospace',
-                            fontSize: 14,
-                            height: 1.45,
-                            leadingDistribution: TextLeadingDistribution.even,
-                          ),
-                          // No forced strut height: fallback glyphs (CJK) are
-                          // taller than the strut and would be pushed up over
-                          // the top border on desktop.
-                          strutStyle: const StrutStyle(
-                            fontFamily: 'monospace',
-                            fontSize: 14,
-                            height: 1.45,
-                            leadingDistribution: TextLeadingDistribution.even,
-                          ),
-                          decoration: InputDecoration(
-                            border: const OutlineInputBorder(),
-                            alignLabelWithHint: true,
-                            hintText: vocabularyOnly
-                                ? 'vocabulary:\n'
-                                      '  nouns:  # Replace with a part of speech\n'
-                                      '    - ko: "Korean word"\n'
-                                      '      en: "English meaning"\n'
-                                      '      examples:\n'
-                                      '        - ko: "Sentence with **word**"\n'
-                                      '          en: "Translated sentence with **meaning**"'
-                                : '# Lesson 1\n'
-                                      '\n'
-                                      'Lesson contents go **here**.\n'
-                                      '\n'
-                                      '## Vocabulary\n'
-                                      '\n'
-                                      '### Nouns\n'
-                                      '- 학교 - school\n'
-                                      '  - Note: Optional notes about the word.\n'
-                                      '  - 저는 학교에 가요. - I go to school.\n'
-                                      '    - Note: Optional notes about the sentence.\n'
-                                      '- 학생 (學生) - student\n'
-                                      '\n'
-                                      '### Verbs\n'
-                                      '- 가다 - to go\n'
-                                      '  - 집에 가요. - I\'m going home.',
-                            hintStyle: TextStyle(
-                              color: theme.colorScheme.onSurfaceVariant
-                                  .withValues(alpha: 0.65),
+                          hintText: hint,
+                          allowPreview: !vocabularyOnly,
+                          previewMarkdown: YamlParserService.withoutFrontmatter,
+                          onChanged: (_) => _parseCurrentYaml(),
+                          fallback: MarkdownTextField(
+                            controller: _yamlController,
+                            maxLines: null,
+                            expands: true,
+                            enabled: !_isParsing && _directoryFiles.isEmpty,
+                            textAlignVertical: TextAlignVertical.top,
+                            keyboardType: TextInputType.multiline,
+                            autocorrect: false,
+                            enableSuggestions: false,
+                            style: const TextStyle(
                               fontFamily: 'monospace',
                               fontSize: 14,
                               height: 1.45,
+                              leadingDistribution: TextLeadingDistribution.even,
                             ),
-                            contentPadding: EdgeInsets.symmetric(
-                              horizontal: 16,
+                            // No forced strut height: fallback glyphs (CJK) are
+                            // taller than the strut and would be pushed up over
+                            // the top border on desktop.
+                            strutStyle: const StrutStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 14,
+                              height: 1.45,
+                              leadingDistribution: TextLeadingDistribution.even,
                             ),
+                            decoration: InputDecoration(
+                              border: const OutlineInputBorder(),
+                              alignLabelWithHint: true,
+                              hintText: hint,
+                              hintStyle: TextStyle(
+                                color: theme.colorScheme.onSurfaceVariant
+                                    .withValues(alpha: 0.65),
+                                fontFamily: 'monospace',
+                                fontSize: 14,
+                                height: 1.45,
+                              ),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                            ),
+                            onChanged: (_) => _parseCurrentYaml(),
                           ),
-                          onChanged: (_) => _parseCurrentYaml(),
                         ),
                       ),
                     ],

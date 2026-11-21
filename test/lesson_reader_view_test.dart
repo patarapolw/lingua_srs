@@ -242,6 +242,114 @@ Preview text.
     expect(find.byTooltip('Copy link to this lesson'), findsOneWidget);
   });
 
+  /// Opens the Markdown editor, which starts on Preview, and chooses Edit.
+  Future<void> openEditor(WidgetTester tester) async {
+    await tester.tap(find.byTooltip('Edit Markdown'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit'));
+    await tester.pumpAndSettle();
+  }
+
+  /// What the editor's page sends when [text] is typed into it.
+  Future<void> typeMarkdown(WidgetTester tester, String text) async {
+    webview.controller.send({
+      'type': 'change',
+      'text': text,
+      'start': text.length,
+      'end': text.length,
+    });
+    await tester.pump();
+  }
+
+  group('Markdown editor', () {
+    testWidgets('opens on Preview of the lesson text, then edits it in a '
+        'WebView', (tester) async {
+      await openReader(tester, const Size(1200, 800));
+      final readerViews = webview.controllers.length;
+
+      await tester.tap(find.byTooltip('Edit Markdown'));
+      await tester.pumpAndSettle();
+      expect(find.text('Preview'), findsOneWidget);
+      expect(webview.controllers, hasLength(readerViews + 1));
+      expect(webview.controller.html, contains('First part'));
+      expect(webview.controller.html, isNot(contains('<textarea')));
+
+      await tester.tap(find.text('Edit'));
+      await tester.pumpAndSettle();
+      expect(webview.controllers, hasLength(readerViews + 2));
+      final page = webview.controller.html!;
+      expect(page, contains('<textarea id="editor"'));
+      expect(page, contains('# Greetings'));
+      // Chosen with a tap: the editor takes focus.
+      expect(page, contains('true, 0, 0);'));
+    });
+
+    testWidgets('starts no WebView for an empty lesson until asked to', (
+      tester,
+    ) async {
+      final provider = await loadedProvider(tester);
+      final lesson = (await tester.runAsync(
+        () => provider.importYaml(
+          '---\nvocabulary:\n---\n# Title\n\n## Vocabulary\n\nText.\n',
+        ),
+      ))!;
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AppProvider>.value(value: provider),
+            ChangeNotifierProvider<AudioService>(
+              create: (_) => _SilentAudioService(),
+            ),
+          ],
+          child: MaterialApp(home: LessonReaderView(lessonId: lesson.id)),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Edit Markdown'));
+      await tester.pumpAndSettle();
+      expect(find.text('Tap to write Markdown'), findsOneWidget);
+      expect(webview.controllers, isEmpty);
+
+      await tester.tap(find.text('Preview'));
+      await tester.pumpAndSettle();
+      expect(find.text('Nothing to preview yet.'), findsOneWidget);
+      expect(webview.controllers, isEmpty);
+
+      await tester.tap(find.text('Edit'));
+      await tester.pumpAndSettle();
+      expect(webview.controllers, hasLength(1));
+      expect(webview.controller.html, contains('<textarea id="editor"'));
+    });
+
+    testWidgets('saves with Ctrl/Cmd+S in the editor', (tester) async {
+      final lesson = await openReader(tester, const Size(1200, 800));
+      await openEditor(tester);
+      await typeMarkdown(tester, '# Greetings\n\nNew text.\n');
+
+      webview.controller.send({'type': 'save'});
+      for (var i = 0; i < 5; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
+        await tester.pump();
+      }
+      await tester.pump(const Duration(milliseconds: 500));
+
+      final provider = Provider.of<AppProvider>(
+        tester.element(find.byType(LessonReaderView)),
+        listen: false,
+      );
+      final saved = provider.lessons.firstWhere((l) => l.id == lesson.id);
+      expect(saved.markdownContent, '# Greetings\n\nNew text.\n');
+      expect(find.byTooltip('Edit Markdown'), findsOneWidget);
+    });
+  });
+
   group('## Vocabulary written in the editor', () {
     const warning = "Don't add vocabulary here.";
 
@@ -249,38 +357,33 @@ Preview text.
       tester,
     ) async {
       await openReader(tester, const Size(1200, 800));
-      await tester.tap(find.byTooltip('Edit Markdown'));
-      await tester.pumpAndSettle();
+      await openEditor(tester);
       expect(find.textContaining(warning), findsNothing);
 
-      await tester.enterText(
-        find.byType(TextField).first,
+      await typeMarkdown(
+        tester,
         '# Greetings\n\n## Vocabulary\n\n- 학교 — school\n',
       );
-      await tester.pump();
       expect(find.textContaining(warning), findsOneWidget);
 
-      await tester.enterText(
-        find.byType(TextField).first,
+      await typeMarkdown(
+        tester,
         '# Greetings\n\n## Vocabulary list\n\n- 학교 — school\n',
       );
-      await tester.pump();
       expect(find.textContaining(warning), findsNothing);
 
-      await tester.enterText(
-        find.byType(TextField).first,
+      await typeMarkdown(
+        tester,
         '# Greetings\n\n## Vocabularies\n\n- 학교 - school\n',
       );
-      await tester.pump();
       expect(find.textContaining(warning), findsOneWidget);
     });
 
     testWidgets('saves the section as text without asking', (tester) async {
       await openReader(tester, const Size(1200, 800));
-      await tester.tap(find.byTooltip('Edit Markdown'));
-      await tester.pumpAndSettle();
-      await tester.enterText(
-        find.byType(TextField).first,
+      await openEditor(tester);
+      await typeMarkdown(
+        tester,
         '# Greetings\n\n## Vocabulary\n\n- 학교 — school\n',
       );
       await tester.tap(find.text('Save'));
