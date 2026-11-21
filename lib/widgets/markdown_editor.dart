@@ -16,8 +16,10 @@ import 'lesson_content_view.dart';
 /// ([LessonContentView]).
 ///
 /// The WebView is not started while the text is empty and the person has
-/// not chosen to write yet: a placeholder stands in for it. Without a
-/// WebView platform (widget tests), [fallback] is shown instead.
+/// not chosen to write yet: a placeholder stands in for it. Edit and
+/// Preview each start their WebView the first time they are shown and keep
+/// it, hidden, while the other is shown. Without a WebView platform (widget
+/// tests), [fallback] is shown instead.
 class MarkdownEditor extends StatefulWidget {
   /// Holds the text. Changes made to it in code are shown in the editor.
   final TextEditingController controller;
@@ -80,15 +82,26 @@ class _MarkdownEditorState extends State<MarkdownEditor> {
       widget.startInPreview &&
       widget.controller.text.trim().isNotEmpty;
 
-  /// Whether the editor should take focus once it loads: it was opened by a
-  /// tap, not by the page opening.
-  bool _focusOnLoad = false;
+  /// Counts the times the person chose to write (a tap on the placeholder,
+  /// or Edit); the editor takes focus on each.
+  int _focusRequest = 0;
+
+  /// What Preview shows: the Markdown as it was when Preview was last
+  /// chosen, kept up to date while it is shown. Null until Preview is first
+  /// shown, so its WebView starts only then.
+  String? _previewText;
+
+  /// Whether the editor has been shown, so its WebView is kept from then on.
+  bool _editorShown = false;
 
   @override
   void initState() {
     super.initState();
     widget.controller.addListener(_onText);
+    if (_preview) _previewText = _previewOf(widget.controller.text);
   }
+
+  String _previewOf(String text) => widget.previewMarkdown?.call(text) ?? text;
 
   @override
   void didUpdateWidget(MarkdownEditor oldWidget) {
@@ -106,21 +119,29 @@ class _MarkdownEditorState extends State<MarkdownEditor> {
     super.dispose();
   }
 
-  /// Text put in the controller in code (a file read, say) starts the editor.
+  /// Text put in the controller in code (a file read, say) starts the
+  /// editor, and is shown in Preview if Preview is shown.
   void _onText() {
-    if (!_started && widget.controller.text.isNotEmpty && mounted) {
-      setState(() => _started = true);
-    }
+    if (!mounted) return;
+    final text = widget.controller.text;
+    final start = !_started && text.isNotEmpty;
+    if (!start && !_preview) return;
+    setState(() {
+      if (start) _started = true;
+      if (_preview) _previewText = _previewOf(text);
+    });
   }
 
   void _setPreview(bool preview) {
     if (preview == _preview) return;
     setState(() {
       _preview = preview;
-      // Choosing Edit is choosing to write, even with no text yet.
-      if (!preview) {
+      if (preview) {
+        _previewText = _previewOf(widget.controller.text);
+      } else {
+        // Choosing Edit is choosing to write, even with no text yet.
         _started = true;
-        _focusOnLoad = true;
+        _focusRequest++;
       }
     });
   }
@@ -128,34 +149,59 @@ class _MarkdownEditorState extends State<MarkdownEditor> {
   void _start() {
     setState(() {
       _started = true;
-      _focusOnLoad = true;
+      _focusRequest++;
     });
   }
+
+  /// Keeps [child] (and its WebView) while another view is shown.
+  static Widget _layer({
+    required Key key,
+    required bool visible,
+    required Widget child,
+  }) => Visibility(
+    key: key,
+    visible: visible,
+    maintainState: true,
+    child: ExcludeFocus(excluding: !visible, child: child),
+  );
 
   @override
   Widget build(BuildContext context) {
     if (!MarkdownEditor._useWebView) return widget.fallback;
-    final Widget body;
-    if (_preview) {
-      body = _MarkdownPreview(
-        controller: widget.controller,
-        previewMarkdown: widget.previewMarkdown,
-      );
-    } else if (_started) {
-      body = MarkdownWebEditor(
-        controller: widget.controller,
-        enabled: widget.enabled,
-        hintText: widget.hintText,
-        autofocus: _focusOnLoad,
-        onChanged: widget.onChanged,
-        onSave: widget.onSave,
-      );
-    } else {
-      body = _EditorPlaceholder(
-        hintText: widget.hintText,
-        onTap: widget.enabled ? _start : null,
-      );
-    }
+    final previewText = _previewText;
+    // The editor's WebView starts the first time Edit is shown with text
+    // (or once asked to write), not while the page opens on Preview.
+    if (_started && !_preview) _editorShown = true;
+    final body = Stack(
+      fit: StackFit.expand,
+      children: [
+        if (_editorShown)
+          _layer(
+            key: const ValueKey('editor'),
+            visible: !_preview,
+            child: MarkdownWebEditor(
+              controller: widget.controller,
+              enabled: widget.enabled,
+              hintText: widget.hintText,
+              focusRequest: _focusRequest,
+              onChanged: widget.onChanged,
+              onSave: widget.onSave,
+            ),
+          )
+        else if (!_started && !_preview)
+          _EditorPlaceholder(
+            key: const ValueKey('placeholder'),
+            hintText: widget.hintText,
+            onTap: widget.enabled ? _start : null,
+          ),
+        if (previewText != null)
+          _layer(
+            key: const ValueKey('preview'),
+            visible: _preview,
+            child: _MarkdownPreview(markdown: previewText),
+          ),
+      ],
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -197,7 +243,11 @@ class _EditorPlaceholder extends StatelessWidget {
   final String? hintText;
   final VoidCallback? onTap;
 
-  const _EditorPlaceholder({required this.hintText, required this.onTap});
+  const _EditorPlaceholder({
+    super.key,
+    required this.hintText,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -265,24 +315,12 @@ class _EditorPlaceholder extends StatelessWidget {
 
 /// The text as the lesson reader shows it.
 class _MarkdownPreview extends StatelessWidget {
-  final TextEditingController controller;
-  final String Function(String text)? previewMarkdown;
+  final String markdown;
 
-  const _MarkdownPreview({
-    required this.controller,
-    required this.previewMarkdown,
-  });
+  const _MarkdownPreview({required this.markdown});
 
   @override
-  Widget build(BuildContext context) => ListenableBuilder(
-    // Text put in by the app (a file read) while Preview is shown.
-    listenable: controller,
-    builder: (context, _) => _preview(context),
-  );
-
-  Widget _preview(BuildContext context) {
-    final text = controller.text;
-    final markdown = previewMarkdown?.call(text) ?? text;
+  Widget build(BuildContext context) {
     if (markdown.trim().isEmpty) {
       return Center(
         child: Text(
@@ -310,7 +348,10 @@ class MarkdownWebEditor extends StatefulWidget {
   final TextEditingController controller;
   final bool enabled;
   final String? hintText;
-  final bool autofocus;
+
+  /// The editor takes focus when this is above 0 as it loads, and again
+  /// each time it goes up.
+  final int focusRequest;
   final ValueChanged<String>? onChanged;
   final VoidCallback? onSave;
 
@@ -319,7 +360,7 @@ class MarkdownWebEditor extends StatefulWidget {
     required this.controller,
     this.enabled = true,
     this.hintText,
-    this.autofocus = false,
+    this.focusRequest = 0,
     this.onChanged,
     this.onSave,
   });
@@ -347,6 +388,9 @@ class _MarkdownWebEditorState extends State<MarkdownWebEditor> {
   bool _loaded = false;
   String? _injection;
 
+  /// Whether the textarea has focus, for the border drawn around it.
+  bool _focused = false;
+
   @override
   void initState() {
     super.initState();
@@ -364,6 +408,9 @@ class _MarkdownWebEditorState extends State<MarkdownWebEditor> {
     if (oldWidget.enabled != widget.enabled && _loaded) {
       _web.runJavaScript(MarkdownEditorHtml.setDisabled(!widget.enabled));
     }
+    if (widget.focusRequest > oldWidget.focusRequest && _loaded) {
+      _web.runJavaScript(MarkdownEditorHtml.focus);
+    }
   }
 
   @override
@@ -375,6 +422,7 @@ class _MarkdownWebEditorState extends State<MarkdownWebEditor> {
   @override
   void dispose() {
     widget.controller.removeListener(_onControllerChanged);
+    releaseWebView(_web);
     super.dispose();
   }
 
@@ -421,7 +469,7 @@ class _MarkdownWebEditorState extends State<MarkdownWebEditor> {
       text: text,
       placeholder: widget.hintText ?? '',
       disabled: !widget.enabled,
-      focus: widget.autofocus,
+      focus: widget.focusRequest > 0,
       selectionStart: selection.isValid ? selection.start : 0,
       selectionEnd: selection.isValid ? selection.end : 0,
     );
@@ -501,14 +549,37 @@ class _MarkdownWebEditorState extends State<MarkdownWebEditor> {
         _web.runJavaScript(MarkdownEditorHtml.insert(start, end, pasted));
       case 'save':
         widget.onSave?.call();
+      case 'focus':
+        final focused = data['focused'] == true;
+        if (focused != _focused) setState(() => _focused = focused);
     }
   }
 
   static int? _offset(Object? value, String text) =>
       value is int ? value.clamp(0, text.length) : null;
 
+  // The border is drawn here, not by the page: the WebView's viewport can be
+  // a few pixels larger than the widget, which cut off the right and bottom
+  // of a border drawn on the textarea.
   @override
-  Widget build(BuildContext context) => WebViewWidget(controller: _web);
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      position: DecorationPosition.foreground,
+      decoration: BoxDecoration(
+        border: Border.all(
+          color: _focused ? scheme.primary : scheme.outline,
+          width: _focused ? 2 : 1,
+        ),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Padding(
+        // As wide as the focused border, so focus does not resize the page.
+        padding: const EdgeInsets.all(2),
+        child: WebViewWidget(controller: _web),
+      ),
+    );
+  }
 }
 
 /// The page [MarkdownWebEditor] shows: a `<textarea>` and the script that
@@ -536,8 +607,7 @@ abstract final class MarkdownEditorHtml {
     return '''
 :root { color-scheme: ${dark ? 'dark' : 'light'}; }
 html, body { margin: 0; height: 100%; background: ${hex(scheme.surface)}; }
-textarea { box-sizing: border-box; display: block; width: 100%; height: 100%; margin: 0; padding: 12px 16px; resize: none; outline: none; border: 1px solid ${hex(scheme.outline)}; border-radius: 4px; background: ${hex(scheme.surface)}; color: ${hex(scheme.onSurface)}; caret-color: ${hex(scheme.primary)}; font: ${fontSize.toStringAsFixed(1)}px/1.45 ui-monospace, "SF Mono", Menlo, Consolas, "Noto Sans Mono", "Noto Sans Mono CJK KR", monospace; tab-size: 2; white-space: pre-wrap; overflow-wrap: anywhere; -webkit-text-size-adjust: 100%; }
-textarea:focus { border: 2px solid ${hex(scheme.primary)}; padding: 11px 15px; }
+textarea { box-sizing: border-box; display: block; width: 100%; height: 100%; margin: 0; padding: 10px 14px; resize: none; outline: none; border: none; background: ${hex(scheme.surface)}; color: ${hex(scheme.onSurface)}; caret-color: ${hex(scheme.primary)}; font: ${fontSize.toStringAsFixed(1)}px/1.45 ui-monospace, "SF Mono", Menlo, Consolas, "Noto Sans Mono", "Noto Sans Mono CJK KR", monospace; tab-size: 2; white-space: pre-wrap; overflow-wrap: anywhere; -webkit-text-size-adjust: 100%; }
 textarea::placeholder { color: ${hex(scheme.onSurfaceVariant)}; opacity: 0.65; }
 textarea:disabled { opacity: 0.6; }
 ''';
@@ -582,6 +652,9 @@ textarea:disabled { opacity: 0.6; }
       changed();
     }
   };
+  window.linguaEditorFocus = function () { ta.focus(); };
+  ta.addEventListener('focus', function () { post({type: 'focus', focused: true}); });
+  ta.addEventListener('blur', function () { post({type: 'focus', focused: false}); });
   ta.addEventListener('input', changed);
   ta.addEventListener('paste', function (e) {
     var data = e.clipboardData;
@@ -623,6 +696,9 @@ textarea:disabled { opacity: 0.6; }
 
   static String setDisabled(bool disabled) =>
       'linguaEditorSetDisabled(${_json(disabled)});';
+
+  /// Puts the focus in the editor.
+  static const focus = 'linguaEditorFocus();';
 
   static String setCss(String css) => 'linguaEditorSetCss(${_json(css)});';
 

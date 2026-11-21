@@ -206,6 +206,38 @@ void main() {
     expect(html, isNot(contains('<textarea')));
   });
 
+  testWidgets('keeps one WebView each for Edit and Preview', (tester) async {
+    final controller = TextEditingController(text: '# One');
+    await tester.pumpWidget(host(controller, startInPreview: true));
+    await tester.pumpAndSettle();
+    expect(webview.controllers, hasLength(1));
+    final preview = webview.controller;
+
+    await tester.tap(find.text('Edit'));
+    await tester.pumpAndSettle();
+    expect(webview.controllers, hasLength(2));
+    final editor = webview.controller;
+    expect(editor.html, contains('<textarea id="editor"'));
+    editor.finish();
+    await tester.pump();
+
+    editor.send({'type': 'change', 'text': '# Two', 'start': 5, 'end': 5});
+    await tester.tap(find.text('Preview'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit'));
+    await tester.pumpAndSettle();
+
+    expect(webview.controllers, [preview, editor]);
+    expect(preview.html, contains('Two'));
+    // Back in Edit, the editor takes focus again.
+    expect(editor.scripts.last, MarkdownEditorHtml.focus);
+
+    // Leaving releases both WebViews rather than waiting for the GC.
+    expect(preview.closed || editor.closed, isFalse);
+    await tester.pumpWidget(const SizedBox());
+    expect(preview.closed && editor.closed, isTrue);
+  });
+
   testWidgets('offers no Preview for YAML', (tester) async {
     await tester.pumpWidget(
       host(
