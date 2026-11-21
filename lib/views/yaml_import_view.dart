@@ -1190,31 +1190,6 @@ class _YamlImportViewState extends State<YamlImportView>
                   onChanged: (_) => _parseCurrentYaml(),
                 ),
                 const SizedBox(height: 12),
-                Text(
-                  vocabularyOnly ? 'Vocabulary YAML (no Markdown)' : 'Markdown',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                if (!vocabularyOnly) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    'List words under a ## Vocabulary heading, as '
-                    'below. YAML frontmatter with vocabulary:, or plain '
-                    'YAML, works too.',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                ],
-                if (widget.aiSuggested) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    'Suggested by AI. Each word, and each example '
-                    'sentence not in your Sentence Pool yet, gets a '
-                    'note saying so when added.',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                ],
-                const SizedBox(height: 8),
                 Expanded(
                   // Pasted HTML (a web page, Google Docs) becomes
                   // Markdown, as in the lesson editor. The text is laid
@@ -1225,6 +1200,41 @@ class _YamlImportViewState extends State<YamlImportView>
                     enabled: !_isParsing && _directoryFiles.isEmpty,
                     hintText: hint,
                     allowPreview: !vocabularyOnly,
+                    // On the switch's row, so the heading, its help and
+                    // the switch take two rows rather than three.
+                    label: Text(
+                      vocabularyOnly
+                          ? 'Vocabulary YAML (no Markdown)'
+                          : 'Markdown',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    description: vocabularyOnly && !widget.aiSuggested
+                        ? null
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (!vocabularyOnly)
+                                Text(
+                                  'List words under a ## Vocabulary '
+                                  'heading, as below. YAML frontmatter '
+                                  'with vocabulary:, or plain YAML, '
+                                  'works too.',
+                                  style: theme.textTheme.bodySmall,
+                                ),
+                              if (!vocabularyOnly && widget.aiSuggested)
+                                const SizedBox(height: 4),
+                              if (widget.aiSuggested)
+                                Text(
+                                  'Suggested by AI. Each word, and each '
+                                  'example sentence not in your Sentence '
+                                  'Pool yet, gets a note saying so when '
+                                  'added.',
+                                  style: theme.textTheme.bodySmall,
+                                ),
+                            ],
+                          ),
                     previewMarkdown: YamlParserService.withoutFrontmatter,
                     onChanged: (_) => _parseCurrentYaml(),
                     fallback: MarkdownTextField(

@@ -50,6 +50,13 @@ class MarkdownEditor extends StatefulWidget {
   /// frontmatter. The text itself when null.
   final String Function(String text)? previewMarkdown;
 
+  /// A heading for the editor, with the Edit / Preview switch beside it on
+  /// the same row.
+  final Widget? label;
+
+  /// Shown under the heading row, above the editor.
+  final Widget? description;
+
   const MarkdownEditor({
     super.key,
     required this.controller,
@@ -61,6 +68,8 @@ class MarkdownEditor extends StatefulWidget {
     this.startInPreview = false,
     this.allowPreview = true,
     this.previewMarkdown,
+    this.label,
+    this.description,
   });
 
   /// Overrides whether a WebView is used, for tests. When null, it is used
@@ -169,7 +178,9 @@ class _MarkdownEditorState extends State<MarkdownEditor> {
 
   @override
   Widget build(BuildContext context) {
-    if (!MarkdownEditor._useWebView) return widget.fallback;
+    if (!MarkdownEditor._useWebView) {
+      return _withHeader(switcher: null, body: widget.fallback);
+    }
     final previewText = _previewText;
     // The editor's WebView starts the first time Edit is shown with text
     // (or once asked to write), not while the page opens on Preview.
@@ -204,13 +215,9 @@ class _MarkdownEditorState extends State<MarkdownEditor> {
           ),
       ],
     );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (widget.allowPreview) ...[
-          Align(
-            alignment: AlignmentDirectional.centerEnd,
-            child: SegmentedButton<bool>(
+    return _withHeader(
+      switcher: widget.allowPreview
+          ? SegmentedButton<bool>(
               showSelectedIcon: false,
               style: const ButtonStyle(visualDensity: VisualDensity.compact),
               segments: const [
@@ -229,10 +236,33 @@ class _MarkdownEditorState extends State<MarkdownEditor> {
               ],
               selected: {_preview},
               onSelectionChanged: (selected) => _setPreview(selected.first),
-            ),
+            )
+          : null,
+      body: body,
+    );
+  }
+
+  /// [body] under a row with [MarkdownEditor.label] and [switcher], then
+  /// [MarkdownEditor.description].
+  Widget _withHeader({required Widget? switcher, required Widget body}) {
+    final label = widget.label;
+    final description = widget.description;
+    final hasRow = label != null || switcher != null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (hasRow)
+          Row(
+            children: [
+              Expanded(child: label ?? const SizedBox.shrink()),
+              if (switcher != null) ...[const SizedBox(width: 12), switcher],
+            ],
           ),
-          const SizedBox(height: 8),
+        if (description != null) ...[
+          SizedBox(height: hasRow ? 6 : 0),
+          description,
         ],
+        if (hasRow || description != null) const SizedBox(height: 12),
         Expanded(child: body),
       ],
     );
