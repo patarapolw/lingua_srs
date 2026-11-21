@@ -116,6 +116,14 @@ class FakeWebViewController extends PlatformWebViewController {
     scripts.add(javaScript);
   }
 
+  /// Whether the app released the WebView.
+  bool closed = false;
+
+  @override
+  Future<void> closeWebViewSession() async {
+    closed = true;
+  }
+
   /// What the page sends through the `Lingua` channel.
   void send(Map<String, Object?> message) =>
       _channels['Lingua']!(JavaScriptMessage(message: jsonEncode(message)));

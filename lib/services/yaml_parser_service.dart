@@ -1575,6 +1575,16 @@ class YamlParserService {
     return end < start ? null : (start, end);
   }
 
+  /// [markdown] after its frontmatter (the `---` lines included): the lesson
+  /// text, as the import editor's Preview shows it. [markdown] itself when
+  /// it has no frontmatter.
+  static String withoutFrontmatter(String markdown) {
+    final span = frontmatterSpan(markdown);
+    if (span == null) return markdown;
+    final rest = markdown.indexOf('\n', span.$2);
+    return rest == -1 ? '' : markdown.substring(rest + 1);
+  }
+
   /// Two target words with the same key are the same word: they differ only
   /// in case or spacing.
   static String vocabularyKey(String word) =>

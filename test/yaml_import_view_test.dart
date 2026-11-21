@@ -1,6 +1,5 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:desktop_drop/desktop_drop.dart';
 import 'package:lingua_srs/services/yaml_parser_service.dart';
 import 'package:lingua_srs/views/yaml_import_view.dart';
 import 'package:lingua_srs/widgets/markdown_text_field.dart';
@@ -15,9 +14,8 @@ void main() {
 
     expect(find.text('Files'), findsOneWidget);
     expect(find.text('Folder'), findsOneWidget);
-    expect(find.byType(DropTarget), findsOneWidget);
-    expect(find.textContaining('.md, .yaml, .yml, or .zip'), findsOneWidget);
-    expect(find.textContaining('plain YAML both work'), findsOneWidget);
+    // Files are picked, not dropped: there is no drop hint.
+    expect(find.textContaining('.md, .yaml, .yml, or .zip'), findsNothing);
     expect(find.text('Pick File'), findsNothing);
     expect(find.text('Pick ZIP'), findsNothing);
   });
@@ -432,8 +430,6 @@ vocabulary:
     expect(find.text('Add Vocabulary'), findsWidgets);
     expect(find.text('Files'), findsNothing);
     expect(find.text('Folder'), findsNothing);
-    expect(find.byType(DropTarget), findsOneWidget);
-    expect(tester.widget<DropTarget>(find.byType(DropTarget)).enable, isFalse);
     final nameField = tester.widget<TextField>(find.byType(TextField).first);
     expect(nameField.readOnly, isTrue);
 

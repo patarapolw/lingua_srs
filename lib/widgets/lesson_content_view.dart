@@ -16,6 +16,16 @@ import 'lesson_html.dart';
 import 'markdown_content.dart';
 import 'youtube_embed.dart';
 
+/// Frees [controller]'s native WebView now. Otherwise it lives on until
+/// Dart's garbage collector finalizes the controller, so WebViews opened
+/// and closed in a session pile up.
+void releaseWebView(WebViewController controller) {
+  unawaited(
+    Future<void>.sync(controller.platform.closeWebViewSession)
+        .catchError((Object _) {}),
+  );
+}
+
 /// A heading found in a lesson, used for the table of contents.
 class LessonHeading {
   final int level;
@@ -552,6 +562,7 @@ class _LessonContentViewState extends State<LessonContentView> {
       unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
     }
     _detach(widget.controller);
+    releaseWebView(_web);
     super.dispose();
   }
 
