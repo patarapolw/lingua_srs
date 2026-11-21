@@ -165,7 +165,7 @@ void main() {
     await rateGood(tester);
   }
 
-  testWidgets('back before anything is answered leaves without asking', (
+  testWidgets('back before any answer is shown leaves without asking', (
     tester,
   ) async {
     final provider = await loadedProvider(tester);
@@ -176,6 +176,24 @@ void main() {
 
     expect(find.text('Leave this review?'), findsNothing);
     expect(find.byType(StudyView), findsNothing);
+  });
+
+  testWidgets('back with the first answer shown asks', (tester) async {
+    final provider = await loadedProvider(tester);
+    final lesson = await seedTwoNewCards(tester, provider);
+    await openReview(tester, provider, _RecordingAudioService(), lesson);
+    await reveal(tester);
+
+    await pressBack(tester);
+
+    expect(find.text('Leave this review?'), findsOneWidget);
+    expect(find.textContaining('2 cards are left'), findsOneWidget);
+
+    await tester.tap(find.text('Stay'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(StudyView), findsOneWidget);
+    expect(find.textContaining('Good'), findsOneWidget);
   });
 
   testWidgets('back in a started review asks, and Stay keeps the review', (

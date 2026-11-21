@@ -1823,10 +1823,12 @@ class _StudyViewState extends State<StudyView> {
   }
 
   /// Whether going back would leave cards of a started session unanswered:
-  /// something was rated or skipped, and cards are still to come. Leaving a
-  /// session not yet started, or a finished one, needs no warning.
+  /// an answer was shown, or something was rated or skipped, and cards are
+  /// still to come. Leaving a session not yet started, or a finished one,
+  /// needs no warning.
   bool get _leavingDropsCards =>
-      _undoStack.isNotEmpty && _currentIndex < _queue.length;
+      (_isAnswerRevealed || _undoStack.isNotEmpty) &&
+      _currentIndex < _queue.length;
 
   bool _confirmingLeave = false;
 
