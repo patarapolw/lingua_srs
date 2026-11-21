@@ -608,6 +608,10 @@ enum CramMode {
   learnNew,
 }
 
+/// The answers to the question asked when back is pressed in a started
+/// review.
+enum LeaveReviewChoice { stay, wrapUp, leave }
+
 class StudyView extends StatefulWidget {
   final String? lessonId;
 
@@ -1806,11 +1810,80 @@ class _StudyViewState extends State<StudyView> {
     // ends and dispose() runs. This is tied to the route being popped, never
     // to layout, so rotating the device does not cut audio off.
     return PopScope(
+      canPop: !_leavingDropsCards,
       onPopInvokedWithResult: (didPop, _) {
-        if (didPop) unawaited(_audio.stop());
+        if (didPop) {
+          unawaited(_audio.stop());
+        } else {
+          unawaited(_confirmLeave());
+        }
       },
       child: _buildScreen(context),
     );
+  }
+
+  /// Whether going back would leave cards of a started session unanswered:
+  /// something was rated or skipped, and cards are still to come. Leaving a
+  /// session not yet started, or a finished one, needs no warning.
+  bool get _leavingDropsCards =>
+      _undoStack.isNotEmpty && _currentIndex < _queue.length;
+
+  bool _confirmingLeave = false;
+
+  /// Asked when back is pressed in a started session: stay, leave, or wrap
+  /// up instead, which keeps the mistakes and a few reviews.
+  Future<void> _confirmLeave() async {
+    if (_confirmingLeave) return;
+    _confirmingLeave = true;
+    final left = distinctCardCount(_queue.sublist(_answeredCount));
+    final mistakes = _againCardIds.length;
+    final canWrapUp = !_wrappedUp;
+    final choice = await showDialog<LeaveReviewChoice>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Leave this review?'),
+        content: Text(
+          [
+            'Your answers so far are saved. '
+                '$left ${left == 1 ? 'card is' : 'cards are'} left in this '
+                'session.',
+            if (mistakes > 0)
+              '$mistakes ${mistakes == 1 ? 'card' : 'cards'} you got wrong '
+                  '${mistakes == 1 ? 'has' : 'have'} not been answered again '
+                  'yet.',
+            if (canWrapUp)
+              'Wrap up instead to finish with your mistakes and at most '
+                  '$wrapUpReviewCount more reviews.',
+          ].join('\n\n'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, LeaveReviewChoice.stay),
+            child: const Text('Stay'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, LeaveReviewChoice.leave),
+            child: const Text('Leave'),
+          ),
+          if (canWrapUp)
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, LeaveReviewChoice.wrapUp),
+              child: const Text('Wrap up'),
+            ),
+        ],
+      ),
+    );
+    _confirmingLeave = false;
+    if (!mounted) return;
+    switch (choice) {
+      case LeaveReviewChoice.leave:
+        // Navigator.pop ignores canPop, so this leaves without asking again.
+        Navigator.of(context).pop();
+      case LeaveReviewChoice.wrapUp:
+        _wrapUp();
+      case LeaveReviewChoice.stay || null:
+        break;
+    }
   }
 
   Widget _buildScreen(BuildContext context) {
