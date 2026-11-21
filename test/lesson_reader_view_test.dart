@@ -11,6 +11,7 @@ import 'package:lingua_srs/services/lesson_links.dart';
 import 'package:lingua_srs/services/tts_voice.dart';
 import 'package:lingua_srs/views/lesson_detail_view.dart';
 import 'package:lingua_srs/views/lesson_reader_view.dart';
+import 'package:lingua_srs/widgets/markdown_editor.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:webview_platform_interface/webview_platform_interface.dart';
@@ -242,12 +243,23 @@ Preview text.
     expect(find.byTooltip('Copy link to this lesson'), findsOneWidget);
   });
 
-  /// Opens the Markdown editor, which starts on Preview, and chooses Edit.
+  /// Opens the Markdown editor, which starts on Edit.
   Future<void> openEditor(WidgetTester tester) async {
     await tester.tap(find.byTooltip('Edit Markdown'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Edit'));
-    await tester.pumpAndSettle();
+  }
+
+  /// Waits, in real time, for the editor's save to write the lesson and
+  /// close the editor: a fixed wait was too short with the whole suite
+  /// running. Gives up after 5 seconds and lets the test's checks fail.
+  Future<void> waitForSave(WidgetTester tester) async {
+    for (var i = 0; i < 100; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pump();
+      if (find.byType(MarkdownEditor).evaluate().isEmpty) return;
+    }
   }
 
   /// What the editor's page sends when [text] is typed into it.
@@ -262,26 +274,26 @@ Preview text.
   }
 
   group('Markdown editor', () {
-    testWidgets('opens on Preview of the lesson text, then edits it in a '
-        'WebView', (tester) async {
+    testWidgets('opens on Edit of the lesson text in a WebView, with '
+        'Preview a tap away', (tester) async {
       await openReader(tester, const Size(1200, 800));
       final readerViews = webview.controllers.length;
 
       await tester.tap(find.byTooltip('Edit Markdown'));
       await tester.pumpAndSettle();
-      expect(find.text('Preview'), findsOneWidget);
       expect(webview.controllers, hasLength(readerViews + 1));
-      expect(webview.controller.html, contains('First part'));
-      expect(webview.controller.html, isNot(contains('<textarea')));
-
-      await tester.tap(find.text('Edit'));
-      await tester.pumpAndSettle();
-      expect(webview.controllers, hasLength(readerViews + 2));
       final page = webview.controller.html!;
       expect(page, contains('<textarea id="editor"'));
       expect(page, contains('# Greetings'));
-      // Chosen with a tap: the editor takes focus.
-      expect(page, contains('true, 0, 0);'));
+      // Opened with the page, not a tap on the editor: no focus, so no
+      // keyboard on a phone.
+      expect(page, contains('false, 0, 0);'));
+
+      await tester.tap(find.text('Preview'));
+      await tester.pumpAndSettle();
+      expect(webview.controllers, hasLength(readerViews + 2));
+      expect(webview.controller.html, contains('First part'));
+      expect(webview.controller.html, isNot(contains('<textarea')));
     });
 
     testWidgets('starts no WebView for an empty lesson until asked to', (
@@ -332,12 +344,7 @@ Preview text.
       await typeMarkdown(tester, '# Greetings\n\nNew text.\n');
 
       webview.controller.send({'type': 'save'});
-      for (var i = 0; i < 5; i++) {
-        await tester.runAsync(
-          () => Future<void>.delayed(const Duration(milliseconds: 50)),
-        );
-        await tester.pump();
-      }
+      await waitForSave(tester);
       await tester.pump(const Duration(milliseconds: 500));
 
       final provider = Provider.of<AppProvider>(
@@ -387,12 +394,7 @@ Preview text.
         '# Greetings\n\n## Vocabulary\n\n- 학교 — school\n',
       );
       await tester.tap(find.text('Save'));
-      for (var i = 0; i < 5; i++) {
-        await tester.runAsync(
-          () => Future<void>.delayed(const Duration(milliseconds: 50)),
-        );
-        await tester.pump();
-      }
+      await waitForSave(tester);
       // Back in the reader, whose content view reloads the saved text and
       // so never settles: wait out the editor's pop transition only.
       await tester.pump(const Duration(milliseconds: 500));

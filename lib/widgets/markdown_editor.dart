@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:webview_all/webview_all.dart';
 
@@ -408,9 +410,36 @@ class _MarkdownWebEditorState extends State<MarkdownWebEditor> {
     if (oldWidget.enabled != widget.enabled && _loaded) {
       _web.runJavaScript(MarkdownEditorHtml.setDisabled(!widget.enabled));
     }
-    if (widget.focusRequest > oldWidget.focusRequest && _loaded) {
-      _web.runJavaScript(MarkdownEditorHtml.focus);
+    if (widget.focusRequest > oldWidget.focusRequest && _loaded) _focus();
+  }
+
+  static bool get _isAndroid =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+  static const _androidChannel = MethodChannel('lingua/markdown_editor');
+
+  /// The page's title, which the Android side finds this WebView by.
+  late final String _title = 'lingua-editor-${identityHashCode(this)}';
+
+  /// Puts the focus in the editor, with the keyboard up on Android.
+  Future<void> _focus() async {
+    if (_isAndroid) {
+      // A JavaScript focus() alone opens no keyboard there: the WebView
+      // has no native focus until it is touched.
+      try {
+        final focused = await _androidChannel.invokeMethod<bool>('focus', {
+          'title': _title,
+          'script': MarkdownEditorHtml.focus,
+        });
+        if (focused == true) return;
+      } on PlatformException {
+        // Below, as on other platforms.
+      } on MissingPluginException {
+        // Below, as on other platforms.
+      }
+      if (!mounted) return;
     }
+    _web.runJavaScript(MarkdownEditorHtml.focus);
   }
 
   @override
@@ -482,7 +511,9 @@ class _MarkdownWebEditorState extends State<MarkdownWebEditor> {
       _injection = MarkdownEditorHtml.injection(css, start: start);
       await _web.loadFlutterAsset(_windowsHostAsset);
     } else {
-      await _web.loadHtmlString(MarkdownEditorHtml.page(css, start: start));
+      await _web.loadHtmlString(
+        MarkdownEditorHtml.page(css, start: start, title: _title),
+      );
     }
   }
 
@@ -500,6 +531,9 @@ class _MarkdownWebEditorState extends State<MarkdownWebEditor> {
       _web.runJavaScript(MarkdownEditorHtml.setCss(css));
     }
     _onControllerChanged();
+    // The start script focused the textarea, but that opens no keyboard on
+    // Android.
+    if (widget.focusRequest > 0 && _isAndroid) _focus();
   }
 
   /// Sends text put in the controller in code to the page.
@@ -576,7 +610,16 @@ class _MarkdownWebEditorState extends State<MarkdownWebEditor> {
       child: Padding(
         // As wide as the focused border, so focus does not resize the page.
         padding: const EdgeInsets.all(2),
-        child: WebViewWidget(controller: _web),
+        child: WebViewWidget(
+          controller: _web,
+          // Every touch goes to the editor. Otherwise a parent that also
+          // takes drags (the Add Lessons tabs on a phone) holds the touch
+          // in the gesture arena, and Android's long press for the
+          // copy/paste menu never reaches the WebView.
+          gestureRecognizers: {
+            Factory<OneSequenceGestureRecognizer>(EagerGestureRecognizer.new),
+          },
+        ),
       ),
     );
   }
@@ -714,9 +757,12 @@ textarea:disabled { opacity: 0.6; }
       '<body><textarea id="editor" spellcheck="false" autocomplete="off" '
       'autocapitalize="off" aria-label="Markdown"></textarea>';
 
-  /// A whole page, for a WebView that can load an HTML string.
-  static String page(String css, {String start = ''}) =>
-      '<!DOCTYPE html><html>${inner(css)}'
+  /// A whole page, for a WebView that can load an HTML string. [title]
+  /// (letters, digits and `-`) tells this editor's WebView apart on
+  /// Android.
+  static String page(String css, {String start = '', String title = ''}) =>
+      '<!DOCTYPE html><html>'
+      '${inner(css).replaceFirst('<head>', '<head><title>$title</title>')}'
       '<script>$script\n$start</script></body></html>';
 
   /// A script that replaces the WebView's page with the editor, for

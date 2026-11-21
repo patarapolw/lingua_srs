@@ -416,8 +416,6 @@ class _LessonMarkdownEditorState extends State<_LessonMarkdownEditor> {
                     controller: _controller,
                     enabled: !_saving,
                     hintText: 'Enter lesson Markdown',
-                    // Opens on the lesson as it reads, with Edit a tap away.
-                    startInPreview: true,
                     onSave: _saving ? null : _save,
                     fallback: MarkdownTextField(
                       controller: _controller,

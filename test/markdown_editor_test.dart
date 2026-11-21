@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lingua_srs/services/yaml_parser_service.dart';
 import 'package:lingua_srs/widgets/markdown_editor.dart';
@@ -207,6 +209,9 @@ void main() {
   });
 
   testWidgets('keeps one WebView each for Edit and Preview', (tester) async {
+    // Off Android, where focus goes through the page alone.
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
     final controller = TextEditingController(text: '# One');
     await tester.pumpWidget(host(controller, startInPreview: true));
     await tester.pumpAndSettle();
@@ -236,6 +241,42 @@ void main() {
     expect(preview.closed || editor.closed, isFalse);
     await tester.pumpWidget(const SizedBox());
     expect(preview.closed && editor.closed, isTrue);
+  });
+
+  testWidgets('asks Android to focus the WebView, so the keyboard opens', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final calls = <MethodCall>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('lingua/markdown_editor'),
+      (call) async {
+        calls.add(call);
+        return true;
+      },
+    );
+    final controller = TextEditingController(text: '# One');
+    await tester.pumpWidget(host(controller, startInPreview: true));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Edit'));
+    await tester.pumpAndSettle();
+    final editor = webview.controller;
+    editor.finish();
+    await tester.pump();
+
+    expect(calls, hasLength(1));
+    final title = (calls.single.arguments as Map)['title'] as String;
+    expect(editor.html, contains('<title>$title</title>'));
+
+    await tester.tap(find.text('Preview'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit'));
+    await tester.pumpAndSettle();
+    expect(calls, hasLength(2));
+    // The native side ran the focus script, so the page is not sent it.
+    expect(editor.scripts, isNot(contains(MarkdownEditorHtml.focus)));
   });
 
   testWidgets('offers no Preview for YAML', (tester) async {
