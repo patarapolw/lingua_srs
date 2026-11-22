@@ -81,6 +81,7 @@ lingua_srs/
 │   │   ├── yaml_import_view.dart      # File/folder import, editor, validator & preview
 │   │   ├── vocab_edit_dialog.dart     # On-the-go editor for any field
 │   │   ├── ai_discussion_dialog.dart  # AI-assisted quiz discussion chat
+│   │   ├── ai_settings_dialog.dart    # AI key and instructions alone, opened from an AI chat's More menu
 │   │   ├── recent_ai_discussions_view.dart # Recent Discussions tab, with search
 │   │   ├── related_ai_discussions_sheet.dart # Related discussions panel of an AI chat
 │   │   ├── activity_heatmap_view.dart # Study activity: heatmap, cards by stage, leeches
@@ -93,6 +94,7 @@ lingua_srs/
 │   └── widgets/
 │       ├── adaptive_scaffold.dart     # Responsive layout (Rail vs BottomNav)
 │       ├── ai_discussion_suggestion_tile.dart # One suggested AI discussion and why
+│       ├── ai_settings_fields.dart    # DeepSeek API key and custom instructions fields, for Settings and AI settings
 │       ├── ai_question_chip.dart              # A suggested question to tap; a long one wraps onto more lines; a typed one can be removed
 │       ├── audio_button.dart          # Audio play/stop indicator
 │       ├── answer_workspace.dart      # Per-card handwriting or typed answer area

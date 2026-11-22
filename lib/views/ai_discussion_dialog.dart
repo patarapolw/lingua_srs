@@ -21,6 +21,7 @@ import '../widgets/ai_discussion_suggestion_tile.dart';
 import '../widgets/ai_question_chip.dart';
 import '../widgets/emphasis_text.dart';
 import '../widgets/markdown_content.dart';
+import 'ai_settings_dialog.dart';
 import 'related_ai_discussions_sheet.dart';
 import 'yaml_import_view.dart';
 
@@ -32,7 +33,7 @@ typedef _VocabularyOffer = ({
 });
 
 /// What the dialog header's More menu offers.
-enum _DialogMenuAction { delete }
+enum _DialogMenuAction { aiSettings, delete }
 
 class AiDiscussionDialog extends StatefulWidget {
   final String discussionId;
@@ -682,7 +683,9 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
     FocusScope.of(context).unfocus();
     final provider = context.read<AppProvider>();
     if (provider.deepSeekApiKey.isEmpty) {
-      setState(() => _error = 'Add your DeepSeek API key in settings first.');
+      setState(
+        () => _error = 'Add your DeepSeek API key in AI settings (More) first.',
+      );
       return;
     }
 
@@ -853,37 +856,39 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
                         onPressed: _sending ? null : _openRelated,
                         icon: const Icon(Icons.manage_search),
                       ),
-                    // Deleting is rare and permanent, so it lives in a menu. An
-                    // empty chat has nothing to delete, hence nothing to show.
-                    if (messages.isNotEmpty)
-                      PopupMenuButton<_DialogMenuAction>(
-                        tooltip: 'More',
-                        enabled: !_sending,
-                        onSelected: (action) {
-                          switch (action) {
-                            case _DialogMenuAction.delete:
-                              _deleteDiscussion();
-                          }
-                        },
-                        itemBuilder: (_) => const [
-                          PopupMenuItem(
+                    // AI settings are here so a chat opened during a review
+                    // can change them without leaving it. Deleting is rare and
+                    // permanent, so it lives in the menu too, and only once
+                    // there is something to delete.
+                    PopupMenuButton<_DialogMenuAction>(
+                      tooltip: 'More',
+                      enabled: !_sending,
+                      onSelected: (action) {
+                        switch (action) {
+                          case _DialogMenuAction.aiSettings:
+                            AiSettingsDialog.show(context);
+                          case _DialogMenuAction.delete:
+                            _deleteDiscussion();
+                        }
+                      },
+                      itemBuilder: (_) => [
+                        const PopupMenuItem(
+                          value: _DialogMenuAction.aiSettings,
+                          child: _MenuItemLabel(
+                            icon: Icons.tune,
+                            text: 'AI settings',
+                          ),
+                        ),
+                        if (messages.isNotEmpty)
+                          const PopupMenuItem(
                             value: _DialogMenuAction.delete,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.delete_outline),
-                                SizedBox(width: 12),
-                                Flexible(
-                                  child: Text(
-                                    'Delete discussion',
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
+                            child: _MenuItemLabel(
+                              icon: Icons.delete_outline,
+                              text: 'Delete discussion',
                             ),
                           ),
-                        ],
-                      ),
+                      ],
+                    ),
                     IconButton(
                       tooltip: 'Close',
                       onPressed: () => Navigator.of(context).pop(),
@@ -1171,6 +1176,24 @@ Future<void> showAiDiscussion(
 
 /// Shown instead of the message box while a chat about a word or lesson that is
 /// gone is only being read.
+/// An icon and a label in the dialog header's More menu.
+class _MenuItemLabel extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _MenuItemLabel({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Icon(icon),
+      const SizedBox(width: 12),
+      Flexible(child: Text(text, overflow: TextOverflow.ellipsis)),
+    ],
+  );
+}
+
 class _OrphanedNotice extends StatelessWidget {
   const _OrphanedNotice({required this.isLesson, required this.onContinue});
 

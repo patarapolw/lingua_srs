@@ -8,12 +8,12 @@ import 'package:provider/provider.dart';
 
 import '../providers/app_provider.dart';
 import '../services/backup_service.dart';
-import '../services/lesson_ai_prompt.dart';
 import '../services/sync_account_service.dart';
 import '../services/sync_client.dart';
 import '../services/sync_error_text.dart';
 import '../services/sync_pairing.dart';
 import '../services/sync_password_policy.dart';
+import '../widgets/ai_settings_fields.dart';
 import '../widgets/dialog_messenger.dart';
 import '../widgets/icon_switch.dart';
 import 'pairing_confirmation.dart';
@@ -71,7 +71,6 @@ class _SettingsDialogState extends State<_SettingsDialogBody> {
   final _newSyncPasswordController = TextEditingController();
   final _newSyncConfirmPasswordController = TextEditingController();
   late bool _darkMode = widget.isDarkMode;
-  bool _obscureApiKey = true;
   bool _obscureSyncPassword = true;
   bool _obscureSyncConfirmPassword = true;
   bool _obscureNewSyncPassword = true;
@@ -1479,57 +1478,13 @@ class _SettingsDialogState extends State<_SettingsDialogBody> {
                   'Add your DeepSeek API key to ask questions about vocabulary and example sentences during quizzes.',
                 ),
                 const SizedBox(height: 16),
-                TextField(
-                  controller: _apiKeyController,
-                  obscureText: _obscureApiKey,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  decoration: InputDecoration(
-                    labelText: 'DeepSeek API key',
-                    hintText: 'sk-...',
-                    floatingLabelBehavior: FloatingLabelBehavior.always,
-                    suffixIcon: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (provider.deepSeekApiKey.isNotEmpty)
-                          IconButton(
-                            tooltip: 'Remove API key',
-                            icon: const Icon(Icons.delete_outline),
-                            onPressed: _saving ? null : _removeApiKey,
-                          ),
-                        IconButton(
-                          tooltip: _obscureApiKey
-                              ? 'Show API key'
-                              : 'Hide API key',
-                          icon: Icon(
-                            _obscureApiKey
-                                ? Icons.visibility
-                                : Icons.visibility_off,
-                          ),
-                          onPressed: () =>
-                              setState(() => _obscureApiKey = !_obscureApiKey),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _aiInstructionsController,
-                  minLines: 2,
-                  maxLines: 6,
-                  maxLength: LessonAiPrompt.maxInstructionsChars,
-                  decoration: const InputDecoration(
-                    labelText: 'Custom AI instructions',
-                    hintText: 'e.g. Explain for an ESL learner',
-                    alignLabelWithHint: true,
-                    floatingLabelBehavior: FloatingLabelBehavior.always,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  'The key is stored in this device’s secure storage. DeepSeek receives your questions, and for the merge and hint buttons the Korean and English of your vocabulary (for hints, every word of the same type).',
-                  style: theme.textTheme.bodySmall,
+                AiSettingsFields(
+                  apiKeyController: _apiKeyController,
+                  instructionsController: _aiInstructionsController,
+                  onRemoveApiKey: provider.deepSeekApiKey.isNotEmpty
+                      ? _removeApiKey
+                      : null,
+                  enabled: !_saving,
                 ),
               ],
             ],
