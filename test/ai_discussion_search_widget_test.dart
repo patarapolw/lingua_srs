@@ -14,6 +14,7 @@ import 'package:lingua_srs/services/lesson_ai_prompt.dart';
 import 'package:lingua_srs/services/storage_service.dart';
 import 'package:lingua_srs/services/yaml_parser_service.dart';
 import 'package:lingua_srs/views/ai_discussion_dialog.dart';
+import 'package:lingua_srs/views/ai_settings_dialog.dart';
 import 'package:lingua_srs/views/recent_ai_discussions_view.dart';
 import 'package:lingua_srs/views/yaml_import_view.dart';
 import 'package:lingua_srs/widgets/ai_question_chip.dart';
@@ -539,7 +540,7 @@ void main() {
       expect(composer.controller!.text, question);
       expect(provider.getAiDiscussion('v-apple:new'), isEmpty);
       expect(
-        find.text('Add your DeepSeek API key in settings first.'),
+        find.text('Add your DeepSeek API key in AI settings (More) first.'),
         findsNothing,
       );
     });
@@ -563,7 +564,7 @@ void main() {
       expect(tester.testTextInput.isVisible, isFalse);
       expect(tester.widget<TextField>(composer).focusNode!.hasFocus, isFalse);
       expect(
-        find.text('Add your DeepSeek API key in settings first.'),
+        find.text('Add your DeepSeek API key in AI settings (More) first.'),
         findsOneWidget,
       );
     });
@@ -868,7 +869,7 @@ void main() {
       expect(find.byIcon(Icons.key_outlined), findsNothing);
     });
 
-    testWidgets('an empty chat has nothing to delete, so no More button', (
+    testWidgets('an empty chat offers AI settings but nothing to delete', (
       tester,
     ) async {
       final (provider, _) = await loadedProvider(tester);
@@ -876,7 +877,11 @@ void main() {
 
       expect(find.byTooltip('Related discussions'), findsOneWidget);
       expect(find.byTooltip('Close'), findsOneWidget);
-      expect(find.byTooltip('More'), findsNothing);
+      await tester.tap(find.byTooltip('More'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('AI settings'), findsOneWidget);
+      expect(find.text('Delete discussion'), findsNothing);
     });
 
     testWidgets('delete is hidden in More, not a header button', (
@@ -936,7 +941,11 @@ void main() {
 
       expect(provider.getAiDiscussion('v-apple:cur'), isEmpty);
       expect(find.byType(AiDiscussionDialog), findsOneWidget);
-      expect(find.byTooltip('More'), findsNothing);
+      await tester.tap(find.byTooltip('More'));
+      await tester.pumpAndSettle();
+      expect(find.text('Delete discussion'), findsNothing);
+      await tester.tapAt(Offset.zero);
+      await tester.pumpAndSettle();
       expect(
         find.text('Ask a question about this word or sentence.'),
         findsOneWidget,
@@ -962,6 +971,116 @@ void main() {
         ),
         findsOneWidget,
       );
+    });
+  });
+
+  group('AI settings from a chat', () {
+    Future<void> openAiSettings(WidgetTester tester) async {
+      await tester.tap(find.byTooltip('More'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('AI settings'));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> openChat(WidgetTester tester, AppProvider provider) async {
+      await pumpWith(
+        tester,
+        provider,
+        Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) => const AiDiscussionDialog(
+                  discussionId: 'v-apple:new',
+                  targetWord: '사과',
+                  translation: 'apple',
+                  targetLanguage: 'ko',
+                  nativeLanguage: 'en',
+                ),
+              ),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+    }
+
+    final keyField = find.widgetWithText(TextField, 'DeepSeek API key');
+    final instructionsField = find.widgetWithText(
+      TextField,
+      'Custom AI instructions',
+    );
+
+    testWidgets('shows the saved key and instructions', (tester) async {
+      final (provider, _) = await loadedProvider(tester);
+      await tester.runAsync(() async {
+        await provider.setDeepSeekApiKey('sk-old');
+        await provider.setAiInstructions('Explain simply.');
+      });
+      await openChat(tester, provider);
+
+      await openAiSettings(tester);
+
+      expect(find.byType(AiSettingsDialog), findsOneWidget);
+      expect(tester.widget<TextField>(keyField).controller!.text, 'sk-old');
+      expect(
+        tester.widget<TextField>(instructionsField).controller!.text,
+        'Explain simply.',
+      );
+    });
+
+    testWidgets('has no switch that turns AI off', (tester) async {
+      final (provider, _) = await loadedProvider(tester);
+      await openChat(tester, provider);
+
+      await openAiSettings(tester);
+
+      expect(
+        find.descendant(
+          of: find.byType(AiSettingsDialog),
+          matching: find.byType(Switch),
+        ),
+        findsNothing,
+      );
+      expect(find.text('AI features'), findsNothing);
+    });
+
+    testWidgets('Save keeps the chat open and its new instructions', (
+      tester,
+    ) async {
+      final (provider, _) = await loadedProvider(tester);
+      await openChat(tester, provider);
+
+      await openAiSettings(tester);
+      await tester.enterText(keyField, ' sk-new ');
+      await tester.enterText(instructionsField, 'Explain for an ESL learner');
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AiSettingsDialog), findsNothing);
+      expect(find.byType(AiDiscussionDialog), findsOneWidget);
+      expect(provider.deepSeekApiKey, 'sk-new');
+      expect(provider.aiInstructions, 'Explain for an ESL learner');
+      expect(provider.showAi, isTrue);
+    });
+
+    testWidgets('Cancel changes nothing', (tester) async {
+      final (provider, _) = await loadedProvider(tester);
+      await tester.runAsync(
+        () => provider.setAiInstructions('Explain simply.'),
+      );
+      await openChat(tester, provider);
+
+      await openAiSettings(tester);
+      await tester.enterText(instructionsField, 'Something else');
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AiDiscussionDialog), findsOneWidget);
+      expect(provider.aiInstructions, 'Explain simply.');
     });
   });
 
@@ -1404,7 +1523,7 @@ void main() {
 
       // No API key is set in tests, so it stops at asking for one.
       expect(
-        find.text('Add your DeepSeek API key in settings first.'),
+        find.text('Add your DeepSeek API key in AI settings (More) first.'),
         findsOneWidget,
       );
     });
