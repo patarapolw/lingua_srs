@@ -1,4 +1,8 @@
+import 'dart:convert';
 import 'dart:math';
+
+import 'package:cryptography_plus/cryptography_plus.dart';
+import 'package:cryptography_plus/dart.dart';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lingua_srs/services/sync_account_crypto.dart';
@@ -51,6 +55,40 @@ void main() {
       ),
       throwsFormatException,
     );
+  });
+
+  // The app used cryptography_plus's DartArgon2id until #167 moved it to
+  // hashlib's, which is faster. Both must give the same master key, or
+  // accounts made before the change could no longer sign in. The known-answer
+  // test above checks one case; this checks odd emails and passwords too.
+  test('Argon2id gives the same bytes as the earlier implementation', () async {
+    const earlier = DartArgon2id(
+      memory: 65536,
+      iterations: 3,
+      parallelism: 1,
+      hashLength: 32,
+    );
+    final cases = [
+      ('reader@example.com', 'TEST-ONLY-CRYPTO-PASSWORD'),
+      ('a@b.c', 'x'),
+      for (var seed = 0; seed < 2; seed++)
+        (
+          'r\u00e9ader+$seed@example.com',
+          SyncAccountCrypto.normalizePassword(oddText(Random(seed))),
+        ),
+    ];
+    for (final (email, password) in cases) {
+      final expected = await (await earlier.deriveKey(
+        secretKey: SecretKey(utf8.encode(password)),
+        nonce: utf8.encode('linguasrs:$email'),
+      )).extractBytes();
+
+      expect(
+        SyncAccountCrypto.argon2id(utf8.encode(password), email),
+        expected,
+        reason: 'email $email, code points ${hex(password)}',
+      );
+    }
   });
 
   group('password normalization', () {

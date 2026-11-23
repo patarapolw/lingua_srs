@@ -68,6 +68,9 @@ dependencies:
   # test/android_native_library_names_test.dart).
   super_clipboard: ^0.10.0-dev.2
   cryptography_plus: ^3.0.0
+  # Argon2id for the sync account key: pure Dart, about twice as fast as
+  # cryptography_plus's DartArgon2id, with the same key bytes (#167).
+  hashlib: ^2.4.4
   bip39_mnemonic: ^4.1.0
   password_rules: ^1.0.0
   qr_flutter: ^4.1.0
