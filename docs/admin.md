@@ -93,10 +93,10 @@ In the dashboard, open the domain, then **Security** → **WAF** → **Rate limi
 - **When rate exceeds:** a number of requests in a period (below).
 - **Then take action:** Block, for a mitigation timeout (below).
 
-What a plan includes (how many rules, which periods, timeouts and matching operators) differs between plans and changes; check Cloudflare's [rate limiting rules documentation](https://developers.cloudflare.com/waf/rate-limiting-rules/) for yours. As a starting point only, these values are suggestions, not tested limits:
+What a plan includes (how many rules, which periods, timeouts and matching operators) differs between plans and changes; check Cloudflare's [rate limiting rules documentation](https://developers.cloudflare.com/waf/rate-limiting-rules/) for yours. The free plan allows one rate limiting rule, so it has to cover all of `/v1/`:
 
-- One rule on all of `/v1/`: 20 requests per 10 seconds per IP, blocked for 10 seconds (or the shortest timeout offered). A sync usually makes a few requests. A first sync of a large library makes more: it pulls 500 records a request and pushes up to 100 records or packs a request (see [sync.md](sync.md#packs)). The limit slows guessing to about two a second per address; raise it if first syncs get blocked.
-- If your plan allows a second rule: a stricter one on the paths that have no regular use, 5 requests per 10 seconds per IP on URI Path starting with `/v1/accounts` (signup, confirmation and both recovery steps; it does not match `/v1/account`, which syncing uses) and on `/v1/pairings/`.
+- One rule on all of `/v1/`: 20 requests per 10 seconds per IP, blocked for 10 seconds (or the shortest timeout offered). This is what the hosted server uses. A sync usually makes a few requests. A first sync of a large library makes more: it pulls 500 records a request and pushes up to 100 records or packs a request (see [sync.md](sync.md#packs)). The limit slows guessing to about two a second per address; raise it if first syncs get blocked.
+- Only on a plan that allows a second rule: a stricter one on the paths that have no regular use, for example 5 requests per 10 seconds per IP on URI Path starting with `/v1/accounts` (signup, confirmation and both recovery steps; it does not match `/v1/account`, which syncing uses) and on `/v1/pairings/`. This is an untested suggestion; the free plan cannot have it.
 
 People behind one shared address (an office, a school, mobile carrier NAT) count as one IP. A blocked request gets HTTP 429 from Cloudflare instead of the Worker's answer; the app reports that sync failed and tries again at its next sync. If legitimate users are blocked, look at **Security** → **Events** and raise the numbers.
 
