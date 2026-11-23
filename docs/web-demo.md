@@ -36,7 +36,7 @@ flutter build web --release --no-web-resources-cdn --base-href /lingua_srs/demo/
 
 - `test/web_demo_test.dart` runs with the other tests, on the VM, with `WebDemo.debugEnabled` on.
 - `flutter test --platform chrome test/web_smoke_test.dart` runs in Chrome, where `kIsWeb` is true. It opens the pages that once threw on the web. Plain `flutter test` skips it. Browser tests serve no assets, so it leaves out the sample lessons.
-- CI's `web` job runs the smoke test and builds the demo on every pull request.
+- CI's `check` job runs the smoke test and builds the demo on every pull request, after the VM tests. The Chrome run needs the same GTK and Rust setup: it runs super_clipboard's build hook too.
 
 ## Deploying it
 
