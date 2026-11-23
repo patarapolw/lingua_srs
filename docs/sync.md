@@ -61,7 +61,7 @@ authKey = HKDF(master, "auth")      sent as the Basic credential email:authKey
 wrapKey = HKDF(master, "wrap")      never leaves the device
 ```
 
-The app computes Argon2id with the pure Dart implementation off the UI isolate, so key derivation does not depend on loading a platform-native library.
+The app computes Argon2id with hashlib's pure Dart implementation off the UI isolate, so key derivation does not depend on loading a platform-native library (`serverpod_argon2` failed to load on Android). hashlib replaced cryptography_plus's `DartArgon2id` (#167): it is about twice as fast and gives the same bytes, so existing accounts keep their keys. A known-answer test and a comparison with `DartArgon2id` in `test/sync_account_crypto_test.dart` guard this.
 
 Argon2id is slow on purpose, so the app derives these keys **once per sign-in**, not once per step. It keeps the last derived keys in memory only (never on disk, in preferences or in logs), matched on email and password, and reuses them for creating and confirming an account, the sign-in check and the first sync that unlocks the data key. The keys are dropped when that sync has unlocked the data key, after a failed sign-in or password change, on sign-out and account deletion, and after five minutes at the latest. Changing the password replaces them with the keys of the new password. The derived bytes are unchanged, so existing accounts keep working.
 

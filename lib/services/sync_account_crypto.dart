@@ -2,7 +2,8 @@ import 'dart:convert';
 import 'dart:isolate';
 
 import 'package:cryptography_plus/cryptography_plus.dart';
-import 'package:cryptography_plus/dart.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:hashlib/hashlib.dart' show Argon2, Argon2Type;
 import 'package:unorm_dart/unorm_dart.dart' as unorm;
 
 class SyncAccountKeys {
@@ -19,12 +20,6 @@ class SyncAccountCrypto {
     'passes': 3,
     'lanes': 1,
   };
-  static const _argon2 = DartArgon2id(
-    memory: 65536,
-    iterations: 3,
-    parallelism: 1,
-    hashLength: 32,
-  );
   static final _cipher = AesGcm.with256bits();
 
   /// The password as key derivation sees it, in Unicode form NFKC.
@@ -42,13 +37,9 @@ class SyncAccountCrypto {
     required String password,
   }) async {
     final normalizedPassword = normalizePassword(password);
-    final master = await Isolate.run(() async {
-      final key = await _argon2.deriveKey(
-        secretKey: SecretKey(utf8.encode(normalizedPassword)),
-        nonce: utf8.encode('linguasrs:$email'),
-      );
-      return (await key.extractBytes()).toList();
-    });
+    final master = await Isolate.run(
+      () => argon2id(utf8.encode(normalizedPassword), email),
+    );
     final authKey = await _deriveKey(master, 'auth');
     final wrapKey = await _deriveKey(master, 'wrap');
     return SyncAccountKeys(
@@ -56,6 +47,25 @@ class SyncAccountCrypto {
       wrapKey: wrapKey,
     );
   }
+
+  /// The Argon2id master key for [password] (UTF-8, already normalized) and
+  /// [email], with the parameters in [kdf]. It runs on the calling isolate:
+  /// [deriveKeys] calls it off the UI isolate.
+  ///
+  /// It uses hashlib's pure Dart Argon2id, about twice as fast as
+  /// cryptography_plus's `DartArgon2id` and giving the same bytes, so
+  /// existing accounts keep their keys (#167). The known-answer test in
+  /// `test/sync_account_crypto_test.dart` guards that. A native Argon2 is not
+  /// used: `serverpod_argon2` failed to load on Android.
+  @visibleForTesting
+  static List<int> argon2id(List<int> password, String email) => Argon2(
+    type: Argon2Type.argon2id,
+    memorySizeKB: kdf['memoryKiB'] as int,
+    iterations: kdf['passes'] as int,
+    parallelism: kdf['lanes'] as int,
+    hashLength: 32,
+    salt: utf8.encode('linguasrs:$email'),
+  ).convert(password).bytes;
 
   /// The keys derived from a recovery code's secret (see
   /// `SyncRecoveryCode`): an auth key, of which the server keeps only a hash,
