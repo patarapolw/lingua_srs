@@ -65,6 +65,25 @@ jobs:
       # After the tests, so a formatting slip doesn't hide their results.
       - run: dart format --output=none --set-exit-if-changed lib test
 
+  # The web demo (#277): code that compiles for the VM can still fail to
+  # build for the web, or throw there (`Platform` checks), which the VM tests
+  # above cannot see. docs/web-demo.md.
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      # The runner image has Chrome.
+      - run: flutter test --platform chrome test/web_smoke_test.dart
+      - run: >-
+          flutter build web --release --no-web-resources-cdn
+          --base-href /${{ github.event.repository.name }}/demo/
+
   worker:
     runs-on: ubuntu-latest
     timeout-minutes: 10

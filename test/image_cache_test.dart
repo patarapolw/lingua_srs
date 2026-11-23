@@ -194,6 +194,23 @@ void main() {
       );
     });
 
+    testWidgets('on the web, an image without CORS falls back to <img>', (
+      tester,
+    ) async {
+      ImageCacheService.instance = _FixedCache(null);
+
+      await pumpImage(tester, 'https://example.com/a.png');
+      await tester.pump();
+
+      // Most image hosts send no CORS headers, so the renderer cannot read
+      // their images; the browser can still show them in an <img> (#277).
+      final image = tester.widget<Image>(find.byType(Image)).image;
+      expect(
+        (image as NetworkImage).webHtmlElementStrategy,
+        WebHtmlElementStrategy.fallback,
+      );
+    });
+
     testWidgets('a URL the cache does not handle is not looked up', (
       tester,
     ) async {

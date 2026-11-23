@@ -9,6 +9,7 @@ Flutter app (Dart, `provider` state management). See [README.md](README.md) for 
 - `dart format lib test`: format (the same folders `ci.yml` checks; the repo formats on save)
 - `flutter analyze`: must stay free of warnings
 - `flutter test integration_test -d macos` (or `-d linux`): keychain and network checks on a real desktop build; CI runs them in `.github/workflows/desktop.yml` when platform code changes
+- `flutter test --platform chrome test/web_smoke_test.dart`: the web demo's smoke test in Chrome; CI's `web` job runs it and builds the demo (docs/web-demo.md)
 - `cd worker; npm test`: run the sync Worker tests (run from `worker/`; `npm run typecheck` type-checks it)
 
 ## Conventions

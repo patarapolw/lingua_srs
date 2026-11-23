@@ -102,7 +102,8 @@ DeepSeek's use of this data is governed by its own terms and your agreement with
 ### Text-to-speech
 
 - **Android**: words and sentences are spoken by your phone's text-to-speech engine. With an installed offline voice, nothing leaves the device. If only a network voice is available, the engine (for example Google's) sends the text to its provider. That is handled by the engine you chose in your Android settings.
-- **Windows, Linux and other platforms**: the app gets speech from Google Translate's online text-to-speech service. It sends the text being spoken (the word or sentence, with brackets and formatting removed) and its language. During a review it also fetches the speech for the next few cards in advance. The audio is then cached on your device. [Google privacy policy](https://policies.google.com/privacy)
+- **Windows, Linux and other platforms**, except the web demo: the app gets speech from Google Translate's online text-to-speech service. It sends the text being spoken (the word or sentence, with brackets and formatting removed) and its language. During a review it also fetches the speech for the next few cards in advance. The audio is then cached on your device. [Google privacy policy](https://policies.google.com/privacy)
+- **Web demo**: your browser's voices; see [Web demo](#web-demo).
 
 ### Media in lessons
 
