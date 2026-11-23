@@ -1,0 +1,68 @@
+# Builds the web demo (#277) and publishes it to GitHub Pages under demo/.
+# The docs site (#273) is to be built into the root of _site/ here too, next
+# to demo/: Pages serves one artifact per repository. See docs/web-demo.md.
+name: Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - lib/**
+      - web/**
+      - assets/**
+      - pubspec.yaml
+      - pubspec.lock
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      # CanvasKit is bundled rather than loaded from Google's CDN, so the
+      # demo's own files all come from Pages.
+      - run: >-
+          flutter build web --release --no-web-resources-cdn
+          --base-href /${{ github.event.repository.name }}/demo/
+      - name: Assemble the site
+        run: |
+          mkdir -p _site
+          cp -r build/web _site/demo
+          # Until the docs site takes the root (#273), it points at the demo.
+          cat > _site/index.html <<'HTML'
+          <!doctype html>
+          <meta charset="utf-8">
+          <title>LinguaSRS</title>
+          <meta http-equiv="refresh" content="0; url=demo/">
+          <a href="demo/">LinguaSRS web demo</a>
+          HTML
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}demo/
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

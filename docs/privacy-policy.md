@@ -2,7 +2,7 @@
 
 Effective date: 18 November 2026
 
-This policy explains what the LinguaSRS app and its optional sync server do with your data. It covers the app on every platform it is released for (Android through Google Play, and the Windows and Linux builds on GitHub Releases) and the hosted sync server.
+This policy explains what the LinguaSRS app and its optional sync server do with your data. It covers the app on every platform it is released for (Android through Google Play, and the Windows and Linux builds on GitHub Releases), the [web demo](#web-demo) and the hosted sync server.
 
 In short: your lessons and progress stay on your device. Nothing leaves it unless you use a feature that needs the internet, such as sync, AI chats, online voices or lessons that load media from the web. The app has no ads, no analytics and no crash reporting. If you use sync, the server stores your email address and your data in a form only your devices can decrypt.
 
@@ -110,6 +110,16 @@ Lessons can contain links to audio, images and YouTube videos. When the app play
 
 Which websites are contacted depends on the lessons you import or write.
 
+## Web demo
+
+The web demo at <https://patarapolw.github.io/lingua_srs/demo/> is the app in a browser, without AI features and without sync. It has no account and no server of its own, and sends your lessons and progress nowhere.
+
+- **Your data stays in the browser.** Lessons, progress and settings are kept in the browser's storage for the demo's site, on your device. Clearing the site's data in the browser deletes them. *Back up* saves a file where the browser saves downloads.
+- **Hosting.** GitHub Pages serves the demo's files. Like any web host, GitHub receives your IP address and request details when your browser loads them. [GitHub privacy statement](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement)
+- **Text-to-speech** uses your browser's voices (the Web Speech API), not Google Translate. Some browsers offer online voices that send the text to their provider, such as Google's voices in Chrome. That is handled by your browser.
+- **Fonts.** To show characters such as Korean, Chinese or Japanese, the demo downloads fonts from Google Fonts (fonts.gstatic.com), which receives your IP address. [Google privacy policy](https://policies.google.com/privacy)
+- **Media in lessons** is loaded as described under [Media in lessons](#media-in-lessons).
+
 ## No ads, analytics or tracking
 
 The app contains no advertising, no analytics and no crash reporting. It does not track you across apps or websites, and it does not sell or share your data for advertising.
@@ -144,6 +154,7 @@ If you no longer have the app or cannot sign in, email [polv@polv.cc](mailto:pol
 - Remove the DeepSeek key next to the key field in Settings.
 - **Sign out** in **Settings → Sync** removes the sync sign-in from that device.
 - To remove everything, clear the app's data or uninstall the app (on Windows and Linux, also delete the app's data folder).
+- In the web demo, clear the site's data in your browser.
 
 ## Security
 

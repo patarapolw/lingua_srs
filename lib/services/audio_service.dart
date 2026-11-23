@@ -38,6 +38,10 @@ class AudioService extends ChangeNotifier {
 
   bool get isPlaying => _isPlaying;
   String? get currentlyPlayingKey => _currentlyPlayingKey;
+
+  /// Whether text-to-speech uses the device's own voices: Android's TTS
+  /// engine, or on the web the browser's (Web Speech). Elsewhere it streams
+  /// an online voice.
   bool get usesOfflineTts => _offlineTts;
 
   TtsVoiceUsed? _lastVoice;
@@ -80,8 +84,11 @@ class AudioService extends ChangeNotifier {
     String? engine;
     var voices = <TtsVoice>[];
     try {
-      final defaultEngine = await _tts.getDefaultEngine;
-      engine = defaultEngine?.toString();
+      // A browser has no engines to name (the web plugin cannot answer).
+      if (!kIsWeb) {
+        final defaultEngine = await _tts.getDefaultEngine;
+        engine = defaultEngine?.toString();
+      }
       voices = TtsVoice.fromPlugin(await _tts.getVoices);
       // Only offline voices need their language data on the device. The
       // checks are sent together rather than one round trip at a time.
@@ -122,7 +129,7 @@ class AudioService extends ChangeNotifier {
   }) : _player = player ?? AudioPlayer(),
        _random = random ?? Random(),
        _tts = tts ?? FlutterTts(),
-       _offlineTts = offlineTts ?? (!kIsWeb && Platform.isAndroid) {
+       _offlineTts = offlineTts ?? (kIsWeb || Platform.isAndroid) {
     _initCacheDir();
     _completeSub = _player.onPlayerComplete.listen((_) {
       _isPlaying = false;
@@ -144,6 +151,8 @@ class AudioService extends ChangeNotifier {
   }
 
   Future<void> _initCacheDir() async {
+    // The web has no files: the browser's own HTTP cache keeps audio.
+    if (kIsWeb) return;
     try {
       Directory baseDir;
       try {
@@ -293,7 +302,8 @@ class AudioService extends ChangeNotifier {
 
   bool _isCurrent(int session) => !_isDisposed && session == _generation;
 
-  /// Uses an installed offline Android voice; other platforms stream and cache online TTS.
+  /// Uses an installed Android voice, or a browser voice on the web; other
+  /// platforms stream and cache online TTS.
   ///
   /// A locale prefix on [text] (`zh-TW:垃圾`, see [TtsText]) is not spoken:
   /// it picks the voice instead of [language].
@@ -365,7 +375,9 @@ class AudioService extends ChangeNotifier {
           continue;
         }
         final choice = {'name': voice.name, 'locale': voice.locale};
-        if (await _tts.setVoice(choice) == 1) {
+        final set = await _tts.setVoice(choice);
+        // The web plugin answers nothing; the voice is from its own list.
+        if (set == 1 || (kIsWeb && set == null)) {
           selected = voice;
           break;
         }
@@ -379,8 +391,8 @@ class AudioService extends ChangeNotifier {
 
       if (selected == null) {
         debugPrint(
-          'No Android TTS voice is available for "$requestedLanguage". '
-          'Install a voice in Android text-to-speech settings.',
+          'No TTS voice is available for "$requestedLanguage". Install a '
+          'voice in the system text-to-speech settings.',
         );
         return;
       }

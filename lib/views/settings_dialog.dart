@@ -13,6 +13,7 @@ import '../services/sync_client.dart';
 import '../services/sync_error_text.dart';
 import '../services/sync_pairing.dart';
 import '../services/sync_password_policy.dart';
+import '../services/web_demo.dart';
 import '../widgets/ai_settings_fields.dart';
 import '../widgets/dialog_messenger.dart';
 import '../widgets/icon_switch.dart';
@@ -172,8 +173,11 @@ class _SettingsDialogState extends State<_SettingsDialogBody> {
       final provider = context.read<AppProvider>();
       await provider.setMaxReviews24h(maxReviews);
       await provider.setMaxNewCards24h(maxNewCards);
-      await provider.setDeepSeekApiKey(_apiKeyController.text);
-      await provider.setAiInstructions(_aiInstructionsController.text);
+      // The web demo has no AI settings to save ([WebDemo]).
+      if (!WebDemo.enabled) {
+        await provider.setDeepSeekApiKey(_apiKeyController.text);
+        await provider.setAiInstructions(_aiInstructionsController.text);
+      }
       if (mounted) Navigator.of(context).pop();
     } catch (error) {
       if (mounted) {
@@ -835,8 +839,11 @@ class _SettingsDialogState extends State<_SettingsDialogBody> {
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('Restore backup?'),
-          content: const Text(
-            'This replaces the app data on this device. Your DeepSeek API key and sync sign-in will remain on this device.',
+          content: Text(
+            WebDemo.enabled
+                ? 'This replaces the lessons and study progress in this '
+                      'browser.'
+                : 'This replaces the app data on this device. Your DeepSeek API key and sync sign-in will remain on this device.',
           ),
           actions: [
             TextButton(
@@ -976,8 +983,11 @@ class _SettingsDialogState extends State<_SettingsDialogBody> {
               const SizedBox(height: 24),
               Text('Backup and restore', style: theme.textTheme.titleSmall),
               const SizedBox(height: 8),
-              const Text(
-                'Save your lessons and study progress to a file, or restore them on this device. The DeepSeek API key and sync password are not included.',
+              Text(
+                WebDemo.enabled
+                    ? 'Save your lessons and study progress to a file, or '
+                          'restore them in this browser.'
+                    : 'Save your lessons and study progress to a file, or restore them on this device. The DeepSeek API key and sync password are not included.',
               ),
               const SizedBox(height: 12),
               Wrap(
@@ -996,8 +1006,14 @@ class _SettingsDialogState extends State<_SettingsDialogBody> {
                 ],
               ),
               const SizedBox(height: 24),
-              if (SyncPairing.defaultEndpoint != null ||
-                  syncPairing != null) ...[
+              if (WebDemo.enabled) ...[
+                Text('Web demo', style: theme.textTheme.titleSmall),
+                const SizedBox(height: 8),
+                const Text(WebDemo.settingsNote),
+              ],
+              if (!WebDemo.enabled &&
+                  (SyncPairing.defaultEndpoint != null ||
+                      syncPairing != null)) ...[
                 Text('Sync', style: theme.textTheme.titleSmall),
                 const SizedBox(height: 8),
                 if (syncPairing == null)
@@ -1456,57 +1472,58 @@ class _SettingsDialogState extends State<_SettingsDialogBody> {
                 ],
                 const SizedBox(height: 24),
               ],
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'AI features',
-                      style: theme.textTheme.titleSmall,
-                    ),
-                  ),
-                  Switch(value: provider.showAi, onChanged: provider.setShowAi),
-                ],
-              ),
-              const SizedBox(height: 8),
-              if (!provider.showAi)
-                const Text(
-                  'AI features are hidden: the Discussions tab, Ask AI and '
-                  'the AI suggestion buttons. Saved discussions are kept.',
-                ),
-              if (provider.showAi) ...[
-                const Text(
-                  'Add your DeepSeek API key to ask questions about vocabulary and example sentences during quizzes.',
-                ),
-                const SizedBox(height: 16),
-                AiSettingsFields(
-                  apiKeyController: _apiKeyController,
-                  instructionsController: _aiInstructionsController,
-                  onRemoveApiKey: provider.deepSeekApiKey.isNotEmpty
-                      ? _removeApiKey
-                      : null,
-                  enabled: !_saving,
-                ),
-              ],
+              if (!WebDemo.enabled) ..._aiSection(theme, provider),
             ],
           ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: _saving ? null : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: _saving ? null : _save,
-          child: _saving
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('Save'),
-        ),
-      ],
+      actions: _actions,
     );
   }
+
+  List<Widget> _aiSection(ThemeData theme, AppProvider provider) => [
+    Row(
+      children: [
+        Expanded(child: Text('AI features', style: theme.textTheme.titleSmall)),
+        Switch(value: provider.showAi, onChanged: provider.setShowAi),
+      ],
+    ),
+    const SizedBox(height: 8),
+    if (!provider.showAi)
+      const Text(
+        'AI features are hidden: the Discussions tab, Ask AI and '
+        'the AI suggestion buttons. Saved discussions are kept.',
+      ),
+    if (provider.showAi) ...[
+      const Text(
+        'Add your DeepSeek API key to ask questions about vocabulary and example sentences during quizzes.',
+      ),
+      const SizedBox(height: 16),
+      AiSettingsFields(
+        apiKeyController: _apiKeyController,
+        instructionsController: _aiInstructionsController,
+        onRemoveApiKey: provider.deepSeekApiKey.isNotEmpty
+            ? _removeApiKey
+            : null,
+        enabled: !_saving,
+      ),
+    ],
+  ];
+
+  List<Widget> get _actions => [
+    TextButton(
+      onPressed: _saving ? null : () => Navigator.of(context).pop(),
+      child: const Text('Cancel'),
+    ),
+    FilledButton(
+      onPressed: _saving ? null : _save,
+      child: _saving
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Text('Save'),
+    ),
+  ];
 }

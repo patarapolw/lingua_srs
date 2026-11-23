@@ -243,7 +243,7 @@ void main() {
       await service.speak('안녕하세요', language: 'ko');
 
       expect(tts.spoken, isEmpty);
-      expect(printed, [contains('No Android TTS voice')]);
+      expect(printed, [contains('No TTS voice')]);
     });
   });
 

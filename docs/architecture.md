@@ -5,6 +5,8 @@ Overview of the source layout. Lesson file syntax lives in [lesson-format.md](le
 ```
 lingua_srs/
 ├── worker/                            # Cloudflare Worker (D1) for sync; see sync.md
+├── assets/demo/                       # Sample lessons the web demo starts with; see web-demo.md
+├── web/                               # Web build (the demo): index.html, manifest and icons
 ├── tool/install_dart_sdk.sh           # Dart SDK alone, for `dart format` without Flutter (AGENTS.md)
 ├── lib/
 │   ├── main.dart                      # App entry point, MultiProvider, adaptive theming
@@ -70,6 +72,8 @@ lingua_srs/
 │   │   ├── vocabulary_section_move.dart # Moves a lesson's `## Vocabulary` words into its frontmatter, read by rule or by AI
 │   │   ├── markdown_archive_service.dart # Reads Markdown files out of an imported ZIP
 │   │   ├── vocab_ai_service.dart      # AI merge suggestions and similar-meaning hints
+│   │   ├── lesson_markdown_store.dart # Lessons' Markdown: a file each, or a preference each on the web
+│   │   ├── web_demo.dart              # The web demo: no AI or sync, sample lessons on a first visit
 │   │   └── storage_service.dart       # Local persistence and debug seed data
 │   ├── views/
 │   │   ├── study_view.dart            # Flashcard study view with cloze & shortcuts

@@ -1,6 +1,6 @@
 # LinguaSRS
 
-SRS that puts language learning first: custom lessons, lesson-by-lesson vocabulary review, and a shared sentence pool. Built for studying on your phone (**Android and iOS**), with the same app on **Windows, macOS and Linux**. It uses an Anki-style SM-2 spaced repetition system.
+SRS that puts language learning first: custom lessons, lesson-by-lesson vocabulary review, and a shared sentence pool. Built for studying on your phone (**Android and iOS**), with the same app on **Windows, macOS and Linux**. It uses an Anki-style SM-2 spaced repetition system. [Try the web demo](https://patarapolw.github.io/lingua_srs/demo/) in a browser, without AI or sync ([what differs](docs/web-demo.md)).
 
 ## Screenshots
 
@@ -39,7 +39,7 @@ SRS that puts language learning first: custom lessons, lesson-by-lesson vocabula
   - EN ➔ KO cards hide the word in that sentence (cloze deletion).
 - **Shared pools**: browse, edit and link sentences across lessons; search every word in Korean or English.
 - **Merge duplicates**: combine duplicate words into one shared card, by hand or with AI suggestions, with undo.
-- **Audio**: stream-on-first-play with offline caching; offline system TTS on Android, cached online TTS elsewhere.
+- **Audio**: stream-on-first-play with offline caching; system TTS on Android and in the web demo, cached online TTS elsewhere.
 - **Pronunciation cues**: optional romanization (RR) and IPA lines for Korean words and sentences, shown on the back of the card.
 - **Adaptive review**:
   - *Again* cards return a few cards later, interleaved with new cards. In addition, *Again* is due again after 1 hour and *Hard* after 12 hours.
@@ -64,7 +64,7 @@ Korean ➔ English is the best supported; Mandarin Chinese has pinyin, simplifie
 ```bash
 flutter pub get
 flutter devices                   # find your phone's device id
-flutter run -d <device id>        # Android or iOS; or windows, macos, linux
+flutter run -d <device id>        # Android or iOS; or windows, macos, linux, chrome
 flutter test
 ```
 

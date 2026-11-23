@@ -103,6 +103,8 @@ flutter:
 
   assets:
     - assets/webview_host.html
+    # Sample lessons a first visit to the web demo starts with (#277).
+    - assets/demo/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

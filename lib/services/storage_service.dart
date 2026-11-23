@@ -2,10 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'language_activity.dart';
+import 'lesson_markdown_store.dart';
 import '../models/ai_discussion_message.dart';
 import '../models/lesson.dart';
 import '../models/saved_time.dart';
@@ -19,6 +19,7 @@ import 'secret_storage.dart';
 import 'sync_change_tracker.dart';
 import 'sync_pairing.dart';
 import 'sync_record_cipher.dart';
+import 'web_demo.dart';
 
 class StorageService {
   static const String _keyLessons = 'lingua_srs_lessons';
@@ -92,6 +93,8 @@ class StorageService {
   }
 
   static Future<String> loadDeepSeekApiKey() async {
+    // The web demo has no AI features, and no keychain to keep a key in.
+    if (WebDemo.enabled) return '';
     final prefs = await SharedPreferences.getInstance();
     return (await _loadSecret(prefs, _keyDeepSeekApiKey)) ?? '';
   }
@@ -110,6 +113,8 @@ class StorageService {
   /// The sync account this device is signed in to, or null when signed out or
   /// the stored link can no longer be read.
   static Future<SyncPairing?> loadSyncPairing() async {
+    // The web demo never signs in to sync.
+    if (WebDemo.enabled) return null;
     final prefs = await SharedPreferences.getInstance();
     final raw = await _loadSecret(prefs, _keySyncPairing);
     if (raw == null || raw.isEmpty) return null;
@@ -767,30 +772,22 @@ class StorageService {
     if (lessons.any((lesson) => lesson.markdownContent.isNotEmpty) ||
         _storedLessonMarkdownIds.isNotEmpty ||
         prefs.getStringList(_keyLessonMarkdownIds)?.isNotEmpty == true) {
-      final directory = await getApplicationSupportDirectory();
+      final store = await LessonMarkdownStore.open(prefs);
       final previousIds = {
         ..._storedLessonMarkdownIds,
         ...?prefs.getStringList(_keyLessonMarkdownIds),
       };
-      final markdownDirectory = Directory(
-        '${directory.path}${Platform.pathSeparator}lesson_markdown',
-      );
       for (final lesson in lessons) {
         final markdown = lesson.markdownContent;
         if (markdown.isEmpty) continue;
         markdownIds.add(lesson.id);
         if (_lessonMarkdownCache[lesson.id] == markdown) continue;
 
-        await markdownDirectory.create(recursive: true);
-        await _markdownFile(
-          directory,
-          lesson.id,
-        ).writeAsString(markdown, flush: true);
+        await store.write(lesson.id, markdown);
         _lessonMarkdownCache[lesson.id] = markdown;
       }
       for (final removedId in previousIds.difference(markdownIds.toSet())) {
-        final file = _markdownFile(directory, removedId);
-        if (await file.exists()) await file.delete();
+        await store.delete(removedId);
         _lessonMarkdownCache.remove(removedId);
       }
       _storedLessonMarkdownIds = markdownIds.toSet();
@@ -891,37 +888,30 @@ class StorageService {
       return;
     }
 
-    final directory = await getApplicationSupportDirectory();
+    final store = await LessonMarkdownStore.open(prefs);
     final lessonsById = {for (final lesson in lessons) lesson.id: lesson};
     for (final id in ids) {
       final lesson = lessonsById[id];
       if (lesson == null) continue;
-      final file = _markdownFile(directory, id);
-      if (!await file.exists()) {
+      final markdown = await store.read(id);
+      if (markdown == null) {
         debugPrint(
           'Markdown content for lesson "$id" is missing from storage.',
         );
         continue;
       }
-      final markdown = await file.readAsString();
       lesson.markdownContent = markdown;
       _lessonMarkdownCache[id] = markdown;
     }
     _storedLessonMarkdownIds = ids.toSet();
   }
 
-  static File _markdownFile(Directory directory, String lessonId) {
-    final safeId = base64Url.encode(utf8.encode(lessonId)).replaceAll('=', '');
-    return File(
-      '${directory.path}${Platform.pathSeparator}lesson_markdown'
-      '${Platform.pathSeparator}$safeId.md',
-    );
-  }
-
   static Future<void> _migrateLegacyWindowsPreferences(
     SharedPreferences prefs,
   ) async {
-    if (!Platform.isWindows || prefs.getBool(_keyWindowsMigration) == true) {
+    if (kIsWeb ||
+        !Platform.isWindows ||
+        prefs.getBool(_keyWindowsMigration) == true) {
       return;
     }
 

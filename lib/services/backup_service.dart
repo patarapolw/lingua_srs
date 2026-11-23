@@ -1,7 +1,5 @@
 import 'dart:convert';
-import 'dart:io';
 
-import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/ai_discussion_message.dart';
@@ -9,6 +7,7 @@ import '../models/lesson.dart';
 import '../models/sentence.dart';
 import '../models/shared_vocab.dart';
 import '../models/vocab_merge_record.dart';
+import 'lesson_markdown_store.dart';
 import 'storage_service.dart';
 
 class BackupService {
@@ -60,15 +59,13 @@ class BackupService {
       preferences[key] = value is List ? List<String>.from(value) : value!;
     }
 
-    final directory = await getApplicationSupportDirectory();
+    final store = await LessonMarkdownStore.open(prefs);
     final lessonMarkdown = <String, String>{};
     final markdownIds =
         (preferences[_keyLessonMarkdownIds] as List<String>?) ?? const [];
     for (final id in markdownIds) {
-      final file = _markdownFile(directory, id);
-      if (await file.exists()) {
-        lessonMarkdown[id] = await file.readAsString();
-      }
+      final markdown = await store.read(id);
+      if (markdown != null) lessonMarkdown[id] = markdown;
     }
     preferences[_keyLessonMarkdownIds] = lessonMarkdown.keys.toList();
 
@@ -129,13 +126,14 @@ class BackupService {
     final prefs = await SharedPreferences.getInstance();
     final previousMarkdownIds =
         prefs.getStringList(_keyLessonMarkdownIds) ?? const [];
-    final directory = await getApplicationSupportDirectory();
-    await _writeLessonMarkdown(directory, lessonMarkdown);
+    final store = await LessonMarkdownStore.open(prefs);
+    for (final entry in lessonMarkdown.entries) {
+      await store.write(entry.key, entry.value as String);
+    }
     for (final id in previousMarkdownIds.toSet().difference(
       markdownIds.toSet(),
     )) {
-      final file = _markdownFile(directory, id);
-      if (await file.exists()) await file.delete();
+      await store.delete(id);
     }
 
     for (final key in prefs.getKeys()) {
@@ -289,23 +287,4 @@ class BackupService {
       value is int ||
       value is double ||
       (value is List && value.every((item) => item is String));
-
-  static Future<void> _writeLessonMarkdown(
-    Directory directory,
-    Map<String, dynamic> lessonMarkdown,
-  ) async {
-    for (final entry in lessonMarkdown.entries) {
-      final file = _markdownFile(directory, entry.key);
-      await file.parent.create(recursive: true);
-      await file.writeAsString(entry.value as String, flush: true);
-    }
-  }
-
-  static File _markdownFile(Directory directory, String lessonId) {
-    final safeId = base64Url.encode(utf8.encode(lessonId)).replaceAll('=', '');
-    return File(
-      '${directory.path}${Platform.pathSeparator}lesson_markdown'
-      '${Platform.pathSeparator}$safeId.md',
-    );
-  }
 }
