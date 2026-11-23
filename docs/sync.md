@@ -330,7 +330,7 @@ Cloudflare's free plans have no bill: past their daily limits requests simply fa
 
 A changed record costs about three D1 row writes (the row and its two indexes), so the free plan's 100,000 writes a day is roughly 30,000 record changes. The app should merge repeated changes to one card into a single record and push in batches.
 
-Failed sign-ins and recovery attempts per address are not limited by the Worker, which cannot count attempts without spending D1 writes on them. Each operator sets up the limit in Cloudflare (#130): serve the Worker from a custom domain, add a rate limiting rule for `/v1/*` there (check what your plan includes), rebuild the app with the new `SYNC_ENDPOINT`, and only then set `workers_dev` to `false`, because rules apply to traffic through your own domain and not to the `workers.dev` address. The steps, in order, are in [Serve sync from your own domain](admin.md#serve-sync-from-your-own-domain). Whether a given server has the rule depends on its operator having done them.
+Failed sign-ins and recovery attempts per address are not limited by the Worker, which cannot count attempts without spending D1 writes on them. Each operator sets up the limit in Cloudflare (#130): serve the Worker from a custom domain, add a rate limiting rule for `/v1/*` there (the free plan allows one rule, which is enough), rebuild the app with the new `SYNC_ENDPOINT`, and only then set `workers_dev` to `false`, because rules apply to traffic through your own domain and not to the `workers.dev` address. The steps, in order, are in [Serve sync from your own domain](admin.md#serve-sync-from-your-own-domain). Whether a given server has the rule depends on its operator having done them.
 
 ## Running your own
 
