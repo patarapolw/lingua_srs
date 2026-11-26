@@ -15,7 +15,7 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
@@ -62,6 +62,14 @@ jobs:
           key: hooks-test-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
           restore-keys: hooks-test-${{ runner.os }}-
       - run: flutter test
+      # The web demo (#277): code that compiles for the VM can still fail to
+      # build for the web, or throw there (`Platform` checks), which the VM
+      # tests cannot see. The Chrome run needs the GTK and Rust setup above
+      # too: it runs the same build hooks. docs/web-demo.md.
+      - run: flutter test --platform chrome test/web_smoke_test.dart
+      - run: >-
+          flutter build web --release --no-web-resources-cdn
+          --base-href /${{ github.event.repository.name }}/demo/
       # After the tests, so a formatting slip doesn't hide their results.
       - run: dart format --output=none --set-exit-if-changed lib test
 

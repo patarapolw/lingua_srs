@@ -52,6 +52,10 @@ class _CachedMarkdownImageState extends State<CachedMarkdownImage> {
 
   Widget _fromNetwork() => Image.network(
     widget.url,
+    // On the web, an image from a site that does not allow CORS cannot be
+    // read by the app's renderer; the browser can still show it in an
+    // <img> element.
+    webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
     fit: widget.fit,
     width: widget.fit == null ? null : double.infinity,
     height: widget.fit == null ? null : double.infinity,

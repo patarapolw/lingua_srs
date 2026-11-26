@@ -30,6 +30,9 @@ migration:
     - platform: windows
       create_revision: e8113bf45620cbeb8aff64947ee4c93e16adb4cf
       base_revision: e8113bf45620cbeb8aff64947ee4c93e16adb4cf
+    - platform: web
+      create_revision: ae9b586f34a8443573f82ef57c3bf914a908cbf7
+      base_revision: ae9b586f34a8443573f82ef57c3bf914a908cbf7
 
   # User provided section
 

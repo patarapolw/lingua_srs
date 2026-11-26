@@ -58,6 +58,7 @@ Full feature reference. For a short overview see the [README](../README.md).
 7. **Text-to-Speech**:
    - **Android** uses a system TTS voice: an installed offline voice when there is one, otherwise a network voice of the engine (such as Google's), which needs a connection. Install the desired language voice in Android text-to-speech settings; generated TTS is not prefetched. Samsung's TTS engine, and the language packs installed for it, are only open to Samsung apps, so on a Samsung phone the app uses Google's engine and its voices.
    - **Windows and other platforms** use online streamed TTS with local caching. Windows does not fall back to SAPI.
+   - **The [web demo](web-demo.md)** uses the browser's voices (Web Speech), picked like Android's: a voice of the requested region first, then the language's others. The *Spoken in* sheet lists the browser's languages.
    - **Brackets are not spoken**: text in round brackets, such as `먹다 (to eat)`, is skipped, or the voice would stumble over the note. Cloze blanks and Markdown marks are skipped too. The pronunciation line still shows bracketed text.
    - **Voices vary**: when an Android language has several installed offline voices, each utterance picks one at random.
    - **Alternate TTS text** (`tts`) is used for review autoplay and replay as well as for the audio buttons.

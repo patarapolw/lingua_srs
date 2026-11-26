@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:material_ui/material_ui.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
@@ -1646,7 +1647,7 @@ class _YamlImportViewState extends State<YamlImportView>
   }
 
   bool get _isDesktop =>
-      Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+      !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
 
   /// Folder import is for VitePress-compatible folders, so desktop only.
   bool get _supportsFolderImport =>
@@ -1867,12 +1868,17 @@ class _TypedPreview {
   });
 }
 
+/// Runs [work] in another isolate, so the UI keeps drawing. The web has no
+/// isolates to run it in, so there it runs here.
+Future<T> _inBackground<T>(T Function() work) =>
+    kIsWeb ? Future.sync(work) : Isolate.run(work);
+
 Future<_TypedPreview> _parseLessonInBackground(
   String text,
   String? title,
   String? unitTitle, {
   bool allowMarkdown = true,
-}) => Isolate.run(() {
+}) => _inBackground(() {
   final result = YamlParserService.parseLessonYaml(
     text,
     defaultTitle: title,
@@ -1905,7 +1911,7 @@ Future<MarkdownDirectoryResult> _parseMarkdownDirectoryInBackground(
   List<String> directoryPaths,
   Map<String, String> importedSources, {
   Set<String> reimport = const {},
-}) => Isolate.run(
+}) => _inBackground(
   () => parseMarkdownFiles(
     paths,
     directoryPaths,
@@ -1918,7 +1924,7 @@ Future<MarkdownDirectoryResult> _parsePickedMarkdownSourcesInBackground(
   List<PickedMarkdownSource> sources,
   Map<String, String> importedSources, {
   Set<String> reimport = const {},
-}) => Isolate.run(
+}) => _inBackground(
   () =>
       parsePickedMarkdownSources(sources, importedSources, reimport: reimport),
 );
@@ -2179,7 +2185,9 @@ String zipEntrySourceKey(String path) => 'zip:${path.replaceAll('\\', '/')}';
 /// between folders, and lowercase on Windows, where names ignore case.
 String markdownSourceKey(String path) {
   final normalizedPath = path.replaceAll('\\', '/');
-  return Platform.isWindows ? normalizedPath.toLowerCase() : normalizedPath;
+  return !kIsWeb && Platform.isWindows
+      ? normalizedPath.toLowerCase()
+      : normalizedPath;
 }
 
 String? _unitTitleForPath(String relativePath) {

@@ -36,6 +36,7 @@ import '../services/sync_records.dart';
 import '../services/typed_questions.dart';
 import '../services/vocab_ai_service.dart';
 import '../services/vocabulary_section_move.dart';
+import '../services/web_demo.dart';
 import '../services/yaml_parser_service.dart';
 
 class StudyCardItem {
@@ -259,8 +260,9 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   bool get autoplayAudio => _autoplayAudio;
 
   /// False when the learner turned AI features off in Settings: the
-  /// Discussions tab, Ask AI and the AI buttons are hidden.
-  bool get showAi => _showAi;
+  /// Discussions tab, Ask AI and the AI buttons are hidden. Always false in
+  /// the web demo, which has no AI features ([WebDemo]).
+  bool get showAi => _showAi && !WebDemo.enabled;
 
   /// The learner's own instructions added to every AI chat's system prompt.
   String get aiInstructions => _aiInstructions;
@@ -276,7 +278,7 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
   /// False without a key, after DeepSeek rejected it (until it changes), and
   /// while AI features are turned off.
   bool get canUseAi =>
-      _showAi && _deepSeekApiKey.trim().isNotEmpty && !_deepSeekKeyRejected;
+      showAi && _deepSeekApiKey.trim().isNotEmpty && !_deepSeekKeyRejected;
   List<VocabMergeRecord> get mergeHistory => List.unmodifiable(_mergeHistory);
   bool get isLoading => _isLoading;
   String? get selectedLessonId => _selectedLessonId;
@@ -645,12 +647,31 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
       await StorageService.saveAiDiscussions(_aiDiscussions);
     }
 
+    if (await WebDemo.shouldAddSamples(hasLessons: _lessons.isNotEmpty)) {
+      await _addDemoSamples();
+    }
+
     if (_lessons.isNotEmpty) {
       _selectedLessonId = _lessons.first.id;
     }
 
     _isLoading = false;
     notifyListeners();
+  }
+
+  /// Adds the web demo's sample lessons on a first visit ([WebDemo]). If
+  /// they cannot be read, the demo opens without them.
+  Future<void> _addDemoSamples() async {
+    try {
+      final lessons = await importParsedLessons(await WebDemo.loadSamples());
+      // Importing shows the language of the last sample; open on the first.
+      if (lessons.isNotEmpty) {
+        await setActiveLanguage(lessons.first.languageKey);
+      }
+      await WebDemo.markSamplesAdded();
+    } catch (error) {
+      debugPrint('Could not add the demo lessons: $error');
+    }
   }
 
   /// Merges sentences with the same text into one, and points every word at

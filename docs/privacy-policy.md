@@ -2,7 +2,7 @@
 
 Effective date: 18 November 2026
 
-This policy explains what the LinguaSRS app and its optional sync server do with your data. It covers the app on every platform it is released for (Android through Google Play, and the Windows and Linux builds on GitHub Releases) and the hosted sync server.
+This policy explains what the LinguaSRS app and its optional sync server do with your data. It covers the app on every platform it is released for (Android through Google Play, and the Windows and Linux builds on GitHub Releases), the [web demo](#web-demo) and the hosted sync server.
 
 In short: your lessons and progress stay on your device. Nothing leaves it unless you use a feature that needs the internet, such as sync, AI chats, online voices or lessons that load media from the web. The app has no ads, no analytics and no crash reporting. If you use sync, the server stores your email address and your data in a form only your devices can decrypt.
 
@@ -102,13 +102,24 @@ DeepSeek's use of this data is governed by its own terms and your agreement with
 ### Text-to-speech
 
 - **Android**: words and sentences are spoken by your phone's text-to-speech engine. With an installed offline voice, nothing leaves the device. If only a network voice is available, the engine (for example Google's) sends the text to its provider. That is handled by the engine you chose in your Android settings.
-- **Windows, Linux and other platforms**: the app gets speech from Google Translate's online text-to-speech service. It sends the text being spoken (the word or sentence, with brackets and formatting removed) and its language. During a review it also fetches the speech for the next few cards in advance. The audio is then cached on your device. [Google privacy policy](https://policies.google.com/privacy)
+- **Windows, Linux and other platforms**, except the web demo: the app gets speech from Google Translate's online text-to-speech service. It sends the text being spoken (the word or sentence, with brackets and formatting removed) and its language. During a review it also fetches the speech for the next few cards in advance. The audio is then cached on your device. [Google privacy policy](https://policies.google.com/privacy)
+- **Web demo**: your browser's voices; see [Web demo](#web-demo).
 
 ### Media in lessons
 
 Lessons can contain links to audio, images and YouTube videos. When the app plays or shows them, your device downloads them from the website they are on, which receives your IP address and the request, as with any web page. For YouTube videos, the app uses the privacy-enhanced player (youtube-nocookie.com), loads thumbnails from YouTube, and asks YouTube for the video title. Links you tap in a lesson open in your browser. [YouTube is covered by Google's privacy policy](https://policies.google.com/privacy)
 
 Which websites are contacted depends on the lessons you import or write.
+
+## Web demo
+
+The web demo at <https://patarapolw.github.io/lingua_srs/demo/> is the app in a browser, without AI features and without sync. It has no account and no server of its own, and sends your lessons and progress nowhere.
+
+- **Your data stays in the browser.** Lessons, progress and settings are kept in the browser's storage for the demo's site, on your device. Clearing the site's data in the browser deletes them. *Back up* saves a file where the browser saves downloads.
+- **Hosting.** GitHub Pages serves the demo's files. Like any web host, GitHub receives your IP address and request details when your browser loads them. [GitHub privacy statement](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement)
+- **Text-to-speech** uses your browser's voices (the Web Speech API), not Google Translate. Some browsers offer online voices that send the text to their provider, such as Google's voices in Chrome. That is handled by your browser.
+- **Fonts.** To show characters such as Korean, Chinese or Japanese, the demo downloads fonts from Google Fonts (fonts.gstatic.com), which receives your IP address. [Google privacy policy](https://policies.google.com/privacy)
+- **Media in lessons** is loaded as described under [Media in lessons](#media-in-lessons).
 
 ## No ads, analytics or tracking
 
@@ -144,6 +155,7 @@ If you no longer have the app or cannot sign in, email [polv@polv.cc](mailto:pol
 - Remove the DeepSeek key next to the key field in Settings.
 - **Sign out** in **Settings → Sync** removes the sync sign-in from that device.
 - To remove everything, clear the app's data or uninstall the app (on Windows and Linux, also delete the app's data folder).
+- In the web demo, clear the site's data in your browser.
 
 ## Security
 

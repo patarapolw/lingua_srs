@@ -148,7 +148,7 @@ class SrsService {
     int hiddenDays,
   ) {
     // Keep `flutter test` output quiet; this is for logcat only.
-    if (Platform.environment.containsKey('FLUTTER_TEST')) return;
+    if (!kIsWeb && Platform.environment.containsKey('FLUTTER_TEST')) return;
     debugPrint(
       'SRS ${rating.name}: card ${card.id} shown ${formatDuration(shown)}, '
       'hidden interval ${hiddenDays}d, reps ${card.repetitions}, '
