@@ -179,6 +179,41 @@ void main() {
       expect(prompt, isNot(contains('YAML</summary>')));
     });
 
+    group('a word with few example sentences', () {
+      String promptWith(int? count) => WordAiPrompt.systemPrompt(
+        targetLanguage: 'ko',
+        nativeLanguage: 'en',
+        targetWord: '사과',
+        translation: 'apple',
+        sentenceCount: count,
+      );
+
+      test('asks for new sentences in every answer', () {
+        for (final (count, phrase) in [
+          (0, 'no example sentences'),
+          (1, 'one example sentence'),
+          (2, '2 example sentences'),
+        ]) {
+          final prompt = promptWith(count);
+
+          expect(prompt, contains('"사과" has only $phrase so far'));
+          expect(prompt, contains('In every answer'));
+          expect(prompt, isNot(contains('most answers need none')));
+          // The new sentences still come with the YAML copy.
+          expect(prompt, contains(WordAiPrompt.examplesSummaryTag));
+        }
+      });
+
+      test('gives sentences only when called for with more', () {
+        for (final count in [3, null]) {
+          final prompt = promptWith(count);
+
+          expect(prompt, contains('most answers need none'));
+          expect(prompt, isNot(contains('In every answer')));
+        }
+      });
+    });
+
     test('reads the sentences out of a collapsed block', () {
       final examples = WordAiPrompt.examplesYaml(
         '1. **사과**가 맛있어요. — The **apple** is tasty.\n\n'

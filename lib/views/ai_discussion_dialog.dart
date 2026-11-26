@@ -489,6 +489,7 @@ class _AiDiscussionDialogState extends State<AiDiscussionDialog> {
       translation: widget.translation,
       sentenceTarget: widget.sentenceTarget,
       sentenceTranslation: widget.sentenceTranslation,
+      sentenceCount: widget.vocab?.sentenceIds.length,
     );
   }
 
