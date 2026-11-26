@@ -5,6 +5,7 @@ import 'package:archive/archive.dart';
 import '../models/lesson.dart';
 import '../models/sentence.dart';
 import '../models/vocab_item.dart';
+import 'yaml_parser_service.dart';
 
 class LessonExportService {
   static List<int> createZip(List<Lesson> lessons, List<Sentence> sentences) {
@@ -144,10 +145,17 @@ class LessonExportService {
       'target': vocab.targetWord,
       'meaning': vocab.translation,
     };
-    if (vocab.reading.isNotEmpty) entry[readingKey(lesson)] = vocab.reading;
-    if (vocab.simplified.isNotEmpty) entry['simplified'] = vocab.simplified;
-    if (vocab.traditional.isNotEmpty) entry['traditional'] = vocab.traditional;
-    if (vocab.hanja.isNotEmpty) entry['hanja'] = vocab.hanja;
+    // A reading or form with alternatives is written as a list.
+    for (final (key, value) in [
+      (readingKey(lesson), vocab.reading),
+      ('simplified', vocab.simplified),
+      ('traditional', vocab.traditional),
+      ('hanja', vocab.hanja),
+      ('kanji', vocab.kanji),
+      ('variants', vocab.variants),
+    ]) {
+      if (value.isNotEmpty) entry[key] = YamlParserService.formYaml(value);
+    }
     if (vocab.audioUrl != null) entry['audio'] = vocab.audioUrl;
     if (vocab.ttsText != null) entry['tts'] = vocab.ttsText;
     if (vocab.notes.isNotEmpty) entry['notes'] = vocab.notes;

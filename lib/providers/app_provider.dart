@@ -2372,7 +2372,9 @@ class AppProvider extends ChangeNotifier implements SyncRecordStore {
         file.traditional,
         word.traditional,
       )
-      ..hanja = form(base?.hanja ?? '', file.hanja, word.hanja);
+      ..hanja = form(base?.hanja ?? '', file.hanja, word.hanja)
+      ..kanji = form(base?.kanji ?? '', file.kanji, word.kanji)
+      ..variants = form(base?.variants ?? '', file.variants, word.variants);
     if (base == null || !_sameNames(base.sectionPath, file.sectionPath)) {
       word
         ..pos = file.pos

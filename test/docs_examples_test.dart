@@ -33,6 +33,8 @@ String describeLesson(YamlParseResult result) {
     block('    ', 'simplified', word.simplified);
     block('    ', 'traditional', word.traditional);
     block('    ', 'hanja', word.hanja);
+    block('    ', 'kanji', word.kanji);
+    block('    ', 'variants', word.variants);
     block('    ', 'tts', word.ttsText ?? '');
     block('    ', 'audio', word.audioUrl ?? '');
     block('    ', 'disambiguation', word.disambiguation);

@@ -3,8 +3,10 @@ import 'package:material_ui/material_ui.dart';
 import '../models/vocab_item.dart';
 
 /// A word's reading and the other ways it is written, under the word: the
-/// reading as a line of text, then one small tag per other form
-/// (*Traditional:* 學生, *Hanja:* 學生). Tapping a tag opens
+/// reading as a line of text, its alternatives split by a muted ` / `
+/// (shéi / shuí), then one small tag per other form with each of its
+/// variants (*Traditional:* 學生, *Traditional:* 臺灣 / 台灣). A screen
+/// reader hears the alternatives joined by "or". Tapping a tag opens
 /// [CharacterZoom]. Nothing is built when the word has neither.
 class VocabForms extends StatelessWidget {
   const VocabForms({
@@ -26,10 +28,23 @@ class VocabForms extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final reading = vocab.reading.trim();
+    final readings = vocab.readings;
     final forms = vocab.otherForms;
-    if (reading.isEmpty && forms.isEmpty) return const SizedBox.shrink();
+    if (readings.isEmpty && forms.isEmpty) return const SizedBox.shrink();
     final muted = theme.colorScheme.onSurfaceVariant;
+    // Alternatives one after another, split by a muted slash.
+    List<TextSpan> alternatives(List<String> variants, TextStyle? style) => [
+      for (final (i, variant) in variants.indexed) ...[
+        if (i > 0)
+          TextSpan(
+            text: VocabItem.variantsSeparator,
+            style: style?.copyWith(color: muted.withValues(alpha: 0.6)),
+          ),
+        TextSpan(text: variant, style: style),
+      ],
+    ];
+    final readingTextStyle = (readingStyle ?? theme.textTheme.titleMedium)
+        ?.copyWith(color: muted);
     final textAlign = switch (alignment) {
       WrapAlignment.center => TextAlign.center,
       WrapAlignment.end => TextAlign.end,
@@ -43,13 +58,13 @@ class VocabForms extends StatelessWidget {
       },
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (reading.isNotEmpty)
-          Text(
-            reading,
+        if (readings.isNotEmpty)
+          Text.rich(
+            TextSpan(children: alternatives(readings, readingTextStyle)),
             key: const ValueKey('vocab-reading'),
-            style: (readingStyle ?? theme.textTheme.titleMedium)?.copyWith(
-              color: muted,
-            ),
+            semanticsLabel: readings.length > 1
+                ? 'Read as ${readings.join(' or ')}'
+                : null,
             textAlign: textAlign,
           ),
         if (forms.isNotEmpty)
@@ -84,12 +99,15 @@ class VocabForms extends StatelessWidget {
                                   color: muted,
                                 ),
                               ),
-                              TextSpan(
-                                text: other.form,
-                                style: theme.textTheme.titleMedium,
+                              ...alternatives(
+                                other.forms,
+                                theme.textTheme.titleMedium,
                               ),
                             ],
                           ),
+                          semanticsLabel: other.forms.length > 1
+                              ? '${other.label}: ${other.forms.join(' or ')}'
+                              : null,
                         ),
                       ),
                     ),
@@ -104,8 +122,10 @@ class VocabForms extends StatelessWidget {
 
 /// The word's Han characters drawn large in a dialog, to see the strokes:
 /// the word and its other forms (simplified, traditional, Hanja) that are
-/// written in Han characters. A Hangul word is left out, so a Korean word
-/// shows its Hanja, or the word itself when `ko:` is already in Hanja.
+/// written in Han characters, each variant of a form drawn on its own under
+/// the form's label (臺灣 and 台灣, both *Traditional*). A Hangul word is
+/// left out, so a Korean word shows its Hanja, or the word itself when `ko:`
+/// is already in Hanja.
 /// Pinch or scroll to zoom further.
 /// The dialog is as wide as its characters, up to 440 pixels, and wraps
 /// the forms onto more rows past that.
@@ -117,11 +137,12 @@ class CharacterZoom extends StatelessWidget {
   static final _han = RegExp(r'\p{Script=Han}', unicode: true);
 
   /// The forms of [vocab] that have Han characters, the word first and
-  /// unlabelled, then its other forms with their labels.
+  /// unlabelled, then each variant of its other forms with its form's label.
   static List<({String label, String form})> zoomForms(VocabItem vocab) => [
     for (final f in [
       (label: '', form: vocab.targetWord.trim()),
-      ...vocab.otherForms,
+      for (final other in vocab.otherForms)
+        for (final form in other.forms) (label: other.label, form: form),
     ])
       if (_han.hasMatch(f.form)) f,
   ];
@@ -164,7 +185,7 @@ class CharacterZoom extends StatelessWidget {
     // word when it is not drawn below (a Hangul word with its Hanja).
     final heading = {
       if (forms.every((f) => f.form != word)) word,
-      vocab.reading.trim(),
+      vocab.readings.join(VocabItem.variantsSeparator),
     }.where((text) => text.isNotEmpty).join(' · ');
     return Dialog(
       key: const ValueKey('character-zoom'),

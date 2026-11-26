@@ -70,7 +70,7 @@ vocabulary:
       en: "student"
 ```
 
-Korean: `hanja`, for a Sino-Korean word.
+Korean: `hanja`, for a Sino-Korean word. Japanese: `reading` for a word written in kanji, or `kanji` for a word written in kana. Any language: `variants`, for other ways the word is written.
 
 ```yaml
 vocabulary:
@@ -80,10 +80,31 @@ vocabulary:
       en: "student"
 ```
 
+Several alternatives: a reading or form can list more than one, as a YAML list or in one string split by `/`, `;` or `、`. They are alternatives for the same word and meaning (誰 is read shéi or shuí; 台灣 is also written 臺灣). A reading that goes with a different meaning, such as 行 háng (row) and xíng (to walk), belongs in an entry of its own.
+
+```yaml
+target: zh-TW
+vocabulary:
+  pronouns:
+    - zh: "誰"
+      pinyin: ["shéi", "shuí"]
+      simplified: "谁"
+      en: "who"
+  nouns:
+    - zh: "台灣"
+      pinyin: "Táiwān"
+      traditional: ["臺灣", "台灣"]
+      en: "Taiwan"
+```
+
+The card shows the alternatives with a slash between them (*shéi / shuí*, *Traditional: 臺灣*, leaving out the form the word is already written in), and the character zoom draws each variant on its own. Export, and writing words back to a lesson file, write a list when there is more than one.
+
 - **Importing the file again** treats these like the word and its translation: one edited in the app stays while the file's entry is as it was, and one changed in the file is taken. Writing the app's words back to a folder writes them too, under the key the entry already uses.
 - **`pinyin`** and **`reading`** are the same field: how the word is read. `reading` suits any language whose writing does not show it, such as kana for a Japanese word. When an entry has both, the first one is used. Export writes `pinyin` in a Chinese lesson and `reading` in any other.
 - **`simplified`** and **`traditional`** record both forms of a Chinese word, whichever one the lesson is written in. The card shows the form that differs from the word itself: a `zh: 学生` card shows *Traditional: 學生*.
-- **`hanja`** is the Hanja of a Korean word, shown as *Hanja: 學生*. Leave it out for a native Korean word.
+- **`hanja`** is the Hanja of a Korean word, shown as *Hanja: 學生*. Leave it out for a native Korean word. A word with more than one Hanja form for the same meaning lists them all, such as a full and an abbreviated character (`ko: 국`, `hanja: [國, 国]`).
+- **`kanji`** is the kanji of a Japanese word written in kana (`ja: すし`, `kanji: 寿司`), shown as *Kanji: 寿司*. A word written in kanji takes a `reading` instead.
+- **`variants`** (or `variant`) is how else the word is written, in any language: another spelling (`en: color`, `variants: colour`; `ko: 짜장면`, `variants: 자장면`) or a variant character (`ja: 寿司`, `variants: 鮨`). It is shown as *Also written: colour*.
 - **`target:`** names the lesson's language. Entries are keyed by the language alone (`zh:`, not `zh-TW:`), so write the region or script on `target:` (`zh-CN`, `zh-TW`, `zh-Hant`); it is kept, and picks the text-to-speech voice (Taiwanese for `zh-TW` and `zh-Hant`, mainland otherwise). Without `target:`, the language is taken from the entry key (`zh`). A region that says nothing more than the language is dropped: `ko-KR` is `ko`, `ja-JP` is `ja`, `th-TH` is `th`, and likewise `vi-VN`, `id-ID`, `tr-TR`, `de-DE`, `it-IT`, `ru-RU`, `pl-PL`, `uk-UA`, `cs-CZ`, `hu-HU`, `ro-RO`, `el-GR`, `he-IL`, `hi-IN`, `fi-FI` and `da-DK`. A region that tells a variant apart is kept (`pt-BR`, `en-GB`, `de-AT`), and Chinese, English, Spanish, Portuguese, French and Arabic always keep theirs.
 
 ## Markdown frontmatter
@@ -242,8 +263,8 @@ A file or folder being imported is listed with a note when it has the section. T
 - **Readings and forms.** Bracketed groups right after the word, `(…)`, `（…）`, `[…]` or `【…】`, say more about it:
   - In a Chinese lesson, Latin text with tone marks or tone numbers (`xuésheng`, `xue2sheng`) is the `pinyin`. Han characters are the other script: `traditional` in a Simplified lesson, `simplified` when `target:` is `zh-TW`, `zh-HK`, `zh-MO` or `zh-Hant`.
   - In a Korean lesson, Han characters are the `hanja` (`선생님 (先生님)`).
-  - In a Japanese lesson, kana is the `reading`.
-  - A label picks the field in any lesson: `pinyin:`/`拼音:`/`reading:`, `trad:`/`繁:`, `simp:`/`简:`, `hanja:`/`한자:`.
+  - In a Japanese lesson, kana is the `reading` of a word written in kanji, and Han characters are the `kanji` of a word written in kana (`すし (寿司)`).
+  - A label picks the field in any lesson: `pinyin:`/`拼音:`/`reading:`, `trad:`/`繁:`, `simp:`/`简:`, `hanja:`/`한자:`, `kanji:` (and `漢字:` in a Japanese lesson; in any other it is `hanja`), and `also:`/`variant:` for `variants`, which needs its colon: `(also used in …)` stays a note.
   - Any other group, such as `(formal)`, becomes a note of the word.
 - **Notes and examples.** List items or lines indented under a word belong to it:
   - `Note:`, `Usage:`, `注:`, `注意:`, `备注:` or `참고:` starts a note.
@@ -254,7 +275,7 @@ A file or folder being imported is listed with a note when it has the section. T
 - **Tables.** A table with a header row (a `|---|` line under it) is read by its column names. Matching ignores case and looks for the name anywhere in the header:
   - word: `word`, `term`, `vocab`, `Korean`, `Chinese`, `hanzi`, `汉字`, `词`, `단어` or the language code
   - `pinyin`/`拼音`/`reading`/`kana`
-  - `traditional`/`繁`, `simplified`/`简`, `hanja`/`한자`
+  - `traditional`/`繁`, `simplified`/`简`, `hanja`/`한자`, `kanji` (`漢字` in a Japanese lesson), `variants`/`also written`
   - meaning: `meaning`, `translation`, `English`, `definition`, `意思`, `뜻`
   - an example: `example`, `sentence`, `例句`, `예문`
   - the example's translation: `example translation`, `sentence meaning`, `例句翻译`

@@ -19,12 +19,16 @@ class VocabSource {
   final String simplified;
   final String traditional;
   final String hanja;
+  final String kanji;
+  final String variants;
   final List<String> sectionPath;
 
   static const readingField = 'reading';
   static const simplifiedField = 'simplified';
   static const traditionalField = 'traditional';
   static const hanjaField = 'hanja';
+  static const kanjiField = 'kanji';
+  static const variantsField = 'variants';
 
   /// The names of the reading and form fields, as saved.
   static const formFields = [
@@ -32,6 +36,8 @@ class VocabSource {
     simplifiedField,
     traditionalField,
     hanjaField,
+    kanjiField,
+    variantsField,
   ];
 
   /// The word's examples in the file, as [VocabItem.exampleKey] names them.
@@ -44,6 +50,8 @@ class VocabSource {
     this.simplified = '',
     this.traditional = '',
     this.hanja = '',
+    this.kanji = '',
+    this.variants = '',
     this.sectionPath = const [],
     this.examples = const [],
   });
@@ -55,6 +63,8 @@ class VocabSource {
     if (simplified.isNotEmpty) simplifiedField: simplified,
     if (traditional.isNotEmpty) traditionalField: traditional,
     if (hanja.isNotEmpty) hanjaField: hanja,
+    if (kanji.isNotEmpty) kanjiField: kanji,
+    if (variants.isNotEmpty) variantsField: variants,
     'sectionPath': sectionPath,
     'examples': examples,
   };
@@ -72,6 +82,8 @@ class VocabSource {
       simplified: json[simplifiedField] as String? ?? '',
       traditional: json[traditionalField] as String? ?? '',
       hanja: json[hanjaField] as String? ?? '',
+      kanji: json[kanjiField] as String? ?? '',
+      variants: json[variantsField] as String? ?? '',
       sectionPath: strings(json['sectionPath']),
       examples: strings(json['examples']),
     );
@@ -96,6 +108,15 @@ class VocabItem {
   /// The Hanja a Korean word is written with (학생 is 學生). Empty when not
   /// given, as for a native Korean word.
   String hanja;
+
+  /// The kanji a Japanese word written in kana is written with (すし is
+  /// 寿司). Empty when not given.
+  String kanji;
+
+  /// Other ways the word is written, in any language: another spelling
+  /// (colour for color, 자장면 for 짜장면) or a variant character (鮨 for
+  /// 寿司). Empty when not given.
+  String variants;
   String pos; // Part of speech or category (e.g. nouns, verbs, adjectives)
   List<String> sectionPath;
   List<String> sentenceIds; // Reference to sentences in the pool
@@ -122,6 +143,8 @@ class VocabItem {
     this.simplified = '',
     this.traditional = '',
     this.hanja = '',
+    this.kanji = '',
+    this.variants = '',
     required this.pos,
     List<String>? sectionPath,
     String? audioUrl,
@@ -251,20 +274,55 @@ class VocabItem {
     VocabSource.simplifiedField => simplified,
     VocabSource.traditionalField => traditional,
     VocabSource.hanjaField => hanja,
+    VocabSource.kanjiField => kanji,
+    VocabSource.variantsField => variants,
     _ => throw ArgumentError.value(field, 'field'),
   };
 
+  /// What separates the alternatives of a reading or form saved as one
+  /// string: `/`, `;` or `、`, in their half- or full-width shapes, with any
+  /// spaces around them. A YAML list is saved joined by
+  /// [variantsSeparator] (docs/lesson-format.md).
+  static final _variantSeparator = RegExp(r'\s*[/／;；、]\s*');
+
+  /// How the alternatives of a reading or form read from a YAML list are
+  /// joined into the one string a word saves.
+  static const variantsSeparator = ' / ';
+
+  /// The alternatives in a reading or form [value]: `臺 / 台` is 臺 and 台,
+  /// `shéi; shuí` is shéi and shuí. Each is trimmed, and empty and repeated
+  /// ones are left out.
+  static List<String> variantsOf(String value) => [
+    ...{
+      for (final part in value.split(_variantSeparator))
+        if (part.trim().isNotEmpty) part.trim(),
+    },
+  ];
+
+  /// The ways [reading] says the word is read, alternatives of one another
+  /// (誰 is shéi or shuí). Empty when there is no reading.
+  List<String> get readings => variantsOf(reading);
+
   /// The other ways this word is written, labelled, for the back of a card:
-  /// its simplified and traditional forms and its Hanja. A form that is the
-  /// same as [targetWord] is left out, since the card already shows it.
-  List<({String label, String form})> get otherForms => [
-    for (final (label, form) in [
+  /// its simplified and traditional forms, its Hanja or kanji, and the
+  /// other ways it is written (*Also written*), each with every
+  /// variant it has (*Traditional:* 臺灣, 台灣). A variant that is the same
+  /// as [targetWord] is left out, since the card already shows it, and so is
+  /// a form left with none.
+  List<({String label, List<String> forms})> get otherForms => [
+    for (final (label, value) in [
       ('Simplified', simplified),
       ('Traditional', traditional),
       ('Hanja', hanja),
+      ('Kanji', kanji),
+      ('Also written', variants),
     ])
-      if (form.trim().isNotEmpty && form.trim() != targetWord.trim())
-        (label: label, form: form.trim()),
+      if ([
+            for (final form in variantsOf(value))
+              if (form != targetWord.trim()) form,
+          ]
+          case final forms when forms.isNotEmpty)
+        (label: label, forms: forms),
   ];
 
   List<String> get effectiveSectionPath =>
@@ -288,6 +346,8 @@ class VocabItem {
     if (simplified.isNotEmpty) 'simplified': simplified,
     if (traditional.isNotEmpty) 'traditional': traditional,
     if (hanja.isNotEmpty) 'hanja': hanja,
+    if (kanji.isNotEmpty) 'kanji': kanji,
+    if (variants.isNotEmpty) 'variants': variants,
     'pos': pos,
     'sectionPath': sectionPath,
     'audioUrl': audioUrl,
@@ -314,6 +374,8 @@ class VocabItem {
     simplified: json['simplified'] as String? ?? '',
     traditional: json['traditional'] as String? ?? '',
     hanja: json['hanja'] as String? ?? '',
+    kanji: json['kanji'] as String? ?? '',
+    variants: json['variants'] as String? ?? '',
     pos: json['pos'] as String? ?? 'general',
     sectionPath: (json['sectionPath'] as List<dynamic>?)
         ?.map((e) => e.toString())

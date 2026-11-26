@@ -69,6 +69,8 @@ class _VocabEditDialogState extends State<VocabEditDialog>
   late TextEditingController _simplifiedCtrl;
   late TextEditingController _traditionalCtrl;
   late TextEditingController _hanjaCtrl;
+  late TextEditingController _kanjiCtrl;
+  late TextEditingController _variantsCtrl;
   late TextEditingController _posCtrl;
   late TextEditingController _audioCtrl;
   late bool _useAudio;
@@ -585,6 +587,8 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     _simplifiedCtrl.dispose();
     _traditionalCtrl.dispose();
     _hanjaCtrl.dispose();
+    _kanjiCtrl.dispose();
+    _variantsCtrl.dispose();
     _posCtrl.dispose();
     _audioCtrl.dispose();
     _ttsCtrl.dispose();
@@ -605,6 +609,8 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     _simplifiedCtrl = TextEditingController(text: widget.vocab.simplified);
     _traditionalCtrl = TextEditingController(text: widget.vocab.traditional);
     _hanjaCtrl = TextEditingController(text: widget.vocab.hanja);
+    _kanjiCtrl = TextEditingController(text: widget.vocab.kanji);
+    _variantsCtrl = TextEditingController(text: widget.vocab.variants);
     _posCtrl = TextEditingController(text: widget.vocab.pos);
     _audioCtrl = TextEditingController(text: widget.vocab.audioUrl ?? '');
     _useAudio = widget.vocab.useAudio;
@@ -1543,9 +1549,10 @@ class _VocabEditDialogState extends State<VocabEditDialog>
 
   /// Fields for how the word is read and otherwise written, shown on the back
   /// of its cards. Which ones are offered depends on the lesson's language:
-  /// Hanja for Korean, pinyin and both character forms for Chinese, and a
-  /// reading for any other language. A field that already has text is always
-  /// shown, whatever the language, so it can be edited or cleared.
+  /// Hanja for Korean, pinyin and both character forms for Chinese, a
+  /// reading and kanji for Japanese, and a reading for any other language;
+  /// *Also written* for every language. A field that already has text is
+  /// always shown, whatever the language, so it can be edited or cleared.
   List<Widget> _writingFields(AppProvider provider) {
     final language = provider.lessons
         .where((lesson) => lesson.id == widget.lessonId)
@@ -1553,6 +1560,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
         ?.targetLanguageCode;
     final korean = language == null || language == 'ko';
     final chinese = language == 'zh';
+    final japanese = language == 'ja';
     final fields = [
       if (!korean || widget.vocab.reading.isNotEmpty)
         (
@@ -1582,6 +1590,19 @@ class _VocabEditDialogState extends State<VocabEditDialog>
           label: 'Hanja (optional)',
           hint: 'e.g. 學生 for 학생',
         ),
+      if (japanese || widget.vocab.kanji.isNotEmpty)
+        (
+          key: 'vocab-kanji-field',
+          controller: _kanjiCtrl,
+          label: 'Kanji (optional)',
+          hint: 'e.g. 寿司 for すし',
+        ),
+      (
+        key: 'vocab-variants-field',
+        controller: _variantsCtrl,
+        label: 'Also written (optional)',
+        hint: 'Other spellings or variant characters',
+      ),
     ];
     return [
       for (final field in fields) ...[
@@ -1592,6 +1613,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
           decoration: InputDecoration(
             labelText: field.label,
             hintText: field.hint,
+            helperText: 'Separate alternatives with /',
             border: const OutlineInputBorder(),
           ),
         ),
@@ -1708,6 +1730,8 @@ class _VocabEditDialogState extends State<VocabEditDialog>
     widget.vocab.simplified = _simplifiedCtrl.text.trim();
     widget.vocab.traditional = _traditionalCtrl.text.trim();
     widget.vocab.hanja = _hanjaCtrl.text.trim();
+    widget.vocab.kanji = _kanjiCtrl.text.trim();
+    widget.vocab.variants = _variantsCtrl.text.trim();
     widget.vocab.pos = _posCtrl.text.trim();
     widget.vocab.audioUrl = _audioCtrl.text.trim().isEmpty
         ? null

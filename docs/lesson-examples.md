@@ -252,6 +252,38 @@ language: ja → en
 lesson text: # 学生
 ```
 
+A Japanese word written in kana takes `kanji` instead, and `variants` is how else a word is written, in any language. Either can list more than one.
+
+```markdown
+---
+target: ja
+vocabulary:
+  nouns:
+    - ja: すし
+      kanji: [寿司, 鮨]
+      en: sushi
+    - ja: 寿司
+      reading: すし
+      variants: 鮨
+      en: sushi (in kanji)
+---
+
+# すし
+```
+
+The app reads:
+
+```text
+title: すし
+language: ja → en
+- [nouns] すし = sushi
+    kanji: 寿司 / 鮨
+- [nouns] 寿司 = sushi (in kanji)
+    reading: すし
+    variants: 鮨
+lesson text: # すし
+```
+
 ## Groups inside a part of speech
 
 A part of speech can hold named groups; the word's section is the whole path.
