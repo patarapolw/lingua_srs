@@ -88,6 +88,13 @@ vocabulary:
 # Lesson
 ''';
 
+/// [vocab]'s other forms as text, `Traditional: 臺灣 | 台灣`: a record
+/// compares its list of forms by identity, not by what is in it.
+List<String> _otherForms(VocabItem vocab) => [
+  for (final other in vocab.otherForms)
+    '${other.label}: ${other.forms.join(' | ')}',
+];
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(setUpSecretStorage);
@@ -278,9 +285,7 @@ ${header}vocabulary:
         traditional: '學生',
         pos: 'nouns',
       );
-      expect(vocab.otherForms, [
-        (label: 'Traditional', forms: ['學生']),
-      ]);
+      expect(_otherForms(vocab), ['Traditional: 學生']);
 
       final korean = VocabItem(
         targetWord: '학생',
@@ -288,9 +293,7 @@ ${header}vocabulary:
         hanja: '學生',
         pos: 'nouns',
       );
-      expect(korean.otherForms, [
-        (label: 'Hanja', forms: ['學生']),
-      ]);
+      expect(_otherForms(korean), ['Hanja: 學生']);
 
       final plain = VocabItem(targetWord: '나무', translation: 'tree', pos: 'n');
       expect(plain.otherForms, isEmpty);
@@ -325,10 +328,7 @@ ${header}vocabulary:
         traditional: '臺灣 / 台灣',
         pos: 'nouns',
       );
-      expect(taiwan.otherForms, [
-        (label: 'Simplified', forms: ['台湾']),
-        (label: 'Traditional', forms: ['臺灣']),
-      ]);
+      expect(_otherForms(taiwan), ['Simplified: 台湾', 'Traditional: 臺灣']);
       taiwan.simplified = '台灣';
       taiwan.traditional = '台灣';
       expect(taiwan.otherForms, isEmpty);
@@ -366,9 +366,7 @@ ${header}vocabulary:
           .vocabularies;
 
       expect(who.readings, ['shéi', 'shuí']);
-      expect(taiwan.otherForms, [
-        (label: 'Traditional', forms: ['臺灣']),
-      ]);
+      expect(_otherForms(taiwan), ['Traditional: 臺灣']);
     });
 
     test('export writes a list, and reimports it', () {
@@ -778,10 +776,13 @@ vocabulary:
 
       expect(find.text('shéi / shuí'), findsOneWidget);
       expect(find.text('Simplified: 谁'), findsOneWidget);
-      // The semantics label reads the alternatives as such.
-      final semantics = tester.ensureSemantics();
-      expect(find.bySemanticsLabel('Read as shéi or shuí'), findsOneWidget);
-      semantics.dispose();
+      // A screen reader hears the alternatives as such.
+      expect(
+        tester
+            .widget<Text>(find.byKey(const ValueKey('vocab-reading')))
+            .semanticsLabel,
+        'Read as shéi or shuí',
+      );
     });
 
     testWidgets('zooms into each variant on its own', (tester) async {

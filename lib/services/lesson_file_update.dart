@@ -170,7 +170,9 @@ class LessonFileUpdate {
       // as a list when there are alternatives.
       for (final field in VocabSource.formFields) {
         final value = word.formOf(field).trim();
-        if (value.isEmpty || value == fileWord.formOf(field)) continue;
+        if (value.isEmpty || _sameForm(value, fileWord.formOf(field))) {
+          continue;
+        }
         set(
           location.formKeys[field] ?? _formKey(lesson, field),
           YamlParserService.formYaml(value),
@@ -574,6 +576,13 @@ class LessonFileUpdate {
     return value;
   }
 
+  /// Whether readings or forms [a] and [b] have the same alternatives in
+  /// the same order: `shéi/shuí`, typed in the app, is the file's list
+  /// `[shéi, shuí]`, which reads back as `shéi / shuí`.
+  static bool _sameForm(String a, String b) =>
+      VocabItem.variantsOf(a).join('\u0000') ==
+      VocabItem.variantsOf(b).join('\u0000');
+
   /// The key a reading or form is written under when the entry has none for
   /// it yet.
   static String _formKey(Lesson lesson, String field) =>
@@ -601,7 +610,8 @@ class LessonFileUpdate {
       keys.target: word.targetWord.trim(),
       keys.translation: word.translation.trim(),
       for (final field in VocabSource.formFields)
-        _formKey(lesson, field): ?text(word.formOf(field)),
+        if (text(word.formOf(field)) case final form?)
+          _formKey(lesson, field): YamlParserService.formYaml(form),
       'audio': ?text(word.audioUrl),
       'tts': ?text(word.ttsText),
       'notes': ?text(word.notes),
