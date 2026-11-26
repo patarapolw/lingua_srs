@@ -18,6 +18,7 @@ class WordAiPrompt {
     required String translation,
     String? sentenceTarget,
     String? sentenceTranslation,
+    int? sentenceCount,
   }) {
     final sentence = _clean(sentenceTarget);
     final sentenceMeaning = _clean(sentenceTranslation);
@@ -37,9 +38,14 @@ class WordAiPrompt {
         targetLanguage: targetLanguage,
         nativeLanguage: nativeLanguage,
         targetWord: targetWord,
+        sentenceCount: sentenceCount,
       ),
     ].join('\n');
   }
+
+  /// A word with this many example sentences or fewer gets new ones in every
+  /// answer, so the learner has more to practise with.
+  static const fewSentences = 2;
 
   /// How the AI writes example sentences for the word, so that an answer can
   /// add them to the word ([examplesYaml]). The keys are ones the lesson
@@ -48,16 +54,26 @@ class WordAiPrompt {
     required String targetLanguage,
     required String nativeLanguage,
     required String targetWord,
+    int? sentenceCount,
   }) {
     final (target, native) = exampleKeys(
       targetLanguage: targetLanguage,
       nativeLanguage: nativeLanguage,
     );
+    final few = sentenceCount != null && sentenceCount <= fewSentences;
     return [
-      'Only give sentences in $targetLanguage when the question calls for '
-          'them (the learner asks for examples, other ways to use the word or '
-          'sentences to practise with, or a sentence helps explain); most '
-          'answers need none. When your answer does have sentences that use '
+      if (few)
+        '"$targetWord" has only ${_sentences(sentenceCount)} so far. In '
+            'every answer, even when the question does not ask for them, '
+            'also suggest two or three new sentences in $targetLanguage that '
+            'use "$targetWord", different from its example sentences, so the '
+            'learner has more to practise with.'
+      else
+        'Only give sentences in $targetLanguage when the question calls for '
+            'them (the learner asks for examples, other ways to use the word '
+            'or sentences to practise with, or a sentence helps explain); '
+            'most answers need none.',
+      'When your answer does have sentences that use '
           '"$targetWord", write them in the answer as usual, each with its '
           'translation, never only as YAML. Then, at the very end of the '
           'answer, repeat those same sentences in YAML inside a collapsed '
@@ -151,6 +167,12 @@ class WordAiPrompt {
       ...history.skip(latest + 1),
     ];
   }
+
+  static String _sentences(int count) => switch (count) {
+    0 => 'no example sentences',
+    1 => 'one example sentence',
+    _ => '$count example sentences',
+  };
 
   static String _translation(String? text) =>
       text == null ? '' : ' (translation: "$text")';
