@@ -311,6 +311,18 @@ ${header}vocabulary:
       expect(VocabItem.variantsOf('  '), isEmpty);
     });
 
+    test('a Korean word can have several Hanja forms', () {
+      final country = YamlParserService.parseLessonYaml(
+        'vocabulary:\n  nouns:\n    - ko: 국\n      hanja: [國, 国]\n'
+        '      en: country\n',
+      ).lesson.vocabularies.single;
+
+      expect(country.hanja, '國 / 国');
+      expect(_otherForms(country), ['Hanja: 國 | 国']);
+      // The Hangul word is not drawn; each Hanja form is.
+      expect(CharacterZoom.zoomForms(country).map((f) => f.form), ['國', '国']);
+    });
+
     test('readings and otherForms list every alternative', () {
       final who = VocabItem(
         targetWord: '誰',
