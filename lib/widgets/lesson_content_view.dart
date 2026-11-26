@@ -373,6 +373,12 @@ class LessonContentView extends StatefulWidget {
   /// unless [initialHeading] is given or the text has changed.
   final String? scrollKey;
 
+  /// The language `<TTS>` text is spoken in: the lesson's
+  /// target language, region included (`zh-TW`). A locale prefix on
+  /// the text (`ja:こんにちは`) overrides it. When null, the app's default
+  /// ([AudioService.defaultTtsLanguage]) is used.
+  final String? language;
+
   const LessonContentView({
     super.key,
     required this.markdown,
@@ -382,6 +388,7 @@ class LessonContentView extends StatefulWidget {
     this.onLessonLink,
     this.initialHeading,
     this.scrollKey,
+    this.language,
   });
 
   @override
@@ -724,7 +731,10 @@ class _LessonContentViewState extends State<LessonContentView> {
     if (audio.isPlaying && audio.currentlyPlayingKey == key) {
       audio.stop();
     } else if (isTts) {
-      audio.speak(source, language: 'ko');
+      audio.speak(
+        source,
+        language: widget.language ?? AudioService.defaultTtsLanguage,
+      );
     } else {
       audio.playAudio(source);
     }

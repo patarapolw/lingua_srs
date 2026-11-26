@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:lingua_srs/services/audio_service.dart';
+import 'package:lingua_srs/widgets/audio_button.dart';
 import 'package:lingua_srs/widgets/markdown_content.dart';
 
 void main() {
@@ -215,6 +216,32 @@ void main() {
       );
     }
   });
+
+  for (final (language, expected) in [('zh-TW', 'zh-TW'), (null, 'ko')]) {
+    testWidgets('speaks text buttons in ${language ?? 'the default'}', (
+      tester,
+    ) async {
+      final audioService = AudioService();
+      addTearDown(audioService.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ChangeNotifierProvider<AudioService>.value(
+              value: audioService,
+              child: MarkdownContent(
+                content: 'Say ![tts](<lingua-audio:?text=你好>)',
+                language: language,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final button = tester.widget<AudioButton>(find.byType(AudioButton));
+      expect(button.language, expected);
+    });
+  }
 
   testWidgets('does not convert HTML del tags inside Markdown code', (
     tester,

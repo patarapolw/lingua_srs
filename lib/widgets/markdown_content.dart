@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../services/audio_service.dart';
 import 'audio_button.dart';
 import 'cached_markdown_image.dart';
 import 'markdown_details.dart';
@@ -19,12 +20,18 @@ class MarkdownContent extends StatelessWidget {
   /// Called first for every tapped link; return true if it was handled.
   final bool Function(String href)? onLink;
 
+  /// The language `lingua-audio` text buttons speak in, such as the lesson's
+  /// target language. A locale prefix on the text overrides it. When null,
+  /// [AudioService.defaultTtsLanguage] is used.
+  final String? language;
+
   const MarkdownContent({
     super.key,
     required this.content,
     this.style,
     this.selectable = false,
     this.onLink,
+    this.language,
   });
 
   static String prepareSpoilerSpans(String input) => input.replaceAllMapped(
@@ -275,7 +282,7 @@ class MarkdownContent extends StatelessWidget {
         return AudioButton(
           audioUrl: uri.queryParameters['src'],
           fallbackText: textToSpeak,
-          language: 'ko',
+          language: language ?? AudioService.defaultTtsLanguage,
           compact: true,
         );
       }

@@ -275,6 +275,7 @@ void main() {
       String markdown = lesson,
       String? initialHeading,
       String? scrollKey,
+      String? language,
       LessonContentController? controller,
       void Function(LessonLink link)? onLessonLink,
     }) async {
@@ -289,6 +290,7 @@ void main() {
                 controller: controller,
                 initialHeading: initialHeading,
                 scrollKey: scrollKey,
+                language: language,
                 onLessonLink: onLessonLink,
               ),
             ),
@@ -402,6 +404,26 @@ void main() {
       await tester.pump();
 
       expect(audio.played, ['audio:https://a/b.mp3', 'speak:안녕:ko']);
+    });
+
+    testWidgets('speaks text in the lesson\'s language, region included', (
+      tester,
+    ) async {
+      await show(tester, language: 'zh-TW');
+
+      platform.controller.send({'type': 'tts', 'text': '你好'});
+      // The prefix is passed on as is; AudioService speaks it in Japanese.
+      platform.controller.send({'type': 'tts', 'text': 'ja:こんにちは'});
+      await tester.pump();
+
+      expect(audio.played, ['speak:你好:zh-TW', 'speak:ja:こんにちは:zh-TW']);
+      final service = AudioService();
+      addTearDown(service.dispose);
+      expect(
+        Uri.parse(service.getTtsUrl('ja:こんにちは', language: 'zh-TW'))
+            .queryParameters['tl'],
+        'ja',
+      );
     });
 
     testWidgets('keeps out navigations once the page has loaded', (
