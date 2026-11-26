@@ -16,6 +16,7 @@ import 'package:lingua_srs/services/markdown_archive_service.dart';
 import 'package:lingua_srs/services/tts_voice.dart';
 import 'package:lingua_srs/services/yaml_parser_service.dart';
 import 'package:lingua_srs/views/study_view.dart';
+import 'package:lingua_srs/widgets/vocab_forms.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -401,6 +402,102 @@ ${header}vocabulary:
           .vocabularies;
       expect(whoAgain.readings, ['shéi', 'shuí', 'shúi']);
       expect(update.text, isNot(contains('shéi/shuí')));
+    });
+  });
+
+  group('kanji and variants', () {
+    const yaml = '''
+---
+target: ja
+vocabulary:
+  nouns:
+    - ja: すし
+      kanji: [寿司, 鮨]
+      en: sushi
+    - ja: 寿司
+      reading: すし
+      variant: 鮨
+      en: sushi (in kanji)
+---
+# Lesson
+''';
+
+    test('are read from a lesson file, and shown as other forms', () {
+      final [kana, kanji] = YamlParserService.parseLessonYaml(yaml)
+          .lesson
+          .vocabularies;
+
+      expect(kana.kanji, '寿司 / 鮨');
+      expect(_otherForms(kana), ['Kanji: 寿司 | 鮨']);
+      expect(CharacterZoom.zoomForms(kana).map((f) => f.form), ['寿司', '鮨']);
+      expect(kanji.variants, '鮨');
+      expect(_otherForms(kanji), ['Also written: 鮨']);
+
+      final english = VocabItem(
+        targetWord: 'color',
+        translation: '색',
+        variants: 'colour',
+        pos: 'nouns',
+      );
+      expect(_otherForms(english), ['Also written: colour']);
+      expect(CharacterZoom.canZoom(english), isFalse);
+    });
+
+    test('are saved and loaded with the word and its source', () {
+      final kana = YamlParserService.parseLessonYaml(yaml)
+          .lesson
+          .vocabularies
+          .first;
+      final loaded = VocabItem.fromJson(
+        jsonDecode(jsonEncode(kana.toJson())) as Map<String, dynamic>,
+      );
+
+      expect(loaded.kanji, '寿司 / 鮨');
+      expect(loaded.source!.kanji, '寿司 / 鮨');
+      expect(loaded.variants, isEmpty);
+    });
+
+    test('are exported, and written back under their keys', () {
+      final parsed = YamlParserService.parseLessonYaml(yaml);
+      final markdown = MarkdownArchiveService.readMarkdownFiles(
+        LessonExportService.createZip([parsed.lesson], parsed.sentences),
+      ).single.contents;
+      expect(markdown, contains('"kanji":["寿司","鮨"]'));
+      expect(markdown, contains('"variants":"鮨"'));
+
+      final [kana, kanji] = parsed.lesson.vocabularies;
+      kana.variants = 'スシ';
+      kanji.variants = '鮓 / 鮨';
+      final update = LessonFileUpdate.plan(yaml, parsed.lesson, {
+        for (final sentence in parsed.sentences) sentence.id: sentence,
+      })!;
+      expect(update.changed, 2);
+      // A new key is written as `variants`, an old one under its own name.
+      expect(update.text, contains('variants: スシ'));
+      expect(update.text, isNot(contains('variant: 鮨')));
+      final [kanaAgain, kanjiAgain] = YamlParserService.parseLessonYaml(
+        update.text,
+      ).lesson.vocabularies;
+      expect(kanaAgain.variants, 'スシ');
+      expect(kanjiAgain.variants, '鮓 / 鮨');
+    });
+
+    test('are read from a Vocabulary section', () {
+      final japanese = YamlParserService.parseVocabularySection('''
+- すし (寿司) — sushi
+- 寿司 (すし) (also: 鮨) — sushi (in kanji)
+''', targetLanguage: 'ja');
+      final [kana, kanji] = japanese.words;
+      expect(kana.forms, {'kanji': '寿司'});
+      expect(kanji.reading, 'すし');
+      expect(kanji.forms, {'variants': '鮨'});
+
+      final english = YamlParserService.parseVocabularySection('''
+- color (variant: colour) (also used for paint) — 색
+''', targetLanguage: 'en');
+      final word = english.words.single;
+      expect(word.forms, {'variants': 'colour'});
+      expect(word.notes, ['also used for paint']);
     });
   });
 

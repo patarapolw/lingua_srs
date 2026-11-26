@@ -221,7 +221,8 @@ class SectionWord {
   final String reading;
 
   /// Its other written forms, by frontmatter key: `simplified`,
-  /// `traditional` or `hanja`.
+  /// `traditional`, `hanja`, `kanji` or `variants`
+  /// ([YamlParserService.sectionFormKeys]).
   final Map<String, String> forms;
 
   /// Paragraphs of notes.
@@ -548,6 +549,8 @@ class YamlParserService {
         String simplified = '';
         String traditional = '';
         String hanja = '';
+        String kanji = '';
+        String variants = '';
         String? vocabId;
         String? vocabAudio;
         String? ttsText;
@@ -612,6 +615,16 @@ class YamlParserService {
             hanja = formText(field.value);
             if (hanja.isNotEmpty) {
               formKeys[VocabSource.hanjaField] = field.key;
+            }
+          } else if (kanjiKeys.contains(fKey) && kanji.isEmpty) {
+            kanji = formText(field.value);
+            if (kanji.isNotEmpty) {
+              formKeys[VocabSource.kanjiField] = field.key;
+            }
+          } else if (variantsKeys.contains(fKey) && variants.isEmpty) {
+            variants = formText(field.value);
+            if (variants.isNotEmpty) {
+              formKeys[VocabSource.variantsField] = field.key;
             }
           }
         }
@@ -679,6 +692,8 @@ class YamlParserService {
             simplified: simplified,
             traditional: traditional,
             hanja: hanja,
+            kanji: kanji,
+            variants: variants,
             pos: sectionPath.last,
             sectionPath: sectionPath,
             audioUrl: vocabAudio,
@@ -695,6 +710,8 @@ class YamlParserService {
             simplified: simplified,
             traditional: traditional,
             hanja: hanja,
+            kanji: kanji,
+            variants: variants,
             sectionPath: sectionPath,
             examples: [
               for (final id in itemSentenceIds)
@@ -887,6 +904,16 @@ class YamlParserService {
       _ => variants,
     };
   }
+
+  /// The frontmatter keys of a word's other written forms, as a
+  /// [SectionWord] has them.
+  static const sectionFormKeys = [
+    'simplified',
+    'traditional',
+    'hanja',
+    'kanji',
+    'variants',
+  ];
 
   /// The key entries are written under for [language]: the language alone,
   /// `zh` for `zh-TW` (docs/lesson-format.md).
@@ -1253,8 +1280,8 @@ class YamlParserService {
   }
 
   /// What a bracketed [group] after [word] is: `reading`, `simplified`,
-  /// `traditional` or `hanja`, with its text. Null for anything else, which
-  /// becomes a note.
+  /// `traditional`, `hanja`, `kanji` or `variants`, with its text. Null for
+  /// anything else, which becomes a note.
   static MapEntry<String, String>? _classifyForm(
     String group,
     String word,
@@ -1265,9 +1292,16 @@ class YamlParserService {
       r'^(pinyin|拼音|reading|読み|读音|讀音|'
       r'trad(?:itional)?\.?|繁(?:體|体)?(?:字)?|'
       r'simp(?:lified)?\.?|简(?:体)?(?:字)?|簡(?:體)?(?:字)?|'
-      r'hanja|漢字|한자)\s*[:：]?\s*(.+)$',
+      r'hanja|漢字|한자|kanji)\s*[:：]?\s*(.+)$',
       caseSensitive: false,
     ).firstMatch(group);
+    // Other spellings need their colon: `(also: colour)`, while
+    // `(also used for …)` is a note.
+    final variant = RegExp(
+      r'^(?:variants?|also(?: written)?)\s*[:：]\s*(.+)$',
+      caseSensitive: false,
+    ).firstMatch(group);
+    if (variant != null) return MapEntry('variants', variant[1]!.trim());
     if (labelled != null) {
       final label = labelled[1]!.toLowerCase();
       final value = labelled[2]!.trim();
@@ -1281,6 +1315,9 @@ class YamlParserService {
           label.startsWith('简') ||
           label.startsWith('簡')) {
         return MapEntry('simplified', value);
+      }
+      if (label == 'kanji' || (label == '漢字' && base == 'ja')) {
+        return MapEntry('kanji', value);
       }
       return MapEntry('hanja', value);
     }
@@ -1315,6 +1352,9 @@ class YamlParserService {
         !_han.hasMatch(group) &&
         !_latin.hasMatch(group)) {
       return MapEntry('reading', group);
+    } else if (base == 'ja' && !_han.hasMatch(word) && _han.hasMatch(group)) {
+      // A word written in kana, with its kanji: `すし (寿司)`.
+      if (!_latin.hasMatch(group)) return MapEntry('kanji', group);
     }
     return null;
   }
@@ -1459,6 +1499,8 @@ class YamlParserService {
       if (any(['hanja', '한자']) || (base == 'ko' && h == '漢字')) {
         return 'hanja';
       }
+      if (any(['kanji']) || (base == 'ja' && h == '漢字')) return 'kanji';
+      if (any(['variant', 'also written'])) return 'variants';
       if (h == 'pos' || any(['part of speech', '词性', '詞性', '품사'])) {
         return 'pos';
       }
@@ -1542,7 +1584,7 @@ class YamlParserService {
     if (head.word.isEmpty || meaning.isEmpty) return null;
     final forms = {
       ...head.forms,
-      for (final key in ['simplified', 'traditional', 'hanja'])
+      for (final key in sectionFormKeys)
         if (values[key] case final value? when value != head.word)
           key: _plainSectionText(value),
     };
@@ -1619,6 +1661,12 @@ class YamlParserService {
   /// Keys that hold the Hanja of a Korean word in vocabulary YAML: its
   /// written form, where the Hangul is how it is read.
   static const hanjaKeys = ['hanja'];
+
+  /// Keys that hold the kanji of a Japanese word written in kana.
+  static const kanjiKeys = ['kanji'];
+
+  /// Keys that hold other ways a word is written, in any language.
+  static const variantsKeys = ['variants', 'variant'];
 
   /// Keys that hold how a word is read in vocabulary YAML: the Hangul of a
   /// Korean word, or the reading of a word written in characters, such as the

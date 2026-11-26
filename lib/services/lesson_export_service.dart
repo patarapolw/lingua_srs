@@ -151,6 +151,8 @@ class LessonExportService {
       ('simplified', vocab.simplified),
       ('traditional', vocab.traditional),
       ('hanja', vocab.hanja),
+      ('kanji', vocab.kanji),
+      ('variants', vocab.variants),
     ]) {
       if (value.isNotEmpty) entry[key] = YamlParserService.formYaml(value);
     }

@@ -343,7 +343,7 @@ class VocabularySectionMove {
             meaning: field(entry, 'meaning'),
             reading: field(entry, 'reading'),
             forms: {
-              for (final key in ['simplified', 'traditional', 'hanja'])
+              for (final key in YamlParserService.sectionFormKeys)
                 if (field(entry, key).isNotEmpty) key: field(entry, key),
             },
             notes: notes(entry['notes']),
