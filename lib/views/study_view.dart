@@ -427,7 +427,8 @@ const wrapUpReviewCount = 5;
 /// (cards that are not new). It drops the other unseen cards, new cards
 /// included. A card in [againCardIds] with no copy left ahead gets one at
 /// the end from [makeDuplicate], when given. The [keep] item, the card on
-/// screen with its back already shown, is never dropped, new or not; it
+/// screen whose back has been shown (even if flipped back to the front), is
+/// never dropped, new or not; it
 /// counts toward [reviewCount] when it is a review. Mutates [queue].
 List<RemovedQueueItem> wrapUpQueue({
   required List<StudyCardItem> queue,
@@ -646,6 +647,9 @@ class _StudyViewState extends State<StudyView> {
   int _currentIndex = 0;
   int _answeredCount = 0; // Highest index of card answered so far
   bool _isAnswerRevealed = false;
+  // The last card whose back was shown. Wrap up keeps it when it is still on
+  // screen, even after flipping back to the front.
+  StudyCardItem? _revealedItem;
   final List<ReviewHistoryRecord> _history = [];
   // Every undoable action, ratings included, newest last.
   final List<SessionUndoEntry> _undoStack = [];
@@ -854,6 +858,7 @@ class _StudyViewState extends State<StudyView> {
     _currentIndex = 0;
     _answeredCount = 0;
     _isAnswerRevealed = false;
+    _revealedItem = null;
     _history.clear();
     _undoStack.clear();
     _againCardIds.clear();
@@ -962,6 +967,7 @@ class _StudyViewState extends State<StudyView> {
   void _revealAnswer() {
     setState(() {
       _isAnswerRevealed = true;
+      if (_currentIndex < _queue.length) _revealedItem = _queue[_currentIndex];
     });
 
     final provider = context.read<AppProvider>();
@@ -1354,7 +1360,9 @@ class _StudyViewState extends State<StudyView> {
         queue: _queue,
         fromIndex: from,
         againCardIds: _againCardIds,
-        keep: _isAnswerRevealed ? onScreen : null,
+        keep: _isAnswerRevealed || identical(onScreen, _revealedItem)
+            ? onScreen
+            : null,
         makeDuplicate: (cardId) {
           final source = _queue.lastWhere((i) => i.card.id == cardId);
           return StudyCardItem(

@@ -701,6 +701,32 @@ void main() {
       expect(seeded.fresh.status, SrsStatus.isNew);
     });
 
+    testWidgets('wrap up keeps a new card flipped back after its back was '
+        'shown', (tester) async {
+      final provider = await loadedProvider(tester);
+      final seeded = await seed(tester, provider);
+      await openStudy(tester, provider, seeded.lesson);
+
+      await reveal(tester);
+      await rate(tester, 'Good');
+      expect(find.text('NEW'), findsOneWidget);
+
+      // 바나나's back is shown, then flipped back to the front.
+      await reveal(tester);
+      final flipBack = find.textContaining('Flip back to Front');
+      await tester.ensureVisible(flipBack);
+      await tester.tap(flipBack);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Show Answer'), findsOneWidget);
+
+      await chooseFromMenu(tester, 'Wrap up session');
+
+      // 바나나 was seen, so it stays on screen to be rated.
+      expect(find.text('Session Complete!'), findsNothing);
+      expect(find.text('NEW'), findsOneWidget);
+      expect(find.textContaining('Show Answer'), findsOneWidget);
+    });
+
     testWidgets('wrap up with only new cards left ends the session at once', (
       tester,
     ) async {
