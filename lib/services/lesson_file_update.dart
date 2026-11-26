@@ -139,13 +139,14 @@ class LessonFileUpdate {
         return node is YamlScalar && node.value != null ? node.style : null;
       }
 
-      void set(Object? key, String value) {
+      void set(Object? key, Object value) {
         final style = styleOf(key) ?? styleOf(location.targetKey);
         apply(
           () => editor.update(
             [...location.path, key],
-            style == ScalarStyle.DOUBLE_QUOTED ||
-                    style == ScalarStyle.SINGLE_QUOTED
+            value is String &&
+                    (style == ScalarStyle.DOUBLE_QUOTED ||
+                        style == ScalarStyle.SINGLE_QUOTED)
                 ? YamlScalar.wrap(value, style: style!)
                 : value,
           ),
@@ -165,11 +166,15 @@ class LessonFileUpdate {
           location.translationKey != null) {
         set(location.translationKey, translation);
       }
-      // The reading and other forms, under the key the entry has for each.
+      // The reading and other forms, under the key the entry has for each,
+      // as a list when there are alternatives.
       for (final field in VocabSource.formFields) {
         final value = word.formOf(field).trim();
         if (value.isEmpty || value == fileWord.formOf(field)) continue;
-        set(location.formKeys[field] ?? _formKey(lesson, field), value);
+        set(
+          location.formKeys[field] ?? _formKey(lesson, field),
+          YamlParserService.formYaml(value),
+        );
       }
       // A detail is shared by every lesson that has the word, and another
       // lesson's file may say something else: only what was typed in the

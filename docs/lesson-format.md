@@ -80,6 +80,25 @@ vocabulary:
       en: "student"
 ```
 
+Several alternatives: a reading or form can list more than one, as a YAML list or in one string split by `/`, `;` or `、`. They are alternatives for the same word and meaning (誰 is read shéi or shuí; 台灣 is also written 臺灣). A reading that goes with a different meaning, such as 行 háng (row) and xíng (to walk), belongs in an entry of its own.
+
+```yaml
+target: zh-TW
+vocabulary:
+  pronouns:
+    - zh: "誰"
+      pinyin: ["shéi", "shuí"]
+      simplified: "谁"
+      en: "who"
+  nouns:
+    - zh: "台灣"
+      pinyin: "Táiwān"
+      traditional: ["臺灣", "台灣"]
+      en: "Taiwan"
+```
+
+The card shows the alternatives with a slash between them (*shéi / shuí*, *Traditional: 臺灣*, leaving out the form the word is already written in), and the character zoom draws each variant on its own. Export, and writing words back to a lesson file, write a list when there is more than one.
+
 - **Importing the file again** treats these like the word and its translation: one edited in the app stays while the file's entry is as it was, and one changed in the file is taken. Writing the app's words back to a folder writes them too, under the key the entry already uses.
 - **`pinyin`** and **`reading`** are the same field: how the word is read. `reading` suits any language whose writing does not show it, such as kana for a Japanese word. When an entry has both, the first one is used. Export writes `pinyin` in a Chinese lesson and `reading` in any other.
 - **`simplified`** and **`traditional`** record both forms of a Chinese word, whichever one the lesson is written in. The card shows the form that differs from the word itself: a `zh: 学生` card shows *Traditional: 學生*.

@@ -254,17 +254,47 @@ class VocabItem {
     _ => throw ArgumentError.value(field, 'field'),
   };
 
+  /// What separates the alternatives of a reading or form saved as one
+  /// string: `/`, `;` or `、`, in their half- or full-width shapes, with any
+  /// spaces around them. A YAML list is saved joined by
+  /// [variantsSeparator] (docs/lesson-format.md).
+  static final _variantSeparator = RegExp(r'\s*[/／;；、]\s*');
+
+  /// How the alternatives of a reading or form read from a YAML list are
+  /// joined into the one string a word saves.
+  static const variantsSeparator = ' / ';
+
+  /// The alternatives in a reading or form [value]: `臺 / 台` is 臺 and 台,
+  /// `shéi; shuí` is shéi and shuí. Each is trimmed, and empty and repeated
+  /// ones are left out.
+  static List<String> variantsOf(String value) => [
+    ...{
+      for (final part in value.split(_variantSeparator))
+        if (part.trim().isNotEmpty) part.trim(),
+    },
+  ];
+
+  /// The ways [reading] says the word is read, alternatives of one another
+  /// (誰 is shéi or shuí). Empty when there is no reading.
+  List<String> get readings => variantsOf(reading);
+
   /// The other ways this word is written, labelled, for the back of a card:
-  /// its simplified and traditional forms and its Hanja. A form that is the
-  /// same as [targetWord] is left out, since the card already shows it.
-  List<({String label, String form})> get otherForms => [
-    for (final (label, form) in [
+  /// its simplified and traditional forms and its Hanja, each with every
+  /// variant it has (*Traditional:* 臺灣, 台灣). A variant that is the same
+  /// as [targetWord] is left out, since the card already shows it, and so is
+  /// a form left with none.
+  List<({String label, List<String> forms})> get otherForms => [
+    for (final (label, value) in [
       ('Simplified', simplified),
       ('Traditional', traditional),
       ('Hanja', hanja),
     ])
-      if (form.trim().isNotEmpty && form.trim() != targetWord.trim())
-        (label: label, form: form.trim()),
+      if ([
+            for (final form in variantsOf(value))
+              if (form != targetWord.trim()) form,
+          ]
+          case final forms when forms.isNotEmpty)
+        (label: label, forms: forms),
   ];
 
   List<String> get effectiveSectionPath =>

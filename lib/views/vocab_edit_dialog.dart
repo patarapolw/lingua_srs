@@ -1592,6 +1592,7 @@ class _VocabEditDialogState extends State<VocabEditDialog>
           decoration: InputDecoration(
             labelText: field.label,
             hintText: field.hint,
+            helperText: 'Separate alternatives with /',
             border: const OutlineInputBorder(),
           ),
         ),

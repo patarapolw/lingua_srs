@@ -594,21 +594,25 @@ class YamlParserService {
             ttsText = fVal; // tts: alternate text for TTS
             ttsKey = field.key;
           } else if (readingKeys.contains(fKey) && reading.isEmpty) {
-            reading = fVal; // pinyin, or another reading
-            if (fVal.isNotEmpty) formKeys[VocabSource.readingField] = field.key;
+            reading = formText(field.value); // pinyin, or another reading
+            if (reading.isNotEmpty) {
+              formKeys[VocabSource.readingField] = field.key;
+            }
           } else if (simplifiedKeys.contains(fKey) && simplified.isEmpty) {
-            simplified = fVal;
-            if (fVal.isNotEmpty) {
+            simplified = formText(field.value);
+            if (simplified.isNotEmpty) {
               formKeys[VocabSource.simplifiedField] = field.key;
             }
           } else if (traditionalKeys.contains(fKey) && traditional.isEmpty) {
-            traditional = fVal;
-            if (fVal.isNotEmpty) {
+            traditional = formText(field.value);
+            if (traditional.isNotEmpty) {
               formKeys[VocabSource.traditionalField] = field.key;
             }
           } else if (hanjaKeys.contains(fKey) && hanja.isEmpty) {
-            hanja = fVal;
-            if (fVal.isNotEmpty) formKeys[VocabSource.hanjaField] = field.key;
+            hanja = formText(field.value);
+            if (hanja.isNotEmpty) {
+              formKeys[VocabSource.hanjaField] = field.key;
+            }
           }
         }
 
@@ -862,6 +866,28 @@ class YamlParserService {
     return 'ko';
   }
 
+  /// A reading or form field's value as a word saves it: a YAML list of
+  /// alternatives (`traditional: [臺灣, 台灣]`) joined by
+  /// [VocabItem.variantsSeparator], anything else as its text.
+  static String formText(Object? value) => value is List
+      ? [
+          for (final item in value)
+            if ((item?.toString().trim() ?? '').isNotEmpty)
+              item.toString().trim(),
+        ].join(VocabItem.variantsSeparator)
+      : value?.toString().trim() ?? '';
+
+  /// A reading or form as a lesson file writes it: one string, or a YAML
+  /// list when it has more than one alternative ([VocabItem.variantsOf]).
+  static Object formYaml(String value) {
+    final variants = VocabItem.variantsOf(value);
+    return switch (variants) {
+      [] => '',
+      [final single] => single,
+      _ => variants,
+    };
+  }
+
   /// The key entries are written under for [language]: the language alone,
   /// `zh` for `zh-TW` (docs/lesson-format.md).
   static String languageKey(String language) =>
@@ -885,7 +911,7 @@ class YamlParserService {
       final sentence = emphasizeWord(
         example.sentence,
         word.word,
-        alternatives: word.forms.values,
+        alternatives: word.forms.values.expand(VocabItem.variantsOf),
         language: language,
       );
       if (sentence == null) {
@@ -904,9 +930,9 @@ class YamlParserService {
     return {
       targetKey: word.word,
       if (word.reading.isNotEmpty)
-        (targetKey == 'zh' ? 'pinyin' : 'reading'): word.reading,
+        (targetKey == 'zh' ? 'pinyin' : 'reading'): formYaml(word.reading),
       for (final MapEntry(:key, :value) in word.forms.entries)
-        if (value.isNotEmpty && value != word.word) key: value,
+        if (value.isNotEmpty && value != word.word) key: formYaml(value),
       nativeKey: word.meaning,
       'notes': ?_sectionNotesValue(notes),
       if (examples.isNotEmpty) 'examples': examples,
@@ -1354,7 +1380,7 @@ class YamlParserService {
         : emphasizeWord(
             sentence,
             entry.word,
-            alternatives: entry.forms.values,
+            alternatives: entry.forms.values.expand(VocabItem.variantsOf),
             language: language,
           );
     if (emphasized == null || emphasized.trim().isEmpty) return null;
@@ -1763,17 +1789,22 @@ class YamlParserService {
     String field(YamlMap item, List<String> keys) {
       for (final entry in item.entries) {
         final key = entry.key.toString().trim().toLowerCase();
-        if (keys.contains(key)) return entry.value?.toString().trim() ?? '';
+        if (keys.contains(key)) return formText(entry.value);
       }
       return '';
     }
 
     // Whether two forms, or two readings, do not tell words apart.
-    bool alike(String a, String b) =>
-        a.isEmpty ||
-        b.isEmpty ||
-        a.replaceAll(RegExp(r'\s+'), '').toLowerCase() ==
-            b.replaceAll(RegExp(r'\s+'), '').toLowerCase();
+    // Alike when either is missing, or they have an alternative in common
+    // (`shéi / shuí` and `shéi`).
+    bool alike(String a, String b) {
+      if (a.isEmpty || b.isEmpty) return true;
+      Set<String> variants(String value) => {
+        for (final variant in VocabItem.variantsOf(value))
+          variant.replaceAll(RegExp(r'\s+'), '').toLowerCase(),
+      };
+      return variants(a).intersection(variants(b)).isNotEmpty;
+    }
 
     void filterSection(YamlNode key, YamlNode value) {
       if (value is YamlMap) {

@@ -55,6 +55,26 @@ vocabulary:
 # Lesson
 ''';
 
+/// 誰 has two readings, and 台灣 two Traditional forms, one of them the
+/// word itself.
+const _variantsYaml = '''
+---
+target: zh-TW
+vocabulary:
+  pronouns:
+    - zh: 誰
+      pinyin: [shéi, shuí]
+      simplified: 谁
+      en: who
+  nouns:
+    - zh: 台灣
+      pinyin: Táiwān
+      traditional: [臺灣, 台灣]
+      en: Taiwan
+---
+# Lesson
+''';
+
 const _koreanYaml = '''
 ---
 vocabulary:
@@ -258,7 +278,9 @@ ${header}vocabulary:
         traditional: '學生',
         pos: 'nouns',
       );
-      expect(vocab.otherForms, [(label: 'Traditional', form: '學生')]);
+      expect(vocab.otherForms, [
+        (label: 'Traditional', forms: ['學生']),
+      ]);
 
       final korean = VocabItem(
         targetWord: '학생',
@@ -266,10 +288,121 @@ ${header}vocabulary:
         hanja: '學生',
         pos: 'nouns',
       );
-      expect(korean.otherForms, [(label: 'Hanja', form: '學生')]);
+      expect(korean.otherForms, [
+        (label: 'Hanja', forms: ['學生']),
+      ]);
 
       final plain = VocabItem(targetWord: '나무', translation: 'tree', pos: 'n');
       expect(plain.otherForms, isEmpty);
+    });
+
+    test('variantsOf splits alternatives at a slash, semicolon or 、', () {
+      expect(VocabItem.variantsOf('shéi / shuí'), ['shéi', 'shuí']);
+      expect(VocabItem.variantsOf('臺灣／台灣'), ['臺灣', '台灣']);
+      expect(VocabItem.variantsOf('きょう、こんにち'), ['きょう', 'こんにち']);
+      expect(VocabItem.variantsOf('a; b；c'), ['a', 'b', 'c']);
+      expect(VocabItem.variantsOf('xuésheng'), ['xuésheng']);
+      // Spaces inside a reading are kept, and empty or repeated ones go.
+      expect(VocabItem.variantsOf(' nǐ hǎo // nǐ hǎo '), ['nǐ hǎo']);
+      expect(VocabItem.variantsOf('  '), isEmpty);
+    });
+
+    test('readings and otherForms list every alternative', () {
+      final who = VocabItem(
+        targetWord: '誰',
+        translation: 'who',
+        reading: 'shéi / shuí',
+        pos: 'pronouns',
+      );
+      expect(who.readings, ['shéi', 'shuí']);
+
+      // A variant that is the word itself is left out, and a form with no
+      // other variant is left out altogether.
+      final taiwan = VocabItem(
+        targetWord: '台灣',
+        translation: 'Taiwan',
+        simplified: '台湾',
+        traditional: '臺灣 / 台灣',
+        pos: 'nouns',
+      );
+      expect(taiwan.otherForms, [
+        (label: 'Simplified', forms: ['台湾']),
+        (label: 'Traditional', forms: ['臺灣']),
+      ]);
+      taiwan.simplified = '台灣';
+      taiwan.traditional = '台灣';
+      expect(taiwan.otherForms, isEmpty);
+    });
+  });
+
+  group('several readings and forms', () {
+    test('a YAML list is read as alternatives, a string as written', () {
+      final parsed = YamlParserService.parseLessonYaml(_variantsYaml);
+      final [who, taiwan] = parsed.lesson.vocabularies;
+
+      expect(who.reading, 'shéi / shuí');
+      expect(who.readings, ['shéi', 'shuí']);
+      expect(taiwan.reading, 'Táiwān');
+      expect(taiwan.traditional, '臺灣 / 台灣');
+
+      final kept = YamlParserService.parseLessonYaml(
+        'vocabulary:\n  pronouns:\n    - zh: 誰\n      pinyin: shéi、shuí\n'
+        '      en: who\n',
+      ).lesson.vocabularies.single;
+      expect(kept.reading, 'shéi、shuí');
+      expect(kept.readings, ['shéi', 'shuí']);
+    });
+
+    test('the example in docs/lesson-format.md reads as alternatives', () {
+      final doc = File('docs/lesson-format.md')
+          .readAsStringSync()
+          .replaceAll('\r\n', '\n');
+      final block = RegExp(
+        '```yaml\n(.*?)```',
+        dotAll: true,
+      ).allMatches(doc).map((m) => m[1]!).firstWhere((b) => b.contains('誰'));
+      final [who, taiwan] = YamlParserService.parseLessonYaml(block)
+          .lesson
+          .vocabularies;
+
+      expect(who.readings, ['shéi', 'shuí']);
+      expect(taiwan.otherForms, [
+        (label: 'Traditional', forms: ['臺灣']),
+      ]);
+    });
+
+    test('export writes a list, and reimports it', () {
+      final parsed = YamlParserService.parseLessonYaml(_variantsYaml);
+      final markdown = MarkdownArchiveService.readMarkdownFiles(
+        LessonExportService.createZip([parsed.lesson], parsed.sentences),
+      ).single.contents;
+
+      expect(markdown, contains('"pinyin":["shéi","shuí"]'));
+      expect(markdown, contains('"traditional":["臺灣","台灣"]'));
+      expect(markdown, contains('"pinyin":"Táiwān"'));
+
+      final again = YamlParserService.parseLessonYaml(markdown);
+      final [who, taiwan] = again.lesson.vocabularies;
+      expect(who.reading, 'shéi / shuí');
+      expect(taiwan.traditional, '臺灣 / 台灣');
+    });
+
+    test('writing back writes alternatives typed in the app as a list', () {
+      final parsed = YamlParserService.parseLessonYaml(_variantsYaml);
+      final [who, taiwan] = parsed.lesson.vocabularies;
+      who.reading = 'shéi/shuí/shúi';
+      taiwan.reading = 'Táiwān';
+
+      final update = LessonFileUpdate.plan(_variantsYaml, parsed.lesson, {
+        for (final sentence in parsed.sentences) sentence.id: sentence,
+      })!;
+
+      expect(update.changed, 1);
+      final [whoAgain, _] = YamlParserService.parseLessonYaml(update.text)
+          .lesson
+          .vocabularies;
+      expect(whoAgain.readings, ['shéi', 'shuí', 'shúi']);
+      expect(update.text, isNot(contains('shéi/shuí')));
     });
   });
 
@@ -630,6 +763,52 @@ vocabulary:
       await reveal(tester);
 
       expect(find.byKey(const ValueKey('vocab-zoom-word')), findsNothing);
+    });
+
+    testWidgets('shows every reading and variant, split by a slash', (
+      tester,
+    ) async {
+      await study(
+        tester,
+        '---\ntarget: zh-TW\nvocabulary:\n  pronouns:\n    - zh: 誰\n'
+        '      pinyin: [shéi, shuí]\n      simplified: 谁\n      en: who\n'
+        '---\n# Lesson\n',
+      );
+      await reveal(tester);
+
+      expect(find.text('shéi / shuí'), findsOneWidget);
+      expect(find.text('Simplified: 谁'), findsOneWidget);
+      // The semantics label reads the alternatives as such.
+      final semantics = tester.ensureSemantics();
+      expect(find.bySemanticsLabel('Read as shéi or shuí'), findsOneWidget);
+      semantics.dispose();
+    });
+
+    testWidgets('zooms into each variant on its own', (tester) async {
+      await study(
+        tester,
+        '---\ntarget: zh-CN\nvocabulary:\n  nouns:\n    - zh: 台\n'
+        '      traditional: [臺, 颱, 檯]\n      en: platform\n---\n# Lesson\n',
+      );
+      await reveal(tester);
+
+      expect(find.text('Traditional: 臺 / 颱 / 檯'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('vocab-zoom-word')));
+      await tester.pumpAndSettle();
+
+      final zoom = find.byKey(const ValueKey('character-zoom'));
+      for (final form in ['台', '臺', '颱', '檯']) {
+        expect(
+          find.descendant(of: zoom, matching: find.text(form)),
+          findsOneWidget,
+          reason: form,
+        );
+      }
+      expect(
+        find.descendant(of: zoom, matching: find.text('Traditional')),
+        findsNWidgets(3),
+      );
     });
 
     testWidgets('shows neither line for a word without them', (tester) async {
