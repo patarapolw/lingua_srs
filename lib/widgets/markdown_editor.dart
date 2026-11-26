@@ -57,6 +57,10 @@ class MarkdownEditor extends StatefulWidget {
   /// Shown under the heading row, above the editor.
   final Widget? description;
 
+  /// The language Preview speaks `<TTS>` text in: the lesson's target
+  /// language. The app's default when null.
+  final String? language;
+
   const MarkdownEditor({
     super.key,
     required this.controller,
@@ -70,6 +74,7 @@ class MarkdownEditor extends StatefulWidget {
     this.previewMarkdown,
     this.label,
     this.description,
+    this.language,
   });
 
   /// Overrides whether a WebView is used, for tests. When null, it is used
@@ -211,7 +216,10 @@ class _MarkdownEditorState extends State<MarkdownEditor> {
           _layer(
             key: const ValueKey('preview'),
             visible: _preview,
-            child: _MarkdownPreview(markdown: previewText),
+            child: _MarkdownPreview(
+              markdown: previewText,
+              language: widget.language,
+            ),
           ),
       ],
     );
@@ -348,8 +356,9 @@ class _EditorPlaceholder extends StatelessWidget {
 /// The text as the lesson reader shows it.
 class _MarkdownPreview extends StatelessWidget {
   final String markdown;
+  final String? language;
 
-  const _MarkdownPreview({required this.markdown});
+  const _MarkdownPreview({required this.markdown, this.language});
 
   @override
   Widget build(BuildContext context) {
@@ -369,7 +378,7 @@ class _MarkdownPreview extends StatelessWidget {
       ),
       child: Padding(
         padding: const EdgeInsets.all(1),
-        child: LessonContentView(markdown: markdown),
+        child: LessonContentView(markdown: markdown, language: language),
       ),
     );
   }

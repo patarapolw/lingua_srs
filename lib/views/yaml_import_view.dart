@@ -1197,6 +1197,7 @@ class _YamlImportViewState extends State<YamlImportView>
                   // inside the box (#207).
                   child: MarkdownEditor(
                     controller: _yamlController,
+                    language: _previewResult?.lesson.targetLanguage,
                     enabled: !_isParsing && _directoryFiles.isEmpty,
                     hintText: hint,
                     allowPreview: !vocabularyOnly,

@@ -142,6 +142,7 @@ class _LessonReaderViewState extends State<LessonReaderView> {
                 },
                 initialHeading: widget.initialHeading,
                 scrollKey: selectedLesson.id,
+                language: selectedLesson.targetLanguage,
                 onLessonLink: (link) =>
                     _openLessonLink(context, provider, selectedLesson, link),
               ),
@@ -414,6 +415,7 @@ class _LessonMarkdownEditorState extends State<_LessonMarkdownEditor> {
                 Expanded(
                   child: MarkdownEditor(
                     controller: _controller,
+                    language: widget.lesson.targetLanguage,
                     enabled: !_saving,
                     hintText: 'Enter lesson Markdown',
                     onSave: _saving ? null : _save,

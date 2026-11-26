@@ -114,7 +114,7 @@ Preview words here.
 Footer text here.
 ```
 
-The reader renders `<AudioButton src="...">` and `<TTS>...</TTS>` controls, and `<YouTube id="...">` embeds (also `list` or `src` attributes). Spoiler spans (`<span class="spoiler">...</span>`) are blurred until hovered on desktop or tapped on touch devices. Markdown inside a spoiler is rendered: `<span class="spoiler">my **brother**</span>`. Scripts and event attributes (`onclick="..."`), and capitalised tags the reader does not know (`<VocabQuiz />`), are left out.
+The reader renders `<AudioButton src="...">` and `<TTS>...</TTS>` controls, and `<YouTube id="...">` embeds (also `list` or `src` attributes). `<TTS>` text is spoken in the lesson's language, region included (`zh-TW`); a locale prefix in the text (`<TTS>ja:こんにちは</TTS>`) speaks it in that locale instead. Spoiler spans (`<span class="spoiler">...</span>`) are blurred until hovered on desktop or tapped on touch devices. Markdown inside a spoiler is rendered: `<span class="spoiler">my **brother**</span>`. Scripts and event attributes (`onclick="..."`), and capitalised tags the reader does not know (`<VocabQuiz />`), are left out.
 
 The reader shows the lesson as a web page, so HTML in the Markdown is rendered by the browser engine of the device, not by the app: `<ins>`, `<u>`, `<mark>`, `<sup>`, `<sub>`, `<del>`, `<s>`, `<em>`, `<strong>`, `<br>` (also inside a table cell), `<div>`, `<ul>`, `<table>`, `<img>` and the rest work as they do on the web. Markdown works inside a block once a blank line separates it from the HTML tag, as on GitHub. Styles are the reader's own, and `<style>`, `<script>` and `<iframe>` are removed.
 
